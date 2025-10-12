@@ -13,18 +13,23 @@ let win;
 function createWindow() {
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, "electron-vite.svg"),
-    width: 360,
-    height: 64,
+    width: 250,
+    height: 80,
+    minWidth: 360,
+    maxWidth: 360,
+    minHeight: 80,
+    maxHeight: 80,
     frame: false,
     transparent: true,
     resizable: false,
     alwaysOnTop: true,
+    skipTaskbar: true,
     hasShadow: false,
-    vibrancy: "sidebar",
     webPreferences: {
       preload: path.join(__dirname, "preload.mjs")
     }
   });
+  win.setResizable(false);
   win.webContents.on("did-finish-load", () => {
     win == null ? void 0 : win.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
   });

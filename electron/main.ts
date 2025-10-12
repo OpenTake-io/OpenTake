@@ -29,18 +29,25 @@ let win: BrowserWindow | null
 function createWindow() {
   win = new BrowserWindow({
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
-    width: 360,
-    height: 64,
+    width: 250,
+    height: 80,
+    minWidth: 360,
+    maxWidth: 360,
+    minHeight: 80,
+    maxHeight: 80,
     frame: false,
     transparent: true,
     resizable: false,
     alwaysOnTop: true,
+    skipTaskbar: true,
     hasShadow: false,
-    vibrancy: 'sidebar',
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
+
+  // Absolutely lock the size
+  win.setResizable(false)
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
