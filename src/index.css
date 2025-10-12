@@ -1,3 +1,6 @@
+body {
+  background: transparent !important;
+}
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -49,9 +52,6 @@ button {
   background-color: #1a1a1a;
   cursor: pointer;
   transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
 }
 button:focus,
 button:focus-visible {
@@ -128,7 +128,6 @@ button:focus-visible {
     --chart-5: 340 75% 55%;
   }
 }
-
 
 
 @layer base {
