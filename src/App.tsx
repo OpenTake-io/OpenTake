@@ -1,48 +1,39 @@
-import { useScreenRecorder } from "./hooks/useScreenRecorder";
-import { Button } from "@/components/ui/button";
-import { BsRecordCircle } from "react-icons/bs";
-import { FaRegStopCircle } from "react-icons/fa";
-import { MdMonitor } from "react-icons/md";
+import { LaunchWindow } from "./components/LaunchWindow";
+import { useEffect, useState } from "react";
 
 export default function App() {
-  const { recording, toggleRecording } = useScreenRecorder();
+  const [windowType, setWindowType] = useState<string>('');
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const type = urlParams.get('windowType') || 'default';
+    setWindowType(type);
+
+    // Apply transparency only for HUD overlay windows
+    if (type === 'hud-overlay') {
+      document.body.style.background = 'transparent';
+      document.documentElement.style.background = 'transparent';
+      const root = document.getElementById('root');
+      if (root) root.style.background = 'transparent';
+    }
+  }, []);
+
+  if (windowType === 'hud-overlay') {
+    return <LaunchWindow />;
+  }
+
+  if (windowType === 'editor') {
+    return (
+      <div className="w-full h-full bg-background text-foreground p-6">
+        <h1 className="text-2xl font-bold mb-4">Video Editor</h1>
+        <p>Recording stopped. Video editor interface coming soon...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full h-full flex items-center justify-center bg-transparent">
-      <div className="flex items-center gap-3 backdrop-blur-lg bg-white/10 rounded-full px-4 py-2 shadow-2xl border border-white/30">
-        <Button
-          variant="link"
-          size="sm"
-          className="gap-2 text-white bg-transparent hover:bg-transparent px-3"
-          onClick={() => {
-            console.log("Source button clicked");
-          }}
-        >
-          <MdMonitor size={16} className="text-white" />
-          Source
-        </Button>
-
-        <div className="w-px h-5 bg-white/30" />
-
-        <Button
-          variant="link"
-          size="sm"
-          onClick={toggleRecording}
-          className="gap-2 text-white bg-transparent hover:bg-transparent px-3"
-        >
-          {recording ? (
-            <>
-              <FaRegStopCircle size={16} className="text-white" />
-              Stop
-            </>
-          ) : (
-            <>
-              <BsRecordCircle size={16} className="text-white" />
-              Record
-            </>
-          )}
-        </Button>
-      </div>
+    <div className="w-full h-full bg-background text-foreground">
+      <h1>Default Window</h1>
     </div>
   );
 }

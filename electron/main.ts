@@ -26,13 +26,12 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 
 let win: BrowserWindow | null
 
-function createWindow() {
+function createHudOverlayWindow() {
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
     width: 250,
     height: 80,
-    minWidth: 360,
-    maxWidth: 360,
+    minWidth: 250,
+    maxWidth: 250,
     minHeight: 80,
     maxHeight: 80,
     frame: false,
@@ -43,23 +42,61 @@ function createWindow() {
     hasShadow: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      backgroundThrottling: false,
     },
   })
 
   // Absolutely lock the size
   win.setResizable(false)
 
-  // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
 
   if (VITE_DEV_SERVER_URL) {
-    win.loadURL(VITE_DEV_SERVER_URL)
+    win.loadURL(VITE_DEV_SERVER_URL + '?windowType=hud-overlay')
   } else {
-    // win.loadFile('dist/index.html')
-    win.loadFile(path.join(RENDERER_DIST, 'index.html'))
+    win.loadFile(path.join(RENDERER_DIST, 'index.html'), { 
+      query: { windowType: 'hud-overlay' } 
+    })
   }
+}
+
+function createEditorWindow() {
+  win = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    minWidth: 800,
+    minHeight: 600,
+    frame: true,
+    transparent: false,
+    resizable: true,
+    alwaysOnTop: false,
+    skipTaskbar: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.mjs'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  })
+
+  win.webContents.on('did-finish-load', () => {
+    win?.webContents.send('main-process-message', (new Date).toLocaleString())
+  })
+
+  if (VITE_DEV_SERVER_URL) {
+    win.loadURL(VITE_DEV_SERVER_URL + '?windowType=editor')
+  } else {
+    win.loadFile(path.join(RENDERER_DIST, 'index.html'), { 
+      query: { windowType: 'editor' } 
+    })
+  }
+}
+
+function createWindow() {
+  createHudOverlayWindow()
 }
 
 // Quit when all windows are closed, except on macOS. There, it's common
@@ -82,6 +119,14 @@ app.on('activate', () => {
 
 ipcMain.handle('get-sources', async (_, opts) => {
   return await desktopCapturer.getSources(opts)
+})
+
+ipcMain.handle('switch-to-editor', () => {
+  if (win) {
+    win.close()
+    win = null
+  }
+  createEditorWindow()
 })
 
 app.whenReady().then(createWindow)
