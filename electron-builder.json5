@@ -26,7 +26,8 @@
         ]
       }
     ],
-    "artifactName": "${productName}-Windows-${version}-Setup.${ext}"
+    "artifactName": "${productName}-Windows-${version}-Setup.${ext}",
+    "requestedExecutionLevel": "asInvoker"
   },
   "nsis": {
     "oneClick": false,

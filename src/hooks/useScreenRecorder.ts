@@ -56,7 +56,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       let mimeType = "video/webm;codecs=vp9";
       const recorder = new MediaRecorder(streamRef.current, {
         mimeType,
-        videoBitsPerSecond: 8000000,
+        videoBitsPerSecond: 16_000_000,
       });
       mediaRecorderRef.current = recorder;
       recorder.ondataavailable = (e) => {

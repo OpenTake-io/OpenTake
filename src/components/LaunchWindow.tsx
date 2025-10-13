@@ -43,7 +43,7 @@ export function LaunchWindow() {
 
   return (
     <div className="w-full h-full flex items-center justify-center bg-transparent">
-      <div className="flex items-center gap-6 backdrop-blur-lg bg-white/10 rounded-full px-6 py-3 shadow-2xl border border-white/30">
+      <div className="flex items-center gap-6 backdrop-blur-xl bg-black/80 rounded-full px-6 py-3 shadow-2xl border border-white/20">
         <Button
           variant="link"
           size="sm"
