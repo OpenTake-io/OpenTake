@@ -15,5 +15,11 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
   },
   getSelectedSource: () => {
     return electron.ipcRenderer.invoke("get-selected-source");
+  },
+  startMouseTracking: () => {
+    return electron.ipcRenderer.invoke("start-mouse-tracking");
+  },
+  stopMouseTracking: () => {
+    return electron.ipcRenderer.invoke("stop-mouse-tracking");
   }
 });

@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain, desktopCapturer, screen } from 'electron'
-import { createRequire } from 'node:module'
+import { app, BrowserWindow } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { createHudOverlayWindow, createEditorWindow, createSourceSelectorWindow } from './windows'
+import { registerIpcHandlers } from './ipc/handlers'
+import { cleanupMouseTracking } from './ipc/mouseTracking'
 
-const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
@@ -24,117 +25,28 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
-let win: BrowserWindow | null
+// Window references
+let mainWindow: BrowserWindow | null = null
 let sourceSelectorWindow: BrowserWindow | null = null
-let selectedSource: any = null
-
-function createHudOverlayWindow() {
-  win = new BrowserWindow({
-    width: 250,
-    height: 80,
-    minWidth: 250,
-    maxWidth: 250,
-    minHeight: 80,
-    maxHeight: 80,
-    frame: false,
-    transparent: true,
-    resizable: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    hasShadow: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.mjs'),
-      nodeIntegration: false,
-      contextIsolation: true,
-      backgroundThrottling: false,
-    },
-  })
-
-  // Absolutely lock the size
-  win.setResizable(false)
-
-  win.webContents.on('did-finish-load', () => {
-    win?.webContents.send('main-process-message', (new Date).toLocaleString())
-  })
-
-  if (VITE_DEV_SERVER_URL) {
-    win.loadURL(VITE_DEV_SERVER_URL + '?windowType=hud-overlay')
-  } else {
-    win.loadFile(path.join(RENDERER_DIST, 'index.html'), { 
-      query: { windowType: 'hud-overlay' } 
-    })
-  }
-}
-
-function createEditorWindow() {
-  win = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
-    minHeight: 600,
-    frame: true,
-    transparent: false,
-    resizable: true,
-    alwaysOnTop: false,
-    skipTaskbar: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.mjs'),
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  })
-
-  win.webContents.on('did-finish-load', () => {
-    win?.webContents.send('main-process-message', (new Date).toLocaleString())
-  })
-
-  if (VITE_DEV_SERVER_URL) {
-    win.loadURL(VITE_DEV_SERVER_URL + '?windowType=editor')
-  } else {
-    win.loadFile(path.join(RENDERER_DIST, 'index.html'), { 
-      query: { windowType: 'editor' } 
-    })
-  }
-}
-
-function createSourceSelectorWindow() {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-  
-  sourceSelectorWindow = new BrowserWindow({
-    width: 620,
-    height: 420,
-    minHeight: 350,
-    maxHeight: 500,
-    x: Math.round((width - 620) / 2),
-    y: Math.round((height - 420) / 2),
-    frame: false,
-    resizable: false,
-    alwaysOnTop: true,
-    backgroundColor: '#ffffff',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.mjs'),
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  });
-
-  sourceSelectorWindow.on('closed', () => {
-    sourceSelectorWindow = null;
-  });
-
-  if (VITE_DEV_SERVER_URL) {
-    sourceSelectorWindow.loadURL(VITE_DEV_SERVER_URL + '?windowType=source-selector');
-  } else {
-    sourceSelectorWindow.loadFile(path.join(RENDERER_DIST, 'index.html'), { 
-      query: { windowType: 'source-selector' } 
-    });
-  }
-
-  return sourceSelectorWindow;
-}
 
 function createWindow() {
-  createHudOverlayWindow()
+  mainWindow = createHudOverlayWindow()
+}
+
+function createEditorWindowWrapper() {
+  if (mainWindow) {
+    mainWindow.close()
+    mainWindow = null
+  }
+  mainWindow = createEditorWindow()
+}
+
+function createSourceSelectorWindowWrapper() {
+  sourceSelectorWindow = createSourceSelectorWindow()
+  sourceSelectorWindow.on('closed', () => {
+    sourceSelectorWindow = null
+  })
+  return sourceSelectorWindow
 }
 
 // Quit when all windows are closed, except on macOS. There, it's common
@@ -142,8 +54,9 @@ function createWindow() {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    cleanupMouseTracking()
     app.quit()
-    win = null
+    mainWindow = null
   }
 })
 
@@ -155,46 +68,17 @@ app.on('activate', () => {
   }
 })
 
-ipcMain.handle('get-sources', async (_, opts) => {
-  const sources = await desktopCapturer.getSources(opts)
-  const processedSources = sources.map(source => ({
-    id: source.id,
-    name: source.name,
-    display_id: source.display_id,
-    thumbnail: source.thumbnail ? source.thumbnail.toDataURL() : null,
-    appIcon: source.appIcon ? source.appIcon.toDataURL() : null
-  }))
-  
-  return processedSources
+app.on('will-quit', () => {
+  cleanupMouseTracking()
 })
 
-ipcMain.handle('select-source', (_, source) => {
-  selectedSource = source
-  if (sourceSelectorWindow) {
-    sourceSelectorWindow.close();
-    sourceSelectorWindow = null;
-  }
-  return selectedSource
+// Register all IPC handlers when app is ready
+app.whenReady().then(() => {
+  registerIpcHandlers(
+    createEditorWindowWrapper,
+    createSourceSelectorWindowWrapper,
+    () => mainWindow,
+    () => sourceSelectorWindow
+  )
+  createWindow()
 })
-
-ipcMain.handle('get-selected-source', () => {
-  return selectedSource
-})
-
-ipcMain.handle('open-source-selector', () => {
-  if (sourceSelectorWindow) {
-    sourceSelectorWindow.focus();
-    return;
-  }
-  createSourceSelectorWindow();
-})
-
-ipcMain.handle('switch-to-editor', () => {
-  if (win) {
-    win.close()
-    win = null
-  }
-  createEditorWindow()
-})
-
-app.whenReady().then(createWindow)

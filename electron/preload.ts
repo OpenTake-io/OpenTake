@@ -15,5 +15,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getSelectedSource: () => {
     return ipcRenderer.invoke('get-selected-source')
+  },
+  startMouseTracking: () => {
+    return ipcRenderer.invoke('start-mouse-tracking')
+  },
+  stopMouseTracking: () => {
+    return ipcRenderer.invoke('stop-mouse-tracking')
   }
 })

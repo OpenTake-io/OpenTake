@@ -36,6 +36,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         return;
       }
 
+      // Start mouse tracking
+      console.log('Starting mouse tracking from renderer...')
+      await window.electronAPI.startMouseTracking();
+
       // Use the selected source
       const stream = await (navigator.mediaDevices as any).getUserMedia({
         audio: false,
@@ -101,6 +105,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     ) {
       mediaRecorderRef.current.stop();
       setRecording(false);
+      
+      // Stop mouse tracking
+      console.log('Stopping mouse tracking from renderer...')
+      window.electronAPI.stopMouseTracking();
     }
   };
 

@@ -15,5 +15,7 @@ interface Window {
     openSourceSelector: () => Promise<void>
     selectSource: (source: any) => Promise<any>
     getSelectedSource: () => Promise<any>
+    startMouseTracking: () => Promise<{ success: boolean }>
+    stopMouseTracking: () => Promise<{ success: boolean }>
   }
 }
