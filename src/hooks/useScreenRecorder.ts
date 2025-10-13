@@ -28,26 +28,33 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
   const startRecording = async () => {
     try {
-      const sources = await window.electronAPI.getSources({
-        types: ["screen", "window"],
-        thumbnailSize: { width: 1920, height: 1080 },
-      });
-      // change this later to a picker screen
-      const source = sources[1];
-      console.log(sources)
+      // Get the selected source from the main process
+      const selectedSource = await window.electronAPI.getSelectedSource();
+      
+      if (!selectedSource) {
+        alert("Please select a source to record");
+        return;
+      }
+
+      // Use the selected source
       const stream = await (navigator.mediaDevices as any).getUserMedia({
         audio: false,
         video: {
           mandatory: {
             chromeMediaSource: "desktop",
-            chromeMediaSourceId: source.id,
+            chromeMediaSourceId: selectedSource.id,
           },
         },
       });
       streamRef.current = stream;
+      
+      if (!streamRef.current) {
+        throw new Error("Failed to get media stream");
+      }
+      
       chunksRef.current = [];
       let mimeType = "video/webm;codecs=vp9";
-      const recorder = new MediaRecorder(stream, {
+      const recorder = new MediaRecorder(streamRef.current, {
         mimeType,
         videoBitsPerSecond: 8000000,
       });

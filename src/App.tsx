@@ -1,4 +1,5 @@
 import { LaunchWindow } from "./components/LaunchWindow";
+import { SourceSelector } from "./components/SourceSelector";
 import { useEffect, useState } from "react";
 
 export default function App() {
@@ -22,6 +23,10 @@ export default function App() {
     return <LaunchWindow />;
   }
 
+  if (windowType === 'source-selector') {
+    return <SourceSelector />;
+  }
+
   if (windowType === 'editor') {
     return (
       <div className="w-full h-full bg-background text-foreground p-6">
@@ -33,7 +38,7 @@ export default function App() {
 
   return (
     <div className="w-full h-full bg-background text-foreground">
-      <h1>Default Window</h1>
+      <h1>Pangolin</h1>
     </div>
   );
 }
