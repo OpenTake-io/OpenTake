@@ -15,7 +15,13 @@ interface Window {
     openSourceSelector: () => Promise<void>
     selectSource: (source: any) => Promise<any>
     getSelectedSource: () => Promise<any>
-    startMouseTracking: () => Promise<{ success: boolean }>
-    stopMouseTracking: () => Promise<{ success: boolean }>
+    startMouseTracking: () => Promise<{ success: boolean; startTime?: number }>
+    stopMouseTracking: () => Promise<{ success: boolean; data?: any }>
+    saveMouseTrackingData: (videoFileName: string) => Promise<{ 
+      success: boolean
+      message: string
+      filePath?: string
+      eventCount?: number
+    }>
   }
 }

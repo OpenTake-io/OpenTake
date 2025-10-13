@@ -2,6 +2,7 @@ import { BrowserWindow, screen, ipcMain, desktopCapturer, app } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { uIOhook } from "uiohook-napi";
+import fs from "node:fs/promises";
 const __dirname$1 = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.join(__dirname$1, "..");
 const VITE_DEV_SERVER_URL$1 = process.env["VITE_DEV_SERVER_URL"];
@@ -98,69 +99,104 @@ function createSourceSelectorWindow() {
 }
 let isMouseTrackingActive = false;
 let isHookStarted = false;
+let recordingStartTime = 0;
+let mouseEventData = [];
 function startMouseTracking() {
   if (isMouseTrackingActive) {
-    console.log("⚠️ Mouse tracking already active");
     return { success: false, message: "Already tracking" };
   }
-  console.log("🎯 Starting mouse tracking...");
   isMouseTrackingActive = true;
+  recordingStartTime = performance.now();
+  mouseEventData = [];
   if (!isHookStarted) {
     setupMouseEventListeners();
     try {
       uIOhook.start();
       isHookStarted = true;
-      console.log("✅ Mouse tracking started successfully");
-      console.log('💡 If you see "Accessibility API is disabled" error:');
-      console.log("   Go to System Settings → Privacy & Security → Accessibility");
-      console.log("   Enable permissions for Electron/Terminal/VS Code");
-      return { success: true, message: "Mouse tracking started" };
+      return { success: true, message: "Mouse tracking started", startTime: recordingStartTime };
     } catch (error) {
       console.error("❌ Failed to start mouse tracking:", error);
       isMouseTrackingActive = false;
       return { success: false, message: "Failed to start hook", error };
     }
   } else {
-    console.log("✅ Mouse tracking resumed");
-    return { success: true, message: "Mouse tracking resumed" };
+    return { success: true, message: "Mouse tracking resumed", startTime: recordingStartTime };
   }
 }
 function stopMouseTracking() {
   if (!isMouseTrackingActive) {
-    console.log("⚠️ Mouse tracking not active");
     return { success: false, message: "Not currently tracking" };
   }
-  console.log("🛑 Stopping mouse tracking...");
   isMouseTrackingActive = false;
-  console.log("✅ Mouse tracking stopped (events will still be captured but not logged)");
-  return { success: true, message: "Mouse tracking stopped" };
+  const duration = performance.now() - recordingStartTime;
+  const session = {
+    startTime: recordingStartTime,
+    events: mouseEventData,
+    duration
+  };
+  return {
+    success: true,
+    message: "Mouse tracking stopped",
+    data: session
+  };
 }
 function setupMouseEventListeners() {
   uIOhook.on("mousemove", (e) => {
     if (isMouseTrackingActive) {
-      console.log(`[MOUSE MOVE] x: ${e.x}, y: ${e.y}`);
+      const timestamp = performance.now() - recordingStartTime;
+      const event = {
+        type: "move",
+        timestamp,
+        x: e.x,
+        y: e.y
+      };
+      mouseEventData.push(event);
     }
   });
   uIOhook.on("mousedown", (e) => {
     if (isMouseTrackingActive) {
-      console.log(`[MOUSE DOWN] x: ${e.x}, y: ${e.y}, button: ${e.button}, clicks: ${e.clicks}`);
+      const timestamp = performance.now() - recordingStartTime;
+      const event = {
+        type: "down",
+        timestamp,
+        x: e.x,
+        y: e.y,
+        button: e.button,
+        clicks: e.clicks
+      };
+      mouseEventData.push(event);
     }
   });
   uIOhook.on("mouseup", (e) => {
     if (isMouseTrackingActive) {
-      console.log(`[MOUSE UP] x: ${e.x}, y: ${e.y}, button: ${e.button}`);
+      const timestamp = performance.now() - recordingStartTime;
+      const event = {
+        type: "up",
+        timestamp,
+        x: e.x,
+        y: e.y,
+        button: e.button
+      };
+      mouseEventData.push(event);
     }
   });
   uIOhook.on("click", (e) => {
     if (isMouseTrackingActive) {
-      console.log(`[CLICK] x: ${e.x}, y: ${e.y}, button: ${e.button}, clicks: ${e.clicks}`);
+      const timestamp = performance.now() - recordingStartTime;
+      const event = {
+        type: "click",
+        timestamp,
+        x: e.x,
+        y: e.y,
+        button: e.button,
+        clicks: e.clicks
+      };
+      mouseEventData.push(event);
     }
   });
-  uIOhook.on("wheel", (e) => {
-    if (isMouseTrackingActive) {
-      console.log(`[WHEEL] x: ${e.x}, y: ${e.y}, amount: ${e.amount}, direction: ${e.direction}, rotation: ${e.rotation}`);
-    }
-  });
+}
+function getTrackingData() {
+  return [...mouseEventData];
 }
 function cleanupMouseTracking() {
   if (isHookStarted) {
@@ -168,7 +204,7 @@ function cleanupMouseTracking() {
       uIOhook.stop();
       isHookStarted = false;
       isMouseTrackingActive = false;
-      console.log("🧹 Mouse tracking cleaned up");
+      mouseEventData = [];
     } catch (error) {
       console.error("Error cleaning up mouse tracking:", error);
     }
@@ -218,6 +254,29 @@ function registerIpcHandlers(createEditorWindow2, createSourceSelectorWindow2, g
   });
   ipcMain.handle("stop-mouse-tracking", () => {
     return stopMouseTracking();
+  });
+  ipcMain.handle("save-mouse-tracking-data", async (_, videoFileName) => {
+    try {
+      const data = getTrackingData();
+      if (data.length === 0) {
+        return { success: false, message: "No tracking data to save" };
+      }
+      const jsonFileName = videoFileName.replace(".webm", "_tracking.json");
+      const filePath = path.join(process.env.HOME || "", "Downloads", jsonFileName);
+      await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
+      return {
+        success: true,
+        message: "Tracking data saved",
+        filePath,
+        eventCount: data.length
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: "Failed to save tracking data",
+        error: String(error)
+      };
+    }
   });
 }
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

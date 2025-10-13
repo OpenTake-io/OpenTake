@@ -1,5 +1,7 @@
 import { ipcMain, desktopCapturer, BrowserWindow } from 'electron'
-import { startMouseTracking, stopMouseTracking } from './mouseTracking'
+import { startMouseTracking, stopMouseTracking, getTrackingData } from './mouseTracking'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 
 // Store selected source
 let selectedSource: any = null
@@ -66,5 +68,35 @@ export function registerIpcHandlers(
   // Stop mouse tracking
   ipcMain.handle('stop-mouse-tracking', () => {
     return stopMouseTracking()
+  })
+
+  // Save mouse tracking data to file
+  ipcMain.handle('save-mouse-tracking-data', async (_, videoFileName: string) => {
+    try {
+      const data = getTrackingData()
+      
+      if (data.length === 0) {
+        return { success: false, message: 'No tracking data to save' }
+      }
+
+      // Save to the same directory as the video, with .json extension
+      const jsonFileName = videoFileName.replace('.webm', '_tracking.json')
+      const filePath = path.join(process.env.HOME || '', 'Downloads', jsonFileName)
+      
+      await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8')
+      
+      return { 
+        success: true, 
+        message: 'Tracking data saved',
+        filePath,
+        eventCount: data.length
+      }
+    } catch (error) {
+      return { 
+        success: false, 
+        message: 'Failed to save tracking data',
+        error: String(error)
+      }
+    }
   })
 }

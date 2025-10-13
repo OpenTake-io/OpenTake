@@ -21,5 +21,8 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
   },
   stopMouseTracking: () => {
     return electron.ipcRenderer.invoke("stop-mouse-tracking");
+  },
+  saveMouseTrackingData: (videoFileName) => {
+    return electron.ipcRenderer.invoke("save-mouse-tracking-data", videoFileName);
   }
 });

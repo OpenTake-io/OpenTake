@@ -37,7 +37,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       }
 
       // Start mouse tracking
-      console.log('Starting mouse tracking from renderer...')
       await window.electronAPI.startMouseTracking();
 
       // Use the selected source
@@ -68,21 +67,36 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
           chunksRef.current.push(e.data);
         }
       };
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         if (streamRef.current) {
           streamRef.current.getTracks().forEach((track) => track.stop());
           streamRef.current = null;
         }
         if (chunksRef.current.length === 0) return;
+        
         const blob = new Blob(chunksRef.current, { type: mimeType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `recording-${Date.now()}.webm`;
+        
+        // Generate filename with timestamp
+        const videoFileName = `recording-${Date.now()}.webm`;
+        a.download = videoFileName;
+        
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(url), 100);
+        
+        // Save mouse tracking data alongside the video
+        try {
+          const result = await window.electronAPI.saveMouseTrackingData(videoFileName);
+          if (!result.success) {
+            console.warn('Failed to save tracking data:', result.message);
+          }
+        } catch (error) {
+          console.error('Error saving tracking data:', error);
+        }
       };
       recorder.onerror = () => {
         setRecording(false);
@@ -107,7 +121,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       setRecording(false);
       
       // Stop mouse tracking
-      console.log('Stopping mouse tracking from renderer...')
       window.electronAPI.stopMouseTracking();
     }
   };
