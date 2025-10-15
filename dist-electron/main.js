@@ -318,7 +318,7 @@ async function cleanupOldRecordings() {
   try {
     const files = await fs.readdir(RECORDINGS_DIR);
     const now = Date.now();
-    const maxAge = 7 * 24 * 60 * 60 * 1e3;
+    const maxAge = 1 * 24 * 60 * 60 * 1e3;
     for (const file of files) {
       const filePath = path.join(RECORDINGS_DIR, file);
       const stats = await fs.stat(filePath);

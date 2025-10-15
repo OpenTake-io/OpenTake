@@ -96,7 +96,7 @@ export function SourceSelector() {
                 {screenSources.map((source) => (
                   <Card
                     key={source.id}
-                    className={`cursor-pointer transition-all hover:shadow-lg h-fit ${
+                    className={`cursor-pointer transition-all hover:shadow-lg h-fit scale-90 p-2 ${
                       selectedSource?.id === source.id 
                         ? 'ring-2 ring-gray-700 bg-gray-50' 
                         : 'hover:ring-1 hover:ring-gray-300 bg-white border border-gray-200'
@@ -139,6 +139,7 @@ export function SourceSelector() {
                         ? 'ring-2 ring-gray-700 bg-gray-50' 
                         : 'hover:ring-1 hover:ring-gray-300 bg-white border border-gray-200'
                     }`}
+                    style={{ transform: 'scale(0.9)', margin: '8px' }}
                     onClick={() => handleSourceSelect(source)}
                   >
                     <div className="p-3">
