@@ -118,85 +118,97 @@ export default function VideoEditor() {
 
   // --- Main render ---
   return (
-    <div className="flex flex-col h-screen bg-background p-6">
-      <div className="flex-1 flex items-center justify-center overflow-hidden relative">
-        {videoPath && (
-          <>
-            <canvas
-              ref={canvasRef}
-              className="max-w-full max-h-full"
-              style={{ 
-                borderRadius: 8,
-                objectFit: 'contain',
-                width: 'auto',
-                height: 'auto'
-              }}
+    <div className="flex h-screen bg-background p-6 gap-6">
+      <div className="flex flex-col flex-[7] min-w-0 h-full">
+        <div className="flex flex-col h-full justify-center overflow-hidden relative bg-black/5 rounded-lg p-4" style={{ flex: '0 0 60%' }}>
+          {videoPath && (
+            <>
+              <canvas
+                ref={canvasRef}
+                className="max-w-full max-h-full"
+                style={{ 
+                  borderRadius: 8,
+                  objectFit: 'contain',
+                  width: 'auto',
+                  height: 'auto',
+                  maxHeight: '80%',
+                  maxWidth: '90%'
+                }}
+              />
+              <video
+                ref={videoRef}
+                src={videoPath}
+                style={{ display: 'none' }}
+                preload="metadata"
+                onLoadedMetadata={e => {
+                  const video = e.currentTarget;
+                  if (isFinite(video.duration) && !isNaN(video.duration) && video.duration > 0) {
+                    setDuration(video.duration);
+                  }
+                }}
+                onCanPlay={() => {
+                  const video = videoRef.current;
+                  if (video && isFinite(video.duration) && video.duration > 0) {
+                    setDuration(video.duration);
+                  }
+                }}
+                onTimeUpdate={e => {
+                  const time = e.currentTarget.currentTime;
+                  if (isFinite(time) && !isNaN(time)) {
+                    setCurrentTime(time);
+                  }
+                }}
+                onError={() => setError('Failed to play video')}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => setIsPlaying(false)}
+              />
+            </>
+          )}
+          <div className="mt-4 bg-card border border-border rounded-lg p-4 flex items-center gap-4">
+            <button
+              onClick={togglePlayPause}
+              className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              aria-label={isPlaying ? 'Pause' : 'Play'}
+            >
+              {isPlaying ? (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <rect x="4" y="3" width="3" height="10" rx="0.5" />
+                  <rect x="9" y="3" width="3" height="10" rx="0.5" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M5 3.5v9l7-4.5z" />
+                </svg>
+              )}
+            </button>
+            <span className="text-sm text-muted-foreground font-mono min-w-[80px]">
+              {formatTime(currentTime)}
+            </span>
+            <input
+              type="range"
+              min="0"
+              max={duration || 100}
+              value={currentTime}
+              onChange={handleSeek}
+              step="0.01"
+              className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer hover:[&::-webkit-slider-thumb]:bg-primary/80"
             />
-            <video
-              ref={videoRef}
-              src={videoPath}
-              style={{ display: 'none' }}
-              preload="metadata"
-              onLoadedMetadata={e => {
-                const video = e.currentTarget;
-                if (isFinite(video.duration) && !isNaN(video.duration) && video.duration > 0) {
-                  setDuration(video.duration);
-                }
-              }}
-              onCanPlay={() => {
-                const video = videoRef.current;
-                if (video && isFinite(video.duration) && video.duration > 0) {
-                  setDuration(video.duration);
-                }
-              }}
-              onTimeUpdate={e => {
-                const time = e.currentTarget.currentTime;
-                if (isFinite(time) && !isNaN(time)) {
-                  setCurrentTime(time);
-                }
-              }}
-              onError={() => setError('Failed to play video')}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              onEnded={() => setIsPlaying(false)}
-            />
-          </>
-        )}
+            <span className="text-sm text-muted-foreground font-mono min-w-[80px] text-right">
+              {formatTime(duration)}
+            </span>
+          </div>
+        </div>
+        <div className="mt-6 bg-card border border-border rounded-lg p-4 min-h-[100px] flex flex-col justify-center" style={{ flex: '1 1 0', minHeight: 0 }}>
+          <div className="h-8 bg-muted rounded flex items-center justify-center text-muted-foreground text-xs">
+            Timeline/Editor controls coming soon...
+          </div>
+        </div>
       </div>
-
-      <div className="mt-6 bg-card border border-border rounded-lg p-4">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={togglePlayPause}
-            className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-            aria-label={isPlaying ? 'Pause' : 'Play'}
-          >
-            {isPlaying ? (
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <rect x="4" y="3" width="3" height="10" rx="0.5" />
-                <rect x="9" y="3" width="3" height="10" rx="0.5" />
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M5 3.5v9l7-4.5z" />
-              </svg>
-            )}
-          </button>
-          <span className="text-sm text-muted-foreground font-mono min-w-[80px]">
-            {formatTime(currentTime)}
-          </span>
-          <input
-            type="range"
-            min="0"
-            max={duration || 100}
-            value={currentTime}
-            onChange={handleSeek}
-            step="0.01"
-            className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer hover:[&::-webkit-slider-thumb]:bg-primary/80"
-          />
-          <span className="text-sm text-muted-foreground font-mono min-w-[80px] text-right">
-            {formatTime(duration)}
-          </span>
+      <div className="flex-[3] min-w-0 bg-white border border-border rounded-lg p-6 flex flex-col items-center justify-start">
+        <div className="w-full h-8 bg-muted rounded mb-4" />
+        <div className="flex-1 w-full flex items-center justify-center text-muted-foreground text-lg">
+          Settings panel (coming soon)
         </div>
       </div>
     </div>
