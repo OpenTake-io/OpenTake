@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { fixWebmDuration } from "@fix-webm-duration/fix";
 
 type UseScreenRecorderReturn = {
   recording: boolean;
@@ -10,13 +11,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const startTimeRef = useRef<number>(0);
 
   useEffect(() => {
     return () => {
-      if (
-        mediaRecorderRef.current &&
-        mediaRecorderRef.current.state === "recording"
-      ) {
+      if (mediaRecorderRef.current?.state === "recording") {
         mediaRecorderRef.current.stop();
       }
       if (streamRef.current) {
@@ -60,14 +59,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       
       let bitrate: number;
       if (totalPixels <= 1920 * 1080) {
-        bitrate = 150_000_000; // 150 Mbps for 1080p
+        bitrate = 150_000_000;
       } else if (totalPixels <= 2560 * 1440) {
-        bitrate = 250_000_000; // 250 Mbps for 1440p
+        bitrate = 250_000_000;
       } else {
-        bitrate = 400_000_000; // 400 Mbps for 4K
+        bitrate = 400_000_000;
       }
-      
-      console.log(`Recording at ${width}x${height} with bitrate: ${bitrate / 1_000_000} Mbps`);
       
       chunksRef.current = [];
       const mimeType = "video/webm;codecs=vp9";
@@ -84,45 +81,37 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       };
       
       recorder.onstop = async () => {
-        // Don't stop stream here - already stopped in stopRecording for immediate indicator removal
-        // Just cleanup the ref
         streamRef.current = null;
         
         if (chunksRef.current.length === 0) return;
         
-        const videoBlob = new Blob(chunksRef.current, { type: mimeType });
+        const duration = Date.now() - startTimeRef.current;
+        const buggyBlob = new Blob(chunksRef.current, { type: mimeType });
         const timestamp = Date.now();
         const videoFileName = `recording-${timestamp}.webm`;
         const trackingFileName = `recording-${timestamp}_tracking.json`;
         
         try {
+          const videoBlob = await fixWebmDuration(buggyBlob, duration);
           const arrayBuffer = await videoBlob.arrayBuffer();
-          
-          console.log(`Saving video: ${videoFileName} (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)} MB)`);
           
           const videoResult = await window.electronAPI.storeRecordedVideo(
             arrayBuffer,
             videoFileName
           );
           
-          if (videoResult.success) {
-            console.log('✅ Video stored:', videoResult.path);
-          } else {
-            console.error('❌ Failed to store video:', videoResult.message);
+          if (!videoResult.success) {
+            console.error('Failed to store video:', videoResult.message);
+            return;
           }
           
           const trackingResult = await window.electronAPI.storeMouseTrackingData(trackingFileName);
           
-          if (trackingResult.success) {
-            console.log('Mouse tracking stored:', trackingResult.path);
-            console.log(`Captured ${trackingResult.eventCount} mouse events`);
-          } else {
-            console.warn('Failed to store tracking:', trackingResult.message);
+          if (!trackingResult.success) {
+            console.warn('Failed to store mouse tracking:', trackingResult.message);
           }
           
-          console.log('Opening editor window...');
           await window.electronAPI.switchToEditor();
-          
         } catch (error) {
           console.error('Error saving recording:', error);
         }
@@ -133,6 +122,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       };
       
       recorder.start(1000);
+      startTimeRef.current = Date.now();
       setRecording(true);
     } catch (error) {
       console.error('Failed to start recording:', error);
@@ -145,18 +135,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   };
 
   const stopRecording = () => {
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state === "recording"
-    ) {
-      // Stop stream tracks IMMEDIATELY to remove macOS status indicator
+    if (mediaRecorderRef.current?.state === "recording") {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
       
       mediaRecorderRef.current.stop();
       setRecording(false);
-      
       window.electronAPI.stopMouseTracking();
     }
   };

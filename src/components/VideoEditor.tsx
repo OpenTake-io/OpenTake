@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState } from "react";
 
 export default function VideoEditor() {
-  // --- State ---
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -10,11 +9,9 @@ export default function VideoEditor() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // --- Refs ---
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // --- Load video path on mount ---
   useEffect(() => {
     async function loadVideo() {
       try {
@@ -33,21 +30,21 @@ export default function VideoEditor() {
     loadVideo();
   }, []);
 
-  // --- Canvas drawing and video event listeners ---
   useEffect(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return;
+
     let animationId: number;
 
     function drawFrame() {
-      if (!video || !canvas) return;
-      if (video.paused || video.ended) return;
-      // Keep canvas size in sync with video
+      if (!video || !canvas || video.paused || video.ended) return;
+
       if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
       }
+
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -56,12 +53,8 @@ export default function VideoEditor() {
       animationId = requestAnimationFrame(drawFrame);
     }
 
-    function handlePlay() {
-      drawFrame();
-    }
-    function handlePause() {
-      cancelAnimationFrame(animationId);
-    }
+    const handlePlay = () => drawFrame();
+    const handlePause = () => cancelAnimationFrame(animationId);
 
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
@@ -75,32 +68,23 @@ export default function VideoEditor() {
     };
   }, [videoPath]);
 
-  // --- Handlers ---
   function togglePlayPause() {
     if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.pause();
-    } else {
-      videoRef.current.play();
-    }
+    isPlaying ? videoRef.current.pause() : videoRef.current.play();
   }
 
   function handleSeek(e: React.ChangeEvent<HTMLInputElement>) {
     if (!videoRef.current) return;
-    const newTime = parseFloat(e.target.value);
-    videoRef.current.currentTime = newTime;
+    videoRef.current.currentTime = parseFloat(e.target.value);
   }
 
   function formatTime(seconds: number) {
-    if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) {
-      return '0:00';
-    }
+    if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return '0:00';
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
-  // --- Early returns for loading/error ---
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
@@ -108,6 +92,7 @@ export default function VideoEditor() {
       </div>
     );
   }
+
   if (error) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
@@ -116,7 +101,6 @@ export default function VideoEditor() {
     );
   }
 
-  // --- Main render ---
   return (
     <div className="flex h-screen bg-background p-6 gap-6">
       <div className="flex flex-col flex-[7] min-w-0 h-full">
@@ -142,23 +126,21 @@ export default function VideoEditor() {
                 preload="metadata"
                 onLoadedMetadata={e => {
                   const video = e.currentTarget;
-                  if (isFinite(video.duration) && !isNaN(video.duration) && video.duration > 0) {
+                  if (isFinite(video.duration) && video.duration > 0) {
                     setDuration(video.duration);
                   }
                 }}
-                onCanPlay={() => {
-                  const video = videoRef.current;
-                  if (video && isFinite(video.duration) && video.duration > 0) {
+                onDurationChange={e => {
+                  const video = e.currentTarget;
+                  if (isFinite(video.duration) && video.duration > 0) {
                     setDuration(video.duration);
                   }
                 }}
                 onTimeUpdate={e => {
                   const time = e.currentTarget.currentTime;
-                  if (isFinite(time) && !isNaN(time)) {
-                    setCurrentTime(time);
-                  }
+                  if (isFinite(time)) setCurrentTime(time);
                 }}
-                onError={() => setError('Failed to play video')}
+                onError={() => setError('Failed to load video')}
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
                 onEnded={() => setIsPlaying(false)}
