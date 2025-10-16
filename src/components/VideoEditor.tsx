@@ -1,4 +1,5 @@
 
+
 import { useEffect, useRef, useState } from "react";
 
 export default function VideoEditor() {
@@ -11,6 +12,7 @@ export default function VideoEditor() {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isSeeking = useRef(false);
 
   useEffect(() => {
     async function loadVideo() {
@@ -36,15 +38,12 @@ export default function VideoEditor() {
     if (!video || !canvas) return;
 
     let animationId: number;
-
     function drawFrame() {
       if (!video || !canvas || video.paused || video.ended) return;
-
       if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
       }
-
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -52,14 +51,11 @@ export default function VideoEditor() {
       }
       animationId = requestAnimationFrame(drawFrame);
     }
-
     const handlePlay = () => drawFrame();
     const handlePause = () => cancelAnimationFrame(animationId);
-
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
     video.addEventListener('ended', handlePause);
-
     return () => {
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
@@ -72,12 +68,18 @@ export default function VideoEditor() {
     if (!videoRef.current) return;
     isPlaying ? videoRef.current.pause() : videoRef.current.play();
   }
-
   function handleSeek(e: React.ChangeEvent<HTMLInputElement>) {
     if (!videoRef.current) return;
-    videoRef.current.currentTime = parseFloat(e.target.value);
+    const newTime = parseFloat(e.target.value);
+    videoRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
   }
-
+  function handleSeekStart() {
+    isSeeking.current = true;
+  }
+  function handleSeekEnd() {
+    isSeeking.current = false;
+  }
   function formatTime(seconds: number) {
     if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return '0:00';
     const mins = Math.floor(seconds / 60);
@@ -92,7 +94,6 @@ export default function VideoEditor() {
       </div>
     );
   }
-
   if (error) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
@@ -102,69 +103,63 @@ export default function VideoEditor() {
   }
 
   return (
-    <div className="flex h-screen bg-background p-6 gap-6">
-      <div className="flex flex-col flex-[7] min-w-0 h-full">
-        <div className="flex flex-col h-full justify-center overflow-hidden relative bg-black/5 rounded-lg p-4" style={{ flex: '0 0 60%' }}>
-          {videoPath && (
-            <>
-              <canvas
-                ref={canvasRef}
-                className="max-w-full max-h-full"
-                style={{ 
-                  borderRadius: 8,
-                  objectFit: 'contain',
-                  width: 'auto',
-                  height: 'auto',
-                  maxHeight: '80%',
-                  maxWidth: '90%'
-                }}
-              />
-              <video
-                ref={videoRef}
-                src={videoPath}
-                style={{ display: 'none' }}
-                preload="metadata"
-                onLoadedMetadata={e => {
-                  const video = e.currentTarget;
-                  if (isFinite(video.duration) && video.duration > 0) {
-                    setDuration(video.duration);
-                  }
-                }}
-                onDurationChange={e => {
-                  const video = e.currentTarget;
-                  if (isFinite(video.duration) && video.duration > 0) {
-                    setDuration(video.duration);
-                  }
-                }}
-                onTimeUpdate={e => {
-                  const time = e.currentTarget.currentTime;
-                  if (isFinite(time)) setCurrentTime(time);
-                }}
-                onError={() => setError('Failed to load video')}
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                onEnded={() => setIsPlaying(false)}
-              />
-            </>
-          )}
-          <div className="mt-4 bg-card border border-border rounded-lg p-4 flex items-center gap-4">
+    <div className="flex h-screen bg-background p-8 gap-8">
+      <div className="flex flex-col flex-[7] min-w-0 gap-8">
+        <div className="flex flex-col gap-6 flex-1">
+          <div 
+            className="w-full aspect-video rounded-xl p-8 flex items-center justify-center overflow-hidden bg-cover bg-center"
+            style={{ backgroundImage: 'url(/wallpaper.png)' }}
+          >
+            {videoPath && (
+              <>
+                <canvas
+                  ref={canvasRef}
+                  className="w-full h-full object-contain rounded-lg"
+                />
+                <video
+                  ref={videoRef}
+                  src={videoPath}
+                  className="hidden"
+                  preload="metadata"
+                  onLoadedMetadata={e => {
+                    const { duration } = e.currentTarget;
+                    if (isFinite(duration) && duration > 0) setDuration(duration);
+                  }}
+                  onDurationChange={e => {
+                    const { duration } = e.currentTarget;
+                    if (isFinite(duration) && duration > 0) setDuration(duration);
+                  }}
+                  onTimeUpdate={e => {
+                    const time = e.currentTarget.currentTime;
+                    if (isFinite(time) && !isSeeking.current) setCurrentTime(time);
+                  }}
+                  onError={() => setError('Failed to load video')}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  onEnded={() => setIsPlaying(false)}
+                />
+              </>
+            )}
+          </div>
+
+          <div className="flex items-center gap-4 px-4">
             <button
               onClick={togglePlayPause}
-              className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-md"
               aria-label={isPlaying ? 'Pause' : 'Play'}
             >
               {isPlaying ? (
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <rect x="4" y="3" width="3" height="10" rx="0.5" />
-                  <rect x="9" y="3" width="3" height="10" rx="0.5" />
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="4" width="4" height="16" rx="1" />
+                  <rect x="14" y="4" width="4" height="16" rx="1" />
                 </svg>
               ) : (
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M5 3.5v9l7-4.5z" />
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z" />
                 </svg>
               )}
             </button>
-            <span className="text-sm text-muted-foreground font-mono min-w-[80px]">
+            <span className="text-xs text-muted-foreground font-mono tabular-nums min-w-[50px]">
               {formatTime(currentTime)}
             </span>
             <input
@@ -173,23 +168,32 @@ export default function VideoEditor() {
               max={duration || 100}
               value={currentTime}
               onChange={handleSeek}
+              onMouseDown={handleSeekStart}
+              onMouseUp={handleSeekEnd}
+              onTouchStart={handleSeekStart}
+              onTouchEnd={handleSeekEnd}
               step="0.01"
-              className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer hover:[&::-webkit-slider-thumb]:bg-primary/80"
+              className="flex-1 h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-blue-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:shadow-sm hover:[&::-webkit-slider-thumb]:scale-125"
+              style={{
+                background: `linear-gradient(to right, rgb(59 130 246) 0%, rgb(59 130 246) ${(currentTime / (duration || 100)) * 100}%, rgb(229 231 235) ${(currentTime / (duration || 100)) * 100}%, rgb(229 231 235) 100%)`
+              }}
             />
-            <span className="text-sm text-muted-foreground font-mono min-w-[80px] text-right">
+            <span className="text-xs text-muted-foreground font-mono tabular-nums min-w-[50px] text-right">
               {formatTime(duration)}
             </span>
           </div>
         </div>
-        <div className="mt-6 bg-card border border-border rounded-lg p-4 min-h-[100px] flex flex-col justify-center" style={{ flex: '1 1 0', minHeight: 0 }}>
-          <div className="h-8 bg-muted rounded flex items-center justify-center text-muted-foreground text-xs">
+
+        <div className="bg-card border border-border rounded-xl p-8 flex-1 min-h-[180px] flex flex-col justify-center shadow-sm">
+          <div className="h-12 bg-muted rounded-lg flex items-center justify-center text-muted-foreground text-sm">
             Timeline/Editor controls coming soon...
           </div>
         </div>
       </div>
-      <div className="flex-[3] min-w-0 bg-white border border-border rounded-lg p-6 flex flex-col items-center justify-start">
-        <div className="w-full h-8 bg-muted rounded mb-4" />
-        <div className="flex-1 w-full flex items-center justify-center text-muted-foreground text-lg">
+
+      <div className="flex-[3] min-w-0 bg-card border border-border rounded-xl p-8 flex flex-col shadow-sm">
+        <div className="w-full h-10 bg-muted rounded-lg mb-6" />
+        <div className="flex-1 w-full flex items-center justify-center text-muted-foreground text-base">
           Settings panel (coming soon)
         </div>
       </div>
