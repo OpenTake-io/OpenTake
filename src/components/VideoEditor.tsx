@@ -1,31 +1,106 @@
-import { useEffect, useState } from "react";
 
-export function VideoEditor() {
+import { useEffect, useRef, useState } from "react";
+
+export default function VideoEditor() {
+  // --- State ---
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
 
+  // --- Refs ---
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // --- Load video path on mount ---
   useEffect(() => {
+    async function loadVideo() {
+      try {
+        const result = await window.electronAPI.getRecordedVideoPath();
+        if (result.success && result.path) {
+          setVideoPath(`file://${result.path}`);
+        } else {
+          setError(result.message || 'Failed to load video');
+        }
+      } catch (err) {
+        setError('Error loading video: ' + String(err));
+      } finally {
+        setLoading(false);
+      }
+    }
     loadVideo();
   }, []);
 
-  const loadVideo = async () => {
-    try {
-      const result = await window.electronAPI.getRecordedVideoPath();
-      
-      if (result.success && result.path) {
-        setVideoPath(`file://${result.path}`);
-        console.log('Loading video from:', result.path);
-      } else {
-        setError(result.message || 'Failed to load video');
-      }
-    } catch (err) {
-      setError('Error loading video: ' + String(err));
-    } finally {
-      setLoading(false);
-    }
-  };
+  // --- Canvas drawing and video event listeners ---
+  useEffect(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    let animationId: number;
 
+    function drawFrame() {
+      if (!video || !canvas) return;
+      if (video.paused || video.ended) return;
+      // Keep canvas size in sync with video
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      }
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      }
+      animationId = requestAnimationFrame(drawFrame);
+    }
+
+    function handlePlay() {
+      drawFrame();
+    }
+    function handlePause() {
+      cancelAnimationFrame(animationId);
+    }
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('ended', handlePause);
+
+    return () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('ended', handlePause);
+      cancelAnimationFrame(animationId);
+    };
+  }, [videoPath]);
+
+  // --- Handlers ---
+  function togglePlayPause() {
+    if (!videoRef.current) return;
+    if (isPlaying) {
+      videoRef.current.pause();
+    } else {
+      videoRef.current.play();
+    }
+  }
+
+  function handleSeek(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!videoRef.current) return;
+    const newTime = parseFloat(e.target.value);
+    videoRef.current.currentTime = newTime;
+  }
+
+  function formatTime(seconds: number) {
+    if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) {
+      return '0:00';
+    }
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  // --- Early returns for loading/error ---
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
@@ -33,7 +108,6 @@ export function VideoEditor() {
       </div>
     );
   }
-
   if (error) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
@@ -42,35 +116,88 @@ export function VideoEditor() {
     );
   }
 
+  // --- Main render ---
   return (
     <div className="flex flex-col h-screen bg-background p-6">
-      <h1 className="text-2xl font-bold mb-4 text-foreground">Video Editor</h1>
-      
-      <div className="flex-1 flex items-center justify-center bg-black rounded-lg overflow-hidden">
+      <div className="flex-1 flex items-center justify-center overflow-hidden relative">
         {videoPath && (
-          <video
-            src={videoPath}
-            controls
-            autoPlay
-            className="max-w-full max-h-full"
-            onError={(e) => {
-              console.error('Video playback error:', e);
-              setError('Failed to play video');
-            }}
-            onLoadedMetadata={(e) => {
-              const video = e.currentTarget;
-              console.log('Video loaded:', {
-                duration: video.duration,
-                width: video.videoWidth,
-                height: video.videoHeight
-              });
-            }}
-          />
+          <>
+            <canvas
+              ref={canvasRef}
+              className="max-w-full max-h-full"
+              style={{ 
+                borderRadius: 8,
+                objectFit: 'contain',
+                width: 'auto',
+                height: 'auto'
+              }}
+            />
+            <video
+              ref={videoRef}
+              src={videoPath}
+              style={{ display: 'none' }}
+              preload="metadata"
+              onLoadedMetadata={e => {
+                const video = e.currentTarget;
+                if (isFinite(video.duration) && !isNaN(video.duration) && video.duration > 0) {
+                  setDuration(video.duration);
+                }
+              }}
+              onCanPlay={() => {
+                const video = videoRef.current;
+                if (video && isFinite(video.duration) && video.duration > 0) {
+                  setDuration(video.duration);
+                }
+              }}
+              onTimeUpdate={e => {
+                const time = e.currentTarget.currentTime;
+                if (isFinite(time) && !isNaN(time)) {
+                  setCurrentTime(time);
+                }
+              }}
+              onError={() => setError('Failed to play video')}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onEnded={() => setIsPlaying(false)}
+            />
+          </>
         )}
       </div>
-      
-      <div className="mt-4 text-sm text-muted-foreground">
-        Video path: {videoPath}
+
+      <div className="mt-6 bg-card border border-border rounded-lg p-4">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={togglePlayPause}
+            className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            aria-label={isPlaying ? 'Pause' : 'Play'}
+          >
+            {isPlaying ? (
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <rect x="4" y="3" width="3" height="10" rx="0.5" />
+                <rect x="9" y="3" width="3" height="10" rx="0.5" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M5 3.5v9l7-4.5z" />
+              </svg>
+            )}
+          </button>
+          <span className="text-sm text-muted-foreground font-mono min-w-[80px]">
+            {formatTime(currentTime)}
+          </span>
+          <input
+            type="range"
+            min="0"
+            max={duration || 100}
+            value={currentTime}
+            onChange={handleSeek}
+            step="0.01"
+            className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer hover:[&::-webkit-slider-thumb]:bg-primary/80"
+          />
+          <span className="text-sm text-muted-foreground font-mono min-w-[80px] text-right">
+            {formatTime(duration)}
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { LaunchWindow } from "./components/LaunchWindow";
 import { SourceSelector } from "./components/SourceSelector";
-import { VideoEditor } from "./components/VideoEditor";
+import VideoEditor from "./components/VideoEditor";
 import { useEffect, useState } from "react";
 
 export default function App() {
