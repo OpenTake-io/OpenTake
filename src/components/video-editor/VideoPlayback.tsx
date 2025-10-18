@@ -112,10 +112,15 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     }
   };
 
+  const isImageUrl = wallpaper?.startsWith('/wallpapers/') || wallpaper?.startsWith('http');
+  const backgroundStyle = isImageUrl 
+    ? { backgroundImage: `url(${wallpaper || '/wallpapers/wallpaper1.jpg'})` }
+    : { background: wallpaper || '/wallpapers/wallpaper1.jpg' };
+
   return (
     <div
       className="w-full aspect-video rounded-sm p-12 flex items-center justify-center overflow-hidden bg-cover bg-center"
-      style={{ backgroundImage: `url(${wallpaper || '/wallpapers/wallpaper1.jpg'})` }}
+      style={backgroundStyle}
     >
       <canvas
         ref={canvasRef}
