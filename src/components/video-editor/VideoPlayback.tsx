@@ -7,6 +7,7 @@ interface VideoPlaybackProps {
   onTimeUpdate: (time: number) => void;
   onPlayStateChange: (playing: boolean) => void;
   onError: (error: string) => void;
+  wallpaper?: string;
 }
 
 export interface VideoPlaybackRef {
@@ -20,6 +21,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   onTimeUpdate,
   onPlayStateChange,
   onError,
+  wallpaper,
 }, ref) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -70,9 +72,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   }, [videoPath]);
 
   return (
-    <div 
+    <div
       className="w-full aspect-video rounded-xl p-8 flex items-center justify-center overflow-hidden bg-cover bg-center"
-      style={{ backgroundImage: 'url(/wallpaper.png)' }}
+      style={{ backgroundImage: `url(${wallpaper || '/wallpapers/wallpaper1.jpg'})` }}
     >
       <canvas
         ref={canvasRef}

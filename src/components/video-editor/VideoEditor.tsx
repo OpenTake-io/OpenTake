@@ -1,10 +1,14 @@
 
 
 import { useEffect, useRef, useState } from "react";
+
 import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
 import PlaybackControls from "./PlaybackControls";
 import TimelineEditor from "./TimelineEditor";
 import SettingsPanel from "./SettingsPanel";
+
+const WALLPAPER_COUNT = 12;
+const WALLPAPER_PATHS = Array.from({ length: WALLPAPER_COUNT }, (_, i) => `/wallpapers/wallpaper${i + 1}.jpg`);
 
 export default function VideoEditor() {
   const [videoPath, setVideoPath] = useState<string | null>(null);
@@ -13,6 +17,7 @@ export default function VideoEditor() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [wallpaper, setWallpaper] = useState<string>(WALLPAPER_PATHS[0]);
 
   const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
   const isSeeking = useRef(false);
@@ -85,6 +90,7 @@ export default function VideoEditor() {
                 onTimeUpdate={setCurrentTime}
                 onPlayStateChange={setIsPlaying}
                 onError={setError}
+                wallpaper={wallpaper}
               />
               <PlaybackControls
                 isPlaying={isPlaying}
@@ -100,7 +106,7 @@ export default function VideoEditor() {
         </div>
         <TimelineEditor />
       </div>
-      <SettingsPanel />
+      <SettingsPanel selected={wallpaper} onWallpaperChange={setWallpaper} />
     </div>
   );
 }
