@@ -1,11 +1,25 @@
 import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 
 const WALLPAPER_COUNT = 12;
 const WALLPAPER_PATHS = Array.from({ length: WALLPAPER_COUNT }, (_, i) => `/wallpapers/wallpaper${i + 1}.jpg`);
 
-export default function SettingsPanel({ selected, onWallpaperChange }: { selected: string, onWallpaperChange: (path: string) => void }) {
+interface SettingsPanelProps {
+  selected: string;
+  onWallpaperChange: (path: string) => void;
+  shadowEnabled: boolean;
+  onShadowChange: (enabled: boolean) => void;
+}
+
+export default function SettingsPanel({ selected, onWallpaperChange, shadowEnabled, onShadowChange }: SettingsPanelProps) {
   return (
     <div className="flex-[3] min-w-0 bg-card border border-border rounded-xl p-8 flex flex-col shadow-sm">
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Switch checked={shadowEnabled} onCheckedChange={onShadowChange} />
+          <div className="text-sm">Shadow</div>
+        </div>
+      </div>
       <div className="mb-6">
         <div className="text-lg mb-2">Choose Background</div>
         <div className="grid grid-cols-6 gap-3">
