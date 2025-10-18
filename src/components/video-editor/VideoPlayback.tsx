@@ -71,6 +71,33 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     };
   }, [videoPath]);
 
+  // Draw first frame when metadata is loaded
+  const handleLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
+    onDurationChange(e.currentTarget.duration);
+    // Draw first frame
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (video && canvas) {
+      video.currentTime = 0;
+      const drawFirstFrame = () => {
+        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+        }
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        }
+        video.removeEventListener('seeked', drawFirstFrame);
+      };
+      video.addEventListener('seeked', drawFirstFrame);
+      if (video.currentTime === 0 && video.readyState >= 2) {
+        drawFirstFrame();
+      }
+    }
+  };
+
   return (
     <div
       className="w-full aspect-video rounded-xl p-8 flex items-center justify-center overflow-hidden bg-cover bg-center"
@@ -85,9 +112,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
         src={videoPath}
         className="hidden"
         preload="metadata"
-        onLoadedMetadata={e => {
-          onDurationChange(e.currentTarget.duration);
-        }}
+        onLoadedMetadata={handleLoadedMetadata}
         onDurationChange={e => {
           onDurationChange(e.currentTarget.duration);
         }}
