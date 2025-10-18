@@ -25,6 +25,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
 }, ref) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const drawFrameRef = useRef<(() => void) | null>(null);
 
   useImperativeHandle(ref, () => ({
     video: videoRef.current,
@@ -45,9 +46,30 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Apply rounded rectangle clipping path with consistent radius
+        const radius = Math.min(canvas.width, canvas.height) * 0.02;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(radius, 0);
+        ctx.lineTo(canvas.width - radius, 0);
+        ctx.quadraticCurveTo(canvas.width, 0, canvas.width, radius);
+        ctx.lineTo(canvas.width, canvas.height - radius);
+        ctx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - radius, canvas.height);
+        ctx.lineTo(radius, canvas.height);
+        ctx.quadraticCurveTo(0, canvas.height, 0, canvas.height - radius);
+        ctx.lineTo(0, radius);
+        ctx.quadraticCurveTo(0, 0, radius, 0);
+        ctx.closePath();
+        ctx.clip();
+        
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.restore();
       }
     }
+    
+    // Store drawFrame in a ref so handleLoadedMetadata can use it
+    drawFrameRef.current = drawFrame;
     function drawFrameLoop() {
       if (!video || !canvas || video.paused || video.ended) return;
       drawFrame();
@@ -76,19 +98,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     onDurationChange(e.currentTarget.duration);
     // Draw first frame
     const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (video && canvas) {
+    if (video) {
       video.currentTime = 0;
       const drawFirstFrame = () => {
-        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-        }
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        }
+        // Use the shared drawFrame function from the ref
+        drawFrameRef.current?.();
         video.removeEventListener('seeked', drawFirstFrame);
       };
       video.addEventListener('seeked', drawFirstFrame);
@@ -100,7 +114,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
 
   return (
     <div
-      className="w-full aspect-video rounded-xl p-8 flex items-center justify-center overflow-hidden bg-cover bg-center"
+      className="w-full aspect-video rounded-sm p-12 flex items-center justify-center overflow-hidden bg-cover bg-center"
       style={{ backgroundImage: `url(${wallpaper || '/wallpapers/wallpaper1.jpg'})` }}
     >
       <canvas
@@ -110,7 +124,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       <video
         ref={videoRef}
         src={videoPath}
-        className="hidden"
+        className="hidden rounded"
         preload="metadata"
         onLoadedMetadata={handleLoadedMetadata}
         onDurationChange={e => {

@@ -7,7 +7,7 @@ export default function SettingsPanel({ selected, onWallpaperChange }: { selecte
   return (
     <div className="flex-[3] min-w-0 bg-card border border-border rounded-xl p-8 flex flex-col shadow-sm">
       <div className="mb-6">
-        <div className="text-lg font-semibold mb-2">Choose Background</div>
+        <div className="text-lg mb-2">Choose Background</div>
         <div className="grid grid-cols-6 gap-3">
           {WALLPAPER_PATHS.map((path, idx) => (
             <div
