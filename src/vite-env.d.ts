@@ -36,5 +36,7 @@ interface Window {
       message?: string
       error?: string
     }>
+    setRecordingState: (recording: boolean) => Promise<void>
+    onStopRecordingFromTray: (callback: () => void) => () => void
   }
 }

@@ -1,4 +1,4 @@
-import { BrowserWindow, screen, ipcMain, desktopCapturer, app } from "electron";
+import { BrowserWindow, screen, ipcMain, desktopCapturer, app, nativeImage, Tray, Menu } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -213,7 +213,7 @@ function cleanupMouseTracking() {
   }
 }
 let selectedSource = null;
-function registerIpcHandlers(createEditorWindow2, createSourceSelectorWindow2, getMainWindow, getSourceSelectorWindow) {
+function registerIpcHandlers(createEditorWindow2, createSourceSelectorWindow2, getMainWindow, getSourceSelectorWindow, onRecordingStateChange) {
   ipcMain.handle("get-sources", async (_, opts) => {
     const sources = await desktopCapturer.getSources(opts);
     return sources.map((source) => ({
@@ -312,6 +312,12 @@ function registerIpcHandlers(createEditorWindow2, createSourceSelectorWindow2, g
       return { success: false, message: "Failed to get video path", error: String(error) };
     }
   });
+  ipcMain.handle("set-recording-state", (_, recording) => {
+    const source = selectedSource || { name: "Screen" };
+    if (onRecordingStateChange) {
+      onRecordingStateChange(recording, source.name);
+    }
+  });
 }
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RECORDINGS_DIR = path.join(app.getPath("userData"), "recordings");
@@ -347,8 +353,33 @@ const RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
 let mainWindow = null;
 let sourceSelectorWindow = null;
+let tray = null;
+let selectedSourceName = "";
 function createWindow() {
   mainWindow = createHudOverlayWindow();
+}
+function createTray() {
+  const iconPath = path.join(process.env.VITE_PUBLIC || RENDERER_DIST, "rec-button.png");
+  let icon = nativeImage.createFromPath(iconPath);
+  icon = icon.resize({ width: 24, height: 24, quality: "best" });
+  tray = new Tray(icon);
+  updateTrayMenu();
+}
+function updateTrayMenu() {
+  if (!tray) return;
+  const menuTemplate = [
+    {
+      label: "Stop Recording",
+      click: () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("stop-recording-from-tray");
+        }
+      }
+    }
+  ];
+  const contextMenu = Menu.buildFromTemplate(menuTemplate);
+  tray.setContextMenu(contextMenu);
+  tray.setToolTip(`Recording: ${selectedSourceName}`);
 }
 function createEditorWindowWrapper() {
   if (mainWindow) {
@@ -388,7 +419,21 @@ app.whenReady().then(async () => {
     createEditorWindowWrapper,
     createSourceSelectorWindowWrapper,
     () => mainWindow,
-    () => sourceSelectorWindow
+    () => sourceSelectorWindow,
+    (recording, sourceName) => {
+      selectedSourceName = sourceName;
+      if (recording) {
+        if (!tray) createTray();
+        updateTrayMenu();
+        if (mainWindow) mainWindow.minimize();
+      } else {
+        if (tray) {
+          tray.destroy();
+          tray = null;
+        }
+        if (mainWindow) mainWindow.restore();
+      }
+    }
   );
   createWindow();
 });

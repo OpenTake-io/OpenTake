@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Tray, Menu, nativeImage } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs/promises'
@@ -61,9 +61,37 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 // Window references
 let mainWindow: BrowserWindow | null = null
 let sourceSelectorWindow: BrowserWindow | null = null
+let tray: Tray | null = null
+let isRecording = false
+let selectedSourceName = ''
 
 function createWindow() {
   mainWindow = createHudOverlayWindow()
+}
+
+function createTray() {
+  const iconPath = path.join(process.env.VITE_PUBLIC || RENDERER_DIST, 'rec-button.png');
+  let icon = nativeImage.createFromPath(iconPath);
+  icon = icon.resize({ width: 24, height: 24, quality: 'best' });
+  tray = new Tray(icon);
+  updateTrayMenu();
+}
+
+function updateTrayMenu() {
+  if (!tray) return;
+  const menuTemplate = [
+    {
+      label: 'Stop Recording',
+      click: () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('stop-recording-from-tray');
+        }
+      }
+    }
+  ];
+  const contextMenu = Menu.buildFromTemplate(menuTemplate);
+  tray.setContextMenu(contextMenu);
+  tray.setToolTip(`Recording: ${selectedSourceName}`);
 }
 
 function createEditorWindowWrapper() {
@@ -118,7 +146,22 @@ app.whenReady().then(async () => {
     createEditorWindowWrapper,
     createSourceSelectorWindowWrapper,
     () => mainWindow,
-    () => sourceSelectorWindow
+    () => sourceSelectorWindow,
+    (recording: boolean, sourceName: string) => {
+      isRecording = recording
+      selectedSourceName = sourceName
+      if (recording) {
+        if (!tray) createTray();
+        updateTrayMenu();
+        if (mainWindow) mainWindow.minimize();
+      } else {
+        if (tray) {
+          tray.destroy();
+          tray = null;
+        }
+        if (mainWindow) mainWindow.restore();
+      }
+    }
   )
   createWindow()
 })

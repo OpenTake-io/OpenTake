@@ -10,7 +10,8 @@ export function registerIpcHandlers(
   createEditorWindow: () => void,
   createSourceSelectorWindow: () => BrowserWindow,
   getMainWindow: () => BrowserWindow | null,
-  getSourceSelectorWindow: () => BrowserWindow | null
+  getSourceSelectorWindow: () => BrowserWindow | null,
+  onRecordingStateChange?: (recording: boolean, sourceName: string) => void
 ) {
   ipcMain.handle('get-sources', async (_, opts) => {
     const sources = await desktopCapturer.getSources(opts)
@@ -124,6 +125,13 @@ export function registerIpcHandlers(
     } catch (error) {
       console.error('Failed to get video path:', error)
       return { success: false, message: 'Failed to get video path', error: String(error) }
+    }
+  })
+
+  ipcMain.handle('set-recording-state', (_, recording: boolean) => {
+    const source = selectedSource || { name: 'Screen' }
+    if (onRecordingStateChange) {
+      onRecordingStateChange(recording, source.name)
     }
   })
 }
