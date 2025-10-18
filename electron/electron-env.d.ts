@@ -24,6 +24,25 @@ declare namespace NodeJS {
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
   electronAPI: {
-    getSources: (opts: Electron.SourcesOptions) => Promise<Electron.DesktopCapturerSource[]>
+    getSources: (opts: Electron.SourcesOptions) => Promise<ProcessedDesktopSource[]>
+    switchToEditor: () => Promise<void>
+    openSourceSelector: () => Promise<void>
+    selectSource: (source: any) => Promise<any>
+    getSelectedSource: () => Promise<any>
+    startMouseTracking: () => Promise<void>
+    stopMouseTracking: () => Promise<void>
+    storeRecordedVideo: (videoData: ArrayBuffer, fileName: string) => Promise<{ success: boolean; path?: string; message?: string }>
+    storeMouseTrackingData: (fileName: string) => Promise<{ success: boolean; path?: string; eventCount?: number; message?: string }>
+    getRecordedVideoPath: () => Promise<{ success: boolean; path?: string; message?: string }>
+    setRecordingState: (recording: boolean) => Promise<void>
+    onStopRecordingFromTray: (callback: () => void) => () => void
   }
+}
+
+interface ProcessedDesktopSource {
+  id: string
+  name: string
+  display_id: string
+  thumbnail: string | null
+  appIcon: string | null
 }

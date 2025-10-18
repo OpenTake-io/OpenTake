@@ -13,8 +13,30 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const chunks = useRef<Blob[]>([]);
   const startTime = useRef<number>(0);
 
+  const stopRecording = useRef(() => {
+    if (mediaRecorder.current?.state === "recording") {
+      if (stream.current) {
+        stream.current.getTracks().forEach(track => track.stop());
+      }
+      mediaRecorder.current.stop();
+      setRecording(false);
+      window.electronAPI.stopMouseTracking();
+      window.electronAPI?.setRecordingState(false);
+    }
+  });
+
   useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    
+    if (window.electronAPI?.onStopRecordingFromTray) {
+      cleanup = window.electronAPI.onStopRecordingFromTray(() => {
+        stopRecording.current();
+      });
+    }
+
     return () => {
+      if (cleanup) cleanup();
+      
       if (mediaRecorder.current?.state === "recording") {
         mediaRecorder.current.stop();
       }
@@ -91,6 +113,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       recorder.start(1000);
       startTime.current = Date.now();
       setRecording(true);
+      window.electronAPI?.setRecordingState(true);
     } catch (error) {
       console.error('Failed to start recording:', error);
       setRecording(false);
@@ -101,19 +124,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorder.current?.state === "recording") {
-      if (stream.current) {
-        stream.current.getTracks().forEach(track => track.stop());
-      }
-      mediaRecorder.current.stop();
-      setRecording(false);
-      window.electronAPI.stopMouseTracking();
-    }
-  };
-
   const toggleRecording = () => {
-    recording ? stopRecording() : startRecording();
+    recording ? stopRecording.current() : startRecording();
   };
 
   return { recording, toggleRecording };
