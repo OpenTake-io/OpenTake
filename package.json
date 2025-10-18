@@ -17,6 +17,7 @@
     "@uiw/react-color-colorful": "^2.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dnd-timeline": "^2.2.0",
     "lucide-react": "^0.545.0",
     "pixi.js": "^8.14.0",
     "react": "^18.2.0",
