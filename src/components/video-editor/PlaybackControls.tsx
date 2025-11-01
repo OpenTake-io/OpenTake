@@ -7,8 +7,6 @@ interface PlaybackControlsProps {
   duration: number;
   onTogglePlayPause: () => void;
   onSeek: (time: number) => void;
-  onSeekStart: () => void;
-  onSeekEnd: () => void;
 }
 
 export default function PlaybackControls({
@@ -17,8 +15,6 @@ export default function PlaybackControls({
   duration,
   onTogglePlayPause,
   onSeek,
-  onSeekStart,
-  onSeekEnd,
 }: PlaybackControlsProps) {
   function formatTime(seconds: number) {
     if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return '0:00';
@@ -54,12 +50,8 @@ export default function PlaybackControls({
         max={duration}
         value={currentTime}
         onChange={handleSeekChange}
-        onMouseDown={onSeekStart}
-        onMouseUp={onSeekEnd}
-        onTouchStart={onSeekStart}
-        onTouchEnd={onSeekEnd}
         step="0.01"
-        className="flex-1 h-2 accent-blue-500 rounded-full"
+        className="flex-1 h-2 accent-blue-500 rounded-full transition-all duration-[33ms]"
         style={{
     background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${(currentTime / duration) * 100}%, #e5e7eb ${(currentTime / duration) * 100}%, #e5e7eb 100%)`
   }}

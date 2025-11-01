@@ -1,10 +1,11 @@
 
 
 import { useEffect, useRef, useState } from "react";
+import { Toaster } from "@/components/ui/sonner";
 
 import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
 import PlaybackControls from "./PlaybackControls";
-import TimelineEditor from "./TimelineEditor";
+import TimelineEditor from "./timeline/TimelineEditor";
 import SettingsPanel from "./SettingsPanel";
 
 const WALLPAPER_COUNT = 12;
@@ -20,7 +21,6 @@ export default function VideoEditor() {
   const [wallpaper, setWallpaper] = useState<string>(WALLPAPER_PATHS[0]);
 
   const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
-  const isSeeking = useRef(false);
 
   useEffect(() => {
     async function loadVideo() {
@@ -50,15 +50,6 @@ export default function VideoEditor() {
     const video = videoPlaybackRef.current?.video;
     if (!video) return;
     video.currentTime = time;
-    setCurrentTime(time);
-  }
-
-  function handleSeekStart() {
-    isSeeking.current = true;
-  }
-
-  function handleSeekEnd() {
-    isSeeking.current = false;
   }
 
   if (loading) {
@@ -78,6 +69,7 @@ export default function VideoEditor() {
 
   return (
     <div className="flex h-screen bg-background p-8 gap-8">
+      <Toaster position="top-center" />
       <div className="flex flex-col flex-[7] min-w-0 gap-8">
         <div className="flex flex-col gap-6 flex-1">
           {videoPath && (
@@ -86,7 +78,6 @@ export default function VideoEditor() {
                 <VideoPlayback
                   ref={videoPlaybackRef}
                   videoPath={videoPath}
-                  isSeeking={isSeeking}
                   onDurationChange={setDuration}
                   onTimeUpdate={setCurrentTime}
                   onPlayStateChange={setIsPlaying}
@@ -100,13 +91,11 @@ export default function VideoEditor() {
                 duration={duration}
                 onTogglePlayPause={togglePlayPause}
                 onSeek={handleSeek}
-                onSeekStart={handleSeekStart}
-                onSeekEnd={handleSeekEnd}
               />
             </>
           )}
         </div>
-        <TimelineEditor />
+        <TimelineEditor videoDuration={duration} currentTime={currentTime} onSeek={handleSeek} />
       </div>
       <SettingsPanel selected={wallpaper} onWallpaperChange={setWallpaper} />
     </div>
