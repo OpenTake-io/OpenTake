@@ -2,7 +2,6 @@ import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 
 interface VideoPlaybackProps {
   videoPath: string;
-  isSeeking: React.MutableRefObject<boolean>;
   onDurationChange: (duration: number) => void;
   onTimeUpdate: (time: number) => void;
   onPlayStateChange: (playing: boolean) => void;
@@ -16,7 +15,6 @@ export interface VideoPlaybackRef {
 
 const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   videoPath,
-  isSeeking,
   onDurationChange,
   onTimeUpdate,
   onPlayStateChange,
@@ -26,6 +24,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawFrameRef = useRef<(() => void) | null>(null);
+  const timeUpdateAnimationRef = useRef<number | null>(null);
 
   useImperativeHandle(ref, () => ({
     video: videoRef.current,
@@ -37,6 +36,15 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     if (!video || !canvas) return;
 
     let animationId: number;
+    
+    function updateTime() {
+      if (!video) return;
+      onTimeUpdate(video.currentTime);
+      if (!video.paused && !video.ended) {
+        timeUpdateAnimationRef.current = requestAnimationFrame(updateTime);
+      }
+    }
+    
     function drawFrame() {
       if (!video || !canvas) return;
       if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
@@ -75,23 +83,42 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       drawFrame();
       animationId = requestAnimationFrame(drawFrameLoop);
     }
-    const handlePlay = () => drawFrameLoop();
-    const handlePause = () => cancelAnimationFrame(animationId);
+    const handlePlay = () => {
+      drawFrameLoop();
+      updateTime();
+    };
+    const handlePause = () => {
+      cancelAnimationFrame(animationId);
+      if (timeUpdateAnimationRef.current) {
+        cancelAnimationFrame(timeUpdateAnimationRef.current);
+        timeUpdateAnimationRef.current = null;
+      }
+      onTimeUpdate(video.currentTime);
+    };
     const handleSeeked = () => {
       drawFrame();
+      onTimeUpdate(video.currentTime);
+    };
+    const handleSeeking = () => {
+      onTimeUpdate(video.currentTime);
     };
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
     video.addEventListener('ended', handlePause);
     video.addEventListener('seeked', handleSeeked);
+    video.addEventListener('seeking', handleSeeking);
     return () => {
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('ended', handlePause);
       video.removeEventListener('seeked', handleSeeked);
+      video.removeEventListener('seeking', handleSeeking);
       cancelAnimationFrame(animationId);
+      if (timeUpdateAnimationRef.current) {
+        cancelAnimationFrame(timeUpdateAnimationRef.current);
+      }
     };
-  }, [videoPath]);
+  }, [videoPath, onTimeUpdate]);
 
   // Draw first frame when metadata is loaded
   const handleLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
@@ -134,9 +161,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
         onLoadedMetadata={handleLoadedMetadata}
         onDurationChange={e => {
           onDurationChange(e.currentTarget.duration);
-        }}
-        onTimeUpdate={e => {
-          if (!isSeeking.current) onTimeUpdate(e.currentTarget.currentTime);
         }}
         onError={() => onError('Failed to load video')}
         onPlay={() => onPlayStateChange(true)}

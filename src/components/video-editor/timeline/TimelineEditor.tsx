@@ -1,0 +1,473 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTimelineContext } from "dnd-timeline";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
+import { toast } from "sonner";
+import TimelineWrapper from "./TimelineWrapper";
+import Row from "./Row";
+import Item from "./Item";
+import type { Range, Span } from "dnd-timeline";
+
+const ROW_ID = "row-1";
+const FALLBACK_RANGE_MS = 1000;
+const TARGET_MARKER_COUNT = 12;
+
+interface TimelineEditorProps {
+  videoDuration: number;
+  currentTime: number;
+  onSeek?: (time: number) => void;
+}
+
+interface TimelineItem {
+  id: string;
+  rowId: string;
+  span: Span;
+}
+
+interface TimelineScaleConfig {
+  intervalMs: number;
+  gridMs: number;
+  minItemDurationMs: number;
+  defaultItemDurationMs: number;
+  minVisibleRangeMs: number;
+}
+
+const SCALE_CANDIDATES = [
+  { intervalSeconds: 0.25, gridSeconds: 0.05 },
+  { intervalSeconds: 0.5, gridSeconds: 0.1 },
+  { intervalSeconds: 1, gridSeconds: 0.25 },
+  { intervalSeconds: 2, gridSeconds: 0.5 },
+  { intervalSeconds: 5, gridSeconds: 1 },
+  { intervalSeconds: 10, gridSeconds: 2 },
+  { intervalSeconds: 15, gridSeconds: 3 },
+  { intervalSeconds: 30, gridSeconds: 5 },
+  { intervalSeconds: 60, gridSeconds: 10 },
+  { intervalSeconds: 120, gridSeconds: 20 },
+  { intervalSeconds: 300, gridSeconds: 30 },
+  { intervalSeconds: 600, gridSeconds: 60 },
+  { intervalSeconds: 900, gridSeconds: 120 },
+  { intervalSeconds: 1800, gridSeconds: 180 },
+  { intervalSeconds: 3600, gridSeconds: 300 },
+];
+
+function calculateTimelineScale(durationSeconds: number): TimelineScaleConfig {
+  const totalMs = Math.max(0, Math.round(durationSeconds * 1000));
+
+  const selectedCandidate = SCALE_CANDIDATES.find((candidate) => {
+    if (durationSeconds <= 0) {
+      return true;
+    }
+    const markers = durationSeconds / candidate.intervalSeconds;
+    return markers <= TARGET_MARKER_COUNT;
+  }) ?? SCALE_CANDIDATES[SCALE_CANDIDATES.length - 1];
+
+  const intervalMs = Math.round(selectedCandidate.intervalSeconds * 1000);
+  const gridMs = Math.round(selectedCandidate.gridSeconds * 1000);
+
+  const minItemDurationMs = Math.max(100, Math.min(intervalMs, gridMs * 2));
+  const defaultItemDurationMs = Math.min(
+    Math.max(minItemDurationMs, intervalMs * 2),
+    totalMs > 0 ? totalMs : intervalMs * 2,
+  );
+
+  const minVisibleRangeMs = totalMs > 0
+    ? Math.min(Math.max(intervalMs * 3, minItemDurationMs * 6, 1000), totalMs)
+    : Math.max(intervalMs * 3, minItemDurationMs * 6, 1000);
+
+  return {
+    intervalMs,
+    gridMs,
+    minItemDurationMs,
+    defaultItemDurationMs,
+    minVisibleRangeMs,
+  };
+}
+
+function createInitialRange(totalMs: number): Range {
+  if (totalMs > 0) {
+    return { start: 0, end: totalMs };
+  }
+
+  return { start: 0, end: FALLBACK_RANGE_MS };
+}
+
+function formatTimeLabel(milliseconds: number, intervalMs: number) {
+  const totalSeconds = milliseconds / 1000;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  const fractionalDigits = intervalMs < 250 ? 2 : intervalMs < 1000 ? 1 : 0;
+
+  if (hours > 0) {
+    const minutesString = minutes.toString().padStart(2, "0");
+    const secondsString = Math.floor(seconds)
+      .toString()
+      .padStart(2, "0");
+    return `${hours}:${minutesString}:${secondsString}`;
+  }
+
+  if (fractionalDigits > 0) {
+    const secondsWithFraction = seconds.toFixed(fractionalDigits);
+    const [wholeSeconds, fraction] = secondsWithFraction.split(".");
+    return `${minutes}:${wholeSeconds.padStart(2, "0")}.${fraction}`;
+  }
+
+  return `${minutes}:${Math.floor(seconds).toString().padStart(2, "0")}`;
+}
+
+function PlaybackCursor({ 
+  currentTimeMs, 
+  videoDurationMs 
+}: { 
+  currentTimeMs: number; 
+  videoDurationMs: number;
+}) {
+  const { sidebarWidth, direction, range, valueToPixels } = useTimelineContext();
+  const sideProperty = direction === "rtl" ? "right" : "left";
+
+  if (videoDurationMs <= 0 || currentTimeMs < 0) {
+    return null;
+  }
+
+  const clampedTime = Math.min(currentTimeMs, videoDurationMs);
+  
+  if (clampedTime < range.start || clampedTime > range.end) {
+    return null;
+  }
+
+  const offset = valueToPixels(clampedTime - range.start);
+
+  return (
+    <div
+      className="absolute top-0 bottom-0 pointer-events-none z-50"
+      style={{
+        [sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth}px`,
+      }}
+    >
+      <div
+        className="absolute top-0 bottom-0 w-0.5 bg-gradient-to-b from-red-500 to-red-600 shadow-lg"
+        style={{
+          [sideProperty]: `${offset}px`,
+        }}
+      >
+        <div className="absolute -top-1 -left-1.5 w-3 h-3 bg-red-500 rounded-full shadow-md border border-red-400" />
+      </div>
+    </div>
+  );
+}
+
+function TimelineAxis({
+  intervalMs,
+  videoDurationMs,
+}: {
+  intervalMs: number;
+  videoDurationMs: number;
+}) {
+  const { sidebarWidth, direction, range, valueToPixels } = useTimelineContext();
+  const sideProperty = direction === "rtl" ? "right" : "left";
+
+  const markers = useMemo(() => {
+    if (intervalMs <= 0) {
+      return [] as { time: number; label: string }[];
+    }
+
+    const maxTime = videoDurationMs > 0 ? videoDurationMs : range.end;
+    const visibleStart = Math.max(0, Math.min(range.start, maxTime));
+    const visibleEnd = Math.min(range.end, maxTime);
+    const markerTimes = new Set<number>();
+
+    const firstMarker = Math.ceil(visibleStart / intervalMs) * intervalMs;
+
+    for (let time = firstMarker; time <= maxTime; time += intervalMs) {
+      if (time >= visibleStart && time <= visibleEnd) {
+        markerTimes.add(Math.round(time));
+      }
+    }
+
+    if (visibleStart <= maxTime) {
+      markerTimes.add(Math.round(visibleStart));
+    }
+    
+    if (videoDurationMs > 0) {
+      markerTimes.add(Math.round(videoDurationMs));
+    }
+
+    const sorted = Array.from(markerTimes)
+      .filter(time => time <= maxTime)
+      .sort((a, b) => a - b);
+
+    return sorted.map((time) => ({
+      time,
+      label: formatTimeLabel(time, intervalMs),
+    }));
+  }, [intervalMs, range.end, range.start, videoDurationMs]);
+
+  return (
+    <div
+      className="h-10 bg-gradient-to-b from-slate-50 to-slate-100/50 border-b border-slate-200/60 relative overflow-hidden"
+      style={{
+        [sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth}px`,
+      }}
+    >
+      {markers.map((marker) => {
+        const offset = valueToPixels(marker.time - range.start);
+        const markerStyle: React.CSSProperties = {
+          position: "absolute",
+          bottom: 0,
+          height: "100%",
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "flex-end",
+          [sideProperty]: `${offset}px`,
+        };
+
+        return (
+          <div key={marker.time} style={markerStyle}>
+            <div
+              style={{
+                width: "1px",
+                height: "60%",
+                backgroundColor: "#cbd5e1",
+                opacity: 0.5,
+              }}
+            />
+            <span
+              style={{
+                paddingLeft: "4px",
+                alignSelf: "flex-start",
+                paddingTop: "3px",
+              }}
+              className="text-[10px] text-slate-500 font-medium select-none tracking-tight"
+            >
+              {marker.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Timeline({
+  items,
+  videoDurationMs,
+  intervalMs,
+  currentTimeMs,
+  onSeek,
+}: {
+  items: TimelineItem[];
+  videoDurationMs: number;
+  intervalMs: number;
+  currentTimeMs: number;
+  onSeek?: (time: number) => void;
+}) {
+  const { setTimelineRef, style, sidebarWidth, range, pixelsToValue } = useTimelineContext();
+
+  const handleTimelineClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!onSeek || videoDurationMs <= 0) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left - sidebarWidth;
+    
+    if (clickX < 0) return;
+    
+    const relativeMs = pixelsToValue(clickX);
+    const absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
+    const timeInSeconds = absoluteMs / 1000;
+    
+    onSeek(timeInSeconds);
+  }, [onSeek, videoDurationMs, sidebarWidth, range.start, pixelsToValue]);
+
+  return (
+    <div
+      ref={setTimelineRef}
+      style={style}
+      className="select-none bg-white min-h-[120px] relative cursor-pointer"
+      onClick={handleTimelineClick}
+    >
+      <TimelineAxis intervalMs={intervalMs} videoDurationMs={videoDurationMs} />
+      <PlaybackCursor currentTimeMs={currentTimeMs} videoDurationMs={videoDurationMs} />
+      <Row id={ROW_ID}>
+        {items.map((item) => (
+          <Item
+            id={item.id}
+            key={item.id}
+            rowId={item.rowId}
+            span={item.span}
+          >
+            {`Zoom ${item.id.replace("item-", "")}`}
+          </Item>
+        ))}
+      </Row>
+    </div>
+  );
+}
+
+export default function TimelineEditor({ videoDuration, currentTime, onSeek }: TimelineEditorProps) {
+  const [items, setItems] = useState<TimelineItem[]>([]);
+  const [itemCounter, setItemCounter] = useState(1);
+
+  const totalMs = useMemo(() => Math.max(0, Math.round(videoDuration * 1000)), [videoDuration]);
+  const currentTimeMs = useMemo(() => Math.round(currentTime * 1000), [currentTime]);
+  const timelineScale = useMemo(() => calculateTimelineScale(videoDuration), [videoDuration]);
+  const safeMinDurationMs = useMemo(
+    () => (totalMs > 0 ? Math.min(timelineScale.minItemDurationMs, totalMs) : timelineScale.minItemDurationMs),
+    [timelineScale.minItemDurationMs, totalMs],
+  );
+
+  const [range, setRange] = useState<Range>(() => createInitialRange(totalMs));
+
+  useEffect(() => {
+    const initialRange = createInitialRange(totalMs);
+    setRange(initialRange);
+  }, [totalMs]);
+
+  useEffect(() => {
+    if (totalMs === 0) {
+      setItems([]);
+      setItemCounter(1);
+      return;
+    }
+
+    setItems((prev) => {
+      if (safeMinDurationMs <= 0) {
+        return prev;
+      }
+
+      let mutated = false;
+      const updated = prev
+        .map((item) => {
+          const clampedStart = Math.max(0, Math.min(item.span.start, totalMs));
+          const clampedEnd = Math.min(
+            totalMs,
+            Math.max(clampedStart + safeMinDurationMs, Math.min(item.span.end, totalMs)),
+          );
+
+          if (clampedStart !== item.span.start || clampedEnd !== item.span.end) {
+            mutated = true;
+            return {
+              ...item,
+              span: {
+                start: Math.max(0, Math.min(clampedStart, totalMs - safeMinDurationMs)),
+                end: Math.max(0, clampedEnd),
+              },
+            };
+          }
+
+          return item;
+        })
+        .filter((item) => item.span.end > item.span.start);
+
+      return mutated ? updated : prev;
+    });
+  }, [safeMinDurationMs, totalMs]);
+
+  const hasOverlap = useCallback((newSpan: Span, excludeId?: string): boolean => {
+    return items.some(item => {
+      if (item.id === excludeId) return false;
+      return !(newSpan.end <= item.span.start || newSpan.start >= item.span.end);
+    });
+  }, [items]);
+
+  const addItem = useCallback(() => {
+    if (!videoDuration || videoDuration === 0) return;
+
+    const defaultDuration = Math.min(
+      Math.max(timelineScale.defaultItemDurationMs, safeMinDurationMs),
+      totalMs,
+    );
+
+    if (defaultDuration <= 0) {
+      return;
+    }
+
+    let startPos = 0;
+    const sortedItems = [...items].sort((a, b) => a.span.start - b.span.start);
+
+    for (const item of sortedItems) {
+      if (startPos + defaultDuration <= item.span.start) {
+        break;
+      }
+      startPos = Math.max(startPos, item.span.end);
+    }
+
+    if (startPos + defaultDuration > totalMs) {
+      toast.error("No space available", {
+        description: "Remove or resize existing zoom regions to add more.",
+      });
+      return;
+    }
+
+    const newItem: TimelineItem = {
+      id: `item-${itemCounter}`,
+      rowId: ROW_ID,
+      span: { start: startPos, end: startPos + defaultDuration },
+    };
+
+    setItems((prev) => [...prev, newItem]);
+    setItemCounter((c) => c + 1);
+  }, [itemCounter, items, safeMinDurationMs, timelineScale.defaultItemDurationMs, totalMs, videoDuration]);
+
+  const clampedRange = useMemo<Range>(() => {
+    if (totalMs === 0) {
+      return range;
+    }
+    
+    return {
+      start: Math.max(0, Math.min(range.start, totalMs)),
+      end: Math.min(range.end, totalMs),
+    };
+  }, [range, totalMs]);
+
+  if (!videoDuration || videoDuration === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-gray-50 border border-gray-300 rounded-lg">
+        <span className="text-gray-500 text-sm">Load a video to see timeline</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-100 bg-gradient-to-b from-white to-slate-50/50">
+        <Button onClick={addItem} variant="outline" size="sm" className="gap-2 h-8 px-3 text-xs">
+          <Plus className="w-3.5 h-3.5" />
+          Add Zoom
+        </Button>
+        <div className="flex-1" />
+        <div className="flex items-center gap-3 text-[10px] text-slate-400 font-medium">
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-600">Command + Shift + Scroll</kbd>
+            <span>Pan</span>
+          </span>
+          <span className="text-slate-300">•</span>
+          <span className="flex items-center gap-1">
+            <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-600">Command + Scroll</kbd>
+            <span>Zoom</span>
+          </span>
+        </div>
+      </div>
+      <div className="flex-1 overflow-x-auto overflow-y-hidden">
+        <TimelineWrapper 
+          setItems={setItems} 
+          range={clampedRange} 
+          videoDuration={videoDuration}
+          hasOverlap={hasOverlap}
+          onRangeChange={setRange}
+          minItemDurationMs={timelineScale.minItemDurationMs}
+          minVisibleRangeMs={timelineScale.minVisibleRangeMs}
+          gridSizeMs={timelineScale.gridMs}
+        >
+          <Timeline
+            items={items}
+            videoDurationMs={totalMs}
+            intervalMs={timelineScale.intervalMs}
+            currentTimeMs={currentTimeMs}
+            onSeek={onSeek}
+          />
+        </TimelineWrapper>
+      </div>
+    </div>
+  );
+}
