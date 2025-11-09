@@ -80,6 +80,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   const isPlayingRef = useRef(isPlaying);
   const isSeekingRef = useRef(false);
   const allowPlaybackRef = useRef(false);
+  const lockedVideoDimensionsRef = useRef<{ width: number; height: number } | null>(null);
+  const layoutVideoContentRef = useRef<(() => void) | null>(null);
 
   const clampFocusToStage = useCallback((focus: ZoomFocus, depth: ZoomDepth) => {
     return clampFocusToStageUtil(focus, depth, stageSizeRef.current);
@@ -123,6 +125,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       return;
     }
 
+    // Lock video dimensions on first layout to prevent resize issues
+    if (!lockedVideoDimensionsRef.current && videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+      lockedVideoDimensionsRef.current = {
+        width: videoElement.videoWidth,
+        height: videoElement.videoHeight,
+      };
+    }
+
     const result = layoutVideoContentUtil({
       container,
       app,
@@ -130,6 +140,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       maskGraphics,
       videoElement,
       cropRegion,
+      lockedVideoDimensions: lockedVideoDimensionsRef.current,
     });
 
     if (result) {
@@ -151,7 +162,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
 
       updateOverlayForRegion(activeRegion);
     }
-  }, [updateOverlayForRegion, cropRegion]);  const selectedZoom = useMemo(() => {
+  }, [updateOverlayForRegion, cropRegion]);
+
+  // Keep layoutVideoContent ref updated
+  useEffect(() => {
+    layoutVideoContentRef.current = layoutVideoContent;
+  }, [layoutVideoContent]);
+
+  const selectedZoom = useMemo(() => {
     if (!selectedZoomId) return null;
     return zoomRegions.find((region) => region.id === selectedZoomId) ?? null;
   }, [zoomRegions, selectedZoomId]);
@@ -267,9 +285,84 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
+  // Reset animation state and transforms when crop changes
   useEffect(() => {
     if (!pixiReady || !videoReady) return;
-    layoutVideoContent();
+
+    const app = appRef.current;
+    const cameraContainer = cameraContainerRef.current;
+    const video = videoRef.current;
+
+    if (!app || !cameraContainer || !video) return;
+
+    const tickerWasStarted = app.ticker?.started || false;
+    if (tickerWasStarted && app.ticker) {
+      app.ticker.stop();
+    }
+
+    const wasPlaying = !video.paused;
+    if (wasPlaying) {
+      video.pause();
+    }
+
+    // Reset animation state so the ticker starts from identity once it resumes
+    animationStateRef.current = {
+      scale: 1,
+      focusX: DEFAULT_FOCUS.cx,
+      focusY: DEFAULT_FOCUS.cy,
+    };
+
+    if (blurFilterRef.current) {
+      blurFilterRef.current.blur = 0;
+    }
+
+    // Defer layout to the next frame so DOM measurements include the new crop UI state
+    requestAnimationFrame(() => {
+      const container = cameraContainerRef.current;
+      const videoStage = videoContainerRef.current;
+      const sprite = videoSpriteRef.current;
+      const currentApp = appRef.current;
+      if (!container || !videoStage || !sprite || !currentApp) {
+        return;
+      }
+
+      // Reset all transform hierarchies to identity
+      container.scale.set(1);
+      container.position.set(0, 0);
+      videoStage.scale.set(1);
+      videoStage.position.set(0, 0);
+      sprite.scale.set(1);
+      sprite.position.set(0, 0);
+
+      // Now layoutVideoContent will apply the correct transforms for the new crop
+      layoutVideoContent();
+
+      // Apply an explicit identity transform to ensure no residual camera offset
+      applyZoomTransform({
+        cameraContainer: container,
+        blurFilter: blurFilterRef.current,
+        stageSize: stageSizeRef.current,
+        baseMask: baseMaskRef.current,
+        zoomScale: 1,
+        focusX: DEFAULT_FOCUS.cx,
+        focusY: DEFAULT_FOCUS.cy,
+        motionIntensity: 0,
+        isPlaying: false,
+      });
+
+      // Restart ticker on a second frame to avoid running mid-layout
+      requestAnimationFrame(() => {
+        const finalApp = appRef.current;
+        if (wasPlaying && video) {
+          video.play().catch(() => {
+            /* ignore */
+          });
+        }
+        if (tickerWasStarted && finalApp?.ticker) {
+          finalApp.ticker.start();
+        }
+      });
+    });
   }, [pixiReady, videoReady, layoutVideoContent, cropRegion]);
 
   useEffect(() => {
@@ -559,7 +652,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
 
     app.ticker.add(ticker);
     return () => {
-      app.ticker.remove(ticker);
+      if (app && app.ticker) {
+        app.ticker.remove(ticker);
+      }
     };
   }, [pixiReady, videoReady, clampFocusToStage]);
 
