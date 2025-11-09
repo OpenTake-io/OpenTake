@@ -102,36 +102,32 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   const baseOffsetRef = useRef({ x: 0, y: 0 });
   const maskGraphicsRef = useRef<PIXI.Graphics | null>(null);
   const isPlayingRef = useRef(isPlaying);
+  const isSeekingRef = useRef(false);
 
   const clampFocusToStage = useCallback((focus: ZoomFocus, depth: ZoomDepth) => {
     const stageSize = stageSizeRef.current;
-    const videoSize = videoSizeRef.current;
-    const baseScale = baseScaleRef.current;
 
-    if (!stageSize.width || !stageSize.height || !videoSize.width || !videoSize.height || baseScale <= 0) {
+    if (!stageSize.width || !stageSize.height) {
       return clampFocusToDepth(focus, depth);
     }
 
     const zoomScale = ZOOM_DEPTH_SCALES[depth];
-    const indicatorWidth = (videoSize.width / zoomScale) * baseScale;
-    const indicatorHeight = (videoSize.height / zoomScale) * baseScale;
+    
+    // The zoom window dimensions in stage space
+    const windowWidth = stageSize.width / zoomScale;
+    const windowHeight = stageSize.height / zoomScale;
 
-    const normalizedWidth = stageSize.width > 0 ? Math.min(1, indicatorWidth / stageSize.width) : 1;
-    const normalizedHeight = stageSize.height > 0 ? Math.min(1, indicatorHeight / stageSize.height) : 1;
+    // Calculate margins - the focus point must stay far enough from edges
+    // so that the zoom window doesn't go out of bounds
+    const marginX = windowWidth / (2 * stageSize.width);
+    const marginY = windowHeight / (2 * stageSize.height);
 
     const baseFocus = clampFocusToDepth(focus, depth);
 
-    const marginX = normalizedWidth >= 1 ? 0.5 : normalizedWidth / 2;
-    const marginY = normalizedHeight >= 1 ? 0.5 : normalizedHeight / 2;
-
-    const minX = marginX;
-    const maxX = normalizedWidth >= 1 ? 0.5 : 1 - marginX;
-    const minY = marginY;
-    const maxY = normalizedHeight >= 1 ? 0.5 : 1 - marginY;
-
+    // Clamp the focus to ensure the zoom window stays within stage bounds
     return {
-      cx: Math.min(maxX, Math.max(minX, baseFocus.cx)),
-      cy: Math.min(maxY, Math.max(minY, baseFocus.cy)),
+      cx: Math.max(marginX, Math.min(1 - marginX, baseFocus.cx)),
+      cy: Math.max(marginY, Math.min(1 - marginY, baseFocus.cy)),
     };
   }, []);
 
@@ -192,8 +188,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     const zoomScale = ZOOM_DEPTH_SCALES[region.depth];
     const focus = clampFocusToStage(focusOverride ?? region.focus, region.depth);
 
-    const indicatorWidth = (videoSize.width / zoomScale) * baseScale;
-    const indicatorHeight = (videoSize.height / zoomScale) * baseScale;
+    // The zoom window should show what portion of the STAGE will be visible after zooming
+    // When we zoom by zoomScale, we're showing 1/zoomScale of the stage dimensions
+    const indicatorWidth = stageWidth / zoomScale;
+    const indicatorHeight = stageHeight / zoomScale;
 
     const rawLeft = focus.cx * stageWidth - indicatorWidth / 2;
     const rawTop = focus.cy * stageHeight - indicatorHeight / 2;
@@ -531,6 +529,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     }
     
     const handlePlay = () => {
+      // If we're seeking and the video auto-plays, pause it immediately
+      if (isSeekingRef.current) {
+        video.pause();
+        return;
+      }
       isPlayingRef.current = true;
       onPlayStateChange(true);
       updateTime();
@@ -547,10 +550,24 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     };
     
     const handleSeeked = () => {
+      // Mark seeking as complete
+      isSeekingRef.current = false;
+      
+      // Ensure video stays paused if it wasn't playing before the seek
+      if (!isPlayingRef.current && !video.paused) {
+        video.pause();
+      }
       emitTime(video.currentTime);
     };
     
     const handleSeeking = () => {
+      // Mark that we're in the middle of a seek operation
+      isSeekingRef.current = true;
+      
+      // Prevent autoplay during seeking if video was paused
+      if (!isPlayingRef.current && !video.paused) {
+        video.pause();
+      }
       emitTime(video.currentTime);
     };
     
