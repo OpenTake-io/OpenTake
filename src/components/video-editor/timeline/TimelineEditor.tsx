@@ -20,6 +20,7 @@ interface TimelineEditorProps {
   zoomRegions: ZoomRegion[];
   onZoomAdded: (span: Span) => void;
   onZoomSpanChange: (id: string, span: Span) => void;
+  onZoomDelete: (id: string) => void;
   selectedZoomId: string | null;
   onSelectZoom: (id: string | null) => void;
 }
@@ -325,6 +326,7 @@ export default function TimelineEditor({
   zoomRegions,
   onZoomAdded,
   onZoomSpanChange,
+  onZoomDelete,
   selectedZoomId,
   onSelectZoom,
 }: TimelineEditorProps) {
