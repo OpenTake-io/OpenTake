@@ -28,10 +28,12 @@ export default function Item({ id, span, rowId, children, isSelected = false, on
     >
       <div style={itemContentStyle}>
         <div
-          className={cn(
-            "border border-indigo-400/40 rounded-lg shadow-sm w-full overflow-hidden flex items-center justify-center px-3 transition-all duration-150 cursor-grab active:cursor-grabbing group relative",
-            isSelected ? "bg-indigo-600 ring-2 ring-indigo-300 shadow-xl" : "bg-indigo-500 hover:bg-indigo-600"
-          )}
+            className={cn(
+              "border rounded-lg shadow-sm w-full overflow-hidden flex items-center justify-center px-3 transition-all duration-150 cursor-grab active:cursor-grabbing group relative",
+              isSelected
+                ? "border-2 border-red-500 bg-indigo-600 shadow-xl"
+                : "border bg-indigo-500"
+            )}
           style={{ height: 60 }}
           onClick={(event) => {
             event.stopPropagation();

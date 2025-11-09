@@ -1,4 +1,4 @@
-export type ZoomDepth = 1 | 2 | 3;
+export type ZoomDepth = 1 | 2 | 3 | 4 | 5;
 
 export interface ZoomFocus {
   cx: number; // normalized horizontal center (0-1)
@@ -16,10 +16,12 @@ export interface ZoomRegion {
 export const ZOOM_DEPTH_SCALES: Record<ZoomDepth, number> = {
   1: 1.25,
   2: 1.5,
-  3: 2.5,
+  3: 1.8,
+  4: 2.2,
+  5: 3.5,
 };
 
-export const DEFAULT_ZOOM_DEPTH: ZoomDepth = 2;
+export const DEFAULT_ZOOM_DEPTH: ZoomDepth = 3;
 
 export function clampFocusToDepth(focus: ZoomFocus, _depth: ZoomDepth): ZoomFocus {
   return {
