@@ -2,6 +2,7 @@ interface VideoEventHandlersParams {
   video: HTMLVideoElement;
   isSeekingRef: React.MutableRefObject<boolean>;
   isPlayingRef: React.MutableRefObject<boolean>;
+  allowPlaybackRef: React.MutableRefObject<boolean>;
   currentTimeRef: React.MutableRefObject<number>;
   timeUpdateAnimationRef: React.MutableRefObject<number | null>;
   onPlayStateChange: (playing: boolean) => void;
@@ -13,6 +14,7 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
     video,
     isSeekingRef,
     isPlayingRef,
+    allowPlaybackRef,
     currentTimeRef,
     timeUpdateAnimationRef,
     onPlayStateChange,
@@ -38,12 +40,20 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
       video.pause();
       return;
     }
+
+    if (!allowPlaybackRef.current) {
+      video.pause();
+      return;
+    }
+
+    allowPlaybackRef.current = false;
     isPlayingRef.current = true;
     onPlayStateChange(true);
     updateTime();
   };
 
   const handlePause = () => {
+    allowPlaybackRef.current = false;
     isPlayingRef.current = false;
     if (timeUpdateAnimationRef.current) {
       cancelAnimationFrame(timeUpdateAnimationRef.current);

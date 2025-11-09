@@ -17,6 +17,7 @@ interface LayoutResult {
   baseScale: number;
   baseOffset: { x: number; y: number };
   maskRect: { x: number; y: number; width: number; height: number };
+  cropOffset: { x: number; y: number };
 }
 
 export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
@@ -90,10 +91,14 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
   maskGraphics.fill({ color: 0xffffff });
 
   return {
-    stageSize: { width, height },
+    stageSize: { width: croppedDisplayWidth, height: croppedDisplayHeight },
     videoSize: { width: croppedVideoWidth, height: croppedVideoHeight },
     baseScale: scale,
     baseOffset: { x: spriteX, y: spriteY },
     maskRect: { x: maskX, y: maskY, width: croppedDisplayWidth, height: croppedDisplayHeight },
+    cropOffset: {
+      x: crop.x * videoWidth,
+      y: crop.y * videoHeight,
+    },
   };
 }

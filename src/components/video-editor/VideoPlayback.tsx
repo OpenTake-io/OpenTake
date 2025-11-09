@@ -33,6 +33,8 @@ export interface VideoPlaybackRef {
   app: PIXI.Application | null;
   videoSprite: PIXI.Sprite | null;
   videoContainer: PIXI.Container | null;
+  play: () => Promise<void>;
+  pause: () => void;
 }
 
 const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
@@ -75,6 +77,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   const maskGraphicsRef = useRef<PIXI.Graphics | null>(null);
   const isPlayingRef = useRef(isPlaying);
   const isSeekingRef = useRef(false);
+  const allowPlaybackRef = useRef(false);
 
   const clampFocusToStage = useCallback((focus: ZoomFocus, depth: ZoomDepth) => {
     return clampFocusToStageUtil(focus, depth, stageSizeRef.current);
@@ -152,6 +155,28 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     app: appRef.current,
     videoSprite: videoSpriteRef.current,
     videoContainer: videoContainerRef.current,
+    play: async () => {
+      const video = videoRef.current;
+      if (!video) {
+        allowPlaybackRef.current = false;
+        return;
+      }
+      allowPlaybackRef.current = true;
+      try {
+        await video.play();
+      } catch (error) {
+        allowPlaybackRef.current = false;
+        throw error;
+      }
+    },
+    pause: () => {
+      const video = videoRef.current;
+      allowPlaybackRef.current = false;
+      if (!video) {
+        return;
+      }
+      video.pause();
+    },
   }));
 
   const updateFocusFromClientPoint = (clientX: number, clientY: number) => {
@@ -330,6 +355,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     if (!video) return;
     video.pause();
     video.currentTime = 0;
+    allowPlaybackRef.current = false;
   }, [videoPath]);
 
   useEffect(() => {
@@ -343,6 +369,12 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     if (video.videoWidth === 0 || video.videoHeight === 0) return;
     
     const source = PIXI.VideoSource.from(video);
+    if ('autoPlay' in source) {
+      (source as { autoPlay?: boolean }).autoPlay = false;
+    }
+    if ('autoUpdate' in source) {
+      (source as { autoUpdate?: boolean }).autoUpdate = true;
+    }
     const videoTexture = PIXI.Texture.from(source);
     
     const videoSprite = new PIXI.Sprite(videoTexture);
@@ -374,6 +406,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       video,
       isSeekingRef,
       isPlayingRef,
+      allowPlaybackRef,
       currentTimeRef,
       timeUpdateAnimationRef,
       onPlayStateChange,
@@ -524,6 +557,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     onDurationChange(video.duration);
     video.currentTime = 0;
     video.pause();
+    allowPlaybackRef.current = false;
     currentTimeRef.current = 0;
     setVideoReady(true);
   };
