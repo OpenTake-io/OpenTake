@@ -7,6 +7,7 @@ import TimelineWrapper from "./TimelineWrapper";
 import Row from "./Row";
 import Item from "./Item";
 import type { Range, Span } from "dnd-timeline";
+import type { ZoomRegion } from "../types";
 
 const ROW_ID = "row-1";
 const FALLBACK_RANGE_MS = 1000;
@@ -16,12 +17,11 @@ interface TimelineEditorProps {
   videoDuration: number;
   currentTime: number;
   onSeek?: (time: number) => void;
-}
-
-interface TimelineItem {
-  id: string;
-  rowId: string;
-  span: Span;
+  zoomRegions: ZoomRegion[];
+  onZoomAdded: (span: Span) => void;
+  onZoomSpanChange: (id: string, span: Span) => void;
+  selectedZoomId: string | null;
+  onSelectZoom: (id: string | null) => void;
 }
 
 interface TimelineScaleConfig {
@@ -30,6 +30,13 @@ interface TimelineScaleConfig {
   minItemDurationMs: number;
   defaultItemDurationMs: number;
   minVisibleRangeMs: number;
+}
+
+interface TimelineRenderItem {
+  id: string;
+  rowId: string;
+  span: Span;
+  label: string;
 }
 
 const SCALE_CANDIDATES = [
@@ -255,18 +262,23 @@ function Timeline({
   intervalMs,
   currentTimeMs,
   onSeek,
+  onSelectZoom,
+  selectedZoomId,
 }: {
-  items: TimelineItem[];
+  items: TimelineRenderItem[];
   videoDurationMs: number;
   intervalMs: number;
   currentTimeMs: number;
   onSeek?: (time: number) => void;
+  onSelectZoom?: (id: string | null) => void;
+  selectedZoomId: string | null;
 }) {
   const { setTimelineRef, style, sidebarWidth, range, pixelsToValue } = useTimelineContext();
 
   const handleTimelineClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!onSeek || videoDurationMs <= 0) return;
-    
+    onSelectZoom?.(null);
+
     const rect = e.currentTarget.getBoundingClientRect();
     const clickX = e.clientX - rect.left - sidebarWidth;
     
@@ -277,7 +289,7 @@ function Timeline({
     const timeInSeconds = absoluteMs / 1000;
     
     onSeek(timeInSeconds);
-  }, [onSeek, videoDurationMs, sidebarWidth, range.start, pixelsToValue]);
+  }, [onSeek, onSelectZoom, videoDurationMs, sidebarWidth, range.start, pixelsToValue]);
 
   return (
     <div
@@ -295,8 +307,10 @@ function Timeline({
             key={item.id}
             rowId={item.rowId}
             span={item.span}
+            isSelected={item.id === selectedZoomId}
+            onSelect={() => onSelectZoom?.(item.id)}
           >
-            {`Zoom ${item.id.replace("item-", "")}`}
+            {item.label}
           </Item>
         ))}
       </Row>
@@ -304,10 +318,16 @@ function Timeline({
   );
 }
 
-export default function TimelineEditor({ videoDuration, currentTime, onSeek }: TimelineEditorProps) {
-  const [items, setItems] = useState<TimelineItem[]>([]);
-  const [itemCounter, setItemCounter] = useState(1);
-
+export default function TimelineEditor({
+  videoDuration,
+  currentTime,
+  onSeek,
+  zoomRegions,
+  onZoomAdded,
+  onZoomSpanChange,
+  selectedZoomId,
+  onSelectZoom,
+}: TimelineEditorProps) {
   const totalMs = useMemo(() => Math.max(0, Math.round(videoDuration * 1000)), [videoDuration]);
   const currentTimeMs = useMemo(() => Math.round(currentTime * 1000), [currentTime]);
   const timelineScale = useMemo(() => calculateTimelineScale(videoDuration), [videoDuration]);
@@ -319,59 +339,38 @@ export default function TimelineEditor({ videoDuration, currentTime, onSeek }: T
   const [range, setRange] = useState<Range>(() => createInitialRange(totalMs));
 
   useEffect(() => {
-    const initialRange = createInitialRange(totalMs);
-    setRange(initialRange);
+    setRange(createInitialRange(totalMs));
   }, [totalMs]);
 
   useEffect(() => {
-    if (totalMs === 0) {
-      setItems([]);
-      setItemCounter(1);
+    if (totalMs === 0 || safeMinDurationMs <= 0) {
       return;
     }
 
-    setItems((prev) => {
-      if (safeMinDurationMs <= 0) {
-        return prev;
+    zoomRegions.forEach((region) => {
+      const clampedStart = Math.max(0, Math.min(region.startMs, totalMs));
+      const minEnd = clampedStart + safeMinDurationMs;
+      const clampedEnd = Math.min(totalMs, Math.max(minEnd, region.endMs));
+      const normalizedStart = Math.max(0, Math.min(clampedStart, totalMs - safeMinDurationMs));
+      const normalizedEnd = Math.max(minEnd, Math.min(clampedEnd, totalMs));
+
+      if (normalizedStart !== region.startMs || normalizedEnd !== region.endMs) {
+        onZoomSpanChange(region.id, { start: normalizedStart, end: normalizedEnd });
       }
-
-      let mutated = false;
-      const updated = prev
-        .map((item) => {
-          const clampedStart = Math.max(0, Math.min(item.span.start, totalMs));
-          const clampedEnd = Math.min(
-            totalMs,
-            Math.max(clampedStart + safeMinDurationMs, Math.min(item.span.end, totalMs)),
-          );
-
-          if (clampedStart !== item.span.start || clampedEnd !== item.span.end) {
-            mutated = true;
-            return {
-              ...item,
-              span: {
-                start: Math.max(0, Math.min(clampedStart, totalMs - safeMinDurationMs)),
-                end: Math.max(0, clampedEnd),
-              },
-            };
-          }
-
-          return item;
-        })
-        .filter((item) => item.span.end > item.span.start);
-
-      return mutated ? updated : prev;
     });
-  }, [safeMinDurationMs, totalMs]);
+  }, [zoomRegions, totalMs, safeMinDurationMs, onZoomSpanChange]);
 
   const hasOverlap = useCallback((newSpan: Span, excludeId?: string): boolean => {
-    return items.some(item => {
-      if (item.id === excludeId) return false;
-      return !(newSpan.end <= item.span.start || newSpan.start >= item.span.end);
+    return zoomRegions.some((region) => {
+      if (region.id === excludeId) return false;
+      return !(newSpan.end <= region.startMs || newSpan.start >= region.endMs);
     });
-  }, [items]);
+  }, [zoomRegions]);
 
-  const addItem = useCallback(() => {
-    if (!videoDuration || videoDuration === 0) return;
+  const handleAddZoom = useCallback(() => {
+    if (!videoDuration || videoDuration === 0 || totalMs === 0) {
+      return;
+    }
 
     const defaultDuration = Math.min(
       Math.max(timelineScale.defaultItemDurationMs, safeMinDurationMs),
@@ -383,13 +382,13 @@ export default function TimelineEditor({ videoDuration, currentTime, onSeek }: T
     }
 
     let startPos = 0;
-    const sortedItems = [...items].sort((a, b) => a.span.start - b.span.start);
+    const sorted = [...zoomRegions].sort((a, b) => a.startMs - b.startMs);
 
-    for (const item of sortedItems) {
-      if (startPos + defaultDuration <= item.span.start) {
+    for (const region of sorted) {
+      if (startPos + defaultDuration <= region.startMs) {
         break;
       }
-      startPos = Math.max(startPos, item.span.end);
+      startPos = Math.max(startPos, region.endMs);
     }
 
     if (startPos + defaultDuration > totalMs) {
@@ -399,26 +398,30 @@ export default function TimelineEditor({ videoDuration, currentTime, onSeek }: T
       return;
     }
 
-    const newItem: TimelineItem = {
-      id: `item-${itemCounter}`,
-      rowId: ROW_ID,
-      span: { start: startPos, end: startPos + defaultDuration },
-    };
-
-    setItems((prev) => [...prev, newItem]);
-    setItemCounter((c) => c + 1);
-  }, [itemCounter, items, safeMinDurationMs, timelineScale.defaultItemDurationMs, totalMs, videoDuration]);
+    onZoomAdded({ start: startPos, end: startPos + defaultDuration });
+  }, [videoDuration, totalMs, timelineScale.defaultItemDurationMs, safeMinDurationMs, zoomRegions, onZoomAdded]);
 
   const clampedRange = useMemo<Range>(() => {
     if (totalMs === 0) {
       return range;
     }
-    
+
     return {
       start: Math.max(0, Math.min(range.start, totalMs)),
       end: Math.min(range.end, totalMs),
     };
   }, [range, totalMs]);
+
+  const timelineItems = useMemo<TimelineRenderItem[]>(() => {
+    return [...zoomRegions]
+      .sort((a, b) => a.startMs - b.startMs)
+      .map((region, index) => ({
+        id: region.id,
+        rowId: ROW_ID,
+        span: { start: region.startMs, end: region.endMs },
+        label: `Zoom ${index + 1}`,
+      }));
+  }, [zoomRegions]);
 
   if (!videoDuration || videoDuration === 0) {
     return (
@@ -431,7 +434,7 @@ export default function TimelineEditor({ videoDuration, currentTime, onSeek }: T
   return (
     <div className="flex-1 flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-100 bg-gradient-to-b from-white to-slate-50/50">
-        <Button onClick={addItem} variant="outline" size="sm" className="gap-2 h-8 px-3 text-xs">
+        <Button onClick={handleAddZoom} variant="outline" size="sm" className="gap-2 h-8 px-3 text-xs">
           <Plus className="w-3.5 h-3.5" />
           Add Zoom
         </Button>
@@ -449,22 +452,24 @@ export default function TimelineEditor({ videoDuration, currentTime, onSeek }: T
         </div>
       </div>
       <div className="flex-1 overflow-x-auto overflow-y-hidden">
-        <TimelineWrapper 
-          setItems={setItems} 
-          range={clampedRange} 
+        <TimelineWrapper
+          range={clampedRange}
           videoDuration={videoDuration}
           hasOverlap={hasOverlap}
           onRangeChange={setRange}
           minItemDurationMs={timelineScale.minItemDurationMs}
           minVisibleRangeMs={timelineScale.minVisibleRangeMs}
           gridSizeMs={timelineScale.gridMs}
+          onItemSpanChange={onZoomSpanChange}
         >
           <Timeline
-            items={items}
+            items={timelineItems}
             videoDurationMs={totalMs}
             intervalMs={timelineScale.intervalMs}
             currentTimeMs={currentTimeMs}
             onSeek={onSeek}
+            onSelectZoom={onSelectZoom}
+            selectedZoomId={selectedZoomId}
           />
         </TimelineWrapper>
       </div>

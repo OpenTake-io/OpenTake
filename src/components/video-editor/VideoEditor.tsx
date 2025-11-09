@@ -1,12 +1,20 @@
 
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 
 import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
 import PlaybackControls from "./PlaybackControls";
 import TimelineEditor from "./timeline/TimelineEditor";
 import SettingsPanel from "./SettingsPanel";
+import type { Span } from "dnd-timeline";
+import {
+  DEFAULT_ZOOM_DEPTH,
+  clampFocusToDepth,
+  type ZoomDepth,
+  type ZoomFocus,
+  type ZoomRegion,
+} from "./types";
 
 const WALLPAPER_COUNT = 12;
 const WALLPAPER_PATHS = Array.from({ length: WALLPAPER_COUNT }, (_, i) => `/wallpapers/wallpaper${i + 1}.jpg`);
@@ -19,8 +27,11 @@ export default function VideoEditor() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [wallpaper, setWallpaper] = useState<string>(WALLPAPER_PATHS[0]);
+  const [zoomRegions, setZoomRegions] = useState<ZoomRegion[]>([]);
+  const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
 
   const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
+  const nextZoomIdRef = useRef(1);
 
   useEffect(() => {
     async function loadVideo() {
@@ -42,8 +53,14 @@ export default function VideoEditor() {
 
   function togglePlayPause() {
     const video = videoPlaybackRef.current?.video;
+    console.log('🎮 Toggle play/pause:', { hasVideo: !!video, isPlaying, action: isPlaying ? 'pause' : 'play' });
     if (!video) return;
-    isPlaying ? video.pause() : video.play();
+    
+    if (isPlaying) {
+      video.pause();
+    } else {
+      video.play().catch(err => console.error('❌ Video play failed:', err));
+    }
   }
 
   function handleSeek(time: number) {
@@ -51,6 +68,78 @@ export default function VideoEditor() {
     if (!video) return;
     video.currentTime = time;
   }
+
+  const handleSelectZoom = useCallback((id: string | null) => {
+    setSelectedZoomId(id);
+  }, []);
+
+  const handleZoomAdded = useCallback((span: Span) => {
+    const id = `zoom-${nextZoomIdRef.current++}`;
+    const newRegion: ZoomRegion = {
+      id,
+      startMs: Math.round(span.start),
+      endMs: Math.round(span.end),
+      depth: DEFAULT_ZOOM_DEPTH,
+      focus: { cx: 0.5, cy: 0.5 },
+    };
+    console.log('➕ Zoom region added:', newRegion);
+    setZoomRegions((prev) => [...prev, newRegion]);
+    setSelectedZoomId(id);
+  }, []);
+
+  const handleZoomSpanChange = useCallback((id: string, span: Span) => {
+    console.log('⏱️ Zoom span changed:', { id, start: Math.round(span.start), end: Math.round(span.end) });
+    setZoomRegions((prev) =>
+      prev.map((region) =>
+        region.id === id
+          ? {
+              ...region,
+              startMs: Math.round(span.start),
+              endMs: Math.round(span.end),
+            }
+          : region,
+      ),
+    );
+  }, []);
+
+  const handleZoomFocusChange = useCallback((id: string, focus: ZoomFocus) => {
+    setZoomRegions((prev) =>
+      prev.map((region) =>
+        region.id === id
+          ? {
+              ...region,
+              focus: clampFocusToDepth(focus, region.depth),
+            }
+          : region,
+      ),
+    );
+  }, []);
+
+  const handleZoomDepthChange = useCallback((depth: ZoomDepth) => {
+    if (!selectedZoomId) return;
+    setZoomRegions((prev) =>
+      prev.map((region) =>
+        region.id === selectedZoomId
+          ? {
+              ...region,
+              depth,
+              focus: clampFocusToDepth(region.focus, depth),
+            }
+          : region,
+      ),
+    );
+  }, [selectedZoomId]);
+
+  const selectedZoom = useMemo(() => {
+    if (!selectedZoomId) return null;
+    return zoomRegions.find((region) => region.id === selectedZoomId) ?? null;
+  }, [selectedZoomId, zoomRegions]);
+
+  useEffect(() => {
+    if (selectedZoomId && !zoomRegions.some((region) => region.id === selectedZoomId)) {
+      setSelectedZoomId(null);
+    }
+  }, [selectedZoomId, zoomRegions]);
 
   if (loading) {
     return (
@@ -83,6 +172,11 @@ export default function VideoEditor() {
                   onPlayStateChange={setIsPlaying}
                   onError={setError}
                   wallpaper={wallpaper}
+                  zoomRegions={zoomRegions}
+                  selectedZoomId={selectedZoomId}
+                  onSelectZoom={handleSelectZoom}
+                  onZoomFocusChange={handleZoomFocusChange}
+                  isPlaying={isPlaying}
                 />
               </div>
               <PlaybackControls
@@ -95,9 +189,23 @@ export default function VideoEditor() {
             </>
           )}
         </div>
-        <TimelineEditor videoDuration={duration} currentTime={currentTime} onSeek={handleSeek} />
+        <TimelineEditor
+          videoDuration={duration}
+          currentTime={currentTime}
+          onSeek={handleSeek}
+          zoomRegions={zoomRegions}
+          onZoomAdded={handleZoomAdded}
+          onZoomSpanChange={handleZoomSpanChange}
+          selectedZoomId={selectedZoomId}
+          onSelectZoom={handleSelectZoom}
+        />
       </div>
-      <SettingsPanel selected={wallpaper} onWallpaperChange={setWallpaper} />
+      <SettingsPanel
+        selected={wallpaper}
+        onWallpaperChange={setWallpaper}
+        selectedZoomDepth={selectedZoom?.depth}
+        onZoomDepthChange={handleZoomDepthChange}
+      />
     </div>
   );
 }
