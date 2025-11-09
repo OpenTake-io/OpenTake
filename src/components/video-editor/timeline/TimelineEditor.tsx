@@ -375,7 +375,7 @@ export default function TimelineEditor({
     }
 
     const defaultDuration = Math.min(
-      Math.max(timelineScale.defaultItemDurationMs, safeMinDurationMs),
+      Math.max(3000, safeMinDurationMs),
       totalMs,
     );
 

@@ -2,12 +2,11 @@ import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Colorful from '@uiw/react-color-colorful';
 import { hsvaToHex } from '@uiw/color-convert';
 import { Trash2 } from "lucide-react";
 import type { ZoomDepth } from "./types";
-import { ZOOM_DEPTH_SCALES } from "./types";
 
 const WALLPAPER_COUNT = 12;
 const WALLPAPER_PATHS = Array.from({ length: WALLPAPER_COUNT }, (_, i) => `/wallpapers/wallpaper${i + 1}.jpg`);
@@ -35,10 +34,12 @@ interface SettingsPanelProps {
   onZoomDelete?: (id: string) => void;
 }
 
-const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string; description: string }> = [
-  { depth: 1, label: "Subtle", description: "Gentle focus" },
-  { depth: 2, label: "Medium", description: "Balanced zoom" },
-  { depth: 3, label: "Deep", description: "Bold spotlight" },
+const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
+  { depth: 1, label: "1.25×" },
+  { depth: 2, label: "1.5×" },
+  { depth: 3, label: "1.8×" },
+  { depth: 4, label: "2.2×" },
+  { depth: 5, label: "3.5×" },
 ];
 
 export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, onZoomDepthChange, selectedZoomId, onZoomDelete }: SettingsPanelProps) {
@@ -52,26 +53,19 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
       onZoomDelete(selectedZoomId);
     }
   };
-  const scaleLabels = useMemo(() => {
-    return ZOOM_DEPTH_OPTIONS.reduce<Record<ZoomDepth, string>>((acc, option) => {
-      const scale = ZOOM_DEPTH_SCALES[option.depth];
-      acc[option.depth] = `${scale.toFixed(2)}×`;
-      return acc;
-    }, { 1: "", 2: "", 3: "" });
-  }, []);
 
   return (
     <div className="flex-[3] min-w-0 bg-card border border-border rounded-xl p-8 flex flex-col shadow-sm">
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-semibold text-slate-600">Zoom Region</span>
+          <span className="text-sm font-semibold text-slate-600">Zoom Level</span>
           {zoomEnabled && selectedZoomDepth && (
             <span className="text-xs uppercase tracking-wide text-slate-400">
-              Active · {scaleLabels[selectedZoomDepth]}
+              Active · {ZOOM_DEPTH_OPTIONS.find(o => o.depth === selectedZoomDepth)?.label}
             </span>
           )}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-5 gap-2">
           {ZOOM_DEPTH_OPTIONS.map((option) => {
             const isActive = selectedZoomDepth === option.depth;
             return (
@@ -82,25 +76,21 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
                 disabled={!zoomEnabled}
                 onClick={() => onZoomDepthChange?.(option.depth)}
                 className={cn(
-                  "h-auto w-full rounded-xl border bg-muted/30 px-4 py-4 text-left shadow-sm transition-all",
-                  "flex flex-col gap-2",
+                  "h-auto w-full rounded-lg border bg-muted/30 px-2 py-2.5 text-center shadow-sm transition-all",
+                  "flex flex-col items-center justify-center gap-0.5",
                   zoomEnabled ? "opacity-100" : "opacity-60",
                   isActive
                     ? "border-primary/70 bg-primary/10 text-primary shadow-primary/20"
                     : "border-border/60 hover:border-primary/40 hover:bg-muted/60"
                 )}
               >
-                <span className="text-sm font-semibold tracking-tight">{option.label}</span>
-                <span className="text-xs font-medium text-slate-500">
-                  {scaleLabels[option.depth]}
-                </span>
-                <span className="text-xs text-slate-400 leading-snug">{option.description}</span>
+                <span className="text-xs font-semibold tracking-tight">{option.label}</span>
               </Button>
             );
           })}
         </div>
         {!zoomEnabled && (
-          <p className="text-xs text-slate-400 mt-2">Select a zoom region in the timeline to adjust its depth.</p>
+          <p className="text-xs text-slate-400 mt-2">Select a zoom item in the timeline to adjust its depth.</p>
         )}
         {zoomEnabled && (
           <Button
