@@ -593,7 +593,13 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       let targetScaleFactor = 1;
       let targetFocus = defaultFocus;
 
-      if (region && strength > 0) {
+      // If a zoom is selected but video is not playing, show default unzoomed view
+      // (the overlay will show where the zoom will be)
+      const selectedId = selectedZoomIdRef.current;
+      const hasSelectedZoom = selectedId !== null;
+      const shouldShowUnzoomedView = hasSelectedZoom && !isPlayingRef.current;
+
+      if (region && strength > 0 && !shouldShowUnzoomedView) {
         const zoomScale = ZOOM_DEPTH_SCALES[region.depth];
         const regionFocus = clampFocusToStage(region.focus, region.depth);
         
