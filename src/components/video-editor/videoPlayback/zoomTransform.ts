@@ -8,6 +8,7 @@ interface TransformParams {
   videoSize: { width: number; height: number };
   baseScale: number;
   baseOffset: { x: number; y: number };
+  baseMask: { x: number; y: number; width: number; height: number };
   zoomScale: number;
   focusX: number;
   focusY: number;
@@ -24,6 +25,7 @@ export function applyZoomTransform(params: TransformParams) {
     videoSize,
     baseScale,
     baseOffset,
+    baseMask,
     zoomScale,
     focusX,
     focusY,
@@ -31,7 +33,15 @@ export function applyZoomTransform(params: TransformParams) {
     isPlaying,
   } = params;
 
-  if (!stageSize.width || !stageSize.height || !videoSize.width || !videoSize.height || baseScale <= 0) {
+  if (
+    !stageSize.width ||
+    !stageSize.height ||
+    !videoSize.width ||
+    !videoSize.height ||
+    baseScale <= 0 ||
+    baseMask.width <= 0 ||
+    baseMask.height <= 0
+  ) {
     return;
   }
 
@@ -46,6 +56,8 @@ export function applyZoomTransform(params: TransformParams) {
   // Keep the focus point centered in viewport after zoom transformation
   const baseVideoX = baseOffset.x;
   const baseVideoY = baseOffset.y;
+  const baseMaskX = baseMask.x;
+  const baseMaskY = baseMask.y;
   const focusInVideoSpaceX = focusStagePxX - baseVideoX;
   const focusInVideoSpaceY = focusStagePxY - baseVideoY;
 
@@ -61,10 +73,12 @@ export function applyZoomTransform(params: TransformParams) {
     blurFilter.blur = motionBlur;
   }
 
-  const videoWidth = videoSize.width * actualScale;
-  const videoHeight = videoSize.height * actualScale;
-  const radius = Math.min(videoWidth, videoHeight) * 0.02;
+  const maskWidth = baseMask.width * zoomScale;
+  const maskHeight = baseMask.height * zoomScale;
+  const maskX = baseMaskX + (newVideoX - baseVideoX);
+  const maskY = baseMaskY + (newVideoY - baseVideoY);
+  const radius = Math.min(maskWidth, maskHeight) * 0.02;
   maskGraphics.clear();
-  maskGraphics.roundRect(newVideoX, newVideoY, videoWidth, videoHeight, radius);
+  maskGraphics.roundRect(maskX, maskY, maskWidth, maskHeight, radius);
   maskGraphics.fill({ color: 0xffffff });
 }

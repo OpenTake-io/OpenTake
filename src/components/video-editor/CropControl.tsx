@@ -1,0 +1,248 @@
+import { useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
+
+interface CropRegion {
+  x: number; // 0-1 normalized
+  y: number; // 0-1 normalized
+  width: number; // 0-1 normalized
+  height: number; // 0-1 normalized
+}
+
+interface CropControlProps {
+  videoElement: HTMLVideoElement | null;
+  cropRegion: CropRegion;
+  onCropChange: (region: CropRegion) => void;
+}
+
+type DragHandle = 'top' | 'right' | 'bottom' | 'left' | null;
+
+export function CropControl({ videoElement, cropRegion, onCropChange }: CropControlProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState<DragHandle>(null);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [initialCrop, setInitialCrop] = useState<CropRegion>(cropRegion);
+
+  // Draw video preview at high quality
+  useEffect(() => {
+    if (!videoElement || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) return;
+
+    // Set canvas to actual video dimensions for high quality
+    canvas.width = videoElement.videoWidth || 1920;
+    canvas.height = videoElement.videoHeight || 1080;
+
+    const draw = () => {
+      if (videoElement.readyState >= 2) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+      }
+      requestAnimationFrame(draw);
+    };
+
+    const rafId = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(rafId);
+  }, [videoElement]);
+
+  const getContainerRect = () => {
+    return containerRef.current?.getBoundingClientRect() || { width: 0, height: 0, left: 0, top: 0 };
+  };
+
+  const handlePointerDown = (e: React.PointerEvent, handle: DragHandle) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setIsDragging(handle);
+    const rect = getContainerRect();
+    setDragStart({
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height,
+    });
+    setInitialCrop(cropRegion);
+    
+    // Capture pointer for smooth dragging
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!isDragging) return;
+
+    const rect = getContainerRect();
+    const currentX = (e.clientX - rect.left) / rect.width;
+    const currentY = (e.clientY - rect.top) / rect.height;
+    const deltaX = currentX - dragStart.x;
+    const deltaY = currentY - dragStart.y;
+
+    let newCrop = { ...initialCrop };
+
+    switch (isDragging) {
+      case 'top': {
+        // Calculate new y position
+        const newY = Math.max(0, initialCrop.y + deltaY);
+        // Calculate the bottom edge (which should stay fixed)
+        const bottom = initialCrop.y + initialCrop.height;
+        // Ensure minimum height of 0.1
+        newCrop.y = Math.min(newY, bottom - 0.1);
+        newCrop.height = bottom - newCrop.y;
+        break;
+      }
+      case 'bottom':
+        newCrop.height = Math.max(0.1, Math.min(initialCrop.height + deltaY, 1 - initialCrop.y));
+        break;
+      case 'left': {
+        // Calculate new x position
+        const newX = Math.max(0, initialCrop.x + deltaX);
+        // Calculate the right edge (which should stay fixed)
+        const right = initialCrop.x + initialCrop.width;
+        // Ensure minimum width of 0.1
+        newCrop.x = Math.min(newX, right - 0.1);
+        newCrop.width = right - newCrop.x;
+        break;
+      }
+      case 'right':
+        newCrop.width = Math.max(0.1, Math.min(initialCrop.width + deltaX, 1 - initialCrop.x));
+        break;
+    }
+
+    onCropChange(newCrop);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (isDragging) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+    }
+    setIsDragging(null);
+  };
+
+  const cropPixelX = cropRegion.x * 100;
+  const cropPixelY = cropRegion.y * 100;
+  const cropPixelWidth = cropRegion.width * 100;
+  const cropPixelHeight = cropRegion.height * 100;
+
+  return (
+    <div className="w-full p-8">
+      <div
+        ref={containerRef}
+        className="relative w-full aspect-video bg-black rounded-lg overflow-visible cursor-default select-none shadow-2xl"
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+      >
+        <canvas
+          ref={canvasRef}
+          className="w-full h-full rounded-lg"
+          style={{ imageRendering: 'auto' }}
+        />
+        
+        {/* Dark overlay outside crop */}
+        <div className="absolute inset-0 pointer-events-none">
+          <svg width="100%" height="100%" className="absolute inset-0">
+            <defs>
+              <mask id="cropMask">
+                <rect width="100%" height="100%" fill="white" />
+                <rect
+                  x={`${cropPixelX}%`}
+                  y={`${cropPixelY}%`}
+                  width={`${cropPixelWidth}%`}
+                  height={`${cropPixelHeight}%`}
+                  fill="black"
+                />
+              </mask>
+            </defs>
+            <rect width="100%" height="100%" fill="black" fillOpacity="0.6" mask="url(#cropMask)" />
+          </svg>
+        </div>
+
+        {/* Crop region outline */}
+        <div
+          className="absolute border-2 border-white shadow-2xl pointer-events-none transition-none"
+          style={{
+            left: `${cropPixelX}%`,
+            top: `${cropPixelY}%`,
+            width: `${cropPixelWidth}%`,
+            height: `${cropPixelHeight}%`,
+            willChange: 'left, top, width, height',
+          }}
+        >
+          {/* Grid lines */}
+          <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none">
+            {[...Array(9)].map((_, i) => (
+              <div key={i} className="border border-white/20" />
+            ))}
+          </div>
+        </div>
+
+        {/* Side handles */}
+        {/* Top handle */}
+        <div
+          className={cn(
+            "absolute w-20 h-1 bg-white/90 cursor-ns-resize z-20 pointer-events-auto shadow-md",
+            "hover:bg-white hover:h-1.5 transition-all",
+            isDragging === 'top' && "bg-white h-2"
+          )}
+          style={{
+            left: `${cropPixelX + cropPixelWidth / 2}%`,
+            top: `${cropPixelY}%`,
+            transform: 'translate(-50%, -50%)',
+            willChange: 'transform',
+          }}
+          onPointerDown={(e) => handlePointerDown(e, 'top')}
+        />
+
+        {/* Bottom handle */}
+        <div
+          className={cn(
+            "absolute w-20 h-1 bg-white/90 cursor-ns-resize z-20 pointer-events-auto shadow-md",
+            "hover:bg-white hover:h-1.5 transition-all",
+            isDragging === 'bottom' && "bg-white h-2"
+          )}
+          style={{
+            left: `${cropPixelX + cropPixelWidth / 2}%`,
+            top: `${cropPixelY + cropPixelHeight}%`,
+            transform: 'translate(-50%, -50%)',
+            willChange: 'transform',
+          }}
+          onPointerDown={(e) => handlePointerDown(e, 'bottom')}
+        />
+
+        {/* Left handle */}
+        <div
+          className={cn(
+            "absolute w-1 h-20 bg-white/90 cursor-ew-resize z-20 pointer-events-auto shadow-md",
+            "hover:bg-white hover:w-1.5 transition-all",
+            isDragging === 'left' && "bg-white w-2"
+          )}
+          style={{
+            left: `${cropPixelX}%`,
+            top: `${cropPixelY + cropPixelHeight / 2}%`,
+            transform: 'translate(-50%, -50%)',
+            willChange: 'transform',
+          }}
+          onPointerDown={(e) => handlePointerDown(e, 'left')}
+        />
+
+        {/* Right handle */}
+        <div
+          className={cn(
+            "absolute w-1 h-20 bg-white/90 cursor-ew-resize z-20 pointer-events-auto shadow-md",
+            "hover:bg-white hover:w-1.5 transition-all",
+            isDragging === 'right' && "bg-white w-2"
+          )}
+          style={{
+            left: `${cropPixelX + cropPixelWidth}%`,
+            top: `${cropPixelY + cropPixelHeight / 2}%`,
+            transform: 'translate(-50%, -50%)',
+            willChange: 'transform',
+          }}
+          onPointerDown={(e) => handlePointerDown(e, 'right')}
+        />
+      </div>
+    </div>
+  );
+}

@@ -13,6 +13,20 @@ export interface ZoomRegion {
   focus: ZoomFocus;
 }
 
+export interface CropRegion {
+  x: number; // 0-1 normalized
+  y: number; // 0-1 normalized
+  width: number; // 0-1 normalized
+  height: number; // 0-1 normalized
+}
+
+export const DEFAULT_CROP_REGION: CropRegion = {
+  x: 0,
+  y: 0,
+  width: 1,
+  height: 1,
+};
+
 export const ZOOM_DEPTH_SCALES: Record<ZoomDepth, number> = {
   1: 1.25,
   2: 1.5,

@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import Colorful from '@uiw/react-color-colorful';
 import { hsvaToHex } from '@uiw/color-convert';
-import { Trash2 } from "lucide-react";
-import type { ZoomDepth } from "./types";
+import { Trash2, Download, Crop, X } from "lucide-react";
+import type { ZoomDepth, CropRegion } from "./types";
+import { CropControl } from "./CropControl";
 
 const WALLPAPER_COUNT = 12;
 const WALLPAPER_PATHS = Array.from({ length: WALLPAPER_COUNT }, (_, i) => `/wallpapers/wallpaper${i + 1}.jpg`);
@@ -34,6 +35,11 @@ interface SettingsPanelProps {
   onZoomDelete?: (id: string) => void;
   showShadow?: boolean;
   onShadowChange?: (showShadow: boolean) => void;
+  showBlur?: boolean;
+  onBlurChange?: (showBlur: boolean) => void;
+  cropRegion?: CropRegion;
+  onCropChange?: (region: CropRegion) => void;
+  videoElement?: HTMLVideoElement | null;
 }
 
 const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
@@ -44,9 +50,10 @@ const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
   { depth: 5, label: "3.5×" },
 ];
 
-export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, onZoomDepthChange, selectedZoomId, onZoomDelete, showShadow, onShadowChange }: SettingsPanelProps) {
+export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, onZoomDepthChange, selectedZoomId, onZoomDelete, showShadow, onShadowChange, showBlur, onBlurChange, cropRegion, onCropChange, videoElement }: SettingsPanelProps) {
   const [hsva, setHsva] = useState({ h: 0, s: 0, v: 68, a: 1 });
   const [gradient, setGradient] = useState<string>(GRADIENTS[0]);
+  const [showCropDropdown, setShowCropDropdown] = useState(false);
 
   const zoomEnabled = Boolean(selectedZoomDepth);
   
@@ -107,14 +114,71 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
         )}
       </div>
       <div className="mb-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Switch
-            checked={showShadow}
-            onCheckedChange={onShadowChange}
-          />
-          <div className="text-sm">Shadow</div>
+        <div className="flex flex-col gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={showShadow}
+              onCheckedChange={onShadowChange}
+            />
+            <div className="text-sm">Shadow</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={showBlur}
+              onCheckedChange={onBlurChange}
+            />
+            <div className="text-sm">Blur Background</div>
+          </div>
         </div>
       </div>
+      <div className="mb-6">
+        <Button
+          onClick={() => setShowCropDropdown(!showCropDropdown)}
+          variant="outline"
+          className="w-full gap-2"
+        >
+          <Crop className="w-4 h-4" />
+          Crop Video
+        </Button>
+      </div>
+      
+      {showCropDropdown && cropRegion && onCropChange && (
+        <>
+          <div 
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 animate-in fade-in duration-200"
+            onClick={() => setShowCropDropdown(false)}
+          />
+          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-card rounded-2xl shadow-2xl border border-border/50 p-8 w-[90vw] max-w-5xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <span className="text-xl font-bold text-foreground">Crop Video</span>
+                <p className="text-sm text-muted-foreground mt-2">Drag the white handles on each side to adjust the crop area. Changes apply to the entire video.</p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowCropDropdown(false)}
+                className="hover:bg-muted"
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+            <CropControl
+              videoElement={videoElement || null}
+              cropRegion={cropRegion}
+              onCropChange={onCropChange}
+            />
+            <div className="mt-6 flex justify-end">
+              <Button
+                onClick={() => setShowCropDropdown(false)}
+                size="lg"
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
       <Tabs defaultValue="image" className="mb-6">
         <TabsList className="mb-4">
           <TabsTrigger value="image">Image</TabsTrigger>
@@ -171,6 +235,16 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
           </div>
         </TabsContent>
       </Tabs>
+        <div className="mt-auto pt-4">
+          <Button
+            type="button"
+            size="lg"
+            className="w-full py-5 text-lg flex items-center justify-center gap-3 bg-primary text-white rounded-xl shadow-lg hover:bg-primary/90 transition-all"
+          >
+            <Download className="w-6 h-6" />
+            <span className="text-lg">Export Video</span>
+          </Button>
+        </div>
     </div>
   );
 }
