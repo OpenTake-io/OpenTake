@@ -152,7 +152,7 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
             <div className="flex items-center justify-between mb-6">
               <div>
                 <span className="text-xl font-bold text-foreground">Crop Video</span>
-                <p className="text-sm text-muted-foreground mt-2">Drag the white handles on each side to adjust the crop area. Changes apply to the entire video.</p>
+                <p className="text-sm text-muted-foreground mt-2">Drag on each side to adjust the crop area</p>
               </div>
               <Button
                 variant="ghost"

@@ -154,12 +154,23 @@ function PlaybackCursor({
       }}
     >
       <div
-        className="absolute top-0 bottom-0 w-0.5 bg-gradient-to-b from-red-500 to-red-600 shadow-lg"
+        className="absolute top-0 bottom-0 w-[2px] bg-red-500/90 shadow-[0_0_8px_rgba(239,68,68,0.5)]"
         style={{
           [sideProperty]: `${offset}px`,
         }}
       >
-        <div className="absolute -top-1 -left-1.5 w-3 h-3 bg-red-500 rounded-full shadow-md border border-red-400" />
+        {/* Inverted triangle at top */}
+        <div 
+          className="absolute -top-0.5 -left-[5px] w-0 h-0"
+          style={{
+            borderLeft: '6px solid transparent',
+            borderRight: '6px solid transparent',
+            borderTop: '8px solid rgb(239 68 68)',
+            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+          }}
+        />
+        {/* Subtle glow at top */}
+        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-red-500/30 rounded-full blur-sm" />
       </div>
     </div>
   );
