@@ -58,6 +58,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   const appRef = useRef<PIXI.Application | null>(null);
   const videoSpriteRef = useRef<PIXI.Sprite | null>(null);
   const videoContainerRef = useRef<PIXI.Container | null>(null);
+  const cameraContainerRef = useRef<PIXI.Container | null>(null);
+  const backgroundSpriteRef = useRef<PIXI.Sprite | null>(null);
   const timeUpdateAnimationRef = useRef<number | null>(null);
   const [pixiReady, setPixiReady] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
@@ -74,6 +76,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   const baseScaleRef = useRef(1);
   const baseOffsetRef = useRef({ x: 0, y: 0 });
   const baseMaskRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const cropBoundsRef = useRef({ startX: 0, endX: 0, startY: 0, endY: 0 });
   const maskGraphicsRef = useRef<PIXI.Graphics | null>(null);
   const isPlayingRef = useRef(isPlaying);
   const isSeekingRef = useRef(false);
@@ -115,8 +118,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     const videoSprite = videoSpriteRef.current;
     const maskGraphics = maskGraphicsRef.current;
     const videoElement = videoRef.current;
+    const backgroundSprite = backgroundSpriteRef.current;
+    const cameraContainer = cameraContainerRef.current;
 
-    if (!container || !app || !videoSprite || !maskGraphics || !videoElement) {
+    if (!container || !app || !videoSprite || !maskGraphics || !videoElement || !cameraContainer) {
       return;
     }
 
@@ -135,6 +140,18 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       baseScaleRef.current = result.baseScale;
       baseOffsetRef.current = result.baseOffset;
       baseMaskRef.current = result.maskRect;
+      cropBoundsRef.current = result.cropBounds;
+
+      // Size and position background to match stage
+      if (backgroundSprite) {
+        backgroundSprite.width = result.stageSize.width;
+        backgroundSprite.height = result.stageSize.height;
+        backgroundSprite.position.set(0, 0);
+      }
+
+      // Reset camera container to identity
+      cameraContainer.scale.set(1);
+      cameraContainer.position.set(0, 0);
 
       const selectedId = selectedZoomIdRef.current;
       const activeRegion = selectedId
@@ -143,9 +160,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
 
       updateOverlayForRegion(activeRegion);
     }
-  }, [updateOverlayForRegion, cropRegion]);
-
-  const selectedZoom = useMemo(() => {
+  }, [updateOverlayForRegion, cropRegion]);  const selectedZoom = useMemo(() => {
     if (!selectedZoomId) return null;
     return zoomRegions.find((region) => region.id === selectedZoomId) ?? null;
   }, [zoomRegions, selectedZoomId]);
@@ -264,7 +279,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   useEffect(() => {
     if (!pixiReady || !videoReady) return;
     layoutVideoContent();
-  }, [pixiReady, videoReady, layoutVideoContent, cropRegion]);
+  }, [pixiReady, videoReady, layoutVideoContent, cropRegion, wallpaper]);
 
   useEffect(() => {
     if (!pixiReady || !videoReady) return;
@@ -331,9 +346,15 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       appRef.current = app;
       container.appendChild(app.canvas);
 
+      // Camera container - this will be scaled/positioned for zoom
+      const cameraContainer = new PIXI.Container();
+      cameraContainerRef.current = cameraContainer;
+      app.stage.addChild(cameraContainer);
+
+      // Video container - holds the masked video sprite
       const videoContainer = new PIXI.Container();
       videoContainerRef.current = videoContainer;
-      app.stage.addChild(videoContainer);
+      cameraContainer.addChild(videoContainer);
       
       setPixiReady(true);
     })();
@@ -345,8 +366,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
         app.destroy(true, { children: true, texture: true, textureSource: true });
       }
       appRef.current = null;
+      cameraContainerRef.current = null;
       videoContainerRef.current = null;
       videoSpriteRef.current = null;
+      backgroundSpriteRef.current = null;
     };
   }, []);
 
@@ -357,6 +380,46 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     video.currentTime = 0;
     allowPlaybackRef.current = false;
   }, [videoPath]);
+
+  // Load background into PIXI
+  useEffect(() => {
+    if (!pixiReady) return;
+    const cameraContainer = cameraContainerRef.current;
+    if (!cameraContainer || !wallpaper) return;
+
+    // Remove old background if exists
+    if (backgroundSpriteRef.current) {
+      cameraContainer.removeChild(backgroundSpriteRef.current);
+      backgroundSpriteRef.current.destroy({ texture: true });
+      backgroundSpriteRef.current = null;
+    }
+
+    const isImageUrl = wallpaper?.startsWith('/wallpapers/') || wallpaper?.startsWith('http');
+    if (!isImageUrl) return; // Skip if it's a solid color
+
+    PIXI.Assets.load(wallpaper).then((texture) => {
+      if (!cameraContainer) return;
+      
+      const backgroundSprite = new PIXI.Sprite(texture);
+      backgroundSpriteRef.current = backgroundSprite;
+      
+      // Add background behind video container
+      cameraContainer.addChildAt(backgroundSprite, 0);
+      
+      // Will be sized in layoutVideoContent
+      layoutVideoContent();
+    }).catch((err) => {
+      console.error('Failed to load background:', err);
+    });
+
+    return () => {
+      if (backgroundSpriteRef.current) {
+        cameraContainer.removeChild(backgroundSpriteRef.current);
+        backgroundSpriteRef.current.destroy({ texture: true });
+        backgroundSpriteRef.current = null;
+      }
+    };
+  }, [pixiReady, wallpaper]);
 
   useEffect(() => {
     if (!pixiReady || !videoReady) return;
@@ -460,19 +523,15 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     if (!app || !videoSprite || !videoContainer) return;
 
     const applyTransform = (motionIntensity: number) => {
-      const maskGraphics = maskGraphicsRef.current;
-      if (!maskGraphics) return;
+      const cameraContainer = cameraContainerRef.current;
+      if (!cameraContainer) return;
 
       const state = animationStateRef.current;
 
       applyZoomTransform({
-        videoSprite,
-        maskGraphics,
+        cameraContainer,
         blurFilter: blurFilterRef.current,
         stageSize: stageSizeRef.current,
-        videoSize: videoSizeRef.current,
-        baseScale: baseScaleRef.current,
-        baseOffset: baseOffsetRef.current,
         baseMask: baseMaskRef.current,
         zoomScale: state.scale,
         focusX: state.focusX,
@@ -569,13 +628,16 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
 
   return (
     <div className="relative aspect-video rounded-sm overflow-hidden" style={{ width: '100%' }}>
-      <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ 
-          ...backgroundStyle,
-          filter: showBlur ? 'blur(2px)' : 'none',
-        }}
-      />
+      {/* Fallback background for solid colors or when PIXI hasn't loaded */}
+      {!isImageUrl && (
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ 
+            ...backgroundStyle,
+            filter: showBlur ? 'blur(2px)' : 'none',
+          }}
+        />
+      )}
       <div
         ref={containerRef}
         className="absolute inset-0"
