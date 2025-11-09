@@ -3,15 +3,8 @@ import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { TimelineContext } from "dnd-timeline";
 import type { DragEndEvent, Range, ResizeEndEvent, Span } from "dnd-timeline";
 
-interface TimelineItem {
-  id: string;
-  rowId: string;
-  span: Span;
-}
-
 interface TimelineWrapperProps {
   children: ReactNode;
-  setItems: Dispatch<SetStateAction<TimelineItem[]>>;
   range: Range;
   videoDuration: number;
   hasOverlap: (newSpan: Span, excludeId?: string) => boolean;
@@ -19,11 +12,11 @@ interface TimelineWrapperProps {
   minItemDurationMs: number;
   minVisibleRangeMs: number;
   gridSizeMs: number;
+  onItemSpanChange: (id: string, span: Span) => void;
 }
 
 export default function TimelineWrapper({
   children,
-  setItems,
   range,
   videoDuration,
   hasOverlap,
@@ -31,6 +24,7 @@ export default function TimelineWrapper({
   minItemDurationMs,
   minVisibleRangeMs,
   gridSizeMs,
+  onItemSpanChange,
 }: TimelineWrapperProps) {
   const totalMs = Math.max(0, Math.round(videoDuration * 1000));
 
@@ -105,14 +99,10 @@ export default function TimelineWrapper({
       if (hasOverlap(clampedSpan, activeItemId)) {
         return;
       }
-      
-      setItems((prev) =>
-        prev.map((item) =>
-          item.id === activeItemId ? { ...item, span: clampedSpan } : item
-        )
-      );
+
+      onItemSpanChange(activeItemId, clampedSpan);
     },
-    [clampSpanToBounds, hasOverlap, minItemDurationMs, setItems, totalMs]
+    [clampSpanToBounds, hasOverlap, minItemDurationMs, onItemSpanChange, totalMs]
   );
 
   const onDragEnd = useCallback(
@@ -128,15 +118,9 @@ export default function TimelineWrapper({
         return;
       }
 
-      setItems((prev) =>
-        prev.map((item) =>
-          item.id === activeItemId
-            ? { ...item, rowId: activeRowId, span: clampedSpan }
-            : item
-        )
-      );
+      onItemSpanChange(activeItemId, clampedSpan);
     },
-    [clampSpanToBounds, hasOverlap, setItems]
+    [clampSpanToBounds, hasOverlap, onItemSpanChange]
   );
 
   const handleRangeChange = useCallback(
