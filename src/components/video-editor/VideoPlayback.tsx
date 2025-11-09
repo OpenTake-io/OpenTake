@@ -59,7 +59,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   const videoSpriteRef = useRef<PIXI.Sprite | null>(null);
   const videoContainerRef = useRef<PIXI.Container | null>(null);
   const cameraContainerRef = useRef<PIXI.Container | null>(null);
-  const backgroundSpriteRef = useRef<PIXI.Sprite | null>(null);
   const timeUpdateAnimationRef = useRef<number | null>(null);
   const [pixiReady, setPixiReady] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
@@ -118,7 +117,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     const videoSprite = videoSpriteRef.current;
     const maskGraphics = maskGraphicsRef.current;
     const videoElement = videoRef.current;
-    const backgroundSprite = backgroundSpriteRef.current;
     const cameraContainer = cameraContainerRef.current;
 
     if (!container || !app || !videoSprite || !maskGraphics || !videoElement || !cameraContainer) {
@@ -141,13 +139,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       baseOffsetRef.current = result.baseOffset;
       baseMaskRef.current = result.maskRect;
       cropBoundsRef.current = result.cropBounds;
-
-      // Size and position background to match stage
-      if (backgroundSprite) {
-        backgroundSprite.width = result.stageSize.width;
-        backgroundSprite.height = result.stageSize.height;
-        backgroundSprite.position.set(0, 0);
-      }
 
       // Reset camera container to identity
       cameraContainer.scale.set(1);
@@ -279,7 +270,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   useEffect(() => {
     if (!pixiReady || !videoReady) return;
     layoutVideoContent();
-  }, [pixiReady, videoReady, layoutVideoContent, cropRegion, wallpaper]);
+  }, [pixiReady, videoReady, layoutVideoContent, cropRegion]);
 
   useEffect(() => {
     if (!pixiReady || !videoReady) return;
@@ -369,7 +360,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       cameraContainerRef.current = null;
       videoContainerRef.current = null;
       videoSpriteRef.current = null;
-      backgroundSpriteRef.current = null;
     };
   }, []);
 
@@ -381,45 +371,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     allowPlaybackRef.current = false;
   }, [videoPath]);
 
-  // Load background into PIXI
-  useEffect(() => {
-    if (!pixiReady) return;
-    const cameraContainer = cameraContainerRef.current;
-    if (!cameraContainer || !wallpaper) return;
 
-    // Remove old background if exists
-    if (backgroundSpriteRef.current) {
-      cameraContainer.removeChild(backgroundSpriteRef.current);
-      backgroundSpriteRef.current.destroy({ texture: true });
-      backgroundSpriteRef.current = null;
-    }
-
-    const isImageUrl = wallpaper?.startsWith('/wallpapers/') || wallpaper?.startsWith('http');
-    if (!isImageUrl) return; // Skip if it's a solid color
-
-    PIXI.Assets.load(wallpaper).then((texture) => {
-      if (!cameraContainer) return;
-      
-      const backgroundSprite = new PIXI.Sprite(texture);
-      backgroundSpriteRef.current = backgroundSprite;
-      
-      // Add background behind video container
-      cameraContainer.addChildAt(backgroundSprite, 0);
-      
-      // Will be sized in layoutVideoContent
-      layoutVideoContent();
-    }).catch((err) => {
-      console.error('Failed to load background:', err);
-    });
-
-    return () => {
-      if (backgroundSpriteRef.current) {
-        cameraContainer.removeChild(backgroundSpriteRef.current);
-        backgroundSpriteRef.current.destroy({ texture: true });
-        backgroundSpriteRef.current = null;
-      }
-    };
-  }, [pixiReady, wallpaper]);
 
   useEffect(() => {
     if (!pixiReady || !videoReady) return;
@@ -628,22 +580,20 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
 
   return (
     <div className="relative aspect-video rounded-sm overflow-hidden" style={{ width: '100%' }}>
-      {/* Fallback background for solid colors or when PIXI hasn't loaded */}
-      {!isImageUrl && (
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ 
-            ...backgroundStyle,
-            filter: showBlur ? 'blur(2px)' : 'none',
-          }}
-        />
-      )}
+      {/* Background layer - always render as DOM element with blur */}
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{
+          ...backgroundStyle,
+          filter: showBlur ? 'blur(2px)' : 'none',
+        }}
+      />
       <div
         ref={containerRef}
         className="absolute inset-0"
         style={{
           filter: showShadow
-            ? 'drop-shadow(0 8px 32px rgba(0,0,0,0.55)) drop-shadow(0 2px 8px rgba(0,0,0,0.25))'
+            ? 'drop-shadow(0 12px 48px rgba(0,0,0,0.7)) drop-shadow(0 4px 16px rgba(0,0,0,0.5)) drop-shadow(0 2px 8px rgba(0,0,0,0.3))'
             : 'none',
         }}
       />

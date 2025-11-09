@@ -17,8 +17,7 @@ interface LayoutResult {
   baseScale: number;
   baseOffset: { x: number; y: number };
   maskRect: { x: number; y: number; width: number; height: number };
-  cropVideoBounds: { startX: number; endX: number; startY: number; endY: number };
-  cropStageBounds: { startX: number; endX: number; startY: number; endY: number };
+  cropBounds: { startX: number; endX: number; startY: number; endY: number };
 }
 
 export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
@@ -49,6 +48,11 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
   const croppedVideoWidth = videoWidth * crop.width;
   const croppedVideoHeight = videoHeight * crop.height;
 
+  const cropStartX = crop.x * videoWidth;
+  const cropStartY = crop.y * videoHeight;
+  const cropEndX = cropStartX + croppedVideoWidth;
+  const cropEndY = cropStartY + croppedVideoHeight;
+  
   // Calculate scale to fit the cropped area in the viewport
   const maxDisplayWidth = width * VIEWPORT_SCALE;
   const maxDisplayHeight = height * VIEWPORT_SCALE;
@@ -60,14 +64,11 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
   );
 
   videoSprite.scale.set(scale);
-
+  
+  // Calculate display size of the full video at this scale
   const fullVideoDisplayWidth = videoWidth * scale;
   const fullVideoDisplayHeight = videoHeight * scale;
-
-  const cropVideoStartX = crop.x * videoWidth;
-  const cropVideoStartY = crop.y * videoHeight;
-  const cropVideoEndX = cropVideoStartX + croppedVideoWidth;
-  const cropVideoEndY = cropVideoStartY + croppedVideoHeight;
+  
   // Calculate display size of just the cropped region
   const croppedDisplayWidth = croppedVideoWidth * scale;
   const croppedDisplayHeight = croppedVideoHeight * scale;
@@ -93,12 +94,6 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
   maskGraphics.clear();
   maskGraphics.roundRect(maskX, maskY, croppedDisplayWidth, croppedDisplayHeight, radius);
   maskGraphics.fill({ color: 0xffffff });
-  const cropStageBounds = {
-    startX: maskX,
-    endX: maskX + croppedDisplayWidth,
-    startY: maskY,
-    endY: maskY + croppedDisplayHeight,
-  };
 
   return {
     stageSize: { width, height },
@@ -106,12 +101,6 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
     baseScale: scale,
     baseOffset: { x: spriteX, y: spriteY },
     maskRect: { x: maskX, y: maskY, width: croppedDisplayWidth, height: croppedDisplayHeight },
-    cropVideoBounds: {
-      startX: cropVideoStartX,
-      endX: cropVideoEndX,
-      startY: cropVideoStartY,
-      endY: cropVideoEndY,
-    },
-    cropStageBounds,
+    cropBounds: { startX: cropStartX, endX: cropEndX, startY: cropStartY, endY: cropEndY },
   };
 }
