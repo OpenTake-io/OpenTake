@@ -141,8 +141,8 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
         />
         
         {/* Dark overlay outside crop */}
-        <div className="absolute inset-0 pointer-events-none">
-          <svg width="100%" height="100%" className="absolute inset-0">
+        <div className="absolute inset-0 pointer-events-none" style={{ transition: 'none' }}>
+          <svg width="100%" height="100%" className="absolute inset-0" style={{ transition: 'none' }}>
             <defs>
               <mask id="cropMask">
                 <rect width="100%" height="100%" fill="white" />
@@ -152,93 +152,82 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
                   width={`${cropPixelWidth}%`}
                   height={`${cropPixelHeight}%`}
                   fill="black"
+                  style={{ transition: 'none' }}
                 />
               </mask>
             </defs>
-            <rect width="100%" height="100%" fill="black" fillOpacity="0.6" mask="url(#cropMask)" />
+            <rect 
+              width="100%" 
+              height="100%" 
+              fill="black" 
+              fillOpacity="0.6" 
+              mask="url(#cropMask)" 
+              style={{ transition: 'none' }}
+            />
           </svg>
         </div>
 
-        {/* Crop region outline */}
+        {/* Crop region - 4 straight lines */}
+        {/* Top line */}
         <div
-          className="absolute border-2 border-white shadow-2xl pointer-events-none transition-none"
+          className={cn(
+            "absolute h-[3px] cursor-ns-resize z-20 pointer-events-auto bg-green-500"
+          )}
           style={{
             left: `${cropPixelX}%`,
             top: `${cropPixelY}%`,
             width: `${cropPixelWidth}%`,
-            height: `${cropPixelHeight}%`,
-            willChange: 'left, top, width, height',
-          }}
-        >
-          {/* Grid lines */}
-          <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none">
-            {[...Array(9)].map((_, i) => (
-              <div key={i} className="border border-white/20" />
-            ))}
-          </div>
-        </div>
-
-        {/* Side handles */}
-        {/* Top handle */}
-        <div
-          className={cn(
-            "absolute w-20 h-1 bg-white/90 cursor-ns-resize z-20 pointer-events-auto shadow-md",
-            "hover:bg-white hover:h-1.5 transition-all",
-            isDragging === 'top' && "bg-white h-2"
-          )}
-          style={{
-            left: `${cropPixelX + cropPixelWidth / 2}%`,
-            top: `${cropPixelY}%`,
-            transform: 'translate(-50%, -50%)',
+            transform: 'translateY(-50%)',
             willChange: 'transform',
+            transition: 'none',
           }}
           onPointerDown={(e) => handlePointerDown(e, 'top')}
         />
 
-        {/* Bottom handle */}
+        {/* Bottom line */}
         <div
           className={cn(
-            "absolute w-20 h-1 bg-white/90 cursor-ns-resize z-20 pointer-events-auto shadow-md",
-            "hover:bg-white hover:h-1.5 transition-all",
-            isDragging === 'bottom' && "bg-white h-2"
+            "absolute h-[3px] cursor-ns-resize z-20 pointer-events-auto bg-green-500"
           )}
           style={{
-            left: `${cropPixelX + cropPixelWidth / 2}%`,
+            left: `${cropPixelX}%`,
             top: `${cropPixelY + cropPixelHeight}%`,
-            transform: 'translate(-50%, -50%)',
+            width: `${cropPixelWidth}%`,
+            transform: 'translateY(-50%)',
             willChange: 'transform',
+            transition: 'none',
           }}
           onPointerDown={(e) => handlePointerDown(e, 'bottom')}
         />
 
-        {/* Left handle */}
+        {/* Left line */}
         <div
           className={cn(
-            "absolute w-1 h-20 bg-white/90 cursor-ew-resize z-20 pointer-events-auto shadow-md",
-            "hover:bg-white hover:w-1.5 transition-all",
-            isDragging === 'left' && "bg-white w-2"
+            "absolute w-[3px] cursor-ew-resize z-20 pointer-events-auto bg-green-500"
           )}
           style={{
             left: `${cropPixelX}%`,
-            top: `${cropPixelY + cropPixelHeight / 2}%`,
-            transform: 'translate(-50%, -50%)',
+            top: `${cropPixelY}%`,
+            height: `${cropPixelHeight}%`,
+            transform: 'translateX(-50%)',
             willChange: 'transform',
+            transition: 'none',
           }}
           onPointerDown={(e) => handlePointerDown(e, 'left')}
         />
 
-        {/* Right handle */}
+        {/* Right line */}
         <div
           className={cn(
-            "absolute w-1 h-20 bg-white/90 cursor-ew-resize z-20 pointer-events-auto shadow-md",
-            "hover:bg-white hover:w-1.5 transition-all",
-            isDragging === 'right' && "bg-white w-2"
+            "absolute w-[3px] cursor-ew-resize z-20 pointer-events-auto bg-green-500"
           )}
           style={{
             left: `${cropPixelX + cropPixelWidth}%`,
-            top: `${cropPixelY + cropPixelHeight / 2}%`,
-            transform: 'translate(-50%, -50%)',
+            top: `${cropPixelY}%`,
+            height: `${cropPixelHeight}%`,
+            transform: 'translateX(-50%)',
             willChange: 'transform',
+            transition: 'none',
           }}
           onPointerDown={(e) => handlePointerDown(e, 'right')}
         />
