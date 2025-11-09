@@ -6,7 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
 import PlaybackControls from "./PlaybackControls";
 import TimelineEditor from "./timeline/TimelineEditor";
-import SettingsPanel from "./SettingsPanel";
+import { SettingsPanel } from "./SettingsPanel";
 import type { Span } from "dnd-timeline";
 import {
   DEFAULT_ZOOM_DEPTH,
@@ -130,6 +130,14 @@ export default function VideoEditor() {
     );
   }, [selectedZoomId]);
 
+  const handleZoomDelete = useCallback((id: string) => {
+    console.log('🗑️ Zoom region deleted:', id);
+    setZoomRegions((prev) => prev.filter((region) => region.id !== id));
+    if (selectedZoomId === id) {
+      setSelectedZoomId(null);
+    }
+  }, [selectedZoomId]);
+
   const selectedZoom = useMemo(() => {
     if (!selectedZoomId) return null;
     return zoomRegions.find((region) => region.id === selectedZoomId) ?? null;
@@ -196,6 +204,7 @@ export default function VideoEditor() {
           zoomRegions={zoomRegions}
           onZoomAdded={handleZoomAdded}
           onZoomSpanChange={handleZoomSpanChange}
+          onZoomDelete={handleZoomDelete}
           selectedZoomId={selectedZoomId}
           onSelectZoom={handleSelectZoom}
         />
@@ -205,6 +214,8 @@ export default function VideoEditor() {
         onWallpaperChange={setWallpaper}
         selectedZoomDepth={selectedZoom?.depth}
         onZoomDepthChange={handleZoomDepthChange}
+        selectedZoomId={selectedZoomId}
+        onZoomDelete={handleZoomDelete}
       />
     </div>
   );

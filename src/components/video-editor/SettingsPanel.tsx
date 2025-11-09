@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useMemo, useState } from "react";
 import Colorful from '@uiw/react-color-colorful';
 import { hsvaToHex } from '@uiw/color-convert';
+import { Trash2 } from "lucide-react";
 import type { ZoomDepth } from "./types";
 import { ZOOM_DEPTH_SCALES } from "./types";
 
@@ -30,6 +31,8 @@ interface SettingsPanelProps {
   onWallpaperChange: (path: string) => void;
   selectedZoomDepth?: ZoomDepth | null;
   onZoomDepthChange?: (depth: ZoomDepth) => void;
+  selectedZoomId?: string | null;
+  onZoomDelete?: (id: string) => void;
 }
 
 const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string; description: string }> = [
@@ -38,11 +41,17 @@ const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string; description: 
   { depth: 3, label: "Deep", description: "Bold spotlight" },
 ];
 
-export default function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, onZoomDepthChange }: SettingsPanelProps) {
+export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, onZoomDepthChange, selectedZoomId, onZoomDelete }: SettingsPanelProps) {
   const [hsva, setHsva] = useState({ h: 0, s: 0, v: 68, a: 1 });
   const [gradient, setGradient] = useState<string>(GRADIENTS[0]);
 
   const zoomEnabled = Boolean(selectedZoomDepth);
+  
+  const handleDeleteClick = () => {
+    if (selectedZoomId && onZoomDelete) {
+      onZoomDelete(selectedZoomId);
+    }
+  };
   const scaleLabels = useMemo(() => {
     return ZOOM_DEPTH_OPTIONS.reduce<Record<ZoomDepth, string>>((acc, option) => {
       const scale = ZOOM_DEPTH_SCALES[option.depth];
@@ -55,7 +64,7 @@ export default function SettingsPanel({ selected, onWallpaperChange, selectedZoo
     <div className="flex-[3] min-w-0 bg-card border border-border rounded-xl p-8 flex flex-col shadow-sm">
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-semibold text-slate-600">Zoom Depth</span>
+          <span className="text-sm font-semibold text-slate-600">Zoom Region</span>
           {zoomEnabled && selectedZoomDepth && (
             <span className="text-xs uppercase tracking-wide text-slate-400">
               Active · {scaleLabels[selectedZoomDepth]}
@@ -92,6 +101,17 @@ export default function SettingsPanel({ selected, onWallpaperChange, selectedZoo
         </div>
         {!zoomEnabled && (
           <p className="text-xs text-slate-400 mt-2">Select a zoom region in the timeline to adjust its depth.</p>
+        )}
+        {zoomEnabled && (
+          <Button
+            onClick={handleDeleteClick}
+            variant="destructive"
+            size="sm"
+            className="mt-3 w-full gap-2"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete Zoom
+          </Button>
         )}
       </div>
       <div className="mb-6">
