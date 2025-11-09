@@ -1,3 +1,5 @@
+import type React from 'react';
+
 interface VideoEventHandlersParams {
   video: HTMLVideoElement;
   isSeekingRef: React.MutableRefObject<boolean>;
@@ -46,21 +48,22 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
       return;
     }
 
-    allowPlaybackRef.current = false;
     isPlayingRef.current = true;
     onPlayStateChange(true);
-    updateTime();
+    if (timeUpdateAnimationRef.current) {
+      cancelAnimationFrame(timeUpdateAnimationRef.current);
+    }
+    timeUpdateAnimationRef.current = requestAnimationFrame(updateTime);
   };
 
-  const handlePause = () => {
-    allowPlaybackRef.current = false;
+    const handlePause = () => {
     isPlayingRef.current = false;
+    onPlayStateChange(false);
     if (timeUpdateAnimationRef.current) {
       cancelAnimationFrame(timeUpdateAnimationRef.current);
       timeUpdateAnimationRef.current = null;
     }
     emitTime(video.currentTime);
-    onPlayStateChange(false);
   };
 
   const handleSeeked = () => {

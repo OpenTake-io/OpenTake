@@ -9,6 +9,7 @@ interface LayoutParams {
   maskGraphics: PIXI.Graphics;
   videoElement: HTMLVideoElement;
   cropRegion?: CropRegion;
+  lockedVideoDimensions?: { width: number; height: number } | null;
 }
 
 interface LayoutResult {
@@ -21,10 +22,11 @@ interface LayoutResult {
 }
 
 export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
-  const { container, app, videoSprite, maskGraphics, videoElement, cropRegion } = params;
+  const { container, app, videoSprite, maskGraphics, videoElement, cropRegion, lockedVideoDimensions } = params;
 
-  const videoWidth = videoElement.videoWidth;
-  const videoHeight = videoElement.videoHeight;
+  // Use locked dimensions if available, otherwise use current video dimensions
+  const videoWidth = lockedVideoDimensions?.width || videoElement.videoWidth;
+  const videoHeight = lockedVideoDimensions?.height || videoElement.videoHeight;
 
   if (!videoWidth || !videoHeight) {
     return null;
