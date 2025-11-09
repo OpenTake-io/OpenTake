@@ -15,8 +15,8 @@ export interface ZoomRegion {
 
 export const ZOOM_DEPTH_SCALES: Record<ZoomDepth, number> = {
   1: 1.25,
-  2: 1.6,
-  3: 2.2,
+  2: 1.5,
+  3: 2.5,
 };
 
 export const DEFAULT_ZOOM_DEPTH: ZoomDepth = 2;

@@ -1,50 +1,15 @@
 import type React from "react";
 import { useEffect, useRef, useImperativeHandle, forwardRef, useState, useMemo, useCallback } from "react";
 import * as PIXI from 'pixi.js';
-import { ZOOM_DEPTH_SCALES, clampFocusToDepth, type ZoomRegion, type ZoomFocus, type ZoomDepth } from "./types";
-
-const DEFAULT_FOCUS: ZoomFocus = { cx: 0.5, cy: 0.5 };
-const TRANSITION_WINDOW_MS = 320;
-const SMOOTHING_FACTOR = 0.12;
-const MIN_DELTA = 0.0001;
-const VIEWPORT_SCALE = 0.8;
-
-function clamp01(value: number) {
-  return Math.max(0, Math.min(1, value));
-}
-
-function smoothStep(t: number) {
-  const clamped = clamp01(t);
-  return clamped * clamped * (3 - 2 * clamped);
-}
-
-function computeRegionStrength(region: ZoomRegion, timeMs: number) {
-  const leadInStart = region.startMs - TRANSITION_WINDOW_MS;
-  const leadOutEnd = region.endMs + TRANSITION_WINDOW_MS;
-
-  if (timeMs < leadInStart || timeMs > leadOutEnd) {
-    return 0;
-  }
-
-  const fadeIn = smoothStep((timeMs - leadInStart) / TRANSITION_WINDOW_MS);
-  const fadeOut = smoothStep((leadOutEnd - timeMs) / TRANSITION_WINDOW_MS);
-  return Math.min(fadeIn, fadeOut);
-}
-
-function findDominantRegion(regions: ZoomRegion[], timeMs: number) {
-  let bestRegion: ZoomRegion | null = null;
-  let bestStrength = 0;
-
-  for (const region of regions) {
-    const strength = computeRegionStrength(region, timeMs);
-    if (strength > bestStrength) {
-      bestStrength = strength;
-      bestRegion = region;
-    }
-  }
-
-  return { region: bestRegion, strength: bestStrength };
-}
+import { ZOOM_DEPTH_SCALES, type ZoomRegion, type ZoomFocus, type ZoomDepth } from "./types";
+import { DEFAULT_FOCUS, SMOOTHING_FACTOR, MIN_DELTA } from "./videoPlayback/constants";
+import { clamp01 } from "./videoPlayback/mathUtils";
+import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
+import { clampFocusToStage as clampFocusToStageUtil } from "./videoPlayback/focusUtils";
+import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
+import { layoutVideoContent as layoutVideoContentUtil } from "./videoPlayback/layoutUtils";
+import { applyZoomTransform } from "./videoPlayback/zoomTransform";
+import { createVideoEventHandlers } from "./videoPlayback/videoEventHandlers";
 
 interface VideoPlaybackProps {
   videoPath: string;
@@ -105,112 +70,34 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   const isSeekingRef = useRef(false);
 
   const clampFocusToStage = useCallback((focus: ZoomFocus, depth: ZoomDepth) => {
-    const stageSize = stageSizeRef.current;
-
-    if (!stageSize.width || !stageSize.height) {
-      return clampFocusToDepth(focus, depth);
-    }
-
-    const zoomScale = ZOOM_DEPTH_SCALES[depth];
-    
-    // The zoom window dimensions in stage space
-    const windowWidth = stageSize.width / zoomScale;
-    const windowHeight = stageSize.height / zoomScale;
-
-    // Calculate margins - the focus point must stay far enough from edges
-    // so that the zoom window doesn't go out of bounds
-    const marginX = windowWidth / (2 * stageSize.width);
-    const marginY = windowHeight / (2 * stageSize.height);
-
-    const baseFocus = clampFocusToDepth(focus, depth);
-
-    // Clamp the focus to ensure the zoom window stays within stage bounds
-    return {
-      cx: Math.max(marginX, Math.min(1 - marginX, baseFocus.cx)),
-      cy: Math.max(marginY, Math.min(1 - marginY, baseFocus.cy)),
-    };
-  }, []);
-
-  const stageFocusToVideoSpace = useCallback((focus: ZoomFocus): ZoomFocus => {
-    const stageSize = stageSizeRef.current;
-    const videoSize = videoSizeRef.current;
-    const baseScale = baseScaleRef.current;
-    const baseOffset = baseOffsetRef.current;
-
-    if (!stageSize.width || !stageSize.height || !videoSize.width || !videoSize.height || baseScale <= 0) {
-      return focus;
-    }
-
-    const stageX = focus.cx * stageSize.width;
-    const stageY = focus.cy * stageSize.height;
-
-    const videoNormX = (stageX - baseOffset.x) / (videoSize.width * baseScale);
-    const videoNormY = (stageY - baseOffset.y) / (videoSize.height * baseScale);
-
-    return {
-      cx: videoNormX,
-      cy: videoNormY,
-    };
+    return clampFocusToStageUtil(focus, depth, stageSizeRef.current);
   }, []);
 
   const updateOverlayForRegion = useCallback((region: ZoomRegion | null, focusOverride?: ZoomFocus) => {
     const overlayEl = overlayRef.current;
     const indicatorEl = focusIndicatorRef.current;
+    
     if (!overlayEl || !indicatorEl) {
       return;
     }
 
-    if (!region) {
-      indicatorEl.style.display = 'none';
-      overlayEl.style.pointerEvents = 'none';
-      return;
-    }
-
+    // Update stage size from overlay dimensions
     const stageWidth = overlayEl.clientWidth;
     const stageHeight = overlayEl.clientHeight;
-    if (!stageWidth || !stageHeight) {
-      indicatorEl.style.display = 'none';
-      overlayEl.style.pointerEvents = 'none';
-      return;
+    if (stageWidth && stageHeight) {
+      stageSizeRef.current = { width: stageWidth, height: stageHeight };
     }
 
-    stageSizeRef.current = { width: stageWidth, height: stageHeight };
-
-    const baseScale = baseScaleRef.current;
-    const videoSize = videoSizeRef.current;
-
-    if (!videoSize.width || !videoSize.height || baseScale <= 0) {
-      indicatorEl.style.display = 'none';
-      overlayEl.style.pointerEvents = isPlayingRef.current ? 'none' : 'auto';
-      return;
-    }
-
-    const zoomScale = ZOOM_DEPTH_SCALES[region.depth];
-    const focus = clampFocusToStage(focusOverride ?? region.focus, region.depth);
-
-    // The zoom window should show what portion of the STAGE will be visible after zooming
-    // When we zoom by zoomScale, we're showing 1/zoomScale of the stage dimensions
-    const indicatorWidth = stageWidth / zoomScale;
-    const indicatorHeight = stageHeight / zoomScale;
-
-    const rawLeft = focus.cx * stageWidth - indicatorWidth / 2;
-    const rawTop = focus.cy * stageHeight - indicatorHeight / 2;
-
-    const adjustedLeft = indicatorWidth >= stageWidth
-      ? (stageWidth - indicatorWidth) / 2
-      : Math.max(0, Math.min(stageWidth - indicatorWidth, rawLeft));
-
-    const adjustedTop = indicatorHeight >= stageHeight
-      ? (stageHeight - indicatorHeight) / 2
-      : Math.max(0, Math.min(stageHeight - indicatorHeight, rawTop));
-
-    indicatorEl.style.display = 'block';
-    indicatorEl.style.width = `${indicatorWidth}px`;
-    indicatorEl.style.height = `${indicatorHeight}px`;
-    indicatorEl.style.left = `${adjustedLeft}px`;
-    indicatorEl.style.top = `${adjustedTop}px`;
-    overlayEl.style.pointerEvents = isPlayingRef.current ? 'none' : 'auto';
-  }, [clampFocusToStage]);
+    updateOverlayIndicator({
+      overlayEl,
+      indicatorEl,
+      region,
+      focusOverride,
+      videoSize: videoSizeRef.current,
+      baseScale: baseScaleRef.current,
+      isPlaying: isPlayingRef.current,
+    });
+  }, []);
 
   const layoutVideoContent = useCallback(() => {
     const container = containerRef.current;
@@ -219,63 +106,31 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     const maskGraphics = maskGraphicsRef.current;
     const videoElement = videoRef.current;
 
-    if (!container || !app || !videoSprite || !videoElement) {
+    if (!container || !app || !videoSprite || !maskGraphics || !videoElement) {
       return;
     }
 
-    const videoWidth = videoElement.videoWidth;
-    const videoHeight = videoElement.videoHeight;
+    const result = layoutVideoContentUtil({
+      container,
+      app,
+      videoSprite,
+      maskGraphics,
+      videoElement,
+    });
 
-    if (!videoWidth || !videoHeight) {
-      return;
+    if (result) {
+      stageSizeRef.current = result.stageSize;
+      videoSizeRef.current = result.videoSize;
+      baseScaleRef.current = result.baseScale;
+      baseOffsetRef.current = result.baseOffset;
+
+      const selectedId = selectedZoomIdRef.current;
+      const activeRegion = selectedId
+        ? zoomRegionsRef.current.find((region) => region.id === selectedId) ?? null
+        : null;
+
+      updateOverlayForRegion(activeRegion);
     }
-
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-
-    if (!width || !height) {
-      return;
-    }
-
-    app.renderer.resize(width, height);
-    app.canvas.style.width = '100%';
-    app.canvas.style.height = '100%';
-
-    const maxDisplayWidth = width * VIEWPORT_SCALE;
-    const maxDisplayHeight = height * VIEWPORT_SCALE;
-
-    const scale = Math.min(
-      maxDisplayWidth / videoWidth,
-      maxDisplayHeight / videoHeight,
-      1
-    );
-
-    videoSprite.scale.set(scale);
-    const displayWidth = videoWidth * scale;
-    const displayHeight = videoHeight * scale;
-
-    const offsetX = (width - displayWidth) / 2;
-    const offsetY = (height - displayHeight) / 2;
-    videoSprite.position.set(offsetX, offsetY);
-
-    stageSizeRef.current = { width, height };
-    videoSizeRef.current = { width: videoWidth, height: videoHeight };
-    baseScaleRef.current = scale;
-    baseOffsetRef.current = { x: offsetX, y: offsetY };
-
-    if (maskGraphics) {
-      const radius = Math.min(displayWidth, displayHeight) * 0.02;
-      maskGraphics.clear();
-      maskGraphics.roundRect(offsetX, offsetY, displayWidth, displayHeight, radius);
-      maskGraphics.fill({ color: 0xffffff });
-    }
-
-    const selectedId = selectedZoomIdRef.current;
-    const activeRegion = selectedId
-      ? zoomRegionsRef.current.find((region) => region.id === selectedId) ?? null
-      : null;
-
-    updateOverlayForRegion(activeRegion);
   }, [updateOverlayForRegion]);
 
   const selectedZoom = useMemo(() => {
@@ -442,7 +297,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       appRef.current = app;
       container.appendChild(app.canvas);
 
-      // Create a container for the video (this will hold animations later)
       const videoContainer = new PIXI.Container();
       videoContainerRef.current = videoContainer;
       app.stage.addChild(videoContainer);
@@ -450,7 +304,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       setPixiReady(true);
     })();
 
-    // Cleanup
     return () => {
       mounted = false;
       setPixiReady(false);
@@ -463,7 +316,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     };
   }, []);
 
-  // Ensure video starts paused whenever the source changes
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -471,7 +323,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     video.currentTime = 0;
   }, [videoPath]);
 
-  // Setup video sprite when both PixiJS and video are ready
   useEffect(() => {
     if (!pixiReady || !videoReady) return;
 
@@ -482,15 +333,12 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     if (!video || !app || !videoContainer) return;
     if (video.videoWidth === 0 || video.videoHeight === 0) return;
     
-    // Create texture from video element
     const source = PIXI.VideoSource.from(video);
     const videoTexture = PIXI.Texture.from(source);
     
-    // Create sprite with the video texture
     const videoSprite = new PIXI.Sprite(videoTexture);
     videoSpriteRef.current = videoSprite;
     
-    // Create rounded rectangle mask
     const maskGraphics = new PIXI.Graphics();
     videoContainer.addChild(videoSprite);
     videoContainer.addChild(maskGraphics);
@@ -511,65 +359,17 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     blurFilterRef.current = blurFilter;
     
     layoutVideoContent();
-    
-    // Ensure Pixi does not trigger autoplay
     video.pause();
 
-    const emitTime = (timeValue: number) => {
-      currentTimeRef.current = timeValue * 1000;
-      onTimeUpdate(timeValue);
-    };
-
-    function updateTime() {
-      if (!video) return;
-      emitTime(video.currentTime);
-      if (!video.paused && !video.ended) {
-        timeUpdateAnimationRef.current = requestAnimationFrame(updateTime);
-      }
-    }
-    
-    const handlePlay = () => {
-      // If we're seeking and the video auto-plays, pause it immediately
-      if (isSeekingRef.current) {
-        video.pause();
-        return;
-      }
-      isPlayingRef.current = true;
-      onPlayStateChange(true);
-      updateTime();
-    };
-    
-    const handlePause = () => {
-      isPlayingRef.current = false;
-      if (timeUpdateAnimationRef.current) {
-        cancelAnimationFrame(timeUpdateAnimationRef.current);
-        timeUpdateAnimationRef.current = null;
-      }
-      emitTime(video.currentTime);
-      onPlayStateChange(false);
-    };
-    
-    const handleSeeked = () => {
-      // Mark seeking as complete
-      isSeekingRef.current = false;
-      
-      // Ensure video stays paused if it wasn't playing before the seek
-      if (!isPlayingRef.current && !video.paused) {
-        video.pause();
-      }
-      emitTime(video.currentTime);
-    };
-    
-    const handleSeeking = () => {
-      // Mark that we're in the middle of a seek operation
-      isSeekingRef.current = true;
-      
-      // Prevent autoplay during seeking if video was paused
-      if (!isPlayingRef.current && !video.paused) {
-        video.pause();
-      }
-      emitTime(video.currentTime);
-    };
+    const { handlePlay, handlePause, handleSeeked, handleSeeking } = createVideoEventHandlers({
+      video,
+      isSeekingRef,
+      isPlayingRef,
+      currentTimeRef,
+      timeUpdateAnimationRef,
+      onPlayStateChange,
+      onTimeUpdate,
+    });
     
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
@@ -588,7 +388,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
         cancelAnimationFrame(timeUpdateAnimationRef.current);
       }
       
-      // Clean up PixiJS resources
       if (videoSprite) {
         videoContainer.removeChild(videoSprite);
         videoSprite.destroy();
@@ -619,101 +418,40 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     if (!app || !videoSprite || !videoContainer) return;
 
     const applyTransform = (motionIntensity: number) => {
-      const stageSize = stageSizeRef.current;
-      const videoSize = videoSizeRef.current;
-      const baseScale = baseScaleRef.current;
-      const baseOffset = baseOffsetRef.current;
+      const maskGraphics = maskGraphicsRef.current;
+      if (!maskGraphics) return;
+
       const state = animationStateRef.current;
 
-      if (!stageSize.width || !stageSize.height || !videoSize.width || !videoSize.height || baseScale <= 0) {
-        return;
-      }
-
-      // Zoom scale determines how much we're zooming in
-      // scale=1 means show everything at normal size
-      // scale=2 means zoom in 2x (show half the stage, magnified 2x)
-      const zoomScale = state.scale;
-
-      // The focus point in stage coordinates (0-1 normalized to actual pixels)
-      const focusStagePxX = state.focusX * stageSize.width;
-      const focusStagePxY = state.focusY * stageSize.height;
-
-      // When zoomed, we want the focus point to remain at the center of the viewport
-      // The stage center in pixels
-      const stageCenterX = stageSize.width / 2;
-      const stageCenterY = stageSize.height / 2;
-
-      // Calculate the video's new scale and position
-      // The video should scale up by the zoom factor
-      const actualScale = baseScale * zoomScale;
-      videoSprite.scale.set(actualScale);
-
-      // To keep the focus point centered:
-      // 1. In the "virtual stage space", the focus is at (focusStagePxX, focusStagePxY)
-      // 2. We want this point to appear at the stage center after transformation
-      // 3. The video's position offset needs to shift so focus → center
-      
-      // The video's base position at no zoom
-      const baseVideoX = baseOffset.x;
-      const baseVideoY = baseOffset.y;
-
-      // The focus point relative to the video's top-left (in stage pixels, no zoom)
-      const focusInVideoSpaceX = focusStagePxX - baseVideoX;
-      const focusInVideoSpaceY = focusStagePxY - baseVideoY;
-
-      // After scaling the video by zoomScale, the focus point in video would be at:
-      // (focusInVideoSpaceX * zoomScale, focusInVideoSpaceY * zoomScale) relative to video's top-left
-      
-      // We want: videoPosition + focusInVideoSpace * zoomScale = stageCenterX
-      // So: videoPosition = stageCenterX - focusInVideoSpace * zoomScale
-      const newVideoX = stageCenterX - focusInVideoSpaceX * zoomScale;
-      const newVideoY = stageCenterY - focusInVideoSpaceY * zoomScale;
-
-      videoSprite.position.set(newVideoX, newVideoY);
-
-      if (blurFilterRef.current) {
-        const shouldBlur = isPlayingRef.current && motionIntensity > 0.0005;
-        const motionBlur = shouldBlur ? Math.min(6, motionIntensity * 120) : 0;
-        blurFilterRef.current.blur = motionBlur;
-      }
-
-      const maskGraphics = maskGraphicsRef.current;
-      if (maskGraphics) {
-        const videoWidth = videoSize.width * actualScale;
-        const videoHeight = videoSize.height * actualScale;
-        const radius = Math.min(videoWidth, videoHeight) * 0.02;
-        maskGraphics.clear();
-        maskGraphics.roundRect(
-          newVideoX,
-          newVideoY,
-          videoWidth,
-          videoHeight,
-          radius
-        );
-        maskGraphics.fill({ color: 0xffffff });
-      }
+      applyZoomTransform({
+        videoSprite,
+        maskGraphics,
+        blurFilter: blurFilterRef.current,
+        stageSize: stageSizeRef.current,
+        videoSize: videoSizeRef.current,
+        baseScale: baseScaleRef.current,
+        baseOffset: baseOffsetRef.current,
+        zoomScale: state.scale,
+        focusX: state.focusX,
+        focusY: state.focusY,
+        motionIntensity,
+        isPlaying: isPlayingRef.current,
+      });
     };
 
     const ticker = () => {
       const { region, strength } = findDominantRegion(zoomRegionsRef.current, currentTimeRef.current);
       
-      // Default is to show the entire stage at center
       const defaultFocus = DEFAULT_FOCUS;
-
       let targetScaleFactor = 1;
       let targetFocus = defaultFocus;
 
       if (region && strength > 0) {
         const zoomScale = ZOOM_DEPTH_SCALES[region.depth];
-        
-        // The region focus is already in stage space (0-1 normalized coordinates)
-        // We need to ensure it stays within valid bounds for the given zoom level
         const regionFocus = clampFocusToStage(region.focus, region.depth);
         
-        // Interpolate scale: from 1 (no zoom) to zoomScale (full zoom)
+        // Interpolate scale and focus based on region strength
         targetScaleFactor = 1 + (zoomScale - 1) * strength;
-        
-        // Interpolate focus position: from center to region focus
         targetFocus = {
           cx: defaultFocus.cx + (regionFocus.cx - defaultFocus.cx) * strength,
           cy: defaultFocus.cy + (regionFocus.cy - defaultFocus.cy) * strength,
@@ -769,9 +507,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     return () => {
       app.ticker.remove(ticker);
     };
-  }, [pixiReady, videoReady, stageFocusToVideoSpace, clampFocusToStage]);
+  }, [pixiReady, videoReady, clampFocusToStage]);
 
-  // Handle video metadata loaded
   const handleLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
     const video = e.currentTarget;
     onDurationChange(video.duration);
