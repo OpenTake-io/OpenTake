@@ -57,14 +57,15 @@ export default function VideoEditor() {
   }, []);
 
   function togglePlayPause() {
-    const video = videoPlaybackRef.current?.video;
+    const playback = videoPlaybackRef.current;
+    const video = playback?.video;
     console.log('🎮 Toggle play/pause:', { hasVideo: !!video, isPlaying, action: isPlaying ? 'pause' : 'play' });
-    if (!video) return;
-    
+    if (!playback || !video) return;
+
     if (isPlaying) {
-      video.pause();
+      playback.pause();
     } else {
-      video.play().catch(err => console.error('❌ Video play failed:', err));
+      playback.play().catch(err => console.error('❌ Video play failed:', err));
     }
   }
 
