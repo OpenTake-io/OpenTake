@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
 import { VIEWPORT_SCALE } from "./constants";
+import type { CropRegion } from '../types';
 
 interface LayoutParams {
   container: HTMLDivElement;
@@ -7,6 +8,7 @@ interface LayoutParams {
   videoSprite: PIXI.Sprite;
   maskGraphics: PIXI.Graphics;
   videoElement: HTMLVideoElement;
+  cropRegion?: CropRegion;
 }
 
 interface LayoutResult {
@@ -14,10 +16,11 @@ interface LayoutResult {
   videoSize: { width: number; height: number };
   baseScale: number;
   baseOffset: { x: number; y: number };
+  maskRect: { x: number; y: number; width: number; height: number };
 }
 
 export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
-  const { container, app, videoSprite, maskGraphics, videoElement } = params;
+  const { container, app, videoSprite, maskGraphics, videoElement, cropRegion } = params;
 
   const videoWidth = videoElement.videoWidth;
   const videoHeight = videoElement.videoHeight;
@@ -37,32 +40,60 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
   app.canvas.style.width = '100%';
   app.canvas.style.height = '100%';
 
+  // Apply crop region
+  const crop = cropRegion || { x: 0, y: 0, width: 1, height: 1 };
+  
+  // Calculate the cropped dimensions
+  const croppedVideoWidth = videoWidth * crop.width;
+  const croppedVideoHeight = videoHeight * crop.height;
+  
+  // Calculate scale to fit the cropped area in the viewport
   const maxDisplayWidth = width * VIEWPORT_SCALE;
   const maxDisplayHeight = height * VIEWPORT_SCALE;
 
   const scale = Math.min(
-    maxDisplayWidth / videoWidth,
-    maxDisplayHeight / videoHeight,
+    maxDisplayWidth / croppedVideoWidth,
+    maxDisplayHeight / croppedVideoHeight,
     1
   );
 
   videoSprite.scale.set(scale);
-  const displayWidth = videoWidth * scale;
-  const displayHeight = videoHeight * scale;
+  
+  // Calculate display size of the full video at this scale
+  const fullVideoDisplayWidth = videoWidth * scale;
+  const fullVideoDisplayHeight = videoHeight * scale;
+  
+  // Calculate display size of just the cropped region
+  const croppedDisplayWidth = croppedVideoWidth * scale;
+  const croppedDisplayHeight = croppedVideoHeight * scale;
 
-  const offsetX = (width - displayWidth) / 2;
-  const offsetY = (height - displayHeight) / 2;
-  videoSprite.position.set(offsetX, offsetY);
+  // Center the cropped region in the container
+  const centerOffsetX = (width - croppedDisplayWidth) / 2;
+  const centerOffsetY = (height - croppedDisplayHeight) / 2;
+  
+  // Position the full video sprite so that when we apply the mask,
+  // the cropped region appears centered
+  // The crop starts at (crop.x * videoWidth, crop.y * videoHeight) in video coordinates
+  // In display coordinates, that's (crop.x * fullVideoDisplayWidth, crop.y * fullVideoDisplayHeight)
+  // We want that point to be at centerOffsetX, centerOffsetY
+  const spriteX = centerOffsetX - (crop.x * fullVideoDisplayWidth);
+  const spriteY = centerOffsetY - (crop.y * fullVideoDisplayHeight);
+  
+  videoSprite.position.set(spriteX, spriteY);
 
-  const radius = Math.min(displayWidth, displayHeight) * 0.02;
+  // Create a mask that only shows the cropped region (centered in container)
+  const maskX = centerOffsetX;
+  const maskY = centerOffsetY;
+  const radius = Math.min(croppedDisplayWidth, croppedDisplayHeight) * 0.02;
   maskGraphics.clear();
-  maskGraphics.roundRect(offsetX, offsetY, displayWidth, displayHeight, radius);
+  maskGraphics.roundRect(maskX, maskY, croppedDisplayWidth, croppedDisplayHeight, radius);
   maskGraphics.fill({ color: 0xffffff });
 
   return {
     stageSize: { width, height },
-    videoSize: { width: videoWidth, height: videoHeight },
+    videoSize: { width: croppedVideoWidth, height: croppedVideoHeight },
     baseScale: scale,
-    baseOffset: { x: offsetX, y: offsetY },
+    baseOffset: { x: spriteX, y: spriteY },
+    maskRect: { x: maskX, y: maskY, width: croppedDisplayWidth, height: croppedDisplayHeight },
   };
 }

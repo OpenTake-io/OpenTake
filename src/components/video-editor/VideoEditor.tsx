@@ -11,9 +11,11 @@ import type { Span } from "dnd-timeline";
 import {
   DEFAULT_ZOOM_DEPTH,
   clampFocusToDepth,
+  DEFAULT_CROP_REGION,
   type ZoomDepth,
   type ZoomFocus,
   type ZoomRegion,
+  type CropRegion,
 } from "./types";
 
 const WALLPAPER_COUNT = 12;
@@ -28,6 +30,8 @@ export default function VideoEditor() {
   const [duration, setDuration] = useState(0);
   const [wallpaper, setWallpaper] = useState<string>(WALLPAPER_PATHS[0]);
   const [showShadow, setShowShadow] = useState(false);
+  const [showBlur, setShowBlur] = useState(false);
+  const [cropRegion, setCropRegion] = useState<CropRegion>(DEFAULT_CROP_REGION);
   const [zoomRegions, setZoomRegions] = useState<ZoomRegion[]>([]);
   const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
 
@@ -187,6 +191,8 @@ export default function VideoEditor() {
                   onZoomFocusChange={handleZoomFocusChange}
                   isPlaying={isPlaying}
                   showShadow={showShadow}
+                  showBlur={showBlur}
+                  cropRegion={cropRegion}
                 />
               </div>
               <PlaybackControls
@@ -220,6 +226,11 @@ export default function VideoEditor() {
         onZoomDelete={handleZoomDelete}
         showShadow={showShadow}
         onShadowChange={setShowShadow}
+        showBlur={showBlur}
+        onBlurChange={setShowBlur}
+        cropRegion={cropRegion}
+        onCropChange={setCropRegion}
+        videoElement={videoPlaybackRef.current?.video || null}
       />
     </div>
   );

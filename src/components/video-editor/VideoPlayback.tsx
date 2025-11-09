@@ -24,6 +24,8 @@ interface VideoPlaybackProps {
   onZoomFocusChange: (id: string, focus: ZoomFocus) => void;
   isPlaying: boolean;
   showShadow?: boolean;
+  showBlur?: boolean;
+  cropRegion?: import('./types').CropRegion;
 }
 
 export interface VideoPlaybackRef {
@@ -46,6 +48,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   onZoomFocusChange,
   isPlaying,
   showShadow,
+  showBlur,
+  cropRegion,
 }, ref) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -67,6 +71,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   const videoSizeRef = useRef({ width: 0, height: 0 });
   const baseScaleRef = useRef(1);
   const baseOffsetRef = useRef({ x: 0, y: 0 });
+  const baseMaskRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
   const maskGraphicsRef = useRef<PIXI.Graphics | null>(null);
   const isPlayingRef = useRef(isPlaying);
   const isSeekingRef = useRef(false);
@@ -118,6 +123,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       videoSprite,
       maskGraphics,
       videoElement,
+      cropRegion,
     });
 
     if (result) {
@@ -125,6 +131,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       videoSizeRef.current = result.videoSize;
       baseScaleRef.current = result.baseScale;
       baseOffsetRef.current = result.baseOffset;
+      baseMaskRef.current = result.maskRect;
 
       const selectedId = selectedZoomIdRef.current;
       const activeRegion = selectedId
@@ -133,7 +140,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
 
       updateOverlayForRegion(activeRegion);
     }
-  }, [updateOverlayForRegion]);
+  }, [updateOverlayForRegion, cropRegion]);
 
   const selectedZoom = useMemo(() => {
     if (!selectedZoomId) return null;
@@ -232,7 +239,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   useEffect(() => {
     if (!pixiReady || !videoReady) return;
     layoutVideoContent();
-  }, [pixiReady, videoReady, layoutVideoContent]);
+  }, [pixiReady, videoReady, layoutVideoContent, cropRegion]);
 
   useEffect(() => {
     if (!pixiReady || !videoReady) return;
@@ -433,6 +440,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
         videoSize: videoSizeRef.current,
         baseScale: baseScaleRef.current,
         baseOffset: baseOffsetRef.current,
+        baseMask: baseMaskRef.current,
         zoomScale: state.scale,
         focusX: state.focusX,
         focusY: state.focusY,
@@ -526,10 +534,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     : { background: wallpaper || '/wallpapers/wallpaper1.jpg' };
 
   return (
-    <div
-      className="relative aspect-video rounded-sm overflow-hidden bg-cover bg-center"
-      style={{ ...backgroundStyle, width: '100%' }}
-    >
+    <div className="relative aspect-video rounded-sm overflow-hidden" style={{ width: '100%' }}>
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ 
+          ...backgroundStyle,
+          filter: showBlur ? 'blur(2px)' : 'none',
+        }}
+      />
       <div
         ref={containerRef}
         className="absolute inset-0"
