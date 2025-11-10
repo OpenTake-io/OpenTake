@@ -38,5 +38,8 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
     const listener = () => callback();
     electron.ipcRenderer.on("stop-recording-from-tray", listener);
     return () => electron.ipcRenderer.removeListener("stop-recording-from-tray", listener);
+  },
+  openExternalUrl: (url) => {
+    return electron.ipcRenderer.invoke("open-external-url", url);
   }
 });

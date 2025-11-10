@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import Colorful from '@uiw/react-color-colorful';
 import { hsvaToHex } from '@uiw/color-convert';
-import { Trash2, Download, Crop, X } from "lucide-react";
+import { Trash2, Download, Crop, X, Bug } from "lucide-react";
 import type { ZoomDepth, CropRegion } from "./types";
 import { CropControl } from "./CropControl";
 
@@ -244,6 +244,16 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
             <Download className="w-6 h-6" />
             <span className="text-lg">Export Video</span>
           </Button>
+          <button
+            type="button"
+            onClick={() => {
+              window.electronAPI?.openExternalUrl('https://github.com/siddharthvaddem/pangolin/issues/new');
+            }}
+            className="w-full mt-3 flex items-center justify-center gap-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground/90 transition-colors py-1"
+          >
+            <Bug className="w-3 h-3 text-black" />
+            <span>Report Bug</span>
+          </button>
         </div>
     </div>
   );

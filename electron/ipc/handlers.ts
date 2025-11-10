@@ -1,4 +1,4 @@
-import { ipcMain, desktopCapturer, BrowserWindow } from 'electron'
+import { ipcMain, desktopCapturer, BrowserWindow, shell } from 'electron'
 import { startMouseTracking, stopMouseTracking, getTrackingData } from './mouseTracking'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -132,6 +132,16 @@ export function registerIpcHandlers(
     const source = selectedSource || { name: 'Screen' }
     if (onRecordingStateChange) {
       onRecordingStateChange(recording, source.name)
+    }
+  })
+
+  ipcMain.handle('open-external-url', async (_, url: string) => {
+    try {
+      await shell.openExternal(url)
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to open URL:', error)
+      return { success: false, error: String(error) }
     }
   })
 }
