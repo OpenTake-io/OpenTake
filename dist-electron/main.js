@@ -51,6 +51,7 @@ function createEditorWindow() {
     resizable: true,
     alwaysOnTop: false,
     skipTaskbar: false,
+    title: "",
     webPreferences: {
       preload: path.join(__dirname$1, "preload.mjs"),
       nodeIntegration: false,
