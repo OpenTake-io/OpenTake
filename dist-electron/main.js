@@ -1,4 +1,4 @@
-import { BrowserWindow, screen, ipcMain, desktopCapturer, app, nativeImage, Tray, Menu } from "electron";
+import { BrowserWindow, screen, ipcMain, desktopCapturer, shell, app, nativeImage, Tray, Menu } from "electron";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -316,6 +316,15 @@ function registerIpcHandlers(createEditorWindow2, createSourceSelectorWindow2, g
     const source = selectedSource || { name: "Screen" };
     if (onRecordingStateChange) {
       onRecordingStateChange(recording, source.name);
+    }
+  });
+  ipcMain.handle("open-external-url", async (_, url) => {
+    try {
+      await shell.openExternal(url);
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to open URL:", error);
+      return { success: false, error: String(error) };
     }
   });
 }

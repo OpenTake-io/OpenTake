@@ -36,6 +36,7 @@ interface Window {
     getRecordedVideoPath: () => Promise<{ success: boolean; path?: string; message?: string }>
     setRecordingState: (recording: boolean) => Promise<void>
     onStopRecordingFromTray: (callback: () => void) => () => void
+    openExternalUrl: (url: string) => Promise<{ success: boolean; error?: string }>
   }
 }
 

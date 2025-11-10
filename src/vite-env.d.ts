@@ -38,5 +38,6 @@ interface Window {
     }>
     setRecordingState: (recording: boolean) => Promise<void>
     onStopRecordingFromTray: (callback: () => void) => () => void
+    openExternalUrl: (url: string) => Promise<{ success: boolean; error?: string }>
   }
 }
