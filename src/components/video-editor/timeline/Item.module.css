@@ -1,0 +1,4 @@
+.squircle {
+  border-radius: 12px;
+  -corner-smoothing: antialiased;
+}

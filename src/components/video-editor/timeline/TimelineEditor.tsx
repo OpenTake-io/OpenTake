@@ -72,7 +72,8 @@ function calculateTimelineScale(durationSeconds: number): TimelineScaleConfig {
   const intervalMs = Math.round(selectedCandidate.intervalSeconds * 1000);
   const gridMs = Math.round(selectedCandidate.gridSeconds * 1000);
 
-  const minItemDurationMs = Math.max(100, Math.min(intervalMs, gridMs * 2));
+  // Set minItemDurationMs to 1ms for maximum granularity
+  const minItemDurationMs = 1;
   const defaultItemDurationMs = Math.min(
     Math.max(minItemDurationMs, intervalMs * 2),
     totalMs > 0 ? totalMs : intervalMs * 2,
@@ -337,7 +338,7 @@ export default function TimelineEditor({
   zoomRegions,
   onZoomAdded,
   onZoomSpanChange,
-  onZoomDelete,
+  // Removed unused onZoomDelete prop
   selectedZoomId,
   onSelectZoom,
 }: TimelineEditorProps) {
@@ -374,8 +375,14 @@ export default function TimelineEditor({
   }, [zoomRegions, totalMs, safeMinDurationMs, onZoomSpanChange]);
 
   const hasOverlap = useCallback((newSpan: Span, excludeId?: string): boolean => {
+    // Snap if gap is 2ms or less
     return zoomRegions.some((region) => {
       if (region.id === excludeId) return false;
+      // If the new span is within 2ms of another region, treat as overlap (snap)
+      const gapBefore = newSpan.start - region.endMs;
+      const gapAfter = region.startMs - newSpan.end;
+      if (gapBefore > 0 && gapBefore <= 2) return true;
+      if (gapAfter > 0 && gapAfter <= 2) return true;
       return !(newSpan.end <= region.startMs || newSpan.start >= region.endMs);
     });
   }, [zoomRegions]);
