@@ -40,7 +40,7 @@ export function startMouseTracking() {
       isHookStarted = true
       return { success: true, message: 'Mouse tracking started', startTime: recordingStartTime }
     } catch (error) {
-      console.error('❌ Failed to start mouse tracking:', error)
+      console.error('Failed to start mouse tracking:', error)
       isMouseTrackingActive = false
       return { success: false, message: 'Failed to start hook', error }
     }
