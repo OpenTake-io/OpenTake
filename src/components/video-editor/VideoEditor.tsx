@@ -59,13 +59,13 @@ export default function VideoEditor() {
   function togglePlayPause() {
     const playback = videoPlaybackRef.current;
     const video = playback?.video;
-    console.log('🎮 Toggle play/pause:', { hasVideo: !!video, isPlaying, action: isPlaying ? 'pause' : 'play' });
+    console.log('Toggle play/pause:', { hasVideo: !!video, isPlaying, action: isPlaying ? 'pause' : 'play' });
     if (!playback || !video) return;
 
     if (isPlaying) {
       playback.pause();
     } else {
-      playback.play().catch(err => console.error('❌ Video play failed:', err));
+      playback.play().catch(err => console.error('Video play failed:', err));
     }
   }
 
@@ -88,13 +88,13 @@ export default function VideoEditor() {
       depth: DEFAULT_ZOOM_DEPTH,
       focus: { cx: 0.5, cy: 0.5 },
     };
-    console.log('➕ Zoom region added:', newRegion);
+    console.log('Zoom region added:', newRegion);
     setZoomRegions((prev) => [...prev, newRegion]);
     setSelectedZoomId(id);
   }, []);
 
   const handleZoomSpanChange = useCallback((id: string, span: Span) => {
-    console.log('⏱️ Zoom span changed:', { id, start: Math.round(span.start), end: Math.round(span.end) });
+    console.log('Zoom span changed:', { id, start: Math.round(span.start), end: Math.round(span.end) });
     setZoomRegions((prev) =>
       prev.map((region) =>
         region.id === id
@@ -137,7 +137,7 @@ export default function VideoEditor() {
   }, [selectedZoomId]);
 
   const handleZoomDelete = useCallback((id: string) => {
-    console.log('🗑️ Zoom region deleted:', id);
+    console.log('Zoom region deleted:', id);
     setZoomRegions((prev) => prev.filter((region) => region.id !== id));
     if (selectedZoomId === id) {
       setSelectedZoomId(null);
