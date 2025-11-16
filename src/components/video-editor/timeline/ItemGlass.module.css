@@ -1,0 +1,32 @@
+.glassPurple {
+  position: relative;
+  border-radius: 12px;
+  -corner-smoothing: antialiased;
+  background: radial-gradient(circle at 60% 55%, rgba(104, 61, 196, 0.92) 60%, rgba(60, 20, 120, 0.85) 100%);
+  border: none;
+  box-shadow: 0 2px 8px 0 rgba(88,36,204,0.10) inset, 0 1px 3px 0 rgba(0,0,0,0.10);
+  backdrop-filter: blur(2px) saturate(120%);
+  -webkit-backdrop-filter: blur(2px) saturate(120%);
+}
+
+.zoomEndCap {
+  position: absolute;
+  top: 0;
+  background: #3c3c3c;
+  width: 18px;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+  transition: background 0.2s, box-shadow 0.2s;
+
+}
+
+.zoomEndCap.left {
+  left: -9px;
+  cursor: ew-resize;
+}
+.zoomEndCap.right {
+  right: -9px;
+  transform: scaleX(-1);
+  cursor: ew-resize;
+}
