@@ -151,27 +151,42 @@ function PlaybackCursor({
     <div
       className="absolute top-0 bottom-0 pointer-events-none z-50"
       style={{
-        [sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth}px`,
+        [sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth - 8}px`, // reduce margin
       }}
     >
       <div
-        className="absolute top-0 bottom-0 w-[2px] bg-red-500/90 shadow-[0_0_8px_rgba(239,68,68,0.5)]"
+        className="absolute top-3 bottom-3 w-[2px] bg-red-500/90 shadow-[0_0_8px_rgba(239,68,68,0.5)]"
         style={{
           [sideProperty]: `${offset}px`,
         }}
       >
-        {/* Inverted triangle at top */}
-        <div 
-          className="absolute -top-0.5 -left-[5px] w-0 h-0"
-          style={{
-            borderLeft: '6px solid transparent',
-            borderRight: '6px solid transparent',
-            borderTop: '8px solid rgb(239 68 68)',
-            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
-          }}
-        />
+        <div
+          className="absolute -top-2 left-1/2 -translate-x-1/2 flex flex-col items-center"
+          style={{ width: '32px' }}
+        >
+          <div
+            style={{
+              width: '8px',
+              height: '8px',
+              background: '#ef4444',
+              borderRadius: '12px 12px 12px 12px/14px 14px 8px 8px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '11px',
+              fontWeight: 600,
+              color: '#ef4444',
+              letterSpacing: '-0.5px',
+              position: 'relative',
+            }}
+          >
+  
+          </div>
+         
+        </div>
         {/* Subtle glow at top */}
-        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-red-500/30 rounded-full blur-sm" />
+        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-red-500/30 rounded-full blur-sm" />
       </div>
     </div>
   );
@@ -180,9 +195,11 @@ function PlaybackCursor({
 function TimelineAxis({
   intervalMs,
   videoDurationMs,
+  currentTimeMs,
 }: {
   intervalMs: number;
   videoDurationMs: number;
+  currentTimeMs: number;
 }) {
   const { sidebarWidth, direction, range, valueToPixels } = useTimelineContext();
   const sideProperty = direction === "rtl" ? "right" : "left";
@@ -225,7 +242,7 @@ function TimelineAxis({
 
   return (
     <div
-      className="h-10 bg-gradient-to-b from-slate-50 to-slate-100/50 border-b border-slate-200/60 relative overflow-hidden"
+      className="h-10 bg-black border-b border-[#18181b] relative overflow-hidden"
       style={{
         [sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth}px`,
       }}
@@ -244,24 +261,33 @@ function TimelineAxis({
 
         return (
           <div key={marker.time} style={markerStyle}>
-            <div
-              style={{
-                width: "1px",
-                height: "60%",
-                backgroundColor: "#cbd5e1",
-                opacity: 0.5,
-              }}
-            />
-            <span
-              style={{
-                paddingLeft: "4px",
-                alignSelf: "flex-start",
-                paddingTop: "3px",
-              }}
-              className="text-[10px] text-slate-500 font-medium select-none tracking-tight"
-            >
-              {marker.label}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+              <div
+                style={{
+                  width: '5px',
+                  height: '5px',
+                  borderRadius: '50%',
+                  backgroundColor: marker.time === currentTimeMs ? '#7c3aed' : '#94a3b8',
+                  boxShadow: marker.time === currentTimeMs ? '0 0 4px #7c3aed55' : 'none',
+                  marginRight: '5px',
+                  marginTop: '2px',
+                  transition: 'background 0.2s, box-shadow 0.2s',
+                }}
+              />
+              <span
+                style={{
+                  fontWeight: marker.time === currentTimeMs ? 700 : 500,
+                  color: marker.time === currentTimeMs ? '#7c3aed' : '#94a3b8',
+                  fontSize: '11px',
+                  letterSpacing: '-0.5px',
+                  textShadow: marker.time === currentTimeMs ? '0 1px 6px #7c3aed33' : 'none',
+                  marginTop: '2px',
+                }}
+                className="select-none"
+              >
+                {marker.label}
+              </span>
+            </div>
           </div>
         );
       })}
@@ -273,7 +299,7 @@ function Timeline({
   items,
   videoDurationMs,
   intervalMs,
-  currentTimeMs,
+     currentTimeMs,
   onSeek,
   onSelectZoom,
   selectedZoomId,
@@ -308,10 +334,10 @@ function Timeline({
     <div
       ref={setTimelineRef}
       style={style}
-      className="select-none bg-white min-h-[120px] relative cursor-pointer"
+      className="select-none bg-black min-h-[120px] relative cursor-pointer"
       onClick={handleTimelineClick}
     >
-      <TimelineAxis intervalMs={intervalMs} videoDurationMs={videoDurationMs} />
+         <TimelineAxis intervalMs={intervalMs} videoDurationMs={videoDurationMs} currentTimeMs={currentTimeMs} />
       <PlaybackCursor currentTimeMs={currentTimeMs} videoDurationMs={videoDurationMs} />
       <Row id={ROW_ID}>
         {items.map((item) => (
@@ -338,7 +364,6 @@ export default function TimelineEditor({
   zoomRegions,
   onZoomAdded,
   onZoomSpanChange,
-  // Removed unused onZoomDelete prop
   selectedZoomId,
   onSelectZoom,
 }: TimelineEditorProps) {
@@ -445,33 +470,33 @@ export default function TimelineEditor({
 
   if (!videoDuration || videoDuration === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50 border border-gray-300 rounded-lg">
-        <span className="text-gray-500 text-sm">Load a video to see timeline</span>
+      <div className="flex-1 flex items-center justify-center rounded-lg">
+        <span className="text-slate-400 text-sm">Load a video to see timeline</span>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-slate-100 bg-gradient-to-b from-white to-slate-50/50">
-        <Button onClick={handleAddZoom} variant="outline" size="sm" className="gap-2 h-8 px-3 text-xs">
-          <Plus className="w-3.5 h-3.5" />
+    <div className="flex-1 flex flex-col bg-black border border-none rounded-xl shadow-lg overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-2.5">
+        <Button onClick={handleAddZoom} variant="outline" size="sm" className="gap-2 h-8 px-3 text-xs bg-[#23232a] border-none text-slate-200 hover:bg-white hover:text-black">
+          <Plus className="w-3.5 h-3.5 text-slate-400" />
           Add Zoom
         </Button>
         <div className="flex-1" />
         <div className="flex items-center gap-3 text-[10px] text-slate-400 font-medium">
           <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-600">Command + Shift + Scroll</kbd>
+            <kbd className="px-1.5 py-0.5 bg-[#23232a] border border-[#312e81] rounded text-slate-300">Command + Shift + Scroll</kbd>
             <span>Pan</span>
           </span>
-          <span className="text-slate-300">•</span>
+          <span className="text-slate-600">•</span>
           <span className="flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-600">Command + Scroll</kbd>
+            <kbd className="px-1.5 py-0.5 bg-[#23232a] border border-[#312e81] rounded text-slate-300">Command + Scroll</kbd>
             <span>Zoom</span>
           </span>
         </div>
       </div>
-      <div className="flex-1 overflow-x-auto overflow-y-hidden">
+      <div className="mt-4 flex-1 overflow-x-auto overflow-y-hidden bg-[#000]">
         <TimelineWrapper
           range={clampedRange}
           videoDuration={videoDuration}

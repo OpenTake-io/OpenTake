@@ -10,7 +10,7 @@ export default function Row({ id, children }: RowProps) {
 
   return (
     <div
-      className="border-b border-slate-100 bg-gradient-to-b from-slate-50/30 to-white/50"
+      className="border-b border-[#18181b] bg-[#18181b]"
       style={{ ...rowWrapperStyle, minHeight: 88 }}
     >
       <div ref={setNodeRef} style={rowStyle}>

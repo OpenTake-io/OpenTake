@@ -26,6 +26,7 @@ export default function Item({ id, span, rowId, isSelected = false, onSelect }: 
       {...listeners}
       {...attributes}
       onPointerDownCapture={() => onSelect?.()}
+      className={cn(glassStyles.itemDark)}
     >
       <div style={itemContentStyle}>
         <div

@@ -28,11 +28,11 @@ export default function PlaybackControls({
   }
 
   return (
-    <div className="flex items-center gap-4 px-4">
+    <div className="flex items-center gap-4 px-4 rounded-xl py-3">
       <Button
         onClick={onTogglePlayPause}
         size="icon"
-        className="w-8 h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-md"
+        className="w-8 h-8 rounded-full bg-transparent text-slate-200 hover:bg-[#18181b] transition-colors border border-white"
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {isPlaying ? (
@@ -41,7 +41,7 @@ export default function PlaybackControls({
           <MdPlayArrow width={18} height={18} />
         )}
       </Button>
-      <span className="text-xs text-muted-foreground font-mono">
+      <span className="text-xs text-slate-400 font-mono">
         {formatTime(currentTime)}
       </span>
       <input
@@ -51,12 +51,12 @@ export default function PlaybackControls({
         value={currentTime}
         onChange={handleSeekChange}
         step="0.01"
-        className="flex-1 h-2 accent-blue-500 rounded-full transition-all duration-[33ms]"
+        className="flex-1 h-2 rounded-full transition-all duration-[33ms] custom-playback-range"
         style={{
-    background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${(currentTime / duration) * 100}%, #e5e7eb ${(currentTime / duration) * 100}%, #e5e7eb 100%)`
-  }}
+          background: `linear-gradient(to right, #7c3aed 0%, #7c3aed ${(currentTime / duration) * 100}%, #23232a ${(currentTime / duration) * 100}%, #23232a 100%)`,
+        }}
       />
-      <span className="text-xs text-muted-foreground font-mono">
+      <span className="text-xs text-slate-400 font-mono">
         {formatTime(duration)}
       </span>
     </div>
