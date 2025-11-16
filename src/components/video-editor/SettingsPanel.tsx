@@ -64,12 +64,12 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
   };
 
   return (
-    <div className="flex-[3] min-w-0 bg-card border border-border rounded-xl p-8 flex flex-col shadow-sm">
+    <div className="flex-[3] min-w-0 bg-[#18181b] border border-[#23232a] rounded-xl p-8 flex flex-col shadow-lg">
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-semibold text-slate-600">Zoom Level</span>
+          <span className="text-sm font-semibold text-slate-200">Zoom Level</span>
           {zoomEnabled && selectedZoomDepth && (
-            <span className="text-xs uppercase tracking-wide text-slate-400">
+            <span className="text-xs uppercase tracking-wide text-slate-400/80">
               Active · {ZOOM_DEPTH_OPTIONS.find(o => o.depth === selectedZoomDepth)?.label}
             </span>
           )}
@@ -81,32 +81,32 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
               <Button
                 key={option.depth}
                 type="button"
-                variant="outline"
                 disabled={!zoomEnabled}
                 onClick={() => onZoomDepthChange?.(option.depth)}
                 className={cn(
-                  "h-auto w-full rounded-lg border bg-muted/30 px-2 py-2.5 text-center shadow-sm transition-all",
-                  "flex flex-col items-center justify-center gap-0.5",
+                  "h-auto w-full rounded-xl border px-2 py-3 text-center shadow-lg transition-all flex flex-col items-center justify-center gap-1",
+                  "duration-150 ease-in-out",
                   zoomEnabled ? "opacity-100" : "opacity-60",
                   isActive
-                    ? "border-primary/70 bg-primary/10 text-primary shadow-primary/20"
-                    : "border-border/60 hover:border-primary/40 hover:bg-muted/60"
+                    ? "border-[#7c3aed] bg-white text-black shadow-[#7c3aed]/20 scale-105"
+                    : "border-[#23232a] bg-[#23232a] text-slate-200 hover:border-[#7c3aed] hover:scale-105"
                 )}
+                style={isActive ? { background: '#fff', color: '#111' } : undefined}
               >
-                <span className="text-xs font-semibold tracking-tight">{option.label}</span>
+                <span className={cn("text-sm font-semibold tracking-tight", isActive ? "text-black" : "text-slate-200")}>{option.label}</span>
               </Button>
             );
           })}
         </div>
         {!zoomEnabled && (
-          <p className="text-xs text-slate-400 mt-2">Select a zoom item in the timeline to adjust its depth.</p>
+          <p className="text-xs text-slate-400/80 mt-2">Select a zoom item in the timeline to adjust its depth.</p>
         )}
         {zoomEnabled && (
           <Button
             onClick={handleDeleteClick}
             variant="destructive"
             size="sm"
-            className="mt-3 w-full gap-2"
+            className="mt-3 w-full gap-2 bg-[#7c3aed] text-white border-none hover:bg-[#a78bfa]"
           >
             <Trash2 className="w-4 h-4" />
             Delete Zoom
@@ -120,14 +120,14 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
               checked={showShadow}
               onCheckedChange={onShadowChange}
             />
-            <div className="text-sm">Shadow</div>
+            <div className="text-sm text-slate-200">Shadow</div>
           </div>
           <div className="flex items-center gap-2">
             <Switch
               checked={showBlur}
               onCheckedChange={onBlurChange}
             />
-            <div className="text-sm">Blur Background</div>
+            <div className="text-sm text-slate-200">Blur Background</div>
           </div>
         </div>
       </div>
@@ -135,7 +135,7 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
         <Button
           onClick={() => setShowCropDropdown(!showCropDropdown)}
           variant="outline"
-          className="w-full gap-2"
+          className="w-full gap-2 bg-[#23232a] text-slate-200 border-none"
         >
           <Crop className="w-4 h-4" />
           Crop Video
@@ -145,20 +145,20 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
       {showCropDropdown && cropRegion && onCropChange && (
         <>
           <div 
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 animate-in fade-in duration-200"
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 animate-in fade-in duration-200"
             onClick={() => setShowCropDropdown(false)}
           />
-          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-card rounded-2xl shadow-2xl border border-border/50 p-8 w-[90vw] max-w-5xl animate-in zoom-in-95 duration-200">
+          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-[#23232a] rounded-2xl shadow-2xl border border-[#312e81] p-8 w-[90vw] max-w-5xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <span className="text-xl font-bold text-foreground">Crop Video</span>
-                <p className="text-sm text-muted-foreground mt-2">Drag on each side to adjust the crop area</p>
+                <span className="text-xl font-bold text-slate-200">Crop Video</span>
+                <p className="text-sm text-slate-400 mt-2">Drag on each side to adjust the crop area</p>
               </div>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setShowCropDropdown(false)}
-                className="hover:bg-muted"
+                className="hover:bg-[#312e81] text-slate-200"
               >
                 <X className="w-5 h-5" />
               </Button>
@@ -179,11 +179,11 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
           </div>
         </>
       )}
-      <Tabs defaultValue="image" className="mb-6">
-        <TabsList className="mb-4">
-          <TabsTrigger value="image">Image</TabsTrigger>
-          <TabsTrigger value="color">Color</TabsTrigger>
-          <TabsTrigger value="gradient">Gradient</TabsTrigger>
+      <Tabs defaultValue="image" className="mb-6 text-slate-200">
+        <TabsList className="mb-4 bg-[#23232a] border-none text-slate-200">
+          <TabsTrigger value="image" className="text-slate-200">Image</TabsTrigger>
+          <TabsTrigger value="color" className="text-slate-200">Color</TabsTrigger>
+          <TabsTrigger value="gradient" className="text-slate-200">Gradient</TabsTrigger>
         </TabsList>
         
         <TabsContent value="image">
@@ -194,8 +194,8 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
                 className={cn(
                   "aspect-square rounded-lg border-2 overflow-hidden cursor-pointer transition-all w-16 h-16",
                   selected === path
-                    ? "border-primary/40 ring-1 ring-primary/40 scale-105"
-                    : "border-border hover:border-primary/60 hover:scale-105"
+                    ? "border-[#7c3aed] ring-1 ring-[#7c3aed] scale-105"
+                    : "border-[#23232a] hover:border-[#7c3aed] hover:scale-105"
                 )}
                 style={{ backgroundImage: `url(${path})`, backgroundSize: "cover", backgroundPosition: "center" }}
                 aria-label={`Wallpaper ${idx + 1}`}
@@ -207,14 +207,16 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
         </TabsContent>
         
         <TabsContent value="color">
-          <Colorful
-            color={hsva}
-            disableAlpha={true}
-            onChange={(color) => {
-              setHsva(color.hsva);
-              onWallpaperChange(hsvaToHex(color.hsva));
-            }}
-          />
+          <div className="p-2">
+            <Colorful
+              color={hsva}
+              disableAlpha={true}
+              onChange={(color) => {
+                setHsva(color.hsva);
+                onWallpaperChange(hsvaToHex(color.hsva));
+              }}
+            />
+          </div>
         </TabsContent>
         
         <TabsContent value="gradient">
@@ -224,7 +226,7 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
                 key={g}
                 className={cn(
                   "aspect-square rounded-lg border-2 overflow-hidden cursor-pointer transition-all w-16 h-16",
-                  gradient === g ? "border-primary ring-1 ring-primary/40 scale-105" : "border-border hover:border-primary/60 hover:scale-105"
+                  gradient === g ? "border-[#7c3aed] ring-1 ring-[#7c3aed] scale-105" : "border-[#23232a] hover:border-[#7c3aed] hover:scale-105"
                 )}
                 style={{ background: g }}
                 aria-label={`Gradient ${idx + 1}`}
@@ -239,7 +241,7 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
           <Button
             type="button"
             size="lg"
-            className="w-full py-5 text-lg flex items-center justify-center gap-3 bg-primary text-white rounded-xl shadow-lg hover:bg-primary/90 transition-all"
+            className="w-full py-5 text-lg flex items-center justify-center gap-3 bg-[#7c3aed] text-white rounded-xl shadow-lg hover:bg-[#a78bfa] transition-all"
           >
             <Download className="w-6 h-6" />
             <span className="text-lg">Export Video</span>
@@ -249,9 +251,9 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
             onClick={() => {
               window.electronAPI?.openExternalUrl('https://github.com/siddharthvaddem/pangolin/issues/new');
             }}
-            className="w-full mt-3 flex items-center justify-center gap-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground/90 transition-colors py-1"
+            className="w-full mt-3 flex items-center justify-center gap-1 text-[10px] text-slate-400/80 hover:text-slate-200 transition-colors py-1"
           >
-            <Bug className="w-3 h-3 text-black" />
+            <Bug className="w-3 h-3 text-white" />
             <span>Report Bug</span>
           </button>
         </div>

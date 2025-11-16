@@ -171,10 +171,10 @@ export default function VideoEditor() {
   }
 
   return (
-    <div className="flex h-screen bg-background p-8 gap-8">
+    <div className="flex h-screen bg-background bg-black p-8 gap-8">
       <Toaster position="top-center" />
-      <div className="flex flex-col flex-[7] min-w-0 gap-8">
-        <div className="flex flex-col gap-6 flex-1">
+      <div className="flex flex-col flex-[7] min-w-0 gap-6">
+        <div className="flex flex-col gap-3 flex-1">
           {videoPath && (
             <>
               <div className="flex justify-center w-full">
