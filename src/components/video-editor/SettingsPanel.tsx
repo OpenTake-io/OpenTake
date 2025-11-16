@@ -40,6 +40,7 @@ interface SettingsPanelProps {
   cropRegion?: CropRegion;
   onCropChange?: (region: CropRegion) => void;
   videoElement?: HTMLVideoElement | null;
+  onExport?: () => void;
 }
 
 const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
@@ -50,7 +51,7 @@ const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
   { depth: 5, label: "3.5×" },
 ];
 
-export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, onZoomDepthChange, selectedZoomId, onZoomDelete, showShadow, onShadowChange, showBlur, onBlurChange, cropRegion, onCropChange, videoElement }: SettingsPanelProps) {
+export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, onZoomDepthChange, selectedZoomId, onZoomDelete, showShadow, onShadowChange, showBlur, onBlurChange, cropRegion, onCropChange, videoElement, onExport }: SettingsPanelProps) {
   const [hsva, setHsva] = useState({ h: 0, s: 0, v: 68, a: 1 });
   const [gradient, setGradient] = useState<string>(GRADIENTS[0]);
   const [showCropDropdown, setShowCropDropdown] = useState(false);
@@ -241,6 +242,7 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
           <Button
             type="button"
             size="lg"
+            onClick={onExport}
             className="w-full py-5 text-lg flex items-center justify-center gap-3 bg-[#34B27B] text-white rounded-xl shadow-lg hover:bg-[#34B27B]/80 transition-all"
           >
             <Download className="w-6 h-6" />

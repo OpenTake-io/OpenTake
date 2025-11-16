@@ -119,7 +119,7 @@ function startMouseTracking() {
       isHookStarted = true;
       return { success: true, message: "Mouse tracking started", startTime: recordingStartTime };
     } catch (error) {
-        console.error("Failed to start mouse tracking:", error);
+      console.error("Failed to start mouse tracking:", error);
       isMouseTrackingActive = false;
       return { success: false, message: "Failed to start hook", error };
     }
@@ -327,6 +327,25 @@ function registerIpcHandlers(createEditorWindow2, createSourceSelectorWindow2, g
     } catch (error) {
       console.error("Failed to open URL:", error);
       return { success: false, error: String(error) };
+    }
+  });
+  ipcMain.handle("save-exported-video", async (_, videoData, fileName) => {
+    try {
+      const downloadsPath = app.getPath("downloads");
+      const videoPath = path.join(downloadsPath, fileName);
+      await fs.writeFile(videoPath, Buffer.from(videoData));
+      return {
+        success: true,
+        path: videoPath,
+        message: "Video exported successfully"
+      };
+    } catch (error) {
+      console.error("Failed to save exported video:", error);
+      return {
+        success: false,
+        message: "Failed to save exported video",
+        error: String(error)
+      };
     }
   });
 }

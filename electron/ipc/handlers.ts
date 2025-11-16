@@ -1,4 +1,4 @@
-import { ipcMain, desktopCapturer, BrowserWindow, shell } from 'electron'
+import { ipcMain, desktopCapturer, BrowserWindow, shell, app } from 'electron'
 import { startMouseTracking, stopMouseTracking, getTrackingData } from './mouseTracking'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -142,6 +142,27 @@ export function registerIpcHandlers(
     } catch (error) {
       console.error('Failed to open URL:', error)
       return { success: false, error: String(error) }
+    }
+  })
+
+  ipcMain.handle('save-exported-video', async (_, videoData: ArrayBuffer, fileName: string) => {
+    try {
+      const downloadsPath = app.getPath('downloads')
+      const videoPath = path.join(downloadsPath, fileName)
+      await fs.writeFile(videoPath, Buffer.from(videoData))
+      
+      return {
+        success: true,
+        path: videoPath,
+        message: 'Video exported successfully'
+      }
+    } catch (error) {
+      console.error('Failed to save exported video:', error)
+      return {
+        success: false,
+        message: 'Failed to save exported video',
+        error: String(error)
+      }
     }
   })
 }

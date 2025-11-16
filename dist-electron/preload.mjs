@@ -41,5 +41,8 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
   },
   openExternalUrl: (url) => {
     return electron.ipcRenderer.invoke("open-external-url", url);
+  },
+  saveExportedVideo: (videoData, fileName) => {
+    return electron.ipcRenderer.invoke("save-exported-video", videoData, fileName);
   }
 });
