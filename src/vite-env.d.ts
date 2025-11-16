@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+/// <reference types="../electron/electron-env" />
 
 interface ProcessedDesktopSource {
   id: string;
@@ -39,5 +40,10 @@ interface Window {
     setRecordingState: (recording: boolean) => Promise<void>
     onStopRecordingFromTray: (callback: () => void) => () => void
     openExternalUrl: (url: string) => Promise<{ success: boolean; error?: string }>
+    saveExportedVideo: (videoData: ArrayBuffer, fileName: string) => Promise<{
+      success: boolean
+      path?: string
+      message?: string
+    }>
   }
 }

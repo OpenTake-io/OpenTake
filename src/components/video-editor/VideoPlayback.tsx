@@ -422,6 +422,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
         autoDensity: true,
       });
 
+      // Lock ticker to 60fps for consistent animation speed across all displays
+      app.ticker.maxFPS = 60;
+
       if (!mounted) {
         app.destroy(true, { children: true, texture: true, textureSource: true });
         return;
