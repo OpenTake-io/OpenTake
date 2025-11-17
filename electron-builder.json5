@@ -1,9 +1,9 @@
 // @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "com.siddharthvaddem.pangolin",
+  "appId": "com.siddharthvaddem.openscreen",
   "asar": true,
-  "productName": "Pangolin",
+  "productName": "Openscreen",
   "directories": {
     "output": "release/${version}"
   },
@@ -18,10 +18,11 @@
     }
   ],
   "mac": {
-    "target": [
-      "dmg"
-    ],
-    "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
+      "target": [
+        "dmg"
+      ],
+      "icon": "icons/icons/mac/icon.icns",
+      "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
   },
   "win": {
     "target": [
@@ -32,6 +33,7 @@
         ]
       }
     ],
+    "icon": "icons/icons/win/icon.ico",
     "artifactName": "${productName}-Windows-${version}-Setup.${ext}",
     "requestedExecutionLevel": "asInvoker"
   },
