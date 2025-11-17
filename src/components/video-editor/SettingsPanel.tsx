@@ -286,7 +286,7 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
           <button
             type="button"
             onClick={() => {
-              window.electronAPI?.openExternalUrl('https://github.com/siddharthvaddem/pangolin/issues/new');
+              window.electronAPI?.openExternalUrl('https://github.com/siddharthvaddem/openscreen/issues/new');
             }}
             className="w-full mt-3 flex items-center justify-center gap-1 text-[10px] text-slate-400/80 hover:text-slate-200 transition-colors py-1"
           >
