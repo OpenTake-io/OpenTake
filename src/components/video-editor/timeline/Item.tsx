@@ -12,7 +12,7 @@ interface ItemProps {
   onSelect?: () => void;
 }
 
-export default function Item({ id, span, rowId, isSelected = false, onSelect }: ItemProps) {
+export default function Item({ id, span, rowId, isSelected: _isSelected = false, onSelect }: ItemProps) {
   const { setNodeRef, attributes, listeners, itemStyle, itemContentStyle } = useItem({
     id,
     span,

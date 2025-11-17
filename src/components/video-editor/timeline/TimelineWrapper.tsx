@@ -23,7 +23,7 @@ export default function TimelineWrapper({
   onRangeChange,
   minItemDurationMs,
   minVisibleRangeMs,
-  gridSizeMs,
+  gridSizeMs: _gridSizeMs,
   onItemSpanChange,
 }: TimelineWrapperProps) {
   const totalMs = Math.max(0, Math.round(videoDuration * 1000));
