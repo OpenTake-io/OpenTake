@@ -12,14 +12,6 @@ interface ExportDialogProps {
   onCancel?: () => void;
 }
 
-function formatTime(seconds: number): string {
-  if (!isFinite(seconds) || seconds < 0) return '0:00';
-  
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
 export function ExportDialog({
   isOpen,
   onClose,
@@ -49,7 +41,7 @@ export function ExportDialog({
         className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 animate-in fade-in duration-200"
         onClick={isExporting ? undefined : onClose}
       />
-      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-[#23232a] rounded-2xl shadow-2xl border border-[#34B27B] p-8 w-[90vw] max-w-md animate-in zoom-in-95 duration-200">
+      <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 bg-[#23232a] rounded-2xl shadow-2xl border border-[#3a3a42] p-8 w-[90vw] max-w-md animate-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             {showSuccess ? (
@@ -107,27 +99,18 @@ export function ExportDialog({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <div className="text-slate-400 mb-1">Frame</div>
-                <div className="text-slate-200 font-mono">
-                  {progress.currentFrame} / {progress.totalFrames}
-                </div>
-              </div>
-              <div>
-                <div className="text-slate-400 mb-1">Time Remaining</div>
-                <div className="text-slate-200 font-mono">
-                  {formatTime(progress.estimatedTimeRemaining)}
-                </div>
+            <div className="text-sm">
+              <div className="text-slate-400 mb-1">Frame</div>
+              <div className="text-slate-200 font-mono text-lg">
+                {progress.currentFrame} / {progress.totalFrames}
               </div>
             </div>
 
             {onCancel && (
-              <div className="pt-4 border-t border-[#34B27B]/20">
+              <div className="pt-4 border-t border-[#3a3a42]">
                 <Button
                   onClick={onCancel}
-                  variant="outline"
-                  className="w-full bg-transparent border-slate-600 text-slate-300 hover:bg-slate-800"
+                  className="w-full py-3 bg-[#34B27B] text-white hover:bg-[#34B27B]/80 transition-all"
                 >
                   Cancel Export
                 </Button>

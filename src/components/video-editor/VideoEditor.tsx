@@ -249,6 +249,10 @@ export default function VideoEditor() {
     if (exporterRef.current) {
       exporterRef.current.cancel();
       toast.info('Export cancelled');
+      setShowExportDialog(false);
+      setIsExporting(false);
+      setExportProgress(null);
+      setExportError(null);
     }
   }, []);
 

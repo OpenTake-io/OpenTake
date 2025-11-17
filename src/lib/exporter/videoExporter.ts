@@ -29,7 +29,7 @@ export class VideoExporter {
   private cancelled = false;
   private encodedChunks: EncodedVideoChunk[] = [];
   private encodeQueue = 0;
-  private readonly MAX_ENCODE_QUEUE = 30;
+  private readonly MAX_ENCODE_QUEUE = 60; // Increased for better throughput
   private videoDescription: Uint8Array | undefined;
 
   constructor(config: VideoExporterConfig) {
@@ -74,18 +74,40 @@ export class VideoExporter {
         throw new Error('Video element not available');
       }
 
-      // Step 6: Process frames
+      // Step 6: Process frames with optimized seeking
       const frameDuration = 1_000_000 / this.config.frameRate; // in microseconds
       let frameIndex = 0;
-      const startTime = performance.now();
       const timeStep = 1 / this.config.frameRate;
+
+      // Optimize: Pre-load first frame
+      videoElement.currentTime = 0;
+      await new Promise(resolve => {
+        const onSeeked = () => {
+          videoElement.removeEventListener('seeked', onSeeked);
+          resolve(null);
+        };
+        videoElement.addEventListener('seeked', onSeeked);
+      });
 
       while (frameIndex < totalFrames && !this.cancelled) {
         const timestamp = frameIndex * frameDuration;
         const videoTime = frameIndex * timeStep;
-        
-        // Seek to the frame time
-        await this.decoder.seekToTime(videoTime);
+        // Seek to frame (optimized: only seek if not already there)
+        if (Math.abs(videoElement.currentTime - videoTime) > 0.001) {
+          videoElement.currentTime = videoTime;
+          // Wait for seek with timeout to prevent hanging
+          await Promise.race([
+            new Promise(resolve => {
+              const onSeeked = () => {
+                videoElement.removeEventListener('seeked', onSeeked);
+                // Wait for video to render the frame
+                videoElement.requestVideoFrameCallback(() => resolve(null));
+              };
+              videoElement.addEventListener('seeked', onSeeked, { once: true });
+            }),
+            new Promise(resolve => setTimeout(resolve, 100)) // 100ms timeout
+          ]);
+        }
 
         // Create a VideoFrame from the video element (on GPU!)
         const videoFrame = new VideoFrame(videoElement, {
@@ -93,20 +115,20 @@ export class VideoExporter {
         });
 
         // Render the frame with all effects
-        await this.renderer.renderFrame(videoFrame, timestamp);
+        await this.renderer!.renderFrame(videoFrame, timestamp);
         
         // Close the video frame as we're done with it
         videoFrame.close();
 
-        // Wait if encode queue is too large
+        // Wait if encode queue is too large (backpressure)
         while (this.encodeQueue >= this.MAX_ENCODE_QUEUE && !this.cancelled) {
-          await new Promise(resolve => setTimeout(resolve, 10));
+          await new Promise(resolve => setTimeout(resolve, 1));
         }
 
         if (this.cancelled) break;
 
         // Create VideoFrame from rendered canvas (on GPU, no pixel read!)
-        const canvas = this.renderer.getCanvas();
+        const canvas = this.renderer!.getCanvas();
         const exportFrame = new VideoFrame(canvas, {
           timestamp,
           duration: frameDuration,
@@ -121,17 +143,13 @@ export class VideoExporter {
 
         // Report progress
         frameIndex++;
-        const elapsed = (performance.now() - startTime) / 1000;
-        const framesPerSecond = frameIndex / elapsed;
-        const remainingFrames = totalFrames - frameIndex;
-        const estimatedTimeRemaining = remainingFrames / framesPerSecond;
 
         if (this.config.onProgress) {
           this.config.onProgress({
             currentFrame: frameIndex,
             totalFrames,
             percentage: (frameIndex / totalFrames) * 100,
-            estimatedTimeRemaining,
+            estimatedTimeRemaining: 0,
           });
         }
       }
@@ -208,9 +226,10 @@ export class VideoExporter {
       height: this.config.height,
       bitrate: this.config.bitrate,
       framerate: this.config.frameRate,
-      latencyMode: 'quality',
+      latencyMode: 'realtime', // Changed from 'quality' for faster encoding
       bitrateMode: 'variable',
-    });
+      hardwareAcceleration: 'prefer-hardware', // Use GPU encoding
+    } as VideoEncoderConfig);
   }
 
   cancel(): void {

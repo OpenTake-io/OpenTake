@@ -55,10 +55,14 @@ export class FrameRenderer {
   }
 
   async initialize(): Promise<void> {
-    // Create offscreen canvas
+    // Create offscreen canvas with sRGB color space for fidelity
     const canvas = document.createElement('canvas');
     canvas.width = this.config.width;
     canvas.height = this.config.height;
+    if ('colorSpace' in canvas) {
+      // @ts-ignore
+      canvas.colorSpace = 'srgb';
+    }
 
     // Initialize PixiJS app with transparent background (background rendered separately)
     // Use 2x resolution to match Retina displays and ensure blur quality matches preview
