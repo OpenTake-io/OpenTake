@@ -187,9 +187,9 @@ export default function VideoEditor() {
         videoPlaybackRef.current?.pause();
       }
 
-      // Determine export dimensions (use video dimensions)
-      const width = video.videoWidth;
-      const height = video.videoHeight;
+      // Always export at 1920x1080 (16:9)
+      const width = 1920;
+      const height = 1080;
 
       const exporter = new VideoExporter({
         videoUrl: videoPath,
@@ -203,7 +203,7 @@ export default function VideoEditor() {
         showShadow,
         showBlur,
         cropRegion,
-        onProgress: (progress) => {
+        onProgress: (progress: ExportProgress) => {
           setExportProgress(progress);
         },
       });
