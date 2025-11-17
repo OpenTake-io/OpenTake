@@ -95,7 +95,6 @@ export class VideoExporter {
         // Seek to frame (optimized: only seek if not already there)
         if (Math.abs(videoElement.currentTime - videoTime) > 0.001) {
           videoElement.currentTime = videoTime;
-          // Wait for seek with timeout to prevent hanging
           await Promise.race([
             new Promise(resolve => {
               const onSeeked = () => {
@@ -105,7 +104,7 @@ export class VideoExporter {
               };
               videoElement.addEventListener('seeked', onSeeked, { once: true });
             }),
-            new Promise(resolve => setTimeout(resolve, 100)) // 100ms timeout
+            new Promise(resolve => setTimeout(resolve, 250)) // higher is slower but better capture
           ]);
         }
 
