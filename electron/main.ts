@@ -62,7 +62,6 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 let mainWindow: BrowserWindow | null = null
 let sourceSelectorWindow: BrowserWindow | null = null
 let tray: Tray | null = null
-let isRecording = false
 let selectedSourceName = ''
 
 function createWindow() {
@@ -148,7 +147,7 @@ app.whenReady().then(async () => {
     () => mainWindow,
     () => sourceSelectorWindow,
     (recording: boolean, sourceName: string) => {
-      isRecording = recording
+      // removed unused assignment to _isRecording
       selectedSourceName = sourceName
       if (recording) {
         if (!tray) createTray();

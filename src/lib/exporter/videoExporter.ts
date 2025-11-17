@@ -104,7 +104,7 @@ export class VideoExporter {
               };
               videoElement.addEventListener('seeked', onSeeked, { once: true });
             }),
-            new Promise(resolve => setTimeout(resolve, 250)) // higher is slower but better capture
+            new Promise(resolve => setTimeout(resolve, 200)) // higher is slower but better capture
           ]);
         }
 

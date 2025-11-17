@@ -43,6 +43,8 @@ interface SettingsPanelProps {
   onExport?: () => void;
 }
 
+export default SettingsPanel;
+
 const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
   { depth: 1, label: "1.25×" },
   { depth: 2, label: "1.5×" },
