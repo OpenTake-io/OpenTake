@@ -14,12 +14,6 @@ interface VideoExporterConfig extends ExportConfig {
   onProgress?: (progress: ExportProgress) => void;
 }
 
-/**
- * Fast video exporter using VideoFrame and VideoEncoder APIs.
- * Avoids reading pixel data into JavaScript memory for maximum performance.
- * 
- * Based on: https://pietrasiak.com/fast-video-rendering-and-encoding-using-web-apis
- */
 export class VideoExporter {
   private config: VideoExporterConfig;
   private decoder: VideoFileDecoder | null = null;
@@ -29,7 +23,7 @@ export class VideoExporter {
   private cancelled = false;
   private encodedChunks: EncodedVideoChunk[] = [];
   private encodeQueue = 0;
-  private readonly MAX_ENCODE_QUEUE = 60; // Increased for better throughput
+  private readonly MAX_ENCODE_QUEUE = 60;
   private videoDescription: Uint8Array | undefined;
 
   constructor(config: VideoExporterConfig) {
@@ -38,15 +32,14 @@ export class VideoExporter {
 
   async export(): Promise<ExportResult> {
     try {
-      // Clean up any previous export state
       this.cleanup();
       this.cancelled = false;
 
-      // Step 1: Initialize decoder and load video
+      // Initialize decoder and load video
       this.decoder = new VideoFileDecoder();
       const videoInfo = await this.decoder.loadVideo(this.config.videoUrl);
 
-      // Step 2: Initialize frame renderer
+      // Initialize frame renderer
       this.renderer = new FrameRenderer({
         width: this.config.width,
         height: this.config.height,
@@ -60,26 +53,26 @@ export class VideoExporter {
       });
       await this.renderer.initialize();
 
-      // Step 3: Initialize video encoder
+      // Initialize video encoder
       const totalFrames = Math.ceil(videoInfo.duration * this.config.frameRate);
       await this.initializeEncoder();
 
-      // Step 4: Initialize muxer
+      // Initialize muxer
       this.muxer = new VideoMuxer(this.config, false);
       await this.muxer.initialize();
 
-      // Step 5: Get the video element for frame extraction
+      // Get the video element for frame extraction
       const videoElement = this.decoder.getVideoElement();
       if (!videoElement) {
         throw new Error('Video element not available');
       }
 
-      // Step 6: Process frames with optimized seeking
+      // Process frames with optimized seeking
       const frameDuration = 1_000_000 / this.config.frameRate; // in microseconds
       let frameIndex = 0;
       const timeStep = 1 / this.config.frameRate;
 
-      // Optimize: Pre-load first frame
+      // Pre-load first frame
       videoElement.currentTime = 0;
       await new Promise(resolve => {
         const onSeeked = () => {
@@ -92,7 +85,7 @@ export class VideoExporter {
       while (frameIndex < totalFrames && !this.cancelled) {
         const timestamp = frameIndex * frameDuration;
         const videoTime = frameIndex * timeStep;
-        // Seek to frame (optimized: only seek if not already there)
+        // Seek to frame (only seek if not already there)
         if (Math.abs(videoElement.currentTime - videoTime) > 0.001) {
           videoElement.currentTime = videoTime;
           await Promise.race([
@@ -104,7 +97,7 @@ export class VideoExporter {
               };
               videoElement.addEventListener('seeked', onSeeked, { once: true });
             }),
-            new Promise(resolve => setTimeout(resolve, 200)) // higher is slower but better capture
+            new Promise(resolve => setTimeout(resolve, 200)) // higher this number, slower the export, but better capture/ no frame drops
           ]);
         }
 
@@ -116,31 +109,26 @@ export class VideoExporter {
         // Render the frame with all effects
         await this.renderer!.renderFrame(videoFrame, timestamp);
         
-        // Close the video frame as we're done with it
         videoFrame.close();
 
-        // Wait if encode queue is too large (backpressure)
         while (this.encodeQueue >= this.MAX_ENCODE_QUEUE && !this.cancelled) {
           await new Promise(resolve => setTimeout(resolve, 1));
         }
 
         if (this.cancelled) break;
 
-        // Create VideoFrame from rendered canvas (on GPU, no pixel read!)
         const canvas = this.renderer!.getCanvas();
         const exportFrame = new VideoFrame(canvas, {
           timestamp,
           duration: frameDuration,
         });
 
-        // Encode the frame (check if encoder is still valid)
         if (this.encoder && this.encoder.state === 'configured') {
           this.encodeQueue++;
           this.encoder.encode(exportFrame, { keyFrame: frameIndex % 150 === 0 });
         }
         exportFrame.close();
 
-        // Report progress
         frameIndex++;
 
         if (this.config.onProgress) {
@@ -157,12 +145,12 @@ export class VideoExporter {
         return { success: false, error: 'Export cancelled' };
       }
 
-      // Step 7: Finalize encoding
+      // Finalize encoding
       if (this.encoder && this.encoder.state === 'configured') {
         await this.encoder.flush();
       }
 
-      // Step 8: Add all chunks to muxer with metadata
+      // Add all chunks to muxer with metadata
       for (let i = 0; i < this.encodedChunks.length; i++) {
         const chunk = this.encodedChunks[i];
         const meta: EncodedVideoChunkMetadata = {};
@@ -180,7 +168,7 @@ export class VideoExporter {
         this.muxer!.addVideoChunk(chunk, meta);
       }
 
-      // Step 9: Finalize muxer and get output blob
+      // Finalize muxer and get output blob
       const blob = this.muxer!.finalize();
 
       return { success: true, blob };
@@ -202,7 +190,6 @@ export class VideoExporter {
 
     this.encoder = new VideoEncoder({
       output: (chunk, meta) => {
-        // Store the first chunk's metadata (contains codec description)
         if (meta?.decoderConfig?.description && !videoDescription) {
           const desc = meta.decoderConfig.description;
           videoDescription = new Uint8Array(desc instanceof ArrayBuffer ? desc : (desc as any));
@@ -216,7 +203,6 @@ export class VideoExporter {
       },
     });
 
-    // Configure encoder for H.264 (AVC) with level 5.1 for high resolution support
     const codec = this.config.codec || 'avc1.640033';
     
     this.encoder.configure({
@@ -225,20 +211,18 @@ export class VideoExporter {
       height: this.config.height,
       bitrate: this.config.bitrate,
       framerate: this.config.frameRate,
-      latencyMode: 'realtime', // Changed from 'quality' for faster encoding
+      latencyMode: 'realtime',
       bitrateMode: 'variable',
-      hardwareAcceleration: 'prefer-hardware', // Use GPU encoding
+      hardwareAcceleration: 'prefer-hardware',
     } as VideoEncoderConfig);
   }
 
   cancel(): void {
     this.cancelled = true;
-    // Immediately cleanup to stop encoding
     this.cleanup();
   }
 
   private cleanup(): void {
-    // Close encoder safely
     if (this.encoder) {
       try {
         if (this.encoder.state === 'configured') {
@@ -250,7 +234,6 @@ export class VideoExporter {
       this.encoder = null;
     }
 
-    // Destroy decoder
     if (this.decoder) {
       try {
         this.decoder.destroy();
@@ -260,7 +243,6 @@ export class VideoExporter {
       this.decoder = null;
     }
 
-    // Destroy renderer
     if (this.renderer) {
       try {
         this.renderer.destroy();

@@ -210,15 +210,13 @@ export function SettingsPanel({ selected, onWallpaperChange, selectedZoomDepth, 
             {(wallpaperPaths.length > 0 ? wallpaperPaths : WALLPAPER_RELATIVE.map(p => `/${p}`)).map((path, idx) => {
               const isSelected = (() => {
                 if (!selected) return false;
-                // exact match
+                
                 if (selected === path) return true;
-                // file:// vs absolute path mismatch: compare by filename suffix
                 try {
                   const clean = (s: string) => s.replace(/^file:\/\//, '').replace(/^\//, '')
                   if (clean(selected).endsWith(clean(path))) return true;
                   if (clean(path).endsWith(clean(selected))) return true;
                 } catch {
-                  // ignore
                 }
                 return false;
               })();

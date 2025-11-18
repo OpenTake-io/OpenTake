@@ -22,10 +22,6 @@ interface Muxer {
   target?: any;
 }
 
-/**
- * Video muxer that combines encoded video and audio tracks into a final MP4 file.
- * Uses mp4-muxer library for efficient muxing without re-encoding.
- */
 export class VideoMuxer {
   private muxer: Muxer | null = null;
   private config: ExportConfig;
@@ -37,7 +33,6 @@ export class VideoMuxer {
   }
 
   async initialize(): Promise<void> {
-    // Dynamically import mp4-muxer
     const MP4MuxerModule = await import('mp4-muxer');
     const MP4MuxerClass = (MP4MuxerModule as any).Muxer || MP4MuxerModule.default;
     const ArrayBufferTarget = (MP4MuxerModule as any).ArrayBufferTarget;
@@ -47,7 +42,7 @@ export class VideoMuxer {
     const options: MP4MuxerOptions = {
       target,
       video: {
-        codec: 'avc', // mp4-muxer only accepts 'avc', not full codec string
+        codec: 'avc',
         width: this.config.width,
         height: this.config.height,
       },

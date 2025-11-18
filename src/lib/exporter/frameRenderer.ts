@@ -24,10 +24,8 @@ interface AnimationState {
   focusY: number;
 }
 
-/**
- * Renders video frames with all effects (background, zoom, crop, blur, shadow)
- * to an offscreen canvas for export.
- */
+// Renders video frames with all effects (background, zoom, crop, blur, shadow) to an offscreen canvas for export.
+
 export class FrameRenderer {
   private app: PIXI.Application | null = null;
   private cameraContainer: PIXI.Container | null = null;
@@ -65,7 +63,6 @@ export class FrameRenderer {
     }
 
     // Initialize PixiJS app with transparent background (background rendered separately)
-    // Use 2x resolution to match Retina displays and ensure blur quality matches preview
     this.app = new PIXI.Application();
     await this.app.init({
       canvas,
@@ -73,7 +70,7 @@ export class FrameRenderer {
       height: this.config.height,
       backgroundAlpha: 0,
       antialias: true,
-      resolution: 2, // Match typical Retina/high-DPI displays for blur quality
+      resolution: 2,
       autoDensity: true,
     });
 
@@ -150,20 +147,18 @@ export class FrameRenderer {
           img.src = imageUrl;
         });
         
-        // Draw the image using cover and center positioning (like CSS bg-cover bg-center)
+        // Draw the image using cover and center positioning
         const imgAspect = img.width / img.height;
         const canvasAspect = this.config.width / this.config.height;
         
         let drawWidth, drawHeight, drawX, drawY;
         
         if (imgAspect > canvasAspect) {
-          // Image is wider - fit to height and crop width
           drawHeight = this.config.height;
           drawWidth = drawHeight * imgAspect;
           drawX = (this.config.width - drawWidth) / 2;
           drawY = 0;
         } else {
-          // Image is taller - fit to width and crop height
           drawWidth = this.config.width;
           drawHeight = drawWidth / imgAspect;
           drawX = 0;
@@ -172,13 +167,10 @@ export class FrameRenderer {
         
         bgCtx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
       } else if (wallpaper.startsWith('#')) {
-        // Solid color
         bgCtx.fillStyle = wallpaper;
         bgCtx.fillRect(0, 0, this.config.width, this.config.height);
       } else if (wallpaper.startsWith('linear-gradient') || wallpaper.startsWith('radial-gradient')) {
-        // Gradient - parse and create CanvasGradient"}
         
-        // Simple gradient parser for common cases
         const gradientMatch = wallpaper.match(/(linear|radial)-gradient\((.+)\)/);
         if (gradientMatch) {
           const [, type, params] = gradientMatch;
@@ -187,15 +179,10 @@ export class FrameRenderer {
           let gradient: CanvasGradient;
           
           if (type === 'linear') {
-            // Default to top-to-bottom if no direction specified
             gradient = bgCtx.createLinearGradient(0, 0, 0, this.config.height);
-            
-            // Parse color stops
             parts.forEach((part, index) => {
-              // Skip direction keywords
               if (part.startsWith('to ') || part.includes('deg')) return;
               
-              // Extract color (everything before optional percentage/position)
               const colorMatch = part.match(/^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-z]+)/);
               if (colorMatch) {
                 const color = colorMatch[1];
@@ -204,7 +191,6 @@ export class FrameRenderer {
               }
             });
           } else {
-            // Radial gradient - center circle
             const cx = this.config.width / 2;
             const cy = this.config.height / 2;
             const radius = Math.max(this.config.width, this.config.height) / 2;
@@ -228,19 +214,17 @@ export class FrameRenderer {
           bgCtx.fillRect(0, 0, this.config.width, this.config.height);
         }
       } else {
-        // Unknown format, try to use as fillStyle (might be a named color like 'red', 'blue', etc.)
         bgCtx.fillStyle = wallpaper;
         bgCtx.fillRect(0, 0, this.config.width, this.config.height);
       }
     } catch (error) {
       console.error('[FrameRenderer] Error setting up background, using fallback:', error);
-      // Fallback to black background
       bgCtx.fillStyle = '#000000';
       bgCtx.fillRect(0, 0, this.config.width, this.config.height);
     }
 
     // Store the background canvas for compositing
-    this.backgroundSprite = bgCanvas as any; // Reuse the field to store canvas"}
+    this.backgroundSprite = bgCanvas as any;
   }
 
   async renderFrame(videoFrame: VideoFrame, timestamp: number): Promise<void> {
@@ -248,7 +232,7 @@ export class FrameRenderer {
       throw new Error('Renderer not initialized');
     }
 
-    this.currentVideoTime = timestamp / 1000000; // convert microseconds to seconds
+    this.currentVideoTime = timestamp / 1000000;
 
     // Create or update video sprite from VideoFrame
     if (!this.videoSprite) {
@@ -264,10 +248,8 @@ export class FrameRenderer {
     // Apply layout
     this.updateLayout();
 
-    // Apply zoom effects normalized to 60fps (1 tick per video frame)
-    // This ensures consistent animation speed regardless of display refresh rate
     const timeMs = this.currentVideoTime * 1000;
-    const TICKS_PER_FRAME = 1; // 60fps standard - 1 animation update per video frame
+    const TICKS_PER_FRAME = 1;
     
     let maxMotionIntensity = 0;
     for (let i = 0; i < TICKS_PER_FRAME; i++) {
@@ -285,7 +267,7 @@ export class FrameRenderer {
       focusX: this.animationState.focusX,
       focusY: this.animationState.focusY,
       motionIntensity: maxMotionIntensity,
-      isPlaying: true, // Enable motion blur
+      isPlaying: true,
     });
 
     // Render the PixiJS stage to its canvas (video only, transparent background)
@@ -355,10 +337,6 @@ export class FrameRenderer {
     return clampFocusToStageUtil(focus, depth as any, this.layoutCache);
   }
 
-  /**
-   * Updates animation state for one tick and returns motion intensity.
-   * This simulates one PixiJS ticker update.
-   */
   private updateAnimationState(timeMs: number): number {
     if (!this.cameraContainer || !this.layoutCache) return 0;
 
@@ -368,12 +346,10 @@ export class FrameRenderer {
     let targetScaleFactor = 1;
     let targetFocus = { ...defaultFocus };
 
-    // Match the preview logic exactly
     if (region && strength > 0) {
       const zoomScale = ZOOM_DEPTH_SCALES[region.depth];
       const regionFocus = this.clampFocusToStage(region.focus, region.depth);
       
-      // Interpolate scale and focus based on region strength (exponential easing)
       targetScaleFactor = 1 + (zoomScale - 1) * strength;
       targetFocus = {
         cx: defaultFocus.cx + (regionFocus.cx - defaultFocus.cx) * strength,
@@ -395,7 +371,6 @@ export class FrameRenderer {
     let nextFocusX = prevFocusX;
     let nextFocusY = prevFocusY;
 
-    // Apply smooth exponential easing
     if (Math.abs(scaleDelta) > MIN_DELTA) {
       nextScale = prevScale + scaleDelta * SMOOTHING_FACTOR;
     } else {
@@ -418,7 +393,6 @@ export class FrameRenderer {
     state.focusX = nextFocusX;
     state.focusY = nextFocusY;
 
-    // Calculate and return motion intensity for blur
     return Math.max(
       Math.abs(nextScale - prevScale),
       Math.abs(nextFocusX - prevFocusX),
@@ -442,7 +416,6 @@ export class FrameRenderer {
       const bgCanvas = this.backgroundSprite as any as HTMLCanvasElement;
       
       if (this.config.showBlur) {
-        // Apply CSS blur(2px) to background
         ctx.save();
         ctx.filter = 'blur(2px)';
         ctx.drawImage(bgCanvas, 0, 0, w, h);
@@ -456,22 +429,14 @@ export class FrameRenderer {
 
     // Step 2: Draw video layer with shadows on top of background
     if (this.config.showShadow && this.shadowCanvas && this.shadowCtx) {
-      // CSS drop-shadow creates layered shadows. We need to composite them properly.
-      // The key is to draw all shadows UNDER the video content, not draw video multiple times
       const shadowCtx = this.shadowCtx;
       shadowCtx.clearRect(0, 0, w, h);
-      
-      // Apply all three shadow layers in a single draw call using composite filter
-      // This matches CSS drop-shadow behavior exactly - note: no 'px' on X offset in CSS syntax
       shadowCtx.save();
       shadowCtx.filter = 'drop-shadow(0 12px 48px rgba(0,0,0,0.7)) drop-shadow(0 4px 16px rgba(0,0,0,0.5)) drop-shadow(0 2px 8px rgba(0,0,0,0.3))';
       shadowCtx.drawImage(videoCanvas, 0, 0, w, h);
       shadowCtx.restore();
-
-      // Draw shadow canvas (which has shadows + video) on top of background
       ctx.drawImage(this.shadowCanvas, 0, 0, w, h);
     } else {
-      // No shadows, just draw video directly on top of background
       ctx.drawImage(videoCanvas, 0, 0, w, h);
     }
   }
@@ -480,7 +445,6 @@ export class FrameRenderer {
     if (!this.compositeCanvas) {
       throw new Error('Renderer not initialized');
     }
-    // Return the composite canvas which includes shadows
     return this.compositeCanvas;
   }
 
@@ -496,7 +460,6 @@ export class FrameRenderer {
       this.videoSprite.destroy();
       this.videoSprite = null;
     }
-    // backgroundSprite is now a canvas, just null it
     this.backgroundSprite = null;
     if (this.app) {
       this.app.destroy(true, { children: true, texture: true, textureSource: true });

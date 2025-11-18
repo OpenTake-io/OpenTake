@@ -149,8 +149,6 @@ export default function TimelineWrapper({
     [clampRange, onRangeChange, totalMs],
   );
 
-  // To maximize granularity, disable grid snapping by not passing rangeGridSizeDefinition
-  // and allow pixel-level movement for items.
   return (
     <TimelineContext
       range={range}
@@ -158,7 +156,6 @@ export default function TimelineWrapper({
       onResizeEnd={onResizeEnd}
       onDragEnd={onDragEnd}
       autoScroll={{ enabled: false }}
-      // Remove rangeGridSizeDefinition to avoid snap effect
     >
       {children}
     </TimelineContext>

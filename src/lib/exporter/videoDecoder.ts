@@ -6,17 +6,12 @@ export interface DecodedVideoInfo {
   codec: string;
 }
 
-/**
- * Simple video decoder for WebM files using native VideoDecoder API.
- * For export, we'll use a different approach - directly rendering from the HTML video element.
- */
 export class VideoFileDecoder {
   private decoder: VideoDecoder | null = null;
   private info: DecodedVideoInfo | null = null;
   private videoElement: HTMLVideoElement | null = null;
 
   async loadVideo(videoUrl: string): Promise<DecodedVideoInfo> {
-    // Create a video element to get video info
     this.videoElement = document.createElement('video');
     this.videoElement.src = videoUrl;
     this.videoElement.preload = 'metadata';
@@ -29,8 +24,8 @@ export class VideoFileDecoder {
           width: video.videoWidth,
           height: video.videoHeight,
           duration: video.duration,
-          frameRate: 60, // 60fps for smooth playback
-          codec: 'avc1.640033', // H.264 High Profile Level 5.1
+          frameRate: 60,
+          codec: 'avc1.640033',
         };
 
         resolve(this.info);

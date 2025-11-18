@@ -165,7 +165,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     }
   }, [updateOverlayForRegion, cropRegion]);
 
-  // Keep layoutVideoContent ref updated
   useEffect(() => {
     layoutVideoContentRef.current = layoutVideoContent;
   }, [layoutVideoContent]);
@@ -262,7 +261,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     try {
       event.currentTarget.releasePointerCapture(event.pointerId);
     } catch {
-      // ignore release errors when pointer capture is already cleared
+      
     }
   };
 
@@ -286,7 +285,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
-  // Reset animation state and transforms when crop changes
   useEffect(() => {
     if (!pixiReady || !videoReady) return;
 
@@ -306,7 +304,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       video.pause();
     }
 
-    // Reset animation state so the ticker starts from identity once it resumes
     animationStateRef.current = {
       scale: 1,
       focusX: DEFAULT_FOCUS.cx,
@@ -317,7 +314,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       blurFilterRef.current.blur = 0;
     }
 
-    // Defer layout to the next frame so DOM measurements include the new crop UI state
     requestAnimationFrame(() => {
       const container = cameraContainerRef.current;
       const videoStage = videoContainerRef.current;
@@ -327,7 +323,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
         return;
       }
 
-      // Reset all transform hierarchies to identity
       container.scale.set(1);
       container.position.set(0, 0);
       videoStage.scale.set(1);
@@ -335,10 +330,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       sprite.scale.set(1);
       sprite.position.set(0, 0);
 
-      // Now layoutVideoContent will apply the correct transforms for the new crop
       layoutVideoContent();
 
-      // Apply an explicit identity transform to ensure no residual camera offset
       applyZoomTransform({
         cameraContainer: container,
         blurFilter: blurFilterRef.current,
@@ -351,12 +344,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
         isPlaying: false,
       });
 
-      // Restart ticker on a second frame to avoid running mid-layout
       requestAnimationFrame(() => {
         const finalApp = appRef.current;
         if (wasPlaying && video) {
           video.play().catch(() => {
-            /* ignore */
           });
         }
         if (tickerWasStarted && finalApp?.ticker) {
@@ -402,7 +393,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     overlayEl.style.pointerEvents = isPlaying ? 'none' : 'auto';
   }, [selectedZoom, isPlaying]);
 
-  // Initialize PixiJS application
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -410,7 +400,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     let mounted = true;
     let app: PIXI.Application | null = null;
 
-    // Initialize the app
     (async () => {
       app = new PIXI.Application();
       
@@ -423,7 +412,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
         autoDensity: true,
       });
 
-      // Lock ticker to 60fps for consistent animation speed across all displays
       app.ticker.maxFPS = 60;
 
       if (!mounted) {
@@ -690,7 +678,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
           return
         }
 
-        // If it's a solid color or CSS gradient, use it directly
         if (wallpaper.startsWith('#') || wallpaper.startsWith('linear-gradient') || wallpaper.startsWith('radial-gradient')) {
           if (mounted) setResolvedWallpaper(wallpaper)
           return
@@ -708,8 +695,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
           if (mounted) setResolvedWallpaper(wallpaper)
           return
         }
-
-        // Otherwise assume it's a relative path like 'wallpapers/wallpaper1.jpg'
         const p = await getAssetPath(wallpaper.replace(/^\//, ''))
         if (mounted) setResolvedWallpaper(p)
       } catch (err) {
