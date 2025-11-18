@@ -147,7 +147,6 @@ app.whenReady().then(async () => {
     () => mainWindow,
     () => sourceSelectorWindow,
     (recording: boolean, sourceName: string) => {
-      // removed unused assignment to _isRecording
       selectedSourceName = sourceName
       if (recording) {
         if (!tray) createTray();

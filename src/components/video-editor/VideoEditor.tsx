@@ -181,13 +181,11 @@ export default function VideoEditor() {
     setExportError(null);
 
     try {
-      // Pause video during export
       const wasPlaying = isPlaying;
       if (wasPlaying) {
         videoPlaybackRef.current?.pause();
       }
 
-      // Always export at 1920x1080 (16:9)
       const width = 1920;
       const height = 1080;
 
@@ -212,7 +210,6 @@ export default function VideoEditor() {
       const result = await exporter.export();
 
       if (result.success && result.blob) {
-        // Save the blob using Electron
         const arrayBuffer = await result.blob.arrayBuffer();
         const timestamp = Date.now();
         const fileName = `export-${timestamp}.mp4`;
@@ -230,7 +227,6 @@ export default function VideoEditor() {
         toast.error(result.error || 'Export failed');
       }
 
-      // Resume playback if it was playing
       if (wasPlaying) {
         videoPlaybackRef.current?.play();
       }

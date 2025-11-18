@@ -18,8 +18,7 @@ export function clampFocusToStage(
   
   const windowWidth = stageSize.width / zoomScale;
   const windowHeight = stageSize.height / zoomScale;
-
-  // Calculate margins - focus must stay far enough from edges so zoom window stays within stage bounds
+  
   const marginX = windowWidth / (2 * stageSize.width);
   const marginY = windowHeight / (2 * stageSize.height);
 

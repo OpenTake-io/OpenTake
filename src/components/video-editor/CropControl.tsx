@@ -23,7 +23,6 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [initialCrop, setInitialCrop] = useState<CropRegion>(cropRegion);
 
-  // Draw video preview at high quality
   useEffect(() => {
     if (!videoElement || !canvasRef.current) return;
 
@@ -31,7 +30,6 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    // Set canvas to actual video dimensions for high quality
     canvas.width = videoElement.videoWidth || 1920;
     canvas.height = videoElement.videoHeight || 1080;
 
@@ -62,7 +60,6 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
     });
     setInitialCrop(cropRegion);
     
-    // Capture pointer for smooth dragging
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
@@ -79,11 +76,8 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
 
     switch (isDragging) {
       case 'top': {
-        // Calculate new y position
         const newY = Math.max(0, initialCrop.y + deltaY);
-        // Calculate the bottom edge (which should stay fixed)
         const bottom = initialCrop.y + initialCrop.height;
-        // Ensure minimum height of 0.1
         newCrop.y = Math.min(newY, bottom - 0.1);
         newCrop.height = bottom - newCrop.y;
         break;
@@ -92,11 +86,8 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
         newCrop.height = Math.max(0.1, Math.min(initialCrop.height + deltaY, 1 - initialCrop.y));
         break;
       case 'left': {
-        // Calculate new x position
         const newX = Math.max(0, initialCrop.x + deltaX);
-        // Calculate the right edge (which should stay fixed)
         const right = initialCrop.x + initialCrop.width;
-        // Ensure minimum width of 0.1
         newCrop.x = Math.min(newX, right - 0.1);
         newCrop.width = right - newCrop.x;
         break;
@@ -114,7 +105,6 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
       try {
         e.currentTarget.releasePointerCapture(e.pointerId);
       } catch {
-        // ignore
       }
     }
     setIsDragging(null);
@@ -140,7 +130,6 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
           style={{ imageRendering: 'auto' }}
         />
         
-        {/* Dark overlay outside crop */}
         <div className="absolute inset-0 pointer-events-none" style={{ transition: 'none' }}>
           <svg width="100%" height="100%" className="absolute inset-0" style={{ transition: 'none' }}>
             <defs>
@@ -167,8 +156,6 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
           </svg>
         </div>
 
-        {/* Crop region - 4 straight lines */}
-        {/* Top line */}
         <div
           className={cn(
             "absolute h-[3px] cursor-ns-resize z-20 pointer-events-auto bg-green-500"
@@ -184,7 +171,6 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
           onPointerDown={(e) => handlePointerDown(e, 'top')}
         />
 
-        {/* Bottom line */}
         <div
           className={cn(
             "absolute h-[3px] cursor-ns-resize z-20 pointer-events-auto bg-green-500"
@@ -200,7 +186,6 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
           onPointerDown={(e) => handlePointerDown(e, 'bottom')}
         />
 
-        {/* Left line */}
         <div
           className={cn(
             "absolute w-[3px] cursor-ew-resize z-20 pointer-events-auto bg-green-500"
@@ -216,7 +201,6 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
           onPointerDown={(e) => handlePointerDown(e, 'left')}
         />
 
-        {/* Right line */}
         <div
           className={cn(
             "absolute w-[3px] cursor-ew-resize z-20 pointer-events-auto bg-green-500"

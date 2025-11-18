@@ -15,11 +15,11 @@ If you don't want to pay $29/month for Screen Studio but want a much simpler ver
 
 Okay, let's be real: Screen Studio is an awesome product and this is definitely not a 1:1 clone. OpenScreen is a much simpler take, just the basics for folks who want control and don't want to pay. If you need all the fancy features, your best bet is to support Screen Studio (they really do a great job, haha). But if you just want something free (no gotchas) and open, this project does the job!
 
-OpenScreen is 100% free for personal and commercial use. Use it, remix it, build on it. (Just be cool and give a shoutout if you feel like it!)
+OpenScreen is 100% free for personal and commercial use. Use it, modify it, distribute it. (Just be cool 😁 and give a shoutout if you feel like it !)
 
 
 
-**⚠️ DISCLAIMER: This is very much in beta and might be buggy here and there (but hope you have a good experience!).**
+**⚠️ DISCLAIMER: This is very much in <span style="display: inline-block; background: transparent; color: #111; font-size: 0.85em; font-weight: 600; border-radius: 8px; border: 1.5px solid #111; padding: 2px 10px; margin-right: 2px; vertical-align: middle;">beta</span> and might be buggy here and there (but hope you have a good experience!).**
 
 </p>
 <p align="center">
@@ -53,6 +53,7 @@ Download the latest installer for your platform from the [GitHub Releases](https
 - TypeScript
 - Vite
 - PixiJS
+- dnd-timeline
 
 ---
 

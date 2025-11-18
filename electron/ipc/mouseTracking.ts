@@ -1,3 +1,6 @@
+// uiohook-napi [WIP: scoping out mouse tracking with cross platform support for potential auto zoom/ post processing cursor effects]
+// not currently being used.
+
 import { uIOhook } from 'uiohook-napi'
 
 let isMouseTrackingActive = false

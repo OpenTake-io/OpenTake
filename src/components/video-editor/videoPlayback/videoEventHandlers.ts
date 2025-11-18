@@ -37,7 +37,6 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
   }
 
   const handlePlay = () => {
-    // Prevent autoplay during seek operations
     if (isSeekingRef.current) {
       video.pause();
       return;
@@ -69,7 +68,6 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
   const handleSeeked = () => {
     isSeekingRef.current = false;
 
-    // Keep video paused after seek if it wasn't playing
     if (!isPlayingRef.current && !video.paused) {
       video.pause();
     }
@@ -79,7 +77,6 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
   const handleSeeking = () => {
     isSeekingRef.current = true;
 
-    // Prevent autoplay during seek if video was paused
     if (!isPlayingRef.current && !video.paused) {
       video.pause();
     }

@@ -151,7 +151,7 @@ function PlaybackCursor({
     <div
       className="absolute top-0 bottom-0 pointer-events-none z-50"
       style={{
-        [sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth - 8}px`, // reduce margin
+        [sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth - 8}px`,
       }}
     >
       <div
@@ -185,7 +185,6 @@ function PlaybackCursor({
           </div>
          
         </div>
-        {/* Subtle glow at top */}
         <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-red-500/30 rounded-full blur-sm" />
       </div>
     </div>
@@ -403,7 +402,6 @@ export default function TimelineEditor({
     // Snap if gap is 2ms or less
     return zoomRegions.some((region) => {
       if (region.id === excludeId) return false;
-      // If the new span is within 2ms of another region, treat as overlap (snap)
       const gapBefore = newSpan.start - region.endMs;
       const gapAfter = region.startMs - newSpan.end;
       if (gapBefore > 0 && gapBefore <= 2) return true;

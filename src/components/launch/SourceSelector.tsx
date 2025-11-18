@@ -104,7 +104,6 @@ export function SourceSelector() {
                     </div>
                   </Card>
                 ))}
-                {/* Removed scroll hint gradient for clean look */}
               </div>
             </TabsContent>
             <TabsContent value="windows" className="h-full">
@@ -144,7 +143,6 @@ export function SourceSelector() {
                     </div>
                   </Card>
                 ))}
-                {/* Removed scroll hint gradient for clean look */}
               </div>
             </TabsContent>
           </div>
