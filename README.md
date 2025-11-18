@@ -8,18 +8,17 @@
 
 # <p align="center">OpenScreen</p>
 
-<p align="center"><strong>OpenScreen is your free, open-source alternative to Screen Studio (sort of).</strong></p>
+<p align="center"><strong>Beautiful screen recordings with zoom animation.<br>Simple, open-source alternative to Screen.studio.</strong></p>
 
 
 If you don't want to pay $29/month for Screen Studio but want a much simpler version that does what most people seem to need, making beautiful product demos and walkthroughs, here's a free-to-use app for you. OpenScreen does not offer all Screen Studio features, but covers the basics well!
 
-Okay, let's be real: Screen Studio is an awesome product and this is definitely not a 1:1 clone. OpenScreen is a much simpler take, just the basics for folks who want control and don't want to pay. If you need all the fancy features, your best bet is to support Screen Studio (they really do a great job, haha). But if you just want something free (no gotchas) and open, this project does the job!
 
 OpenScreen is 100% free for personal and commercial use. Use it, modify it, distribute it. (Just be cool 😁 and give a shoutout if you feel like it !)
 
 
 
-**⚠️ DISCLAIMER: This is very much in <span style="display: inline-block; background: transparent; color: #111; font-size: 0.85em; font-weight: 600; border-radius: 8px; border: 1.5px solid #111; padding: 2px 10px; margin-right: 2px; vertical-align: middle;">beta</span> and might be buggy here and there (but hope you have a good experience!).**
+**⚠️ DISCLAIMER: This is very much in <span style="display: inline-block; background: transparent; color: #111; font-size: 0.65em; font-weight: 400; border-radius: 8px; border: 1px solid #111; padding: 0px 5px; margin-right: 2px; vertical-align: middle;">beta</span> and might be buggy here and there (but hope you have a good experience!).**
 
 </p>
 <p align="center">
@@ -47,7 +46,7 @@ Planning to add a contribution guide soon so people can contribute to this repo.
 ## Getting Started
 Download the latest installer for your platform from the [GitHub Releases](https://github.com/siddharthvaddem/openscreen/releases) page.
 
-## Stack
+## Built with
 - Electron
 - React
 - TypeScript
