@@ -26,6 +26,7 @@
 		"build:mac": "tsc && vite build && electron-builder --mac",
 		"build:win": "tsc && vite build && electron-builder --win",
 		"build:linux": "tsc && vite build && electron-builder --linux",
+		"release:dispatch": "sh ./scripts/trigger_release.sh",
 		"test": "vitest --run",
 		"test:watch": "vitest"
 	},
