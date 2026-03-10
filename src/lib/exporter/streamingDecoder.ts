@@ -1,5 +1,5 @@
 import { WebDemuxer } from 'web-demuxer';
-import type { TrimRegion } from '@/components/video-editor/types';
+import type { TrimRegion, SpeedRegion } from '@/components/video-editor/types';
 
 export interface DecodedVideoInfo {
   width: number;
@@ -7,6 +7,8 @@ export interface DecodedVideoInfo {
   duration: number; // seconds
   frameRate: number;
   codec: string;
+  hasAudio: boolean;
+  audioCodec?: string;
 }
 
 /** Caller must close the VideoFrame after use. */
@@ -29,19 +31,88 @@ export class StreamingVideoDecoder {
   private cancelled = false;
   private metadata: DecodedVideoInfo | null = null;
 
-  async loadMetadata(videoUrl: string): Promise<DecodedVideoInfo> {
-    const response = await fetch(videoUrl);
+  private toLocalFilePath(resourceUrl: string): string | null {
+    if (!resourceUrl.startsWith('file:')) {
+      return null;
+    }
+
+    try {
+      const url = new URL(resourceUrl);
+      let filePath = decodeURIComponent(url.pathname);
+      if (/^\/[A-Za-z]:/.test(filePath)) {
+        filePath = filePath.slice(1);
+      }
+      return filePath;
+    } catch {
+      return resourceUrl.replace(/^file:\/\//, '');
+    }
+  }
+
+  private inferMimeType(fileName: string): string {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    switch (extension) {
+      case 'mov':
+        return 'video/quicktime';
+      case 'webm':
+        return 'video/webm';
+      case 'mkv':
+        return 'video/x-matroska';
+      case 'avi':
+        return 'video/x-msvideo';
+      case 'mp4':
+      default:
+        return 'video/mp4';
+    }
+  }
+
+  private async loadVideoFile(resourceUrl: string): Promise<File> {
+    const filename = resourceUrl.split('/').pop() || 'video';
+    const localFilePath = this.toLocalFilePath(resourceUrl);
+
+    if (localFilePath) {
+      const result = await window.electronAPI.readLocalFile(localFilePath);
+      if (!result.success || !result.data) {
+        throw new Error(result.error || 'Failed to read local video file');
+      }
+
+      const bytes = result.data instanceof Uint8Array ? result.data : new Uint8Array(result.data);
+      const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+      return new File([arrayBuffer], filename, { type: this.inferMimeType(filename) });
+    }
+
+    const response = await fetch(resourceUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to load video resource: ${response.status} ${response.statusText}`);
+    }
+
     const blob = await response.blob();
-    const filename = videoUrl.split('/').pop() || 'video';
-    const file = new File([blob], filename, { type: blob.type });
+    return new File([blob], filename, { type: blob.type || this.inferMimeType(filename) });
+  }
+
+  private resolveVideoResourceUrl(videoUrl: string): string {
+    if (/^(blob:|data:|https?:|file:)/i.test(videoUrl)) {
+      return videoUrl;
+    }
+
+    if (videoUrl.startsWith('/')) {
+      return `file://${encodeURI(videoUrl)}`;
+    }
+
+    return videoUrl;
+  }
+
+  async loadMetadata(videoUrl: string): Promise<DecodedVideoInfo> {
+    const resourceUrl = this.resolveVideoResourceUrl(videoUrl);
 
     // Relative URL so it resolves correctly in both dev (http) and packaged (file://) builds
     const wasmUrl = new URL('./wasm/web-demuxer.wasm', window.location.href).href;
     this.demuxer = new WebDemuxer({ wasmFilePath: wasmUrl });
+    const file = await this.loadVideoFile(resourceUrl);
     await this.demuxer.load(file);
 
     const mediaInfo = await this.demuxer.getMediaInfo();
     const videoStream = mediaInfo.streams.find(s => s.codec_type_string === 'video');
+    const audioStream = mediaInfo.streams.find(s => s.codec_type_string === 'audio');
 
     let frameRate = 60;
     if (videoStream?.avg_frame_rate) {
@@ -59,6 +130,8 @@ export class StreamingVideoDecoder {
       duration: mediaInfo.duration,
       frameRate,
       codec: videoStream?.codec_string || 'unknown',
+      hasAudio: !!audioStream,
+      audioCodec: audioStream?.codec_string,
     };
 
     return this.metadata;
@@ -67,6 +140,7 @@ export class StreamingVideoDecoder {
   async decodeAll(
     targetFrameRate: number,
     trimRegions: TrimRegion[] | undefined,
+    speedRegions: SpeedRegion[] | undefined,
     onFrame: OnFrameCallback
   ): Promise<void> {
     if (!this.demuxer || !this.metadata) {
@@ -74,7 +148,10 @@ export class StreamingVideoDecoder {
     }
 
     const decoderConfig = await this.demuxer.getDecoderConfig('video');
-    const segments = this.computeSegments(this.metadata.duration, trimRegions);
+    const segments = this.splitBySpeed(
+      this.computeSegments(this.metadata.duration, trimRegions),
+      speedRegions
+    );
     const frameDurationUs = 1_000_000 / targetFrameRate;
 
     // Async frame queue — decoder pushes, consumer pulls
@@ -215,10 +292,12 @@ export class StreamingVideoDecoder {
   /**
    * Resample buffered frames to fill the target frame count for this segment.
    * Handles VFR sources by duplicating/decimating as needed.
+   * Uses interpolated source timestamps so animations advance smoothly
+   * even when multiple export frames map to the same source frame.
    */
   private async deliverSegment(
     frames: VideoFrame[],
-    segment: { startSec: number; endSec: number },
+    segment: { startSec: number; endSec: number; speed: number },
     targetFrameRate: number,
     frameDurationUs: number,
     startExportFrameIndex: number,
@@ -226,7 +305,10 @@ export class StreamingVideoDecoder {
   ): Promise<number> {
     if (frames.length === 0) return startExportFrameIndex;
 
-    const segmentFrameCount = Math.ceil((segment.endSec - segment.startSec) * targetFrameRate);
+    const segmentDuration = segment.endSec - segment.startSec;
+    const segmentFrameCount = Math.ceil(
+      segmentDuration / segment.speed * targetFrameRate
+    );
     let exportFrameIndex = startExportFrameIndex;
 
     for (let i = 0; i < segmentFrameCount && !this.cancelled; i++) {
@@ -235,8 +317,12 @@ export class StreamingVideoDecoder {
         frames.length - 1
       );
       const sourceFrame = frames[sourceIdx];
+      // Compute a uniformly-spaced source timestamp so zoom/cursor animations
+      // progress smoothly instead of stalling on duplicate VFR timestamps
+      const t = segmentFrameCount > 1 ? i / segmentFrameCount : 0;
+      const interpolatedSourceTimeMs = (segment.startSec + t * segmentDuration) * 1000;
       const clone = new VideoFrame(sourceFrame, { timestamp: sourceFrame.timestamp });
-      await onFrame(clone, exportFrameIndex * frameDurationUs, sourceFrame.timestamp / 1000);
+      await onFrame(clone, exportFrameIndex * frameDurationUs, interpolatedSourceTimeMs);
       exportFrameIndex++;
     }
 
@@ -271,16 +357,47 @@ export class StreamingVideoDecoder {
     return segments;
   }
 
-  getEffectiveDuration(trimRegions?: TrimRegion[]): number {
+  getEffectiveDuration(trimRegions?: TrimRegion[], speedRegions?: SpeedRegion[]): number {
     if (!this.metadata) throw new Error('Must call loadMetadata() first');
-    const trimmed = (trimRegions || []).reduce(
-      (sum, r) => sum + (r.endMs - r.startMs) / 1000, 0
-    );
-    return this.metadata.duration - trimmed;
+    const trimSegments = this.computeSegments(this.metadata.duration, trimRegions);
+    const speedSegments = this.splitBySpeed(trimSegments, speedRegions);
+    return speedSegments.reduce((sum, seg) => sum + (seg.endSec - seg.startSec) / seg.speed, 0);
+  }
+
+  private splitBySpeed(
+    segments: Array<{ startSec: number; endSec: number }>,
+    speedRegions?: SpeedRegion[]
+  ): Array<{ startSec: number; endSec: number; speed: number }> {
+    if (!speedRegions || speedRegions.length === 0)
+      return segments.map(s => ({ ...s, speed: 1 }));
+
+    const result: Array<{ startSec: number; endSec: number; speed: number }> = [];
+    for (const segment of segments) {
+      const overlapping = speedRegions
+        .filter(sr => (sr.startMs / 1000) < segment.endSec && (sr.endMs / 1000) > segment.startSec)
+        .sort((a, b) => a.startMs - b.startMs);
+
+      if (overlapping.length === 0) { result.push({ ...segment, speed: 1 }); continue; }
+
+      let cursor = segment.startSec;
+      for (const sr of overlapping) {
+        const srStart = Math.max(sr.startMs / 1000, segment.startSec);
+        const srEnd = Math.min(sr.endMs / 1000, segment.endSec);
+        if (cursor < srStart) result.push({ startSec: cursor, endSec: srStart, speed: 1 });
+        result.push({ startSec: srStart, endSec: srEnd, speed: sr.speed });
+        cursor = srEnd;
+      }
+      if (cursor < segment.endSec) result.push({ startSec: cursor, endSec: segment.endSec, speed: 1 });
+    }
+    return result.filter(s => s.endSec - s.startSec > 0.0001);
   }
 
   cancel(): void {
     this.cancelled = true;
+  }
+
+  getDemuxer() {
+    return this.demuxer;
   }
 
   destroy(): void {

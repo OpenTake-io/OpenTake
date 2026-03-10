@@ -17,9 +17,9 @@
 }
 
 .selected {
-  border: 2px solid #34B27B;
+  border: 2px solid #2563EB;
   background: linear-gradient(120deg, rgba(91,33,182,0.18) 0%, rgba(38,38,48,0.98) 100%);
-  box-shadow: 0 0 0 2px #34B27B33;
+  box-shadow: 0 0 0 2px #2563EB33;
 }
 
 .icon {
@@ -43,7 +43,7 @@
 /* scrollbar */
 .sourceGridScroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(52, 178, 123, 0.5) rgba(40, 40, 50, 0.6);
+  scrollbar-color: rgba(37, 99, 235, 0.5) rgba(40, 40, 50, 0.6);
 }
 
 .sourceGridScroll::-webkit-scrollbar {
@@ -62,9 +62,9 @@
 }
 
 .sourceGridScroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(52, 178, 123, 0.6);
+  background: rgba(37, 99, 235, 0.6);
 }
 
 .sourceGridScroll::-webkit-scrollbar-thumb:active {
-  background: rgba(52, 178, 123, 0.8);
+  background: rgba(37, 99, 235, 0.8);
 }

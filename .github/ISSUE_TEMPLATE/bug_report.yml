@@ -1,5 +1,5 @@
 name: Bug Report
-description: Create a report to help us improve
+description: Create a report to help us improve. If you are not sure what you are experiencing is a bug, report it anyway. We would rather you submit an unprofessional bug report than not report it at all.
 title: "[Bug]: "
 labels: ["bug", "triage"]
 body:
@@ -60,8 +60,6 @@ body:
         - Windows
         - macOS
         - Linux
-        - iOS
-        - Android
         - Other
     validations:
       required: false
@@ -81,61 +79,6 @@ body:
       label: Other OS
       description: If you selected "Other" for OS, please specify your operating system
       placeholder: e.g., FreeBSD, Solaris
-    validations:
-      required: false
-
-  - type: dropdown
-    id: browser
-    attributes:
-      label: Browser
-      description: What browser are you using?
-      options:
-        - Chrome
-        - Firefox
-        - Safari
-        - Edge
-        - Other
-    validations:
-      required: false
-
-  - type: input
-    id: browser-version
-    attributes:
-      label: Browser Version
-      description: Please specify your browser version
-      placeholder: e.g., 120.0, 121.0.1
-    validations:
-      required: false
-
-  - type: input
-    id: browser-other
-    attributes:
-      label: Other Browser
-      description: If you selected "Other" for Browser, please specify your browser
-      placeholder: e.g., Brave, Vivaldi, Opera
-    validations:
-      required: false
-
-  - type: dropdown
-    id: device-type
-    attributes:
-      label: Device Type
-      description: Device category
-      options:
-        - Desktop
-        - Laptop
-        - Tablet
-        - Mobile
-        - Other
-    validations:
-      required: false
-
-  - type: input
-    id: device-other
-    attributes:
-      label: Other Device
-      description: If you selected "Other" for Device Type, please specify your device
-      placeholder: e.g., Smart TV, IoT device
     validations:
       required: false
 

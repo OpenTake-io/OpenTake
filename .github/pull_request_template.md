@@ -25,13 +25,13 @@
 ![Screenshot Description](path/to/screenshot.png)
 ```
 
-**Video** (if applicable):
+**Video** (wherever possible):
 
 ```html
 <video src="path/to/video.mp4" controls width="600"></video>
 ```
 
-## Testing
+## Testing Guide
 <!-- Describe how reviewers can test the changes. Include steps, commands, or environment setup. -->
 
 ## Checklist

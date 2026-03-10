@@ -1,15 +1,17 @@
 import { cn } from "@/lib/utils";
 import { useEffect, useRef } from "react";
-import { getAssetPath } from "@/lib/assetPath";
+import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
+import { BUILT_IN_WALLPAPERS, WALLPAPER_PATHS, WALLPAPER_RELATIVE_PATHS } from "@/lib/wallpapers";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import Block from '@uiw/react-color-block';
-import { Trash2, Download, Crop, X, Bug, Upload, Star, Film, Image, Sparkles, Palette } from "lucide-react";
+import { Trash2, Download, Crop, X, Bug, Upload, Star, Film, Image, Sparkles, Palette, Save, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
-import type { ZoomDepth, CropRegion, AnnotationRegion, AnnotationType } from "./types";
+import type { ZoomDepth, CropRegion, AnnotationRegion, AnnotationType, PlaybackSpeed } from "./types";
+import { SPEED_OPTIONS } from "./types";
 import { CropControl } from "./CropControl";
 import { KeyboardShortcutsHelp } from "./KeyboardShortcutsHelp";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
@@ -17,9 +19,6 @@ import { type AspectRatio } from "@/utils/aspectRatioUtils";
 import type { ExportQuality, ExportFormat, GifFrameRate, GifSizePreset } from "@/lib/exporter";
 import { GIF_FRAME_RATES, GIF_SIZE_PRESETS } from "@/lib/exporter";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-
-const WALLPAPER_COUNT = 18;
-const WALLPAPER_RELATIVE = Array.from({ length: WALLPAPER_COUNT }, (_, i) => `wallpapers/wallpaper${i + 1}.jpg`);
 const GRADIENTS = [
   "linear-gradient( 111.6deg,  rgba(114,167,232,1) 9.4%, rgba(253,129,82,1) 43.9%, rgba(253,129,82,1) 54.8%, rgba(249,202,86,1) 86.3% )",
   "linear-gradient(120deg, #d4fc79 0%, #96e6a1 100%)",
@@ -58,10 +57,22 @@ interface SettingsPanelProps {
   onTrimDelete?: (id: string) => void;
   shadowIntensity?: number;
   onShadowChange?: (intensity: number) => void;
-  showBlur?: boolean;
-  onBlurChange?: (showBlur: boolean) => void;
-  motionBlurEnabled?: boolean;
-  onMotionBlurChange?: (enabled: boolean) => void;
+  backgroundBlur?: number;
+  onBackgroundBlurChange?: (amount: number) => void;
+  zoomMotionBlur?: number;
+  onZoomMotionBlurChange?: (amount: number) => void;
+  connectZooms?: boolean;
+  onConnectZoomsChange?: (enabled: boolean) => void;
+  showCursor?: boolean;
+  onShowCursorChange?: (enabled: boolean) => void;
+  cursorSize?: number;
+  onCursorSizeChange?: (size: number) => void;
+  cursorSmoothing?: number;
+  onCursorSmoothingChange?: (smoothing: number) => void;
+  cursorMotionBlur?: number;
+  onCursorMotionBlurChange?: (amount: number) => void;
+  cursorClickBounce?: number;
+  onCursorClickBounceChange?: (amount: number) => void;
   borderRadius?: number;
   onBorderRadiusChange?: (radius: number) => void;
   padding?: number;
@@ -82,6 +93,8 @@ interface SettingsPanelProps {
   gifSizePreset?: GifSizePreset;
   onGifSizePresetChange?: (preset: GifSizePreset) => void;
   gifOutputDimensions?: { width: number; height: number };
+  onSaveProject?: () => void;
+  onLoadProject?: () => void;
   onExport?: () => void;
   selectedAnnotationId?: string | null;
   annotationRegions?: AnnotationRegion[];
@@ -90,6 +103,10 @@ interface SettingsPanelProps {
   onAnnotationStyleChange?: (id: string, style: Partial<AnnotationRegion['style']>) => void;
   onAnnotationFigureDataChange?: (id: string, figureData: any) => void;
   onAnnotationDelete?: (id: string) => void;
+  selectedSpeedId?: string | null;
+  selectedSpeedValue?: PlaybackSpeed | null;
+  onSpeedChange?: (speed: PlaybackSpeed) => void;
+  onSpeedDelete?: (id: string) => void;
 }
 
 export default SettingsPanel;
@@ -114,11 +131,23 @@ export function SettingsPanel({
   onTrimDelete,
   shadowIntensity = 0, 
   onShadowChange, 
-  showBlur, 
-  onBlurChange, 
-  motionBlurEnabled = false,
-  onMotionBlurChange, 
-  borderRadius = 0, 
+  backgroundBlur = 0,
+  onBackgroundBlurChange,
+  zoomMotionBlur = 0,
+  onZoomMotionBlurChange,
+  connectZooms = true,
+  onConnectZoomsChange,
+  showCursor = false,
+  onShowCursorChange,
+  cursorSize = 5,
+  onCursorSizeChange,
+  cursorSmoothing = 2,
+  onCursorSmoothingChange,
+  cursorMotionBlur = 0.35,
+  onCursorMotionBlurChange,
+  cursorClickBounce = 1,
+  onCursorClickBounceChange,
+  borderRadius = 12.5, 
   onBorderRadiusChange, 
   padding = 50, 
   onPaddingChange, 
@@ -137,6 +166,8 @@ export function SettingsPanel({
   gifSizePreset = 'medium',
   onGifSizePresetChange,
   gifOutputDimensions = { width: 1280, height: 720 },
+  onSaveProject,
+  onLoadProject,
   onExport,
   selectedAnnotationId,
   annotationRegions = [],
@@ -145,8 +176,12 @@ export function SettingsPanel({
   onAnnotationStyleChange,
   onAnnotationFigureDataChange,
   onAnnotationDelete,
+  selectedSpeedId,
+  selectedSpeedValue,
+  onSpeedChange,
+  onSpeedDelete,
 }: SettingsPanelProps) {
-  const [wallpaperPaths, setWallpaperPaths] = useState<string[]>([]);
+  const [wallpaperPreviewPaths, setWallpaperPreviewPaths] = useState<string[]>([]);
   const [customImages, setCustomImages] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -154,10 +189,12 @@ export function SettingsPanel({
     let mounted = true
     ;(async () => {
       try {
-        const resolved = await Promise.all(WALLPAPER_RELATIVE.map(p => getAssetPath(p)))
-        if (mounted) setWallpaperPaths(resolved)
+        const resolved = await Promise.all(
+          WALLPAPER_RELATIVE_PATHS.map(async (path) => getRenderableAssetUrl(await getAssetPath(path)))
+        )
+        if (mounted) setWallpaperPreviewPaths(resolved)
       } catch (err) {
-        if (mounted) setWallpaperPaths(WALLPAPER_RELATIVE.map(p => `/${p}`))
+        if (mounted) setWallpaperPreviewPaths(WALLPAPER_PATHS)
       }
     })()
     return () => { mounted = false }
@@ -165,7 +202,7 @@ export function SettingsPanel({
   const colorPalette = [
     '#FF0000', '#FFD700', '#00FF00', '#FFFFFF', '#0000FF', '#FF6B00',
     '#9B59B6', '#E91E63', '#00BCD4', '#FF5722', '#8BC34A', '#FFC107',
-    '#34B27B', '#000000', '#607D8B', '#795548',
+    '#2563EB', '#000000', '#607D8B', '#795548',
   ];
   
   const [selectedColor, setSelectedColor] = useState('#ADADAD');
@@ -230,7 +267,7 @@ export function SettingsPanel({
     setCustomImages(prev => prev.filter(img => img !== imageUrl));
     // If the removed image was selected, clear selection
     if (selected === imageUrl) {
-      onWallpaperChange(wallpaperPaths[0] || WALLPAPER_RELATIVE[0]);
+      onWallpaperChange(WALLPAPER_PATHS[0]);
     }
   };
 
@@ -261,7 +298,7 @@ export function SettingsPanel({
             <span className="text-sm font-medium text-slate-200">Zoom Level</span>
             <div className="flex items-center gap-2">
               {zoomEnabled && selectedZoomDepth && (
-                <span className="text-[10px] uppercase tracking-wider font-medium text-[#34B27B] bg-[#34B27B]/10 px-2 py-0.5 rounded-full">
+                <span className="text-[10px] uppercase tracking-wider font-medium text-[#2563EB] bg-[#2563EB]/10 px-2 py-0.5 rounded-full">
                   {ZOOM_DEPTH_OPTIONS.find(o => o.depth === selectedZoomDepth)?.label}
                 </span>
               )}
@@ -282,7 +319,7 @@ export function SettingsPanel({
                     "duration-200 ease-out",
                     zoomEnabled ? "opacity-100 cursor-pointer" : "opacity-40 cursor-not-allowed",
                     isActive
-                      ? "border-[#34B27B] bg-[#34B27B] text-white shadow-[#34B27B]/20"
+                      ? "border-[#2563EB] bg-[#2563EB] text-white shadow-[#2563EB]/20"
                       : "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200"
                   )}
                 >
@@ -321,30 +358,172 @@ export function SettingsPanel({
           </div>
         )}
 
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium text-slate-200">Playback Speed</span>
+            {selectedSpeedId && selectedSpeedValue && (
+              <span className="text-[10px] uppercase tracking-wider font-medium text-[#d97706] bg-[#d97706]/10 px-2 py-0.5 rounded-full">
+                {SPEED_OPTIONS.find(o => o.speed === selectedSpeedValue)?.label ?? `${selectedSpeedValue}×`}
+              </span>
+            )}
+          </div>
+          <div className="grid grid-cols-7 gap-1.5">
+            {SPEED_OPTIONS.map((option) => {
+              const isActive = selectedSpeedValue === option.speed;
+              return (
+                <Button
+                  key={option.speed}
+                  type="button"
+                  disabled={!selectedSpeedId}
+                  onClick={() => onSpeedChange?.(option.speed)}
+                  className={cn(
+                    "h-auto w-full rounded-lg border px-1 py-2 text-center shadow-sm transition-all",
+                    "duration-200 ease-out",
+                    selectedSpeedId ? "opacity-100 cursor-pointer" : "opacity-40 cursor-not-allowed",
+                    isActive
+                      ? "border-[#d97706] bg-[#d97706] text-white shadow-[#d97706]/20"
+                      : "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200"
+                  )}
+                >
+                  <span className="text-xs font-semibold">{option.label}</span>
+                </Button>
+              );
+            })}
+          </div>
+          {!selectedSpeedId && (
+            <p className="text-[10px] text-slate-500 mt-2 text-center">Select a speed region to adjust</p>
+          )}
+          {selectedSpeedId && (
+            <Button
+              onClick={() => selectedSpeedId && onSpeedDelete?.(selectedSpeedId)}
+              variant="destructive"
+              size="sm"
+              className="mt-2 w-full gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/30 transition-all h-8 text-xs"
+            >
+              <Trash2 className="w-3 h-3" />
+              Delete Speed Region
+            </Button>
+          )}
+        </div>
+
         <Accordion type="multiple" defaultValue={["effects", "background"]} className="space-y-1">
           <AccordionItem value="effects" className="border-white/5 rounded-xl bg-white/[0.02] px-3">
             <AccordionTrigger className="py-2.5 hover:no-underline">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#34B27B]" />
+                <Sparkles className="w-4 h-4 text-[#2563EB]" />
                 <span className="text-xs font-medium">Video Effects</span>
               </div>
             </AccordionTrigger>
             <AccordionContent className="pb-3">
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5">
-                  <div className="text-[10px] font-medium text-slate-300">Motion Blur</div>
+                  <div className="text-[10px] font-medium text-slate-300">Show Cursor</div>
                   <Switch
-                    checked={motionBlurEnabled}
-                    onCheckedChange={onMotionBlurChange}
-                    className="data-[state=checked]:bg-[#34B27B] scale-90"
+                    checked={showCursor}
+                    onCheckedChange={onShowCursorChange}
+                    className="data-[state=checked]:bg-[#2563EB] scale-90"
                   />
                 </div>
+                <div className="p-2 rounded-lg bg-white/5 border border-white/5">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-[10px] font-medium text-slate-300">Background Blur</div>
+                    <span className="text-[10px] text-slate-500 font-mono">{backgroundBlur.toFixed(1)}px</span>
+                  </div>
+                  <Slider
+                    value={[backgroundBlur]}
+                    onValueChange={(values) => onBackgroundBlurChange?.(values[0])}
+                    min={0}
+                    max={8}
+                    step={0.25}
+                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="p-2 rounded-lg bg-white/5 border border-white/5">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-[10px] font-medium text-slate-300">Zoom Motion Blur</div>
+                    <span className="text-[10px] text-slate-500 font-mono">{zoomMotionBlur.toFixed(2)}×</span>
+                  </div>
+                  <Slider
+                    value={[zoomMotionBlur]}
+                    onValueChange={(values) => onZoomMotionBlurChange?.(values[0])}
+                    min={0}
+                    max={2}
+                    step={0.05}
+                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                  />
+                </div>
+
                 <div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5">
-                  <div className="text-[10px] font-medium text-slate-300">Blur BG</div>
+                  <div className="text-[10px] font-medium text-slate-300">Connect Zooms</div>
                   <Switch
-                    checked={showBlur}
-                    onCheckedChange={onBlurChange}
-                    className="data-[state=checked]:bg-[#34B27B] scale-90"
+                    checked={connectZooms}
+                    onCheckedChange={onConnectZoomsChange}
+                    className="data-[state=checked]:bg-[#2563EB] scale-90"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="p-2 rounded-lg bg-white/5 border border-white/5">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-[10px] font-medium text-slate-300">Cursor Size</div>
+                    <span className="text-[10px] text-slate-500 font-mono">{cursorSize.toFixed(2)}×</span>
+                  </div>
+                  <Slider
+                    value={[cursorSize]}
+                    onValueChange={(values) => onCursorSizeChange?.(values[0])}
+                    min={0.5}
+                    max={10}
+                    step={0.05}
+                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                  />
+                </div>
+                <div className="p-2 rounded-lg bg-white/5 border border-white/5">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-[10px] font-medium text-slate-300">Cursor Smoothing</div>
+                    <span className="text-[10px] text-slate-500 font-mono">{cursorSmoothing <= 0 ? 'Off' : cursorSmoothing.toFixed(2)}</span>
+                  </div>
+                  <Slider
+                    value={[cursorSmoothing]}
+                    onValueChange={(values) => onCursorSmoothingChange?.(values[0])}
+                    min={0}
+                    max={2}
+                    step={0.01}
+                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="p-2 rounded-lg bg-white/5 border border-white/5">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-[10px] font-medium text-slate-300">Cursor Motion Blur</div>
+                    <span className="text-[10px] text-slate-500 font-mono">{cursorMotionBlur.toFixed(2)}×</span>
+                  </div>
+                  <Slider
+                    value={[cursorMotionBlur]}
+                    onValueChange={(values) => onCursorMotionBlurChange?.(values[0])}
+                    min={0}
+                    max={2}
+                    step={0.05}
+                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                  />
+                </div>
+                <div className="p-2 rounded-lg bg-white/5 border border-white/5">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-[10px] font-medium text-slate-300">Cursor Click Bounce</div>
+                    <span className="text-[10px] text-slate-500 font-mono">{cursorClickBounce.toFixed(2)}×</span>
+                  </div>
+                  <Slider
+                    value={[cursorClickBounce]}
+                    onValueChange={(values) => onCursorClickBounceChange?.(values[0])}
+                    min={0}
+                    max={5}
+                    step={0.05}
+                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
                   />
                 </div>
               </div>
@@ -361,7 +540,7 @@ export function SettingsPanel({
                     min={0}
                     max={1}
                     step={0.01}
-                    className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
                   />
                 </div>
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
@@ -373,9 +552,9 @@ export function SettingsPanel({
                     value={[borderRadius]}
                     onValueChange={(values) => onBorderRadiusChange?.(values[0])}
                     min={0}
-                    max={16}
+                    max={25}
                     step={0.5}
-                    className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
                   />
                 </div>
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
@@ -389,7 +568,7 @@ export function SettingsPanel({
                     min={0}
                     max={100}
                     step={1}
-                    className="w-full [&_[role=slider]]:bg-[#34B27B] [&_[role=slider]]:border-[#34B27B] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
                   />
                 </div>
               </div>
@@ -408,16 +587,16 @@ export function SettingsPanel({
           <AccordionItem value="background" className="border-white/5 rounded-xl bg-white/[0.02] px-3">
             <AccordionTrigger className="py-2.5 hover:no-underline">
               <div className="flex items-center gap-2">
-                <Palette className="w-4 h-4 text-[#34B27B]" />
+                <Palette className="w-4 h-4 text-[#2563EB]" />
                 <span className="text-xs font-medium">Background</span>
               </div>
             </AccordionTrigger>
             <AccordionContent className="pb-3">
               <Tabs defaultValue="image" className="w-full">
                 <TabsList className="mb-2 bg-white/5 border border-white/5 p-0.5 w-full grid grid-cols-3 h-7 rounded-lg">
-                  <TabsTrigger value="image" className="data-[state=active]:bg-[#34B27B] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all">Image</TabsTrigger>
-                  <TabsTrigger value="color" className="data-[state=active]:bg-[#34B27B] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all">Color</TabsTrigger>
-                  <TabsTrigger value="gradient" className="data-[state=active]:bg-[#34B27B] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all">Gradient</TabsTrigger>
+                  <TabsTrigger value="image" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all">Image</TabsTrigger>
+                  <TabsTrigger value="color" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all">Color</TabsTrigger>
+                  <TabsTrigger value="gradient" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all">Gradient</TabsTrigger>
                 </TabsList>
                 
                 <div className="max-h-[min(200px,25vh)] overflow-y-auto custom-scrollbar">
@@ -432,7 +611,7 @@ export function SettingsPanel({
                     <Button
                       onClick={() => fileInputRef.current?.click()}
                       variant="outline"
-                      className="w-full gap-2 bg-white/5 text-slate-200 border-white/10 hover:bg-[#34B27B] hover:text-white hover:border-[#34B27B] transition-all h-7 text-[10px]"
+                      className="w-full gap-2 bg-white/5 text-slate-200 border-white/10 hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] transition-all h-7 text-[10px]"
                     >
                       <Upload className="w-3 h-3" />
                       Upload Custom
@@ -447,8 +626,8 @@ export function SettingsPanel({
                             className={cn(
                               "aspect-square w-9 h-9 rounded-md border-2 overflow-hidden cursor-pointer transition-all duration-200 relative group shadow-sm",
                               isSelected
-                                ? "border-[#34B27B] ring-1 ring-[#34B27B]/30"
-                                : "border-white/10 hover:border-[#34B27B]/40 opacity-80 hover:opacity-100 bg-white/5"
+                                ? "border-[#2563EB] ring-1 ring-[#2563EB]/30"
+                                : "border-white/10 hover:border-[#2563EB]/40 opacity-80 hover:opacity-100 bg-white/5"
                             )}
                             style={{ backgroundImage: `url(${imageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }}
                             onClick={() => onWallpaperChange(imageUrl)}
@@ -464,28 +643,34 @@ export function SettingsPanel({
                         );
                       })}
 
-                      {(wallpaperPaths.length > 0 ? wallpaperPaths : WALLPAPER_RELATIVE.map(p => `/${p}`)).map((path) => {
+                      {(wallpaperPreviewPaths.length > 0 ? wallpaperPreviewPaths : WALLPAPER_PATHS).map((previewPath, index) => {
+                        const wallpaper = BUILT_IN_WALLPAPERS[index];
+                        const wallpaperValue = WALLPAPER_PATHS[index] ?? previewPath;
                         const isSelected = (() => {
                           if (!selected) return false;
-                          if (selected === path) return true;
+                          if (selected === wallpaperValue || selected === previewPath) return true;
                           try {
                             const clean = (s: string) => s.replace(/^file:\/\//, '').replace(/^\//, '')
-                            if (clean(selected).endsWith(clean(path))) return true;
-                            if (clean(path).endsWith(clean(selected))) return true;
+                            if (clean(selected).endsWith(clean(wallpaperValue))) return true;
+                            if (clean(wallpaperValue).endsWith(clean(selected))) return true;
+                            if (clean(selected).endsWith(clean(previewPath))) return true;
+                            if (clean(previewPath).endsWith(clean(selected))) return true;
                           } catch {}
                           return false;
                         })();
                         return (
                           <div
-                            key={path}
+                            key={wallpaperValue}
                             className={cn(
                               "aspect-square w-9 h-9 rounded-md border-2 overflow-hidden cursor-pointer transition-all duration-200 shadow-sm",
                               isSelected
-                                ? "border-[#34B27B] ring-1 ring-[#34B27B]/30"
-                                : "border-white/10 hover:border-[#34B27B]/40 opacity-80 hover:opacity-100 bg-white/5"
+                                ? "border-[#2563EB] ring-1 ring-[#2563EB]/30"
+                                : "border-white/10 hover:border-[#2563EB]/40 opacity-80 hover:opacity-100 bg-white/5"
                             )}
-                            style={{ backgroundImage: `url(${path})`, backgroundSize: "cover", backgroundPosition: "center" }}
-                            onClick={() => onWallpaperChange(path)}
+                            aria-label={wallpaper?.label ?? `Wallpaper ${index + 1}`}
+                            title={wallpaper?.label ?? `Wallpaper ${index + 1}`}
+                            style={{ backgroundImage: `url(${previewPath})`, backgroundSize: "cover", backgroundPosition: "center" }}
+                            onClick={() => onWallpaperChange(wallpaperValue)}
                             role="button"
                           />
                         )
@@ -518,8 +703,8 @@ export function SettingsPanel({
                           className={cn(
                             "aspect-square w-9 h-9 rounded-md border-2 overflow-hidden cursor-pointer transition-all duration-200 shadow-sm",
                             gradient === g 
-                              ? "border-[#34B27B] ring-1 ring-[#34B27B]/30" 
-                              : "border-white/10 hover:border-[#34B27B]/40 opacity-80 hover:opacity-100 bg-white/5"
+                              ? "border-[#2563EB] ring-1 ring-[#2563EB]/30" 
+                              : "border-white/10 hover:border-[#2563EB]/40 opacity-80 hover:opacity-100 bg-white/5"
                           )}
                           style={{ background: g }}
                           aria-label={`Gradient ${idx + 1}`}
@@ -567,7 +752,7 @@ export function SettingsPanel({
               <Button
                 onClick={() => setShowCropDropdown(false)}
                 size="lg"
-                className="bg-[#34B27B] hover:bg-[#34B27B]/90 text-white"
+                className="bg-[#2563EB] hover:bg-[#2563EB]/90 text-white"
               >
                 Done
               </Button>
@@ -583,7 +768,7 @@ export function SettingsPanel({
             className={cn(
               "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border transition-all text-xs font-medium",
               exportFormat === 'mp4'
-                ? "bg-[#34B27B]/10 border-[#34B27B]/50 text-white"
+                ? "bg-[#2563EB]/10 border-[#2563EB]/50 text-white"
                 : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:text-slate-200"
             )}
           >
@@ -595,7 +780,7 @@ export function SettingsPanel({
             className={cn(
               "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border transition-all text-xs font-medium",
               exportFormat === 'gif'
-                ? "bg-[#34B27B]/10 border-[#34B27B]/50 text-white"
+                ? "bg-[#2563EB]/10 border-[#2563EB]/50 text-white"
                 : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:text-slate-200"
             )}
           >
@@ -675,18 +860,39 @@ export function SettingsPanel({
                 <Switch
                   checked={gifLoop}
                   onCheckedChange={onGifLoopChange}
-                  className="data-[state=checked]:bg-[#34B27B] scale-75"
+                  className="data-[state=checked]:bg-[#2563EB] scale-75"
                 />
               </div>
             </div>
           </div>
         )}
         
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onLoadProject}
+            className="h-8 text-[10px] font-medium gap-1.5 bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
+          >
+            <FolderOpen className="w-3.5 h-3.5" />
+            Load Project
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onSaveProject}
+            className="h-8 text-[10px] font-medium gap-1.5 bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
+          >
+            <Save className="w-3.5 h-3.5" />
+            Save Project
+          </Button>
+        </div>
+
         <Button
           type="button"
           size="lg"
           onClick={onExport}
-          className="w-full py-5 text-sm font-semibold flex items-center justify-center gap-2 bg-[#34B27B] text-white rounded-xl shadow-lg shadow-[#34B27B]/20 hover:bg-[#34B27B]/90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+          className="w-full py-5 text-sm font-semibold flex items-center justify-center gap-2 bg-[#2563EB] text-white rounded-xl shadow-lg shadow-[#2563EB]/20 hover:bg-[#2563EB]/90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
         >
           <Download className="w-4 h-4" />
           Export {exportFormat === 'gif' ? 'GIF' : 'Video'}
@@ -696,17 +902,17 @@ export function SettingsPanel({
           <button
             type="button"
             onClick={() => {
-              window.electronAPI?.openExternalUrl('https://github.com/siddharthvaddem/openscreen/issues/new/choose');
+              window.electronAPI?.openExternalUrl('https://github.com/webadderall/bug-free-succotash/issues/new/choose');
             }}
             className="flex-1 flex items-center justify-center gap-1.5 text-[10px] text-slate-500 hover:text-slate-300 py-1.5 transition-colors"
           >
-            <Bug className="w-3 h-3 text-[#34B27B]" />
+            <Bug className="w-3 h-3 text-[#2563EB]" />
             Report Bug
           </button>
           <button
             type="button"
             onClick={() => {
-              window.electronAPI?.openExternalUrl('https://github.com/siddharthvaddem/openscreen');
+              window.electronAPI?.openExternalUrl('https://github.com/webadderall/bug-free-succotash');
             }}
             className="flex-1 flex items-center justify-center gap-1.5 text-[10px] text-slate-500 hover:text-slate-300 py-1.5 transition-colors"
           >

@@ -1,11 +1,12 @@
 import { Application, Container, Sprite, Graphics, BlurFilter, Texture } from 'pixi.js';
-import type { ZoomRegion, CropRegion, AnnotationRegion } from '@/components/video-editor/types';
+import { MotionBlurFilter } from 'pixi-filters/motion-blur';
+import type { ZoomRegion, CropRegion, AnnotationRegion, SpeedRegion, CursorTelemetryPoint } from '@/components/video-editor/types';
 import { ZOOM_DEPTH_SCALES } from '@/components/video-editor/types';
 import { findDominantRegion } from '@/components/video-editor/videoPlayback/zoomRegionUtils';
-import { applyZoomTransform } from '@/components/video-editor/videoPlayback/zoomTransform';
-import { DEFAULT_FOCUS, SMOOTHING_FACTOR, MIN_DELTA } from '@/components/video-editor/videoPlayback/constants';
-import { clampFocusToStage as clampFocusToStageUtil } from '@/components/video-editor/videoPlayback/focusUtils';
+import { applyZoomTransform, computeFocusFromTransform, computeZoomTransform, createMotionBlurState, type MotionBlurState } from '@/components/video-editor/videoPlayback/zoomTransform';
+import { DEFAULT_FOCUS, ZOOM_SCALE_DEADZONE, ZOOM_TRANSLATION_DEADZONE_PX } from '@/components/video-editor/videoPlayback/constants';
 import { renderAnnotations } from './annotationRenderer';
+import { PixiCursorOverlay, DEFAULT_CURSOR_CONFIG, preloadCursorAssets } from '@/components/video-editor/videoPlayback/cursorRenderer';
 
 interface FrameRenderConfig {
   width: number;
@@ -14,22 +15,46 @@ interface FrameRenderConfig {
   zoomRegions: ZoomRegion[];
   showShadow: boolean;
   shadowIntensity: number;
-  showBlur: boolean;
-  motionBlurEnabled?: boolean;
+  backgroundBlur: number;
+  zoomMotionBlur?: number;
+  connectZooms?: boolean;
   borderRadius?: number;
   padding?: number;
   cropRegion: CropRegion;
   videoWidth: number;
   videoHeight: number;
   annotationRegions?: AnnotationRegion[];
+  speedRegions?: SpeedRegion[];
   previewWidth?: number;
   previewHeight?: number;
+  cursorTelemetry?: CursorTelemetryPoint[];
+  showCursor?: boolean;
+  cursorSize?: number;
+  cursorSmoothing?: number;
+  cursorMotionBlur?: number;
+  cursorClickBounce?: number;
 }
 
 interface AnimationState {
   scale: number;
+  appliedScale: number;
   focusX: number;
   focusY: number;
+  progress: number;
+  x: number;
+  y: number;
+}
+
+function createAnimationState(): AnimationState {
+  return {
+    scale: 1,
+    appliedScale: 1,
+    focusX: DEFAULT_FOCUS.cx,
+    focusY: DEFAULT_FOCUS.cy,
+    progress: 0,
+    x: 0,
+    y: 0,
+  };
 }
 
 // Renders video frames with all effects (background, zoom, crop, blur, shadow) to an offscreen canvas for export.
@@ -38,29 +63,39 @@ export class FrameRenderer {
   private app: Application | null = null;
   private cameraContainer: Container | null = null;
   private videoContainer: Container | null = null;
+  private cursorContainer: Container | null = null;
   private videoSprite: Sprite | null = null;
   private backgroundSprite: Sprite | null = null;
   private maskGraphics: Graphics | null = null;
   private blurFilter: BlurFilter | null = null;
+  private motionBlurFilter: MotionBlurFilter | null = null;
   private shadowCanvas: HTMLCanvasElement | null = null;
   private shadowCtx: CanvasRenderingContext2D | null = null;
   private compositeCanvas: HTMLCanvasElement | null = null;
   private compositeCtx: CanvasRenderingContext2D | null = null;
   private config: FrameRenderConfig;
   private animationState: AnimationState;
+  private motionBlurState: MotionBlurState;
   private layoutCache: any = null;
   private currentVideoTime = 0;
+  private lastMotionVector = { x: 0, y: 0 };
+  private cursorOverlay: PixiCursorOverlay | null = null;
 
   constructor(config: FrameRenderConfig) {
     this.config = config;
-    this.animationState = {
-      scale: 1,
-      focusX: DEFAULT_FOCUS.cx,
-      focusY: DEFAULT_FOCUS.cy,
-    };
+    this.animationState = createAnimationState();
+    this.motionBlurState = createMotionBlurState();
   }
 
   async initialize(): Promise<void> {
+    let cursorOverlayEnabled = true;
+    try {
+      await preloadCursorAssets();
+    } catch (error) {
+      cursorOverlayEnabled = false;
+      console.warn('[FrameRenderer] Native cursor assets are unavailable; continuing export without cursor overlay.', error);
+    }
+
     // Create canvas for rendering
     const canvas = document.createElement('canvas');
     canvas.width = this.config.width;
@@ -92,8 +127,19 @@ export class FrameRenderer {
     // Setup containers
     this.cameraContainer = new Container();
     this.videoContainer = new Container();
+    this.cursorContainer = new Container();
     this.app.stage.addChild(this.cameraContainer);
     this.cameraContainer.addChild(this.videoContainer);
+    this.cameraContainer.addChild(this.cursorContainer);
+
+    if (cursorOverlayEnabled) {
+      this.cursorOverlay = new PixiCursorOverlay({
+        dotRadius: DEFAULT_CURSOR_CONFIG.dotRadius * (this.config.cursorSize ?? 1.4),
+        smoothingFactor: this.config.cursorSmoothing ?? DEFAULT_CURSOR_CONFIG.smoothingFactor,
+        motionBlur: this.config.cursorMotionBlur ?? 0,
+        clickBounce: this.config.cursorClickBounce ?? DEFAULT_CURSOR_CONFIG.clickBounce,
+      });
+    }
 
     // Setup background (render separately, not in PixiJS)
     await this.setupBackground();
@@ -103,7 +149,8 @@ export class FrameRenderer {
     this.blurFilter.quality = 5;
     this.blurFilter.resolution = this.app.renderer.resolution;
     this.blurFilter.blur = 0;
-    this.videoContainer.filters = [this.blurFilter];
+    this.motionBlurFilter = new MotionBlurFilter([0, 0], 5, 0);
+    this.videoContainer.filters = [this.blurFilter, this.motionBlurFilter];
 
     // Setup composite canvas for final output with shadows
     this.compositeCanvas = document.createElement('canvas');
@@ -131,6 +178,9 @@ export class FrameRenderer {
     this.maskGraphics = new Graphics();
     this.videoContainer.addChild(this.maskGraphics);
     this.videoContainer.mask = this.maskGraphics;
+    if (this.cursorOverlay) {
+      this.cursorContainer.addChild(this.cursorOverlay.container);
+    }
   }
 
   private async setupBackground(): Promise<void> {
@@ -262,6 +312,12 @@ export class FrameRenderer {
       const texture = Texture.from(videoFrame as any);
       this.videoSprite = new Sprite(texture);
       this.videoContainer.addChild(this.videoSprite);
+      if (this.cursorOverlay && this.cursorContainer) {
+        this.cursorContainer.addChild(this.cursorOverlay.container);
+      }
+      if (this.maskGraphics) {
+        this.videoContainer.addChild(this.maskGraphics);
+      }
     } else {
       // Destroy old texture to avoid memory leaks, then create new one
       const oldTexture = this.videoSprite.texture;
@@ -274,6 +330,17 @@ export class FrameRenderer {
     this.updateLayout();
 
     const timeMs = this.currentVideoTime * 1000;
+
+    if (this.cursorOverlay) {
+      this.cursorOverlay.update(
+        this.config.cursorTelemetry ?? [],
+        timeMs,
+        this.layoutCache.maskRect,
+        this.config.showCursor ?? true,
+        false,
+      );
+    }
+
     const TICKS_PER_FRAME = 1;
     
     let maxMotionIntensity = 0;
@@ -286,14 +353,24 @@ export class FrameRenderer {
     applyZoomTransform({
       cameraContainer: this.cameraContainer,
       blurFilter: this.blurFilter,
+      motionBlurFilter: this.motionBlurFilter,
       stageSize: this.layoutCache.stageSize,
       baseMask: this.layoutCache.maskRect,
       zoomScale: this.animationState.scale,
+      zoomProgress: this.animationState.progress,
       focusX: this.animationState.focusX,
       focusY: this.animationState.focusY,
       motionIntensity: maxMotionIntensity,
+      motionVector: this.lastMotionVector,
       isPlaying: true,
-      motionBlurEnabled: this.config.motionBlurEnabled ?? false,
+      motionBlurAmount: this.config.zoomMotionBlur ?? 0,
+      transformOverride: {
+        scale: this.animationState.appliedScale,
+        x: this.animationState.x,
+        y: this.animationState.y,
+      },
+      motionBlurState: this.motionBlurState,
+      frameTimeMs: timeMs,
     });
 
     // Render the PixiJS stage to its canvas (video only, transparent background)
@@ -320,6 +397,7 @@ export class FrameRenderer {
         scaleFactor
       );
     }
+
   }
 
   private updateLayout(): void {
@@ -346,22 +424,20 @@ export class FrameRenderer {
     const viewportHeight = height * paddingScale;
     const scale = Math.min(viewportWidth / croppedVideoWidth, viewportHeight / croppedVideoHeight);
 
-    // Position video sprite
-    this.videoSprite.width = videoWidth * scale;
-    this.videoSprite.height = videoHeight * scale;
+    this.videoSprite.scale.set(scale);
 
-    const cropPixelX = cropStartX * videoWidth * scale;
-    const cropPixelY = cropStartY * videoHeight * scale;
-    this.videoSprite.x = -cropPixelX;
-    this.videoSprite.y = -cropPixelY;
-
-    // Position video container
+    const fullVideoDisplayWidth = videoWidth * scale;
+    const fullVideoDisplayHeight = videoHeight * scale;
     const croppedDisplayWidth = croppedVideoWidth * scale;
     const croppedDisplayHeight = croppedVideoHeight * scale;
     const centerOffsetX = (width - croppedDisplayWidth) / 2;
     const centerOffsetY = (height - croppedDisplayHeight) / 2;
-    this.videoContainer.x = centerOffsetX;
-    this.videoContainer.y = centerOffsetY;
+
+    const spriteX = centerOffsetX - (cropRegion.x * fullVideoDisplayWidth);
+    const spriteY = centerOffsetY - (cropRegion.y * fullVideoDisplayHeight);
+    this.videoSprite.position.set(spriteX, spriteY);
+
+    this.videoContainer.position.set(0, 0);
 
     // scale border radius by export/preview canvas ratio
     const previewWidth = this.config.previewWidth || 1920;
@@ -370,7 +446,7 @@ export class FrameRenderer {
     const scaledBorderRadius = borderRadius * canvasScaleFactor;
     
     this.maskGraphics.clear();
-    this.maskGraphics.roundRect(0, 0, croppedDisplayWidth, croppedDisplayHeight, scaledBorderRadius);
+    this.maskGraphics.roundRect(centerOffsetX, centerOffsetY, croppedDisplayWidth, croppedDisplayHeight, scaledBorderRadius);
     this.maskGraphics.fill({ color: 0xffffff });
 
     // Cache layout info
@@ -378,76 +454,106 @@ export class FrameRenderer {
       stageSize: { width, height },
       videoSize: { width: croppedVideoWidth, height: croppedVideoHeight },
       baseScale: scale,
-      baseOffset: { x: centerOffsetX, y: centerOffsetY },
-      maskRect: { x: 0, y: 0, width: croppedDisplayWidth, height: croppedDisplayHeight },
+      baseOffset: { x: spriteX, y: spriteY },
+      maskRect: { x: centerOffsetX, y: centerOffsetY, width: croppedDisplayWidth, height: croppedDisplayHeight },
     };
-  }
-
-  private clampFocusToStage(focus: { cx: number; cy: number }, depth: number): { cx: number; cy: number } {
-    if (!this.layoutCache) return focus;
-    return clampFocusToStageUtil(focus, depth as any, this.layoutCache);
   }
 
   private updateAnimationState(timeMs: number): number {
     if (!this.cameraContainer || !this.layoutCache) return 0;
 
-    const { region, strength } = findDominantRegion(this.config.zoomRegions, timeMs);
+    const { region, strength, blendedScale, transition } = findDominantRegion(this.config.zoomRegions, timeMs, {
+      connectZooms: this.config.connectZooms,
+    });
     
     const defaultFocus = DEFAULT_FOCUS;
     let targetScaleFactor = 1;
     let targetFocus = { ...defaultFocus };
+    let targetProgress = 0;
 
     if (region && strength > 0) {
-      const zoomScale = ZOOM_DEPTH_SCALES[region.depth];
-      const regionFocus = this.clampFocusToStage(region.focus, region.depth);
+      const zoomScale = blendedScale ?? ZOOM_DEPTH_SCALES[region.depth];
+      const regionFocus = region.focus;
       
-      targetScaleFactor = 1 + (zoomScale - 1) * strength;
-      targetFocus = {
-        cx: defaultFocus.cx + (regionFocus.cx - defaultFocus.cx) * strength,
-        cy: defaultFocus.cy + (regionFocus.cy - defaultFocus.cy) * strength,
-      };
+      targetScaleFactor = zoomScale;
+      targetFocus = regionFocus;
+      targetProgress = strength;
+
+      if (transition) {
+        const startTransform = computeZoomTransform({
+          stageSize: this.layoutCache.stageSize,
+          baseMask: this.layoutCache.maskRect,
+          zoomScale: transition.startScale,
+          zoomProgress: 1,
+          focusX: transition.startFocus.cx,
+          focusY: transition.startFocus.cy,
+        });
+        const endTransform = computeZoomTransform({
+          stageSize: this.layoutCache.stageSize,
+          baseMask: this.layoutCache.maskRect,
+          zoomScale: transition.endScale,
+          zoomProgress: 1,
+          focusX: transition.endFocus.cx,
+          focusY: transition.endFocus.cy,
+        });
+
+        const interpolatedTransform = {
+          scale: startTransform.scale + (endTransform.scale - startTransform.scale) * transition.progress,
+          x: startTransform.x + (endTransform.x - startTransform.x) * transition.progress,
+          y: startTransform.y + (endTransform.y - startTransform.y) * transition.progress,
+        };
+
+        targetScaleFactor = interpolatedTransform.scale;
+        targetFocus = computeFocusFromTransform({
+          stageSize: this.layoutCache.stageSize,
+          baseMask: this.layoutCache.maskRect,
+          zoomScale: interpolatedTransform.scale,
+          x: interpolatedTransform.x,
+          y: interpolatedTransform.y,
+        });
+        targetProgress = 1;
+      }
     }
 
     const state = this.animationState;
 
-    const prevScale = state.scale;
-    const prevFocusX = state.focusX;
-    const prevFocusY = state.focusY;
+    const prevScale = state.appliedScale;
+    const prevX = state.x;
+    const prevY = state.y;
 
-    const scaleDelta = targetScaleFactor - state.scale;
-    const focusXDelta = targetFocus.cx - state.focusX;
-    const focusYDelta = targetFocus.cy - state.focusY;
+    state.scale = targetScaleFactor;
+    state.focusX = targetFocus.cx;
+    state.focusY = targetFocus.cy;
+    state.progress = targetProgress;
 
-    let nextScale = prevScale;
-    let nextFocusX = prevFocusX;
-    let nextFocusY = prevFocusY;
+    const projectedTransform = computeZoomTransform({
+      stageSize: this.layoutCache.stageSize,
+      baseMask: this.layoutCache.maskRect,
+      zoomScale: state.scale,
+      zoomProgress: state.progress,
+      focusX: state.focusX,
+      focusY: state.focusY,
+    });
 
-    if (Math.abs(scaleDelta) > MIN_DELTA) {
-      nextScale = prevScale + scaleDelta * SMOOTHING_FACTOR;
-    } else {
-      nextScale = targetScaleFactor;
-    }
+    state.appliedScale = Math.abs(projectedTransform.scale - prevScale) < ZOOM_SCALE_DEADZONE
+      ? projectedTransform.scale
+      : projectedTransform.scale;
+    state.x = Math.abs(projectedTransform.x - prevX) < ZOOM_TRANSLATION_DEADZONE_PX
+      ? projectedTransform.x
+      : projectedTransform.x;
+    state.y = Math.abs(projectedTransform.y - prevY) < ZOOM_TRANSLATION_DEADZONE_PX
+      ? projectedTransform.y
+      : projectedTransform.y;
 
-    if (Math.abs(focusXDelta) > MIN_DELTA) {
-      nextFocusX = prevFocusX + focusXDelta * SMOOTHING_FACTOR;
-    } else {
-      nextFocusX = targetFocus.cx;
-    }
-
-    if (Math.abs(focusYDelta) > MIN_DELTA) {
-      nextFocusY = prevFocusY + focusYDelta * SMOOTHING_FACTOR;
-    } else {
-      nextFocusY = targetFocus.cy;
-    }
-
-    state.scale = nextScale;
-    state.focusX = nextFocusX;
-    state.focusY = nextFocusY;
+    this.lastMotionVector = {
+      x: state.x - prevX,
+      y: state.y - prevY,
+    };
 
     return Math.max(
-      Math.abs(nextScale - prevScale),
-      Math.abs(nextFocusX - prevFocusX),
-      Math.abs(nextFocusY - prevFocusY)
+      Math.abs(state.appliedScale - prevScale),
+      Math.abs(state.x - prevX) / Math.max(1, this.layoutCache.stageSize.width),
+      Math.abs(state.y - prevY) / Math.max(1, this.layoutCache.stageSize.height)
     );
   }
 
@@ -466,9 +572,9 @@ export class FrameRenderer {
     if (this.backgroundSprite) {
       const bgCanvas = this.backgroundSprite as any as HTMLCanvasElement;
       
-      if (this.config.showBlur) {
+      if (this.config.backgroundBlur > 0) {
         ctx.save();
-        ctx.filter = 'blur(6px)'; // Canvas blur is weaker than CSS
+        ctx.filter = `blur(${this.config.backgroundBlur * 3}px)`;
         ctx.drawImage(bgCanvas, 0, 0, w, h);
         ctx.restore();
       } else {
@@ -513,18 +619,25 @@ export class FrameRenderer {
 
   destroy(): void {
     if (this.videoSprite) {
-      this.videoSprite.destroy();
+      const videoTexture = this.videoSprite.texture;
+      this.videoSprite.destroy({ texture: false, textureSource: false });
+      videoTexture?.destroy(true);
       this.videoSprite = null;
     }
     this.backgroundSprite = null;
     if (this.app) {
-      this.app.destroy(true, { children: true, texture: true, textureSource: true });
+      this.app.destroy(true, { children: true, texture: false, textureSource: false });
       this.app = null;
     }
     this.cameraContainer = null;
     this.videoContainer = null;
     this.maskGraphics = null;
     this.blurFilter = null;
+    this.motionBlurFilter = null;
+    if (this.cursorOverlay) {
+      this.cursorOverlay.destroy();
+      this.cursorOverlay = null;
+    }
     this.shadowCanvas = null;
     this.shadowCtx = null;
     this.compositeCanvas = null;

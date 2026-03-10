@@ -14,7 +14,9 @@ export default defineConfig({
         entry: 'electron/main.ts',
         vite: {
           build: {
-
+            rollupOptions: {
+              external: ['ffmpeg-static', 'uiohook-napi'],
+            },
           }
         }
       },

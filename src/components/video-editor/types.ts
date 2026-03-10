@@ -13,6 +13,27 @@ export interface ZoomRegion {
   focus: ZoomFocus;
 }
 
+export interface CursorTelemetryPoint {
+  timeMs: number;
+  cx: number;
+  cy: number;
+  interactionType?: 'move' | 'click' | 'double-click' | 'right-click' | 'middle-click' | 'mouseup';
+  cursorType?: 'arrow' | 'text' | 'pointer' | 'crosshair' | 'open-hand' | 'closed-hand' | 'resize-ew' | 'resize-ns' | 'not-allowed';
+}
+
+export interface CursorVisualSettings {
+  size: number;
+  smoothing: number;
+  motionBlur: number;
+  clickBounce: number;
+}
+
+export const DEFAULT_CURSOR_SIZE = 3.0;
+export const DEFAULT_CURSOR_SMOOTHING = 0.67;
+export const DEFAULT_CURSOR_MOTION_BLUR = 0.35;
+export const DEFAULT_CURSOR_CLICK_BOUNCE = 2.5;
+export const DEFAULT_ZOOM_MOTION_BLUR = 0.35;
+
 export interface TrimRegion {
   id: string;
   startMs: number;
@@ -50,6 +71,14 @@ export interface AnnotationTextStyle {
   textAlign: 'left' | 'center' | 'right';
 }
 
+function getDefaultAnnotationFontFamily() {
+  if (typeof navigator !== 'undefined' && /mac/i.test(navigator.platform)) {
+    return '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif';
+  }
+
+  return 'Inter, system-ui, sans-serif';
+}
+
 export interface AnnotationRegion {
   id: string;
   startMs: number;
@@ -79,7 +108,7 @@ export const DEFAULT_ANNOTATION_STYLE: AnnotationTextStyle = {
   color: '#ffffff',
   backgroundColor: 'transparent',
   fontSize: 32,
-  fontFamily: 'Inter',
+  fontFamily: getDefaultAnnotationFontFamily(),
   fontWeight: 'bold',
   fontStyle: 'normal',
   textDecoration: 'none',
@@ -88,7 +117,7 @@ export const DEFAULT_ANNOTATION_STYLE: AnnotationTextStyle = {
 
 export const DEFAULT_FIGURE_DATA: FigureData = {
   arrowDirection: 'right',
-  color: '#34B27B',
+  color: '#2563EB',
   strokeWidth: 4,
 };
 
@@ -107,6 +136,27 @@ export const DEFAULT_CROP_REGION: CropRegion = {
   width: 1,
   height: 1,
 };
+
+export type PlaybackSpeed = 0.25 | 0.5 | 0.75 | 1.25 | 1.5 | 1.75 | 2;
+
+export interface SpeedRegion {
+  id: string;
+  startMs: number;
+  endMs: number;
+  speed: PlaybackSpeed;
+}
+
+export const SPEED_OPTIONS: Array<{ speed: PlaybackSpeed; label: string }> = [
+  { speed: 0.25, label: "0.25×" },
+  { speed: 0.5, label: "0.5×" },
+  { speed: 0.75, label: "0.75×" },
+  { speed: 1.25, label: "1.25×" },
+  { speed: 1.5, label: "1.5×" },
+  { speed: 1.75, label: "1.75×" },
+  { speed: 2, label: "2×" },
+];
+
+export const DEFAULT_PLAYBACK_SPEED: PlaybackSpeed = 1.5;
 
 export const ZOOM_DEPTH_SCALES: Record<ZoomDepth, number> = {
   1: 1.25,

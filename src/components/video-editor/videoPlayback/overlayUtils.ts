@@ -6,13 +6,12 @@ interface OverlayUpdateParams {
   indicatorEl: HTMLDivElement;
   region: ZoomRegion | null;
   focusOverride?: ZoomFocus;
-  videoSize: { width: number; height: number };
-  baseScale: number;
+  baseMask: { x: number; y: number; width: number; height: number };
   isPlaying: boolean;
 }
 
 export function updateOverlayIndicator(params: OverlayUpdateParams) {
-  const { overlayEl, indicatorEl, region, focusOverride, videoSize, baseScale, isPlaying } = params;
+  const { overlayEl, indicatorEl, region, focusOverride, baseMask, isPlaying } = params;
 
   if (!region) {
     indicatorEl.style.display = 'none';
@@ -29,7 +28,7 @@ export function updateOverlayIndicator(params: OverlayUpdateParams) {
     return;
   }
 
-  if (!videoSize.width || !videoSize.height || baseScale <= 0) {
+  if (!baseMask.width || !baseMask.height) {
     indicatorEl.style.display = 'none';
     overlayEl.style.pointerEvents = isPlaying ? 'none' : 'auto';
     return;
@@ -42,20 +41,19 @@ export function updateOverlayIndicator(params: OverlayUpdateParams) {
     { width: stageWidth, height: stageHeight }
   );
 
-  // Zoom window shows the stage area that will be visible after zooming (1/zoomScale of stage dimensions)
-  const indicatorWidth = stageWidth / zoomScale;
-  const indicatorHeight = stageHeight / zoomScale;
+  const indicatorWidth = baseMask.width / zoomScale;
+  const indicatorHeight = baseMask.height / zoomScale;
 
-  const rawLeft = focus.cx * stageWidth - indicatorWidth / 2;
-  const rawTop = focus.cy * stageHeight - indicatorHeight / 2;
+  const rawLeft = baseMask.x + focus.cx * baseMask.width - indicatorWidth / 2;
+  const rawTop = baseMask.y + focus.cy * baseMask.height - indicatorHeight / 2;
 
-  const adjustedLeft = indicatorWidth >= stageWidth
-    ? (stageWidth - indicatorWidth) / 2
-    : Math.max(0, Math.min(stageWidth - indicatorWidth, rawLeft));
+  const adjustedLeft = indicatorWidth >= baseMask.width
+    ? baseMask.x + (baseMask.width - indicatorWidth) / 2
+    : Math.max(baseMask.x, Math.min(baseMask.x + baseMask.width - indicatorWidth, rawLeft));
 
-  const adjustedTop = indicatorHeight >= stageHeight
-    ? (stageHeight - indicatorHeight) / 2
-    : Math.max(0, Math.min(stageHeight - indicatorHeight, rawTop));
+  const adjustedTop = indicatorHeight >= baseMask.height
+    ? baseMask.y + (baseMask.height - indicatorHeight) / 2
+    : Math.max(baseMask.y, Math.min(baseMask.y + baseMask.height - indicatorHeight, rawTop));
 
   indicatorEl.style.display = 'block';
   indicatorEl.style.width = `${indicatorWidth}px`;
