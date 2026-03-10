@@ -2,7 +2,7 @@ import GIF from 'gif.js';
 import type { ExportProgress, ExportResult, GifFrameRate, GifSizePreset, GIF_SIZE_PRESETS } from './types';
 import { StreamingVideoDecoder } from './streamingDecoder';
 import { FrameRenderer } from './frameRenderer';
-import type { ZoomRegion, CropRegion, TrimRegion, AnnotationRegion } from '@/components/video-editor/types';
+import type { ZoomRegion, CropRegion, TrimRegion, AnnotationRegion, SpeedRegion, CursorTelemetryPoint } from '@/components/video-editor/types';
 
 const GIF_WORKER_URL = new URL('gif.js/dist/gif.worker.js', import.meta.url).toString();
 
@@ -16,15 +16,23 @@ interface GifExporterConfig {
   wallpaper: string;
   zoomRegions: ZoomRegion[];
   trimRegions?: TrimRegion[];
+  speedRegions?: SpeedRegion[];
   showShadow: boolean;
   shadowIntensity: number;
-  showBlur: boolean;
-  motionBlurEnabled?: boolean;
+  backgroundBlur: number;
+  zoomMotionBlur?: number;
+  connectZooms?: boolean;
   borderRadius?: number;
   padding?: number;
   videoPadding?: number;
   cropRegion: CropRegion;
   annotationRegions?: AnnotationRegion[];
+  cursorTelemetry?: CursorTelemetryPoint[];
+  showCursor?: boolean;
+  cursorSize?: number;
+  cursorSmoothing?: number;
+  cursorMotionBlur?: number;
+  cursorClickBounce?: number;
   previewWidth?: number;
   previewHeight?: number;
   onProgress?: (progress: ExportProgress) => void;
@@ -92,16 +100,24 @@ export class GifExporter {
         zoomRegions: this.config.zoomRegions,
         showShadow: this.config.showShadow,
         shadowIntensity: this.config.shadowIntensity,
-        showBlur: this.config.showBlur,
-        motionBlurEnabled: this.config.motionBlurEnabled,
+        backgroundBlur: this.config.backgroundBlur,
+        zoomMotionBlur: this.config.zoomMotionBlur,
+        connectZooms: this.config.connectZooms,
         borderRadius: this.config.borderRadius,
         padding: this.config.padding,
         cropRegion: this.config.cropRegion,
         videoWidth: videoInfo.width,
         videoHeight: videoInfo.height,
         annotationRegions: this.config.annotationRegions,
+        speedRegions: this.config.speedRegions,
         previewWidth: this.config.previewWidth,
         previewHeight: this.config.previewHeight,
+        cursorTelemetry: this.config.cursorTelemetry,
+        showCursor: this.config.showCursor,
+        cursorSize: this.config.cursorSize,
+        cursorSmoothing: this.config.cursorSmoothing,
+        cursorMotionBlur: this.config.cursorMotionBlur,
+        cursorClickBounce: this.config.cursorClickBounce,
       });
       await this.renderer.initialize();
 
@@ -122,7 +138,7 @@ export class GifExporter {
       });
 
       // Calculate effective duration and frame count (excluding trim regions)
-      const effectiveDuration = this.streamingDecoder.getEffectiveDuration(this.config.trimRegions);
+      const effectiveDuration = this.streamingDecoder.getEffectiveDuration(this.config.trimRegions, this.config.speedRegions);
       const totalFrames = Math.ceil(effectiveDuration * this.config.frameRate);
 
       // Calculate frame delay in milliseconds (gif.js uses ms)
@@ -142,34 +158,20 @@ export class GifExporter {
       await this.streamingDecoder.decodeAll(
         this.config.frameRate,
         this.config.trimRegions,
+        this.config.speedRegions,
         async (videoFrame, _exportTimestampUs, sourceTimestampMs) => {
           if (this.cancelled) {
             videoFrame.close();
             return;
           }
 
-          // Render the frame with all effects using source timestamp
-          const sourceTimestampUs = sourceTimestampMs * 1000; // Convert to microseconds
+          const sourceTimestampUs = sourceTimestampMs * 1000;
           await this.renderer!.renderFrame(videoFrame, sourceTimestampUs);
           videoFrame.close();
 
-          // Get the rendered canvas and add to GIF
-          const canvas = this.renderer!.getCanvas();
-
-          // Add frame to GIF encoder with delay
-          this.gif!.addFrame(canvas, { delay: frameDelay, copy: true });
-
+          this.addRenderedGifFrame(frameDelay);
           frameIndex++;
-
-          // Update progress
-          if (this.config.onProgress) {
-            this.config.onProgress({
-              currentFrame: frameIndex,
-              totalFrames,
-              percentage: (frameIndex / totalFrames) * 100,
-              estimatedTimeRemaining: 0,
-            });
-          }
+          this.reportProgress(frameIndex, totalFrames);
         }
       );
 
@@ -221,6 +223,22 @@ export class GifExporter {
       };
     } finally {
       this.cleanup();
+    }
+  }
+
+  private addRenderedGifFrame(frameDelay: number) {
+    const canvas = this.renderer!.getCanvas();
+    this.gif!.addFrame(canvas, { delay: frameDelay, copy: true });
+  }
+
+  private reportProgress(currentFrame: number, totalFrames: number) {
+    if (this.config.onProgress) {
+      this.config.onProgress({
+        currentFrame,
+        totalFrames,
+        percentage: totalFrames > 0 ? (currentFrame / totalFrames) * 100 : 100,
+        estimatedTimeRemaining: 0,
+      });
     }
   }
 

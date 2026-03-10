@@ -27,7 +27,7 @@ export class VideoMuxer {
     
     this.output = new Output({
       format: new Mp4OutputFormat({
-        fastStart: 'in-memory',
+        fastStart: false,
       }),
       target: this.target,
     });

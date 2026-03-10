@@ -11,6 +11,42 @@ interface DesktopSource {
   thumbnail: string | null;
   display_id: string;
   appIcon: string | null;
+  originalName: string;
+  sourceType: 'screen' | 'window';
+  appName?: string;
+  windowTitle?: string;
+}
+
+function parseSourceMetadata(source: ProcessedDesktopSource) {
+  if (source.sourceType === 'window' && (source.appName || source.windowTitle)) {
+    return {
+      sourceType: 'window' as const,
+      appName: source.appName,
+      windowTitle: source.windowTitle ?? source.name,
+      displayName: source.windowTitle ?? source.name,
+    };
+  }
+
+  const sourceType: 'screen' | 'window' = source.id.startsWith('window:') ? 'window' : 'screen';
+  if (sourceType === 'window') {
+    const [appNamePart, ...windowTitleParts] = source.name.split(' — ');
+    const appName = appNamePart?.trim() || undefined;
+    const windowTitle = windowTitleParts.join(' — ').trim() || source.name.trim();
+
+    return {
+      sourceType,
+      appName,
+      windowTitle,
+      displayName: windowTitle,
+    };
+  }
+
+  return {
+    sourceType,
+    appName: undefined,
+    windowTitle: undefined,
+    displayName: source.name,
+  };
 }
 
 export function SourceSelector() {
@@ -28,16 +64,21 @@ export function SourceSelector() {
           fetchWindowIcons: true
         });
         setSources(
-          rawSources.map(source => ({
-            id: source.id,
-            name:
-              source.id.startsWith('window:') && source.name.includes(' — ')
-                ? source.name.split(' — ')[1] || source.name
-                : source.name,
-            thumbnail: source.thumbnail,
-            display_id: source.display_id,
-            appIcon: source.appIcon
-          }))
+          rawSources.map(source => {
+            const metadata = parseSourceMetadata(source);
+
+            return {
+              id: source.id,
+              name: metadata.displayName,
+              thumbnail: source.thumbnail,
+              display_id: source.display_id,
+              appIcon: source.appIcon,
+              originalName: source.name,
+              sourceType: metadata.sourceType,
+              appName: metadata.appName,
+              windowTitle: metadata.windowTitle,
+            };
+          })
         );
       } catch (error) {
         console.error('Error loading sources:', error);
@@ -72,8 +113,8 @@ export function SourceSelector() {
       <div className="flex-1 flex flex-col w-full max-w-xl" style={{ padding: 0 }}>
         <Tabs defaultValue="screens">
           <TabsList className="grid grid-cols-2 mb-3 bg-zinc-900/40 rounded-full">
-            <TabsTrigger value="screens" className="data-[state=active]:bg-[#34B27B] data-[state=active]:text-white text-zinc-200 rounded-full text-xs py-1">Screens</TabsTrigger>
-            <TabsTrigger value="windows" className="data-[state=active]:bg-[#34B27B] data-[state=active]:text-white text-zinc-200 rounded-full text-xs py-1">Windows</TabsTrigger>
+            <TabsTrigger value="screens" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-zinc-200 rounded-full text-xs py-1">Screens</TabsTrigger>
+            <TabsTrigger value="windows" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-zinc-200 rounded-full text-xs py-1">Windows</TabsTrigger>
           </TabsList>
             <div className="h-72 flex flex-col justify-stretch">
             <TabsContent value="screens" className="h-full">
@@ -94,7 +135,7 @@ export function SourceSelector() {
                         />
                         {selectedSource?.id === source.id && (
                           <div className="absolute -top-1 -right-1">
-                            <div className="w-4 h-4 bg-[#34B27B] rounded-full flex items-center justify-center shadow-md">
+                            <div className="w-4 h-4 bg-[#2563EB] rounded-full flex items-center justify-center shadow-md">
                               <MdCheck className={styles.icon} />
                             </div>
                           </div>
@@ -107,6 +148,7 @@ export function SourceSelector() {
               </div>
             </TabsContent>
             <TabsContent value="windows" className="h-full">
+              <p className="text-[10px] text-zinc-500 mb-1 px-1">Only visible (non-minimized) windows can be recorded.</p>
               <div className={`grid grid-cols-2 gap-2 h-full overflow-y-auto pr-1 relative ${styles.sourceGridScroll}`}>
                 {windowSources.map(source => (
                   <Card
@@ -117,11 +159,26 @@ export function SourceSelector() {
                   >
                     <div className="p-1">
                       <div className="relative mb-1">
-                        <img
-                          src={source.thumbnail || ''}
-                          alt={source.name}
-                          className="w-full aspect-video object-cover rounded border border-gray-700"
-                        />
+                        {source.thumbnail ? (
+                          <img
+                            src={source.thumbnail}
+                            alt={source.name}
+                            className="w-full aspect-video object-cover rounded border border-gray-700"
+                          />
+                        ) : (
+                          <div className="w-full aspect-video rounded border border-gray-700 bg-zinc-900/80 flex flex-col items-center justify-center text-zinc-400 gap-2">
+                            {source.appIcon ? (
+                              <img
+                                src={source.appIcon}
+                                alt="App icon"
+                                className="w-8 h-8 rounded-md"
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-md bg-zinc-800 border border-zinc-700" />
+                            )}
+                            <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Window</div>
+                          </div>
+                        )}
                         {selectedSource?.id === source.id && (
                           <div className="absolute -top-1 -right-1">
                             <div className="w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center shadow-md">
@@ -151,7 +208,7 @@ export function SourceSelector() {
       <div className="border-t border-zinc-800 p-2 w-full max-w-xl">
         <div className="flex justify-center gap-2">
           <Button variant="outline" onClick={() => window.close()} className="px-4 py-1 text-xs bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700">Cancel</Button>
-          <Button onClick={handleShare} disabled={!selectedSource} className="px-4 py-1 text-xs bg-[#34B27B] text-white hover:bg-[#34B27B]/80 disabled:opacity-50 disabled:bg-zinc-700">Share</Button>
+          <Button onClick={handleShare} disabled={!selectedSource} className="px-4 py-1 text-xs bg-[#2563EB] text-white hover:bg-[#2563EB]/80 disabled:opacity-50 disabled:bg-zinc-700">Share</Button>
         </div>
       </div>
     </div>

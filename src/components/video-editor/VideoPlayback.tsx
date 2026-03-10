@@ -1,18 +1,49 @@
 import type React from "react";
 import { useEffect, useRef, useImperativeHandle, forwardRef, useState, useMemo, useCallback } from "react";
-import { getAssetPath } from "@/lib/assetPath";
+import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
+import { DEFAULT_WALLPAPER_PATH, DEFAULT_WALLPAPER_RELATIVE_PATH } from "@/lib/wallpapers";
 import { Application, Container, Sprite, Graphics, BlurFilter, Texture, VideoSource } from 'pixi.js';
-import { ZOOM_DEPTH_SCALES, type ZoomRegion, type ZoomFocus, type ZoomDepth, type TrimRegion, type AnnotationRegion } from "./types";
-import { DEFAULT_FOCUS, SMOOTHING_FACTOR, MIN_DELTA } from "./videoPlayback/constants";
+import { MotionBlurFilter } from 'pixi-filters/motion-blur';
+import { ZOOM_DEPTH_SCALES, type ZoomRegion, type ZoomFocus, type ZoomDepth, type TrimRegion, type SpeedRegion, type AnnotationRegion, type CursorTelemetryPoint } from "./types";
+import { DEFAULT_FOCUS, ZOOM_SCALE_DEADZONE, ZOOM_TRANSLATION_DEADZONE_PX } from "./videoPlayback/constants";
+import { DEFAULT_CURSOR_CONFIG, PixiCursorOverlay, preloadCursorAssets } from "./videoPlayback/cursorRenderer";
 import { clamp01 } from "./videoPlayback/mathUtils";
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
 import { clampFocusToStage as clampFocusToStageUtil } from "./videoPlayback/focusUtils";
 import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
 import { layoutVideoContent as layoutVideoContentUtil } from "./videoPlayback/layoutUtils";
-import { applyZoomTransform } from "./videoPlayback/zoomTransform";
+import { applyZoomTransform, computeFocusFromTransform, computeZoomTransform, createMotionBlurState, type MotionBlurState } from "./videoPlayback/zoomTransform";
 import { createVideoEventHandlers } from "./videoPlayback/videoEventHandlers";
 import { type AspectRatio, formatAspectRatioForCSS } from "@/utils/aspectRatioUtils";
 import { AnnotationOverlay } from "./AnnotationOverlay";
+import {
+  DEFAULT_CURSOR_CLICK_BOUNCE,
+  DEFAULT_CURSOR_MOTION_BLUR,
+  DEFAULT_CURSOR_SIZE,
+  DEFAULT_CURSOR_SMOOTHING,
+} from "./types";
+
+type PlaybackAnimationState = {
+  scale: number;
+  appliedScale: number;
+  focusX: number;
+  focusY: number;
+  progress: number;
+  x: number;
+  y: number;
+};
+
+function createPlaybackAnimationState(): PlaybackAnimationState {
+  return {
+    scale: 1,
+    appliedScale: 1,
+    focusX: DEFAULT_FOCUS.cx,
+    focusY: DEFAULT_FOCUS.cy,
+    progress: 0,
+    x: 0,
+    y: 0,
+  };
+}
 
 interface VideoPlaybackProps {
   videoPath: string;
@@ -29,18 +60,26 @@ interface VideoPlaybackProps {
   isPlaying: boolean;
   showShadow?: boolean;
   shadowIntensity?: number;
-  showBlur?: boolean;
-  motionBlurEnabled?: boolean;
+  backgroundBlur?: number;
+  zoomMotionBlur?: number;
+  connectZooms?: boolean;
   borderRadius?: number;
   padding?: number;
   cropRegion?: import('./types').CropRegion;
   trimRegions?: TrimRegion[];
+  speedRegions?: SpeedRegion[];
   aspectRatio: AspectRatio;
   annotationRegions?: AnnotationRegion[];
   selectedAnnotationId?: string | null;
   onSelectAnnotation?: (id: string | null) => void;
   onAnnotationPositionChange?: (id: string, position: { x: number; y: number }) => void;
   onAnnotationSizeChange?: (id: string, size: { width: number; height: number }) => void;
+  cursorTelemetry?: CursorTelemetryPoint[];
+  showCursor?: boolean;
+  cursorSize?: number;
+  cursorSmoothing?: number;
+  cursorMotionBlur?: number;
+  cursorClickBounce?: number;
 }
 
 export interface VideoPlaybackRef {
@@ -51,6 +90,7 @@ export interface VideoPlaybackRef {
   containerRef: React.RefObject<HTMLDivElement>;
   play: () => Promise<void>;
   pause: () => void;
+  refreshFrame: () => Promise<void>;
 }
 
 const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
@@ -68,24 +108,33 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   isPlaying,
   showShadow,
   shadowIntensity = 0,
-  showBlur,
-  motionBlurEnabled = false,
+  backgroundBlur = 0,
+  zoomMotionBlur = 0,
+  connectZooms = true,
   borderRadius = 0,
   padding = 50,
   cropRegion,
   trimRegions = [],
+  speedRegions = [],
   aspectRatio,
   annotationRegions = [],
   selectedAnnotationId,
   onSelectAnnotation,
   onAnnotationPositionChange,
   onAnnotationSizeChange,
+  cursorTelemetry = [],
+  showCursor = false,
+  cursorSize = DEFAULT_CURSOR_SIZE,
+  cursorSmoothing = DEFAULT_CURSOR_SMOOTHING,
+  cursorMotionBlur = DEFAULT_CURSOR_MOTION_BLUR,
+  cursorClickBounce = DEFAULT_CURSOR_CLICK_BOUNCE,
 }, ref) => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const appRef = useRef<Application | null>(null);
   const videoSpriteRef = useRef<Sprite | null>(null);
   const videoContainerRef = useRef<Container | null>(null);
+  const cursorContainerRef = useRef<Container | null>(null);
   const cameraContainerRef = useRef<Container | null>(null);
   const timeUpdateAnimationRef = useRef<number | null>(null);
   const [pixiReady, setPixiReady] = useState(false);
@@ -95,8 +144,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   const currentTimeRef = useRef(0);
   const zoomRegionsRef = useRef<ZoomRegion[]>([]);
   const selectedZoomIdRef = useRef<string | null>(null);
-  const animationStateRef = useRef({ scale: 1, focusX: DEFAULT_FOCUS.cx, focusY: DEFAULT_FOCUS.cy });
+  const animationStateRef = useRef<PlaybackAnimationState>(createPlaybackAnimationState());
   const blurFilterRef = useRef<BlurFilter | null>(null);
+  const motionBlurFilterRef = useRef<MotionBlurFilter | null>(null);
   const isDraggingFocusRef = useRef(false);
   const stageSizeRef = useRef({ width: 0, height: 0 });
   const videoSizeRef = useRef({ width: 0, height: 0 });
@@ -111,8 +161,18 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   const lockedVideoDimensionsRef = useRef<{ width: number; height: number } | null>(null);
   const layoutVideoContentRef = useRef<(() => void) | null>(null);
   const trimRegionsRef = useRef<TrimRegion[]>([]);
-  const motionBlurEnabledRef = useRef(motionBlurEnabled);
+  const speedRegionsRef = useRef<SpeedRegion[]>([]);
+  const zoomMotionBlurRef = useRef(zoomMotionBlur);
+  const connectZoomsRef = useRef(connectZooms);
   const videoReadyRafRef = useRef<number | null>(null);
+  const cursorOverlayRef = useRef<PixiCursorOverlay | null>(null);
+  const cursorTelemetryRef = useRef<CursorTelemetryPoint[]>([]);
+  const showCursorRef = useRef(showCursor);
+  const cursorSizeRef = useRef(cursorSize);
+  const cursorSmoothingRef = useRef(cursorSmoothing);
+  const cursorMotionBlurRef = useRef(cursorMotionBlur);
+  const cursorClickBounceRef = useRef(cursorClickBounce);
+  const motionBlurStateRef = useRef<MotionBlurState>(createMotionBlurState());
 
   const clampFocusToStage = useCallback((focus: ZoomFocus, depth: ZoomDepth) => {
     return clampFocusToStageUtil(focus, depth, stageSizeRef.current);
@@ -138,8 +198,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       indicatorEl,
       region,
       focusOverride,
-      videoSize: videoSizeRef.current,
-      baseScale: baseScaleRef.current,
+      baseMask: baseMaskRef.current,
       isPlaying: isPlayingRef.current,
     });
   }, []);
@@ -231,6 +290,40 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       }
       video.pause();
     },
+    refreshFrame: async () => {
+      const video = videoRef.current;
+      if (!video || Number.isNaN(video.currentTime)) {
+        return;
+      }
+
+      const restoreTime = video.currentTime;
+      const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      const epsilon = duration > 0 ? Math.min(1 / 120, duration / 1000 || 1 / 120) : 1 / 120;
+      const nudgeTarget = restoreTime > epsilon
+        ? restoreTime - epsilon
+        : Math.min(duration || restoreTime + epsilon, restoreTime + epsilon);
+
+      if (Math.abs(nudgeTarget - restoreTime) < 0.000001) {
+        return;
+      }
+
+      await new Promise<void>((resolve) => {
+        const handleFirstSeeked = () => {
+          video.removeEventListener('seeked', handleFirstSeeked);
+          const handleSecondSeeked = () => {
+            video.removeEventListener('seeked', handleSecondSeeked);
+            video.pause();
+            resolve();
+          };
+
+          video.addEventListener('seeked', handleSecondSeeked, { once: true });
+          video.currentTime = restoreTime;
+        };
+
+        video.addEventListener('seeked', handleFirstSeeked, { once: true });
+        video.currentTime = nudgeTarget;
+      });
+    },
   }));
 
   const updateFocusFromClientPoint = (clientX: number, clientY: number) => {
@@ -255,10 +348,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
 
     const localX = clientX - rect.left;
     const localY = clientY - rect.top;
+    const baseMask = baseMaskRef.current;
 
     const unclampedFocus: ZoomFocus = {
-      cx: clamp01(localX / stageWidth),
-      cy: clamp01(localY / stageHeight),
+      cx: clamp01((localX - baseMask.x) / Math.max(1, baseMask.width)),
+      cy: clamp01((localY - baseMask.y) / Math.max(1, baseMask.height)),
     };
     const clampedFocus = clampFocusToStage(unclampedFocus, region.depth);
 
@@ -320,8 +414,40 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
   }, [trimRegions]);
 
   useEffect(() => {
-    motionBlurEnabledRef.current = motionBlurEnabled;
-  }, [motionBlurEnabled]);
+    speedRegionsRef.current = speedRegions;
+  }, [speedRegions]);
+
+  useEffect(() => {
+    zoomMotionBlurRef.current = zoomMotionBlur;
+  }, [zoomMotionBlur]);
+
+  useEffect(() => {
+    connectZoomsRef.current = connectZooms;
+  }, [connectZooms]);
+
+  useEffect(() => {
+    cursorTelemetryRef.current = cursorTelemetry;
+  }, [cursorTelemetry]);
+
+  useEffect(() => {
+    showCursorRef.current = showCursor;
+  }, [showCursor]);
+
+  useEffect(() => {
+    cursorSizeRef.current = cursorSize;
+  }, [cursorSize]);
+
+  useEffect(() => {
+    cursorSmoothingRef.current = cursorSmoothing;
+  }, [cursorSmoothing]);
+
+  useEffect(() => {
+    cursorMotionBlurRef.current = cursorMotionBlur;
+  }, [cursorMotionBlur]);
+
+  useEffect(() => {
+    cursorClickBounceRef.current = cursorClickBounce;
+  }, [cursorClickBounce]);
 
   useEffect(() => {
     if (!pixiReady || !videoReady) return;
@@ -342,11 +468,13 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       video.pause();
     }
 
-    animationStateRef.current = {
-      scale: 1,
-      focusX: DEFAULT_FOCUS.cx,
-      focusY: DEFAULT_FOCUS.cy,
-    };
+    animationStateRef.current = createPlaybackAnimationState();
+
+    // Reset cursor overlay smoothing on layout change
+    cursorOverlayRef.current?.reset();
+
+    // Reset motion blur state for clean transitions
+    motionBlurStateRef.current = createMotionBlurState();
 
     if (blurFilterRef.current) {
       blurFilterRef.current.blur = 0;
@@ -380,7 +508,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
         focusY: DEFAULT_FOCUS.cy,
         motionIntensity: 0,
         isPlaying: false,
-        motionBlurEnabled: motionBlurEnabledRef.current,
+        motionBlurAmount: zoomMotionBlurRef.current,
       });
 
       requestAnimationFrame(() => {
@@ -440,6 +568,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     let app: Application | null = null;
 
     (async () => {
+      let cursorOverlayEnabled = true;
+      try {
+        await preloadCursorAssets();
+      } catch (error) {
+        cursorOverlayEnabled = false;
+        console.warn('Native cursor assets are unavailable in preview; continuing without cursor overlay.', error);
+      }
+
       app = new Application();
       
       await app.init({
@@ -454,7 +590,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       app.ticker.maxFPS = 60;
 
       if (!mounted) {
-        app.destroy(true, { children: true, texture: true, textureSource: true });
+        app.destroy(true, { children: true, texture: false, textureSource: false });
         return;
       }
 
@@ -470,22 +606,49 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       const videoContainer = new Container();
       videoContainerRef.current = videoContainer;
       cameraContainer.addChild(videoContainer);
+
+      const cursorContainer = new Container();
+      cursorContainerRef.current = cursorContainer;
+      cameraContainer.addChild(cursorContainer);
+
+      // Cursor overlay - rendered above the masked video so it can sit in front
+      // of the content without getting clipped.
+      if (cursorOverlayEnabled) {
+        const cursorOverlay = new PixiCursorOverlay({
+          dotRadius: DEFAULT_CURSOR_CONFIG.dotRadius * cursorSizeRef.current,
+          smoothingFactor: cursorSmoothingRef.current,
+          motionBlur: cursorMotionBlurRef.current,
+          clickBounce: cursorClickBounceRef.current,
+        });
+        cursorOverlayRef.current = cursorOverlay;
+        cursorContainer.addChild(cursorOverlay.container);
+      } else {
+        cursorOverlayRef.current = null;
+      }
       
       setPixiReady(true);
-    })();
+    })().catch((error) => {
+      console.error('Failed to initialize preview renderer:', error);
+      onError(error instanceof Error ? error.message : 'Failed to initialize preview renderer');
+    });
 
     return () => {
       mounted = false;
       setPixiReady(false);
+      if (cursorOverlayRef.current) {
+        cursorOverlayRef.current.destroy();
+        cursorOverlayRef.current = null;
+      }
       if (app && app.renderer) {
-        app.destroy(true, { children: true, texture: true, textureSource: true });
+        app.destroy(true, { children: true, texture: false, textureSource: false });
       }
       appRef.current = null;
       cameraContainerRef.current = null;
       videoContainerRef.current = null;
+      cursorContainerRef.current = null;
       videoSpriteRef.current = null;
     };
-  }, []);
+  }, [onError]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -509,8 +672,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     const video = videoRef.current;
     const app = appRef.current;
     const videoContainer = videoContainerRef.current;
+    const cursorContainer = cursorContainerRef.current;
     
-    if (!video || !app || !videoContainer) return;
+    if (!video || !app || !videoContainer || !cursorContainer) return;
     if (video.videoWidth === 0 || video.videoHeight === 0) return;
     
     const source = VideoSource.from(video);
@@ -530,19 +694,20 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     videoContainer.addChild(maskGraphics);
     videoContainer.mask = maskGraphics;
     maskGraphicsRef.current = maskGraphics;
+    if (cursorOverlayRef.current) {
+      cursorContainer.addChild(cursorOverlayRef.current.container);
+    }
 
-    animationStateRef.current = {
-      scale: 1,
-      focusX: DEFAULT_FOCUS.cx,
-      focusY: DEFAULT_FOCUS.cy,
-    };
+    animationStateRef.current = createPlaybackAnimationState();
 
     const blurFilter = new BlurFilter();
     blurFilter.quality = 3;
     blurFilter.resolution = app.renderer.resolution;
     blurFilter.blur = 0;
-    videoContainer.filters = [blurFilter];
+    const motionBlurFilter = new MotionBlurFilter([0, 0], 5, 0);
+    videoContainer.filters = [blurFilter, motionBlurFilter];
     blurFilterRef.current = blurFilter;
+    motionBlurFilterRef.current = motionBlurFilter;
     
     layoutVideoContent();
     video.pause();
@@ -557,6 +722,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       onPlayStateChange,
       onTimeUpdate,
       trimRegionsRef,
+      speedRegionsRef,
     });
     
     video.addEventListener('play', handlePlay);
@@ -591,7 +757,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
         blurFilterRef.current.destroy();
         blurFilterRef.current = null;
       }
-      videoTexture.destroy(true);
+      if (motionBlurFilterRef.current) {
+        motionBlurFilterRef.current.destroy();
+        motionBlurFilterRef.current = null;
+      }
+      videoTexture.destroy(false);
       
       videoSpriteRef.current = null;
     };
@@ -605,32 +775,54 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     const videoContainer = videoContainerRef.current;
     if (!app || !videoSprite || !videoContainer) return;
 
-    const applyTransform = (motionIntensity: number) => {
+    const applyTransform = (
+      transform: { scale: number; x: number; y: number },
+      focus: ZoomFocus,
+      motionIntensity: number,
+      motionVector: { x: number; y: number },
+    ) => {
       const cameraContainer = cameraContainerRef.current;
       if (!cameraContainer) return;
 
       const state = animationStateRef.current;
 
-      applyZoomTransform({
+      const appliedTransform = applyZoomTransform({
         cameraContainer,
         blurFilter: blurFilterRef.current,
         stageSize: stageSizeRef.current,
         baseMask: baseMaskRef.current,
         zoomScale: state.scale,
-        focusX: state.focusX,
-        focusY: state.focusY,
+        zoomProgress: state.progress,
+        focusX: focus.cx,
+        focusY: focus.cy,
         motionIntensity,
+        motionVector,
         isPlaying: isPlayingRef.current,
-        motionBlurEnabled: motionBlurEnabledRef.current,
+        motionBlurAmount: zoomMotionBlurRef.current,
+        motionBlurFilter: motionBlurFilterRef.current,
+        transformOverride: transform,
+        motionBlurState: motionBlurStateRef.current,
+        frameTimeMs: performance.now(),
       });
+
+      state.x = appliedTransform.x;
+      state.y = appliedTransform.y;
+      state.appliedScale = appliedTransform.scale;
     };
 
     const ticker = () => {
-      const { region, strength } = findDominantRegion(zoomRegionsRef.current, currentTimeRef.current);
+      const { region, strength, blendedScale, transition } = findDominantRegion(
+        zoomRegionsRef.current,
+        currentTimeRef.current,
+        {
+          connectZooms: connectZoomsRef.current,
+        },
+      );
       
       const defaultFocus = DEFAULT_FOCUS;
       let targetScaleFactor = 1;
       let targetFocus = defaultFocus;
+      let targetProgress = 0;
 
       // If a zoom is selected but video is not playing, show default unzoomed view
       // (the overlay will show where the zoom will be)
@@ -639,60 +831,103 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       const shouldShowUnzoomedView = hasSelectedZoom && !isPlayingRef.current;
 
       if (region && strength > 0 && !shouldShowUnzoomedView) {
-        const zoomScale = ZOOM_DEPTH_SCALES[region.depth];
-        const regionFocus = clampFocusToStage(region.focus, region.depth);
-        
-        // Interpolate scale and focus based on region strength
-        targetScaleFactor = 1 + (zoomScale - 1) * strength;
-        targetFocus = {
-          cx: defaultFocus.cx + (regionFocus.cx - defaultFocus.cx) * strength,
-          cy: defaultFocus.cy + (regionFocus.cy - defaultFocus.cy) * strength,
-        };
+        const zoomScale = blendedScale ?? ZOOM_DEPTH_SCALES[region.depth];
+        const regionFocus = region.focus;
+
+        targetScaleFactor = zoomScale;
+        targetFocus = regionFocus;
+        targetProgress = strength;
+
+        if (transition) {
+          const startTransform = computeZoomTransform({
+            stageSize: stageSizeRef.current,
+            baseMask: baseMaskRef.current,
+            zoomScale: transition.startScale,
+            zoomProgress: 1,
+            focusX: transition.startFocus.cx,
+            focusY: transition.startFocus.cy,
+          });
+          const endTransform = computeZoomTransform({
+            stageSize: stageSizeRef.current,
+            baseMask: baseMaskRef.current,
+            zoomScale: transition.endScale,
+            zoomProgress: 1,
+            focusX: transition.endFocus.cx,
+            focusY: transition.endFocus.cy,
+          });
+
+          const interpolatedTransform = {
+            scale: startTransform.scale + (endTransform.scale - startTransform.scale) * transition.progress,
+            x: startTransform.x + (endTransform.x - startTransform.x) * transition.progress,
+            y: startTransform.y + (endTransform.y - startTransform.y) * transition.progress,
+          };
+
+          targetScaleFactor = interpolatedTransform.scale;
+          targetFocus = computeFocusFromTransform({
+            stageSize: stageSizeRef.current,
+            baseMask: baseMaskRef.current,
+            zoomScale: interpolatedTransform.scale,
+            x: interpolatedTransform.x,
+            y: interpolatedTransform.y,
+          });
+          targetProgress = 1;
+        }
       }
 
       const state = animationStateRef.current;
+      const prevScale = state.appliedScale;
+      const prevX = state.x;
+      const prevY = state.y;
 
-      const prevScale = state.scale;
-      const prevFocusX = state.focusX;
-      const prevFocusY = state.focusY;
+      state.scale = targetScaleFactor;
+      state.focusX = targetFocus.cx;
+      state.focusY = targetFocus.cy;
+      state.progress = targetProgress;
 
-      const scaleDelta = targetScaleFactor - state.scale;
-      const focusXDelta = targetFocus.cx - state.focusX;
-      const focusYDelta = targetFocus.cy - state.focusY;
+      const projectedTransform = computeZoomTransform({
+        stageSize: stageSizeRef.current,
+        baseMask: baseMaskRef.current,
+        zoomScale: state.scale,
+        zoomProgress: state.progress,
+        focusX: state.focusX,
+        focusY: state.focusY,
+      });
 
-      let nextScale = prevScale;
-      let nextFocusX = prevFocusX;
-      let nextFocusY = prevFocusY;
-
-      if (Math.abs(scaleDelta) > MIN_DELTA) {
-        nextScale = prevScale + scaleDelta * SMOOTHING_FACTOR;
-      } else {
-        nextScale = targetScaleFactor;
-      }
-
-      if (Math.abs(focusXDelta) > MIN_DELTA) {
-        nextFocusX = prevFocusX + focusXDelta * SMOOTHING_FACTOR;
-      } else {
-        nextFocusX = targetFocus.cx;
-      }
-
-      if (Math.abs(focusYDelta) > MIN_DELTA) {
-        nextFocusY = prevFocusY + focusYDelta * SMOOTHING_FACTOR;
-      } else {
-        nextFocusY = targetFocus.cy;
-      }
-
-      state.scale = nextScale;
-      state.focusX = nextFocusX;
-      state.focusY = nextFocusY;
+      const appliedScale = Math.abs(projectedTransform.scale - prevScale) < ZOOM_SCALE_DEADZONE
+        ? projectedTransform.scale
+        : projectedTransform.scale;
+      const appliedX = Math.abs(projectedTransform.x - prevX) < ZOOM_TRANSLATION_DEADZONE_PX
+        ? projectedTransform.x
+        : projectedTransform.x;
+      const appliedY = Math.abs(projectedTransform.y - prevY) < ZOOM_TRANSLATION_DEADZONE_PX
+        ? projectedTransform.y
+        : projectedTransform.y;
 
       const motionIntensity = Math.max(
-        Math.abs(nextScale - prevScale),
-        Math.abs(nextFocusX - prevFocusX),
-        Math.abs(nextFocusY - prevFocusY)
+        Math.abs(appliedScale - prevScale),
+        Math.abs(appliedX - prevX) / Math.max(1, stageSizeRef.current.width),
+        Math.abs(appliedY - prevY) / Math.max(1, stageSizeRef.current.height),
       );
 
-      applyTransform(motionIntensity);
+      const motionVector = {
+        x: appliedX - prevX,
+        y: appliedY - prevY,
+      };
+
+      applyTransform({ scale: appliedScale, x: appliedX, y: appliedY }, targetFocus, motionIntensity, motionVector);
+
+      // Update cursor overlay
+      const cursorOverlay = cursorOverlayRef.current;
+      if (cursorOverlay) {
+        const timeMs = currentTimeRef.current;
+        cursorOverlay.update(
+          cursorTelemetryRef.current,
+          timeMs,
+          baseMaskRef.current,
+          showCursorRef.current,
+          !isPlayingRef.current || isSeekingRef.current,
+        );
+      }
     };
 
     app.ticker.add(ticker);
@@ -702,6 +937,19 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       }
     };
   }, [pixiReady, videoReady, clampFocusToStage]);
+
+  useEffect(() => {
+    const overlay = cursorOverlayRef.current;
+    if (!overlay) {
+      return;
+    }
+
+    overlay.setDotRadius(DEFAULT_CURSOR_CONFIG.dotRadius * cursorSize);
+    overlay.setSmoothingFactor(cursorSmoothing);
+    overlay.setMotionBlur(cursorMotionBlur);
+    overlay.setClickBounce(cursorClickBounce);
+    overlay.reset();
+  }, [cursorSize, cursorSmoothing, cursorMotionBlur, cursorClickBounce]);
 
   const handleLoadedMetadata = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
     const video = e.currentTarget;
@@ -737,7 +985,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     ;(async () => {
       try {
         if (!wallpaper) {
-          const def = await getAssetPath('wallpapers/wallpaper1.jpg')
+          const def = await getAssetPath(DEFAULT_WALLPAPER_RELATIVE_PATH)
           if (mounted) setResolvedWallpaper(def)
           return
         }
@@ -753,22 +1001,15 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
           return
         }
 
-        // If it's an absolute web/http or file path, use as-is
         if (wallpaper.startsWith('http') || wallpaper.startsWith('file://') || wallpaper.startsWith('/')) {
-          // If it's an absolute server path (starts with '/'), resolve via getAssetPath as well
-          if (wallpaper.startsWith('/')) {
-            const rel = wallpaper.replace(/^\//, '')
-            const p = await getAssetPath(rel)
-            if (mounted) setResolvedWallpaper(p)
-            return
-          }
-          if (mounted) setResolvedWallpaper(wallpaper)
+          const renderable = await getRenderableAssetUrl(wallpaper)
+          if (mounted) setResolvedWallpaper(renderable)
           return
         }
-        const p = await getAssetPath(wallpaper.replace(/^\//, ''))
+        const p = await getRenderableAssetUrl(await getAssetPath(wallpaper.replace(/^\//, '')))
         if (mounted) setResolvedWallpaper(p)
       } catch (err) {
-        if (mounted) setResolvedWallpaper(wallpaper || '/wallpapers/wallpaper1.jpg')
+        if (mounted) setResolvedWallpaper(wallpaper || DEFAULT_WALLPAPER_PATH)
       }
     })()
     return () => { mounted = false }
@@ -795,7 +1036,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
         className="absolute inset-0 bg-cover bg-center"
         style={{
           ...backgroundStyle,
-          filter: showBlur ? 'blur(2px)' : 'none',
+          filter: backgroundBlur > 0 ? `blur(${backgroundBlur}px)` : 'none',
         }}
       />
       <div
@@ -820,7 +1061,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
         >
           <div
             ref={focusIndicatorRef}
-            className="absolute rounded-md border border-[#34B27B]/80 bg-[#34B27B]/20 shadow-[0_0_0_1px_rgba(52,178,123,0.35)]"
+            className="absolute rounded-md border border-[#2563EB]/80 bg-[#2563EB]/20 shadow-[0_0_0_1px_rgba(37,99,235,0.35)]"
             style={{ display: 'none', pointerEvents: 'none' }}
           />
           {(() => {

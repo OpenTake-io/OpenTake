@@ -1,9 +1,13 @@
 // @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "com.siddharthvaddem.openscreen",
+  "appId": "com.webadderall.recordly",
   "asar": true,
-  "productName": "Openscreen",
+  "asarUnpack": [
+    "node_modules/ffmpeg-static/**",
+    "electron/native/**"
+  ],
+  "productName": "Recordly",
   "npmRebuild": true,
   "buildDependenciesFromSource": true,
   "compression": "normal",
@@ -13,6 +17,7 @@
   "files": [
     "dist",
     "dist-electron",
+    "electron/native",
     "!*.png",
     "!preview*.png",
     "!*.md",
@@ -28,6 +33,7 @@
   ],
 
   "mac": {
+    "hardenedRuntime": false,
     "target": [
       {
         "target": "dmg",
@@ -35,7 +41,13 @@
       }
     ],
     "icon": "icons/icons/mac/icon.icns",
-    "artifactName": "${productName}-Mac-${arch}-${version}-Installer.${ext}"
+    "artifactName": "${productName}-Mac-${arch}-${version}-Installer.${ext}",
+    "extendInfo": {
+      "NSAudioCaptureUsageDescription": "Recordly needs audio capture permission to record system audio.",
+      "NSMicrophoneUsageDescription": "Recordly needs microphone access to record voice audio.",
+      "NSCameraUseContinuityCameraDeviceType": true,
+      "com.apple.security.device.audio-input": true
+    }
   },
   "linux": {
     "target": [

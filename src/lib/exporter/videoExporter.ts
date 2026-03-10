@@ -1,23 +1,32 @@
 import type { ExportConfig, ExportProgress, ExportResult } from './types';
+import { AudioProcessor } from './audioEncoder';
 import { StreamingVideoDecoder } from './streamingDecoder';
 import { FrameRenderer } from './frameRenderer';
 import { VideoMuxer } from './muxer';
-import type { ZoomRegion, CropRegion, TrimRegion, AnnotationRegion } from '@/components/video-editor/types';
+import type { ZoomRegion, CropRegion, TrimRegion, AnnotationRegion, SpeedRegion, CursorTelemetryPoint } from '@/components/video-editor/types';
 
 interface VideoExporterConfig extends ExportConfig {
   videoUrl: string;
   wallpaper: string;
   zoomRegions: ZoomRegion[];
   trimRegions?: TrimRegion[];
+  speedRegions?: SpeedRegion[];
   showShadow: boolean;
   shadowIntensity: number;
-  showBlur: boolean;
-  motionBlurEnabled?: boolean;
+  backgroundBlur: number;
+  zoomMotionBlur?: number;
+  connectZooms?: boolean;
   borderRadius?: number;
   padding?: number;
   videoPadding?: number;
   cropRegion: CropRegion;
   annotationRegions?: AnnotationRegion[];
+  cursorTelemetry?: CursorTelemetryPoint[];
+  showCursor?: boolean;
+  cursorSize?: number;
+  cursorSmoothing?: number;
+  cursorMotionBlur?: number;
+  cursorClickBounce?: number;
   previewWidth?: number;
   previewHeight?: number;
   onProgress?: (progress: ExportProgress) => void;
@@ -29,14 +38,14 @@ export class VideoExporter {
   private renderer: FrameRenderer | null = null;
   private encoder: VideoEncoder | null = null;
   private muxer: VideoMuxer | null = null;
+  private audioProcessor: AudioProcessor | null = null;
   private cancelled = false;
   private encodeQueue = 0;
   // Increased queue size for better throughput with hardware encoding
   private readonly MAX_ENCODE_QUEUE = 120;
   private videoDescription: Uint8Array | undefined;
   private videoColorSpace: VideoColorSpaceInit | undefined;
-  // Track muxing promises for parallel processing
-  private muxingPromises: Promise<void>[] = [];
+  private pendingMuxing: Promise<void> = Promise.resolve();
   private chunkCount = 0;
 
   constructor(config: VideoExporterConfig) {
@@ -60,28 +69,38 @@ export class VideoExporter {
         zoomRegions: this.config.zoomRegions,
         showShadow: this.config.showShadow,
         shadowIntensity: this.config.shadowIntensity,
-        showBlur: this.config.showBlur,
-        motionBlurEnabled: this.config.motionBlurEnabled,
+        backgroundBlur: this.config.backgroundBlur,
+        zoomMotionBlur: this.config.zoomMotionBlur,
+        connectZooms: this.config.connectZooms,
         borderRadius: this.config.borderRadius,
         padding: this.config.padding,
         cropRegion: this.config.cropRegion,
         videoWidth: videoInfo.width,
         videoHeight: videoInfo.height,
         annotationRegions: this.config.annotationRegions,
+        speedRegions: this.config.speedRegions,
         previewWidth: this.config.previewWidth,
         previewHeight: this.config.previewHeight,
+        cursorTelemetry: this.config.cursorTelemetry,
+        showCursor: this.config.showCursor,
+        cursorSize: this.config.cursorSize,
+        cursorSmoothing: this.config.cursorSmoothing,
+        cursorMotionBlur: this.config.cursorMotionBlur,
+        cursorClickBounce: this.config.cursorClickBounce,
       });
       await this.renderer.initialize();
 
       // Initialize video encoder
       await this.initializeEncoder();
 
+      const hasAudio = videoInfo.hasAudio;
+
       // Initialize muxer
-      this.muxer = new VideoMuxer(this.config, false);
+      this.muxer = new VideoMuxer(this.config, hasAudio);
       await this.muxer.initialize();
 
       // Calculate effective duration and frame count (excluding trim regions)
-      const effectiveDuration = this.streamingDecoder.getEffectiveDuration(this.config.trimRegions);
+      const effectiveDuration = this.streamingDecoder.getEffectiveDuration(this.config.trimRegions, this.config.speedRegions);
       const totalFrames = Math.ceil(effectiveDuration * this.config.frameRate);
 
       console.log('[VideoExporter] Original duration:', videoInfo.duration, 's');
@@ -96,6 +115,7 @@ export class VideoExporter {
       await this.streamingDecoder.decodeAll(
         this.config.frameRate,
         this.config.trimRegions,
+        this.config.speedRegions,
         async (videoFrame, _exportTimestampUs, sourceTimestampMs) => {
           if (this.cancelled) {
             videoFrame.close();
@@ -103,52 +123,13 @@ export class VideoExporter {
           }
 
           const timestamp = frameIndex * frameDuration;
-
-          // Render the frame with all effects using source timestamp
-          const sourceTimestampUs = sourceTimestampMs * 1000; // Convert to microseconds
+          const sourceTimestampUs = sourceTimestampMs * 1000;
           await this.renderer!.renderFrame(videoFrame, sourceTimestampUs);
           videoFrame.close();
 
-          const canvas = this.renderer!.getCanvas();
-
-          // Create VideoFrame from canvas on GPU without reading pixels
-          // @ts-ignore - colorSpace not in TypeScript definitions but works at runtime
-          const exportFrame = new VideoFrame(canvas, {
-            timestamp,
-            duration: frameDuration,
-            colorSpace: {
-              primaries: 'bt709',
-              transfer: 'iec61966-2-1',
-              matrix: 'rgb',
-              fullRange: true,
-            },
-          });
-
-          // Check encoder queue before encoding to keep it full
-          while (this.encodeQueue >= this.MAX_ENCODE_QUEUE && !this.cancelled) {
-            await new Promise(resolve => setTimeout(resolve, 0));
-          }
-
-          if (this.encoder && this.encoder.state === 'configured') {
-            this.encodeQueue++;
-            this.encoder.encode(exportFrame, { keyFrame: frameIndex % 150 === 0 });
-          } else {
-            console.warn(`[Frame ${frameIndex}] Encoder not ready! State: ${this.encoder?.state}`);
-          }
-
-          exportFrame.close();
-
+          await this.encodeRenderedFrame(timestamp, frameDuration, frameIndex);
           frameIndex++;
-
-          // Update progress
-          if (this.config.onProgress) {
-            this.config.onProgress({
-              currentFrame: frameIndex,
-              totalFrames,
-              percentage: (frameIndex / totalFrames) * 100,
-              estimatedTimeRemaining: 0,
-            });
-          }
+          this.reportProgress(frameIndex, totalFrames);
         }
       );
 
@@ -161,8 +142,16 @@ export class VideoExporter {
         await this.encoder.flush();
       }
 
-      // Wait for all muxing operations to complete
-      await Promise.all(this.muxingPromises);
+      // Wait for queued muxing operations to complete
+      await this.pendingMuxing;
+
+      if (hasAudio && !this.cancelled) {
+        const demuxer = this.streamingDecoder.getDemuxer();
+        if (demuxer) {
+          this.audioProcessor = new AudioProcessor();
+          await this.audioProcessor.process(demuxer, this.muxer!, this.config.trimRegions);
+        }
+      }
 
       // Finalize muxer and get output blob
       const blob = await this.muxer!.finalize();
@@ -179,9 +168,49 @@ export class VideoExporter {
     }
   }
 
+  private async encodeRenderedFrame(timestamp: number, frameDuration: number, frameIndex: number) {
+    const canvas = this.renderer!.getCanvas();
+
+    // @ts-ignore - colorSpace not in TypeScript definitions but works at runtime
+    const exportFrame = new VideoFrame(canvas, {
+      timestamp,
+      duration: frameDuration,
+      colorSpace: {
+        primaries: 'bt709',
+        transfer: 'iec61966-2-1',
+        matrix: 'rgb',
+        fullRange: true,
+      },
+    });
+
+    while (this.encoder && this.encoder.encodeQueueSize >= this.MAX_ENCODE_QUEUE && !this.cancelled) {
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+
+    if (this.encoder && this.encoder.state === 'configured') {
+      this.encodeQueue++;
+      this.encoder.encode(exportFrame, { keyFrame: frameIndex % 150 === 0 });
+    } else {
+      console.warn(`[Frame ${frameIndex}] Encoder not ready! State: ${this.encoder?.state}`);
+    }
+
+    exportFrame.close();
+  }
+
+  private reportProgress(currentFrame: number, totalFrames: number) {
+    if (this.config.onProgress) {
+      this.config.onProgress({
+        currentFrame,
+        totalFrames,
+        percentage: totalFrames > 0 ? (currentFrame / totalFrames) * 100 : 100,
+        estimatedTimeRemaining: 0,
+      });
+    }
+  }
+
   private async initializeEncoder(): Promise<void> {
     this.encodeQueue = 0;
-    this.muxingPromises = [];
+    this.pendingMuxing = Promise.resolve();
     this.chunkCount = 0;
     let videoDescription: Uint8Array | undefined;
 
@@ -198,11 +227,11 @@ export class VideoExporter {
           this.videoColorSpace = meta.decoderConfig.colorSpace;
         }
 
-        // Stream chunk to muxer immediately (parallel processing)
+        // Stream chunks to muxer in order without retaining an ever-growing promise array
         const isFirstChunk = this.chunkCount === 0;
         this.chunkCount++;
 
-        const muxingPromise = (async () => {
+        this.pendingMuxing = this.pendingMuxing.then(async () => {
           try {
             if (isFirstChunk && this.videoDescription) {
               // Add decoder config for the first chunk
@@ -230,9 +259,7 @@ export class VideoExporter {
           } catch (error) {
             console.error('Muxing error:', error);
           }
-        })();
-
-        this.muxingPromises.push(muxingPromise);
+        });
         this.encodeQueue--;
       },
       error: (error) => {
@@ -250,7 +277,7 @@ export class VideoExporter {
       height: this.config.height,
       bitrate: this.config.bitrate,
       framerate: this.config.frameRate,
-      latencyMode: 'realtime',
+      latencyMode: 'quality', // Changed from 'realtime' to 'quality' for better throughput
       bitrateMode: 'variable',
       hardwareAcceleration: 'prefer-hardware',
     };
@@ -280,6 +307,9 @@ export class VideoExporter {
     this.cancelled = true;
     if (this.streamingDecoder) {
       this.streamingDecoder.cancel();
+    }
+    if (this.audioProcessor) {
+      this.audioProcessor.cancel();
     }
     this.cleanup();
   }
@@ -315,8 +345,9 @@ export class VideoExporter {
     }
 
     this.muxer = null;
+  this.audioProcessor = null;
     this.encodeQueue = 0;
-    this.muxingPromises = [];
+    this.pendingMuxing = Promise.resolve();
     this.chunkCount = 0;
     this.videoDescription = undefined;
     this.videoColorSpace = undefined;

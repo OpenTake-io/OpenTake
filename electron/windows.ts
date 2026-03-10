@@ -1,15 +1,21 @@
-import { BrowserWindow, screen } from 'electron'
-import { ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const nodeRequire = createRequire(import.meta.url)
 
 const APP_ROOT = path.join(__dirname, '..')
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 const RENDERER_DIST = path.join(APP_ROOT, 'dist')
+const WINDOW_ICON_PATH = path.join(process.env.VITE_PUBLIC || RENDERER_DIST, 'app-icons', 'recordly-512.png')
 
 let hudOverlayWindow: BrowserWindow | null = null;
+
+function getScreen() {
+  return nodeRequire('electron').screen as typeof import('electron').screen
+}
 
 ipcMain.on('hud-overlay-hide', () => {
   if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
@@ -18,12 +24,12 @@ ipcMain.on('hud-overlay-hide', () => {
 });
 
 export function createHudOverlayWindow(): BrowserWindow {
-  const primaryDisplay = screen.getPrimaryDisplay();
+  const primaryDisplay = getScreen().getPrimaryDisplay();
   const { workArea } = primaryDisplay;
 
 
   const windowWidth = 500;
-  const windowHeight = 100;
+  const windowHeight = 155;
 
   const x = Math.floor(workArea.x + (workArea.width - windowWidth) / 2);
   const y = Math.floor(workArea.y + workArea.height - windowHeight - 5);
@@ -33,8 +39,8 @@ export function createHudOverlayWindow(): BrowserWindow {
     height: windowHeight,
     minWidth: 500,
     maxWidth: 500,
-    minHeight: 100,
-    maxHeight: 100,
+    minHeight: 155,
+    maxHeight: 155,
     x: x,
     y: y,
     frame: false,
@@ -84,6 +90,9 @@ export function createEditorWindow(): BrowserWindow {
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    ...(process.platform !== 'darwin' && {
+      icon: WINDOW_ICON_PATH,
+    }),
     ...(isMac && {
       titleBarStyle: 'hiddenInset',
       trafficLightPosition: { x: 12, y: 12 },
@@ -92,7 +101,7 @@ export function createEditorWindow(): BrowserWindow {
     resizable: true,
     alwaysOnTop: false,
     skipTaskbar: false,
-    title: 'OpenScreen',
+    title: 'Recordly',
     backgroundColor: '#000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
@@ -122,7 +131,7 @@ export function createEditorWindow(): BrowserWindow {
 }
 
 export function createSourceSelectorWindow(): BrowserWindow {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize
+  const { width, height } = getScreen().getPrimaryDisplay().workAreaSize
   
   const win = new BrowserWindow({
     width: 620,
@@ -135,6 +144,9 @@ export function createSourceSelectorWindow(): BrowserWindow {
     resizable: false,
     alwaysOnTop: true,
     transparent: true,
+    ...(process.platform !== 'darwin' && {
+      icon: WINDOW_ICON_PATH,
+    }),
     backgroundColor: '#00000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
