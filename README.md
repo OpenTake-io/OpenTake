@@ -12,9 +12,8 @@
 ### Create polished, pro-grade screen recordings.
 [Recordly](https://www.recordly.dev) is an **open-source screen recorder and editor** for creating **polished walkthroughs, demos, tutorials, and product videos**.
 
-
 <p align="center">
-  <img src="https://image2url.com/r2/default/gifs/1773106582465-3395bda8-8e8f-4735-ab44-9d912136783d.gif" width="750" alt="Recordly demo video">
+  <img src="./recordlydemo.gif" width="750" alt="Recordly demo video">
 </p>
 
 > Note on origins: Recordly is a hard fork of the excellent [**OpenScreen**](https://github.com/siddharthvaddem/openscreen) foundation by [Siddharth](https://x.com/sidious_man), which is focused on robustness and a stable feature set. Recordly focuses on a different product direction - i.e. adding cursor animations, Apple-inspired zoom animations, smoother panning - and aims to reach full feature parity with Screen Studio.
