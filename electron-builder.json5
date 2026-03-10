@@ -12,7 +12,7 @@
   "buildDependenciesFromSource": true,
   "compression": "normal",
   "directories": {
-    "output": "release/${version}"
+    "output": "release"
   },
   "files": [
     "dist",
@@ -41,7 +41,7 @@
       }
     ],
     "icon": "icons/icons/mac/icon.icns",
-    "artifactName": "${productName}-Mac-${arch}-${version}-Installer.${ext}",
+    "artifactName": "Recordly.dmg",
     "extendInfo": {
       "NSAudioCaptureUsageDescription": "Recordly needs audio capture permission to record system audio.",
       "NSMicrophoneUsageDescription": "Recordly needs microphone access to record voice audio.",
@@ -54,7 +54,7 @@
       "AppImage"
     ],
     "icon": "icons/icons/png",
-    "artifactName": "${productName}-Linux-${version}.${ext}",
+    "artifactName": "Recordly.AppImage",
     "category": "AudioVideo"
   },
   "win": {
@@ -62,5 +62,7 @@
       "nsis"
     ],
     "icon": "icons/icons/win/icon.ico"
+    ,
+    "artifactName": "Recordly.exe"
   }
 }
