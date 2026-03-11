@@ -50,6 +50,16 @@ let selectedSourceName = ''
 let editorHasUnsavedChanges = false
 let isForceClosing = false
 
+function closeEditorWindowBypassingUnsavedPrompt(window: BrowserWindow | null) {
+  if (!window || window.isDestroyed()) {
+    return
+  }
+
+  isForceClosing = true
+  editorHasUnsavedChanges = false
+  window.close()
+}
+
 // Tray Icons
 const defaultTrayIcon = getTrayIcon('app-icons/recordly-32.png');
 const recordingTrayIcon = getTrayIcon('rec-button.png');
@@ -248,13 +258,19 @@ function updateTrayMenu(recording: boolean = false) {
 
 function createEditorWindowWrapper() {
   if (mainWindow) {
-    isForceClosing = true
-    mainWindow.close()
-    isForceClosing = false
+    closeEditorWindowBypassingUnsavedPrompt(mainWindow)
     mainWindow = null
   }
   mainWindow = createEditorWindow()
   editorHasUnsavedChanges = false
+
+  mainWindow.on('closed', () => {
+    if (mainWindow?.isDestroyed()) {
+      mainWindow = null
+    }
+    isForceClosing = false
+    editorHasUnsavedChanges = false
+  })
 
   mainWindow.on('close', (event) => {
     if (isForceClosing || !editorHasUnsavedChanges) {
@@ -276,14 +292,10 @@ function createEditorWindowWrapper() {
     if (choice === 0) {
       mainWindow!.webContents.send('request-save-before-close')
       ipcMain.once('save-before-close-done', () => {
-        isForceClosing = true
-        mainWindow?.close()
-        isForceClosing = false
+        closeEditorWindowBypassingUnsavedPrompt(mainWindow)
       })
     } else if (choice === 1) {
-      isForceClosing = true
-      mainWindow?.close()
-      isForceClosing = false
+      closeEditorWindowBypassingUnsavedPrompt(mainWindow)
     }
   })
 }
