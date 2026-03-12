@@ -1,0 +1,208 @@
+name: Release Builds
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Release tag to create or update
+        required: true
+        type: string
+      release_name:
+        description: Release title
+        required: true
+        type: string
+      release_notes:
+        description: Optional release notes
+        required: false
+        type: string
+      make_latest:
+        description: Mark this release as the latest release
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos-x64:
+    name: Build macOS x64
+    runs-on: macos-13
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install app dependencies
+        run: npx electron-builder install-app-deps
+
+      - name: Build macOS x64
+        run: |
+          npx tsc
+          npx vite build
+          npx electron-builder --mac dmg --x64
+          mv release/Recordly.dmg release/Recordly-x64.dmg
+
+      - name: Upload macOS x64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-x64
+          path: release/Recordly-x64.dmg
+          if-no-files-found: error
+
+  build-macos-arm64:
+    name: Build macOS arm64
+    runs-on: macos-14
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install app dependencies
+        run: npx electron-builder install-app-deps
+
+      - name: Build macOS arm64
+        run: |
+          npx tsc
+          npx vite build
+          npx electron-builder --mac dmg --arm64
+          mv release/Recordly.dmg release/Recordly-arm64.dmg
+
+      - name: Upload macOS arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: release/Recordly-arm64.dmg
+          if-no-files-found: error
+
+  build-windows-x64:
+    name: Build Windows x64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install app dependencies
+        run: npx electron-builder install-app-deps
+
+      - name: Build Windows x64
+        shell: pwsh
+        run: |
+          npx tsc
+          npx vite build
+          npx electron-builder --win nsis --x64
+          Rename-Item -Path release/Recordly.exe -NewName Recordly-windows-x64.exe
+
+      - name: Upload Windows x64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: release/Recordly-windows-x64.exe
+          if-no-files-found: error
+
+  build-linux-x64:
+    name: Build Linux x64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install app dependencies
+        run: npx electron-builder install-app-deps
+
+      - name: Build Linux x64
+        run: |
+          npx tsc
+          npx vite build
+          npx electron-builder --linux AppImage --x64
+          mv release/Recordly.AppImage release/Recordly-linux-x64.AppImage
+
+      - name: Upload Linux x64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: release/Recordly-linux-x64.AppImage
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish release
+    needs:
+      - build-macos-x64
+      - build-macos-arm64
+      - build-windows-x64
+      - build-linux-x64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download macOS x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-x64
+          path: release-assets
+
+      - name: Download macOS arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-arm64
+          path: release-assets
+
+      - name: Download Windows x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-x64
+          path: release-assets
+
+      - name: Download Linux x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-x64
+          path: release-assets
+
+      - name: Create or update release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.event.inputs.tag_name }}
+          name: ${{ github.event.inputs.release_name }}
+          body: ${{ github.event.inputs.release_notes }}
+          makeLatest: ${{ github.event.inputs.make_latest }}
+          allowUpdates: true
+          replacesArtifacts: true
+          artifactErrorsFailBuild: true
+          artifacts: |
+            release-assets/Recordly-arm64.dmg
+            release-assets/Recordly-x64.dmg
+            release-assets/Recordly-windows-x64.exe
+            release-assets/Recordly-linux-x64.AppImage
