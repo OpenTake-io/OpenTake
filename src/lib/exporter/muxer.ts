@@ -87,3 +87,4 @@ export class VideoMuxer {
     return new Blob([buffer], { type: 'video/mp4' });
   }
 }
+

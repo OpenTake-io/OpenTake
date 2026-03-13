@@ -1308,3 +1308,4 @@ export default function TimelineEditor({
     </div>
   );
 }
+

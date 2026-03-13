@@ -1526,3 +1526,4 @@ export default function VideoEditor() {
     </div>
   );
 }
+

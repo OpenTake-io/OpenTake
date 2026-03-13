@@ -58,3 +58,4 @@ export function ShortcutsProvider({ children }: { children: ReactNode }) {
     </ShortcutsContext.Provider>
   );
 }
+

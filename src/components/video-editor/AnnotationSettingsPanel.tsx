@@ -519,3 +519,4 @@ export function AnnotationSettingsPanel({
     </div>
   );
 }
+

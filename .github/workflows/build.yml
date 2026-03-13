@@ -97,3 +97,4 @@ jobs:
           path: release/**/*.AppImage
           retention-days: 30
 
+

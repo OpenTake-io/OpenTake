@@ -46,3 +46,4 @@ body:
       placeholder: Links, mockups, or any additional information
     validations:
       required: false
+

@@ -178,3 +178,4 @@ export function isValidGoogleFontsUrl(url: string): boolean {
     return false;
   }
 }
+

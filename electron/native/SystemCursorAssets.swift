@@ -207,3 +207,4 @@ let encoder = JSONEncoder()
 encoder.outputFormatting = [.sortedKeys]
 let data = try encoder.encode(assets)
 FileHandle.standardOutput.write(data)
+

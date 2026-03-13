@@ -924,3 +924,4 @@ export function SettingsPanel({
     </div>
   );
 }
+

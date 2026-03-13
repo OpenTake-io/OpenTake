@@ -62,3 +62,4 @@ export function updateOverlayIndicator(params: OverlayUpdateParams) {
   indicatorEl.style.top = `${adjustedTop}px`;
   overlayEl.style.pointerEvents = isPlaying ? 'none' : 'auto';
 }
+

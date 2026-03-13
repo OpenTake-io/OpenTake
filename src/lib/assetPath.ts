@@ -95,3 +95,4 @@ export async function getRenderableAssetUrl(asset: string): Promise<string> {
 }
 
 export default getAssetPath;
+

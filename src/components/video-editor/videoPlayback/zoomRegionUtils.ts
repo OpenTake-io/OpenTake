@@ -217,3 +217,4 @@ export function findDominantRegion(regions: ZoomRegion[], timeMs: number, option
     ? { ...activeRegion, transition: null }
     : { region: null, strength: 0, blendedScale: null, transition: null };
 }
+

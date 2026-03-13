@@ -231,3 +231,4 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
     </div>
   );
 }
+
