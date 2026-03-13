@@ -2170,3 +2170,4 @@ export function registerIpcHandlers(
     }
   });
 }
+

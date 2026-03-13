@@ -145,3 +145,4 @@ interface Window {
     onRequestSaveBeforeClose: (callback: () => Promise<void>) => () => void
   }
 }
+

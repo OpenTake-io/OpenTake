@@ -57,3 +57,4 @@ for (const helper of helpers) {
   await chmod(outputPath, 0o755);
   console.log(`[build-native-helpers] Built ${helper.output} -> ${outputPath}`);
 }
+

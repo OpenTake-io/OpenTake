@@ -521,3 +521,4 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     setSystemAudioEnabled,
   };
 }
+

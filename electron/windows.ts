@@ -165,3 +165,4 @@ export function createSourceSelectorWindow(): BrowserWindow {
 
   return win
 }
+

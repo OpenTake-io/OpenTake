@@ -275,3 +275,4 @@ export class GifExporter {
     this.gif = null;
   }
 }
+

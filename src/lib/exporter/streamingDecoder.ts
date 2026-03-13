@@ -504,3 +504,4 @@ export class StreamingVideoDecoder {
     }
   }
 }
+

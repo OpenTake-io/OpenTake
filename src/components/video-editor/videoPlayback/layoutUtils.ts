@@ -109,3 +109,4 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
     cropBounds: { startX: cropStartX, endX: cropEndX, startY: cropStartY, endY: cropEndY },
   };
 }
+

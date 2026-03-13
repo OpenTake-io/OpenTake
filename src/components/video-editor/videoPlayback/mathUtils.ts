@@ -90,3 +90,4 @@ export function easeOutCubic(t: number) {
   const x = clamp01(t);
   return 1 - Math.pow(1 - x, 3);
 }
+

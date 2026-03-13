@@ -666,3 +666,4 @@ export class FrameRenderer {
     this.compositeCtx = null;
   }
 }
+

@@ -174,3 +174,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Cursor visibility control for cursor-free browser capture fallback
   hideOsCursor: () => ipcRenderer.invoke('hide-cursor'),
 })
+

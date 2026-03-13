@@ -43,3 +43,4 @@ export function getAspectRatioLabel(aspectRatio: AspectRatio): string {
 export function formatAspectRatioForCSS(aspectRatio: AspectRatio): string {
   return aspectRatio.replace(':', '/');
 }
+

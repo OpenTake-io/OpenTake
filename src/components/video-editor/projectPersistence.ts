@@ -307,3 +307,4 @@ export function createProjectData(videoPath: string, editor: ProjectEditorState)
     editor,
   };
 }
+
