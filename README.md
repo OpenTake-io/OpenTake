@@ -16,7 +16,7 @@
   <img src="./recordlydemo.gif" width="750" alt="Recordly demo video">
 </p>
 
-> Note on origins: Recordly is a fork of the excellent [**OpenScreen**](https://github.com/siddharthvaddem/openscreen) foundation by [Siddharth](https://x.com/sidious_man), which is focused on robustness and a stable feature set. Recordly focuses on a different product direction - i.e. adding cursor animations, Apple-inspired zoom animations, smoother panning - and aims to reach full feature parity with Screen Studio.
+> Recordly adds a cursor animation pipeline, native macOS screen capture, reworked zoom animations and panning behaviour, and more tweaks on top of [**OpenScreen**](https://github.com/siddharthvaddem/openscreen).
 
 ---
 ## What is Recordly?
