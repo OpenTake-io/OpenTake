@@ -16,7 +16,7 @@
   <img src="./recordlydemo.gif" width="750" alt="Recordly demo video">
 </p>
 
-> Recordly adds a cursor animation pipeline, native macOS screen capture, reworked zoom animations and panning behaviour, and more tweaks on top of [**OpenScreen**](https://github.com/siddharthvaddem/openscreen).
+**FAQ**: What are the changes between this and **Openscreen**? A: Recordly adds a full cursor animation/rendering pipeline, native macOS screen capture, zoom animations faithful to Screen Studio, smoother panning behaviour, and more tweaks.
 > This fork exists because the original maintainer does not wish implementing the architectural changes that make some of these features possible i.e. different recording pipeline.
 
 ---
