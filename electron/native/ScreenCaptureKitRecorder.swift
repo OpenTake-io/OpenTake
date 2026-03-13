@@ -44,6 +44,8 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		case microphone
 	}
 
+	private let microphoneOutputTypeRawValue = 2
+
 	private var primaryAudioSource: PrimaryAudioSource?
 
 	func startCapture(configJSON: String) async throws {
@@ -60,6 +62,13 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		let streamConfig = SCStreamConfiguration()
 		capturesSystemAudio = config.capturesSystemAudio ?? false
 		capturesMicrophone = config.capturesMicrophone ?? false
+		if capturesMicrophone && !supportsNativeMicrophoneCapture(streamConfig: streamConfig) {
+			throw NSError(
+				domain: "RecordlyCapture",
+				code: 10,
+				userInfo: [NSLocalizedDescriptionKey: "Native microphone capture is unavailable on this macOS/Xcode runtime"]
+			)
+		}
 		writesMicrophoneToSeparateTrack = capturesSystemAudio && capturesMicrophone
 		primaryAudioSource = capturesSystemAudio ? .system : (capturesMicrophone ? .microphone : nil)
 		let requestedFPS = max(targetCaptureFPS, config.fps ?? targetCaptureFPS)
@@ -73,13 +82,9 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		streamConfig.excludesCurrentProcessAudio = true
 
 		if capturesMicrophone {
-			guard #available(macOS 15.0, *) else {
-				throw NSError(domain: "RecordlyCapture", code: 10, userInfo: [NSLocalizedDescriptionKey: "Native microphone capture requires macOS 15 or later"])
-			}
-
-			streamConfig.captureMicrophone = true
+			streamConfig.setValue(true, forKey: "captureMicrophone")
 			if let microphoneDeviceId = config.microphoneDeviceId, !microphoneDeviceId.isEmpty {
-				streamConfig.microphoneCaptureDeviceID = microphoneDeviceId
+				streamConfig.setValue(microphoneDeviceId, forKey: "microphoneCaptureDeviceID")
 			}
 		}
 
@@ -207,9 +212,14 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: queue)
 		}
 		if capturesMicrophone {
-			if #available(macOS 15.0, *) {
-				try stream.addStreamOutput(self, type: .microphone, sampleHandlerQueue: queue)
+			guard let microphoneOutputType = SCStreamOutputType(rawValue: microphoneOutputTypeRawValue) else {
+				throw NSError(
+					domain: "RecordlyCapture",
+					code: 15,
+					userInfo: [NSLocalizedDescriptionKey: "Microphone stream output type is unavailable"]
+				)
 			}
+			try stream.addStreamOutput(self, type: microphoneOutputType, sampleHandlerQueue: queue)
 		}
 		try await stream.startCapture()
 
@@ -238,8 +248,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of outputType: SCStreamOutputType) {
 		guard sessionStarted, sampleBuffer.isValid, isRecording else { return }
 
-		switch outputType {
-		case .screen:
+		if outputType == .screen {
 			guard let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
 					  let attachment = attachments.first,
 					  let statusRawValue = attachment[SCStreamFrameInfo.status] as? Int,
@@ -261,18 +270,25 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				videoInput.append(retimedSampleBuffer)
 				frameCount += 1
 			}
-		case .audio:
+			return
+		}
+
+		if outputType == .audio {
 			guard primaryAudioSource == .system, let audioInput else { return }
 			appendAudioSampleBuffer(sampleBuffer, to: audioInput, firstSampleTime: &firstPrimaryAudioSampleTime)
-		case .microphone:
+			return
+		}
+
+		if outputType.rawValue == microphoneOutputTypeRawValue {
 			if writesMicrophoneToSeparateTrack, let microphoneOnlyInput {
 				appendAudioSampleBuffer(sampleBuffer, to: microphoneOnlyInput, firstSampleTime: &firstMicrophoneSampleTime)
 			} else if primaryAudioSource == .microphone, let audioInput {
 				appendAudioSampleBuffer(sampleBuffer, to: audioInput, firstSampleTime: &firstPrimaryAudioSampleTime)
 			}
-		@unknown default:
 			return
 		}
+
+		return
 	}
 
 	func stream(_ stream: SCStream, didStopWithError error: Error) {
@@ -354,6 +370,13 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			AVNumberOfChannelsKey: 2,
 			AVEncoderBitRateKey: bitRate,
 		]
+	}
+
+	private func supportsNativeMicrophoneCapture(streamConfig: SCStreamConfiguration) -> Bool {
+		let supportsConfigSelector = streamConfig.responds(to: Selector(("setCaptureMicrophone:")))
+		let supportsDeviceSelector = streamConfig.responds(to: Selector(("setMicrophoneCaptureDeviceID:")))
+		let supportsOutputType = SCStreamOutputType(rawValue: microphoneOutputTypeRawValue) != nil
+		return supportsConfigSelector && supportsDeviceSelector && supportsOutputType
 	}
 
 	private func startWindowValidationIfNeeded() {
