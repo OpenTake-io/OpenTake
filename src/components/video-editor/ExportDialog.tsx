@@ -12,6 +12,8 @@ interface ExportDialogProps {
   isExporting: boolean;
   error: string | null;
   onCancel?: () => void;
+  onRetrySave?: () => void;
+  canRetrySave?: boolean;
   exportFormat?: 'mp4' | 'gif';
   exportedFilePath?: string;
 }
@@ -23,6 +25,8 @@ export function ExportDialog({
   isExporting,
   error,
   onCancel,
+  onRetrySave,
+  canRetrySave = false,
   exportFormat = 'mp4',
   exportedFilePath, // Add this line
 }: ExportDialogProps) {
@@ -173,6 +177,14 @@ export function ExportDialog({
               </div>
               <p className="text-sm text-red-400 leading-relaxed">{error}</p>
             </div>
+            {!isExporting && canRetrySave && onRetrySave && (
+              <Button
+                onClick={onRetrySave}
+                className="w-full mt-3 bg-[#2563EB] text-white hover:bg-[#1D4ED8]"
+              >
+                Save Again
+              </Button>
+            )}
           </div>
         )}
 
