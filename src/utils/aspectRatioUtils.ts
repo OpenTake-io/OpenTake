@@ -1,4 +1,4 @@
-export const ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:3', '4:5', '16:10', '10:16'] as const;
+export const ASPECT_RATIOS = ['native', '16:9', '9:16', '1:1', '4:3', '4:5', '16:10', '10:16'] as const;
 
 export type AspectRatio = typeof ASPECT_RATIOS[number];
 
@@ -7,8 +7,9 @@ export type AspectRatio = typeof ASPECT_RATIOS[number];
  * Uses exhaustive type checking to ensure all AspectRatio cases are handled.
  * If TypeScript errors here, a new ratio was added to the type but not handled.
  */
-export function getAspectRatioValue(aspectRatio: AspectRatio): number {
+export function getAspectRatioValue(aspectRatio: AspectRatio, nativeAspectRatio = 16 / 9): number {
   switch (aspectRatio) {
+    case 'native': return nativeAspectRatio > 0 ? nativeAspectRatio : 16 / 9;
     case '16:9': return 16 / 9;
     case '9:16': return 9 / 16;
     case '1:1':  return 1;
@@ -26,9 +27,10 @@ export function getAspectRatioValue(aspectRatio: AspectRatio): number {
 
 export function getAspectRatioDimensions(
   aspectRatio: AspectRatio,
-  baseWidth: number
+  baseWidth: number,
+  nativeAspectRatio?: number,
 ): { width: number; height: number } {
-  const ratio = getAspectRatioValue(aspectRatio);
+  const ratio = getAspectRatioValue(aspectRatio, nativeAspectRatio);
   return {
     width: baseWidth,
     height: baseWidth / ratio,
@@ -36,11 +38,17 @@ export function getAspectRatioDimensions(
 }
 
 export function getAspectRatioLabel(aspectRatio: AspectRatio): string {
+  if (aspectRatio === 'native') {
+    return 'Native';
+  }
   return aspectRatio;
 }
 
 
-export function formatAspectRatioForCSS(aspectRatio: AspectRatio): string {
+export function formatAspectRatioForCSS(aspectRatio: AspectRatio, nativeAspectRatio = 16 / 9): string {
+  if (aspectRatio === 'native') {
+    return `${nativeAspectRatio > 0 ? nativeAspectRatio : 16 / 9}`;
+  }
   return aspectRatio.replace(':', '/');
 }
 

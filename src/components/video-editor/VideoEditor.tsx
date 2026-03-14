@@ -1156,9 +1156,10 @@ export default function VideoEditor() {
         videoPlaybackRef.current?.pause();
       }
 
-      const aspectRatioValue = getAspectRatioValue(aspectRatio);
       const sourceWidth = video.videoWidth || 1920;
       const sourceHeight = video.videoHeight || 1080;
+      const sourceAspectRatio = sourceHeight > 0 ? sourceWidth / sourceHeight : 16 / 9;
+      const aspectRatioValue = getAspectRatioValue(aspectRatio, sourceAspectRatio);
 
       // Get preview CONTAINER dimensions for scaling
       const playbackRef = videoPlaybackRef.current;
@@ -1241,7 +1242,10 @@ export default function VideoEditor() {
           exportWidth = sourceWidth;
           exportHeight = sourceHeight;
 
-          if (aspectRatioValue === 1) {
+          if (aspectRatio === 'native') {
+            exportWidth = Math.floor(sourceWidth / 2) * 2;
+            exportHeight = Math.floor(sourceHeight / 2) * 2;
+          } else if (aspectRatioValue === 1) {
             // Square (1:1): use smaller dimension to avoid codec limits
             const baseDimension = Math.floor(Math.min(sourceWidth, sourceHeight) / 2) * 2;
             exportWidth = baseDimension;
@@ -1544,7 +1548,13 @@ export default function VideoEditor() {
               <div className="w-full h-full flex flex-col items-center justify-center bg-black/40 rounded-2xl border border-white/5 shadow-2xl overflow-hidden">
                 {/* Video preview */}
                 <div className="w-full flex justify-center items-center" style={{ flex: '1 1 auto', margin: '6px 0 0' }}>
-                  <div className="relative" style={{ width: 'auto', height: '100%', aspectRatio: getAspectRatioValue(aspectRatio), maxWidth: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
+                  <div className="relative" style={{ width: 'auto', height: '100%', aspectRatio: getAspectRatioValue(aspectRatio, (() => {
+                    const previewVideo = videoPlaybackRef.current?.video;
+                    if (previewVideo && previewVideo.videoHeight > 0) {
+                      return previewVideo.videoWidth / previewVideo.videoHeight;
+                    }
+                    return 16 / 9;
+                  })()), maxWidth: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
                     <VideoPlayback
                       key={videoPath || 'no-video'}
                       aspectRatio={aspectRatio}
