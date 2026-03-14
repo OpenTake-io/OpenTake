@@ -19,7 +19,7 @@
   <img src="./recordlydemo.gif" width="750" alt="Recordly demo video">
 </p>
 
-**FAQ**: What are the changes between this and **Openscreen**? A: Recordly adds a full cursor animation/rendering pipeline, native macOS screen capture, zoom animations faithful to Screen Studio, smoother panning behaviour, and more major tweaks.
+**FAQ**: What are the changes between this and **Openscreen**? A: Recordly adds a full cursor animation/rendering pipeline, native screen capture for Mac and Windows, zoom animations faithful to Screen Studio, smoother panning behaviour, and more major tweaks.
 > This fork exists because the original maintainer does not wish implementing the architectural changes that make some of these features possible i.e. different recording pipeline.
 ---
 ## What is Recordly?
@@ -32,8 +32,7 @@ Recordly runs on:
 - **Windows**
 - **Linux**
 
-macOS includes a **native smooth cursor animation pipeline**.  
-Windows and Linux currently use Electron's capture path, which means the OS cursor cannot always be hidden during recording.
+Linux currently use Electron's capture path, which means the OS cursor cannot always be hidden during recording.
 
 
 
@@ -48,6 +47,9 @@ Windows and Linux currently use Electron's capture path, which means the OS curs
 - Microphone or system audio recording
 - Chromium capture APIs on Windows/Linux
 - Native **ScreenCaptureKit** capture on macOS
+- native WGC recording helper for display and app-window capture on Windows, native WASAPI for system/mic audio, and more
+
+
 
 ### Smart Motion
 
@@ -192,7 +194,7 @@ Adjust:
 
 # Limitations
 
-### Windows & Linux Cursor Capture
+### Linux Cursor Capture
 
 Electron’s desktop capture API does not allow hiding the system cursor during recording.
 
@@ -226,6 +228,7 @@ Recordly is a **desktop video editor with a renderer-driven motion pipeline and 
 **Capture**
 - Electron orchestrates recording
 - macOS uses native helpers for ScreenCaptureKit and cursor telemetry
+- Windows uses native WGC for screen capture
 
 **Motion**
 - Zoom regions
@@ -251,7 +254,7 @@ All contributors welcomed!
 
 Areas where help is especially valuable:
 
-- Smooth cursor pipeline for **Windows and Linux**
+- Smooth cursor pipeline for **Linux**
 - **Webcam** overlay bubble
 - **Localisation** support, especially Chinese
 - UI/UX **design** **improvements**
