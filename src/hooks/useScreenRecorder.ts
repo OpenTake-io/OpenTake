@@ -54,6 +54,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const chunks = useRef<Blob[]>([]);
   const startTime = useRef<number>(0);
   const nativeScreenRecording = useRef(false);
+  const wgcRecording = useRef(false);
   const startInFlight = useRef(false);
   const hasPromptedForReselect = useRef(false);
 
@@ -154,6 +155,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       setRecording(false);
 
       void (async () => {
+        const isWgc = wgcRecording.current;
+        wgcRecording.current = false;
+
         const result = await window.electronAPI.stopNativeScreenRecording();
         window.electronAPI?.setRecordingState(false);
 
@@ -162,7 +166,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
           return;
         }
 
-        await window.electronAPI.setCurrentVideoPath(result.path);
+        let finalPath = result.path;
+
+        if (isWgc) {
+          const muxResult = await window.electronAPI.muxWgcRecording();
+          finalPath = muxResult?.path ?? result.path;
+        }
+
+        await window.electronAPI.setCurrentVideoPath(finalPath);
         await window.electronAPI.switchToEditor();
       })();
       return;
@@ -256,23 +267,60 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         (selectedSource.id?.startsWith("screen:") || selectedSource.id?.startsWith("window:")) &&
         typeof window.electronAPI.startNativeScreenRecording === "function";
 
-      if (useNativeMacScreenCapture) {
+      let useWgcCapture = false;
+      if (
+        platform === "win32" &&
+        (selectedSource.id?.startsWith("screen:") || selectedSource.id?.startsWith("window:")) &&
+        typeof window.electronAPI.isWgcAvailable === "function"
+      ) {
+        try {
+          const wgcResult = await window.electronAPI.isWgcAvailable();
+          useWgcCapture = wgcResult.available;
+        } catch {
+          useWgcCapture = false;
+        }
+      }
+
+      if (useNativeMacScreenCapture || useWgcCapture) {
+        // WGC: resolve mic device label for native WASAPI capture
+        let micLabel: string | undefined;
+        if (useWgcCapture && microphoneEnabled) {
+          try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const mic = devices.find(
+              (d) => d.deviceId === microphoneDeviceId && d.kind === "audioinput",
+            );
+            micLabel = mic?.label || undefined;
+          } catch {
+            // Fall through — native process will use default mic
+          }
+        }
+
         const nativeResult = await window.electronAPI.startNativeScreenRecording(selectedSource, {
           capturesSystemAudio: systemAudioEnabled,
           capturesMicrophone: microphoneEnabled,
           microphoneDeviceId,
+          microphoneLabel: micLabel,
         });
         if (!nativeResult.success) {
-          throw new Error(
-            nativeResult.error ?? nativeResult.message ?? "Failed to start native screen recording",
-          );
+          if (useWgcCapture) {
+            console.warn("WGC capture failed, falling back to browser capture:", nativeResult.error ?? nativeResult.message);
+          } else {
+            throw new Error(
+              nativeResult.error ?? nativeResult.message ?? "Failed to start native screen recording",
+            );
+          }
         }
 
-        nativeScreenRecording.current = true;
-        startTime.current = Date.now();
-        setRecording(true);
-        window.electronAPI?.setRecordingState(true);
-        return;
+        if (nativeResult.success) {
+          nativeScreenRecording.current = true;
+          wgcRecording.current = useWgcCapture;
+          startTime.current = Date.now();
+          setRecording(true);
+          window.electronAPI?.setRecordingState(true);
+
+          return;
+        }
       }
 
       const wantsAudioCapture = microphoneEnabled || systemAudioEnabled;
