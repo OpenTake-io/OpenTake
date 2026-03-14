@@ -1029,8 +1029,20 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     ? { backgroundImage: `url(${resolvedWallpaper || ''})` }
     : { background: resolvedWallpaper || '' };
 
+  const nativeAspectRatio = (() => {
+    const locked = lockedVideoDimensionsRef.current;
+    if (locked && locked.height > 0) {
+      return locked.width / locked.height;
+    }
+    const video = videoRef.current;
+    if (video && video.videoHeight > 0) {
+      return video.videoWidth / video.videoHeight;
+    }
+    return 16 / 9;
+  })();
+
   return (
-    <div className="relative rounded-sm overflow-hidden" style={{ width: '100%', aspectRatio: formatAspectRatioForCSS(aspectRatio) }}>
+    <div className="relative rounded-sm overflow-hidden" style={{ width: '100%', aspectRatio: formatAspectRatioForCSS(aspectRatio, nativeAspectRatio) }}>
       {/* Background layer - always render as DOM element with blur */}
       <div
         className="absolute inset-0 bg-cover bg-center"
