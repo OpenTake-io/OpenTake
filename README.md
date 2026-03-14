@@ -10,7 +10,7 @@
 </p>
 
 ### Create polished, pro-grade screen recordings.
-[Recordly](https://www.recordly.dev) is an **open-source screen recorder and editor** for creating **polished walkthroughs, demos, tutorials, and product videos**. Contribution encouraged. [Help cover app signing costs](https://ko-fi.com/webadderall/goal?g=0)
+[Recordly](https://www.recordly.dev) is an **open-source screen recorder and editor** for creating **polished walkthroughs, demos, tutorials, and product videos**. Contribution encouraged. [Donate](https://ko-fi.com/webadderall/goal?g=0)
 
 <p align="center">
   <img src="./recordlydemo.gif" width="750" alt="Recordly demo video">
