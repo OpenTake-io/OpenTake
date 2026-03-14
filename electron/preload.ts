@@ -177,6 +177,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('request-save-before-close', listener)
     return () => ipcRenderer.removeListener('request-save-before-close', listener)
   },
+  isWgcAvailable: () => ipcRenderer.invoke('is-wgc-available'),
+  storeWgcAudio: (audioData: ArrayBuffer, type: 'system' | 'mic') => ipcRenderer.invoke('store-wgc-audio', audioData, type),
   // Cursor visibility control for cursor-free browser capture fallback
   hideOsCursor: () => ipcRenderer.invoke('hide-cursor'),
 })
