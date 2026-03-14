@@ -24,6 +24,7 @@ public:
     ~WgcSession();
 
     bool initialize(HMONITOR monitor, int fps);
+    bool initialize(HWND hwnd, int fps);
     void setFrameCallback(FrameCallback callback);
     bool startCapture();
     void stopCapture();
@@ -53,6 +54,8 @@ private:
     bool createD3DDevice();
     winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DDevice createWinRTDevice();
     winrt::Windows::Graphics::Capture::GraphicsCaptureItem createCaptureItemForMonitor(HMONITOR monitor);
+    winrt::Windows::Graphics::Capture::GraphicsCaptureItem createCaptureItemForWindow(HWND hwnd);
+    bool initializeWithItem(int fps);
     void onFrameArrived(
         winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool const& sender,
         winrt::Windows::Foundation::IInspectable const& args);

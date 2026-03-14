@@ -88,19 +88,27 @@ winrt::Windows::Graphics::Capture::GraphicsCaptureItem WgcSession::createCapture
     return item;
 }
 
-bool WgcSession::initialize(HMONITOR monitor, int fps) {
-    fps_ = fps;
-    frameIntervalHns_ = 10000000LL / fps_;
+winrt::Windows::Graphics::Capture::GraphicsCaptureItem WgcSession::createCaptureItemForWindow(HWND hwnd) {
+    auto factory = winrt::get_activation_factory<
+        winrt::Windows::Graphics::Capture::GraphicsCaptureItem>();
 
-    if (!createD3DDevice()) return false;
+    auto interop = factory.as<IGraphicsCaptureItemInterop>();
 
-    winrtDevice_ = createWinRTDevice();
-    if (!winrtDevice_) {
-        std::cerr << "ERROR: Failed to create WinRT D3D device" << std::endl;
-        return false;
+    winrt::Windows::Graphics::Capture::GraphicsCaptureItem item{nullptr};
+    HRESULT hr = interop->CreateForWindow(
+        hwnd,
+        winrt::guid_of<ABI::Windows::Graphics::Capture::IGraphicsCaptureItem>(),
+        winrt::put_abi(item));
+
+    if (FAILED(hr)) {
+        std::cerr << "ERROR: CreateForWindow failed: 0x" << std::hex << hr << std::endl;
+        return nullptr;
     }
 
-    captureItem_ = createCaptureItemForMonitor(monitor);
+    return item;
+}
+
+bool WgcSession::initializeWithItem(int fps) {
     if (!captureItem_) return false;
 
     auto size = captureItem_.Size();
@@ -119,6 +127,38 @@ bool WgcSession::initialize(HMONITOR monitor, int fps) {
     session_.IsBorderRequired(false);
 
     return true;
+}
+
+bool WgcSession::initialize(HMONITOR monitor, int fps) {
+    fps_ = fps;
+    frameIntervalHns_ = 10000000LL / fps_;
+
+    if (!createD3DDevice()) return false;
+
+    winrtDevice_ = createWinRTDevice();
+    if (!winrtDevice_) {
+        std::cerr << "ERROR: Failed to create WinRT D3D device" << std::endl;
+        return false;
+    }
+
+    captureItem_ = createCaptureItemForMonitor(monitor);
+    return initializeWithItem(fps);
+}
+
+bool WgcSession::initialize(HWND hwnd, int fps) {
+    fps_ = fps;
+    frameIntervalHns_ = 10000000LL / fps_;
+
+    if (!createD3DDevice()) return false;
+
+    winrtDevice_ = createWinRTDevice();
+    if (!winrtDevice_) {
+        std::cerr << "ERROR: Failed to create WinRT D3D device" << std::endl;
+        return false;
+    }
+
+    captureItem_ = createCaptureItemForWindow(hwnd);
+    return initializeWithItem(fps);
 }
 
 void WgcSession::setFrameCallback(FrameCallback callback) {

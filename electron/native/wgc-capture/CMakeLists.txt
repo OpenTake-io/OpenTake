@@ -9,6 +9,7 @@ add_executable(wgc-capture
   src/wgc_session.cpp
   src/mf_encoder.cpp
   src/monitor_utils.cpp
+  src/wasapi_loopback.cpp
 )
 
 target_compile_options(wgc-capture PRIVATE /EHsc /W3 /utf-8)
