@@ -162,6 +162,7 @@ export class StreamingVideoDecoder {
     const segmentOutputFrameCounts = segments.map(segment =>
       Math.ceil(((segment.endSec - segment.startSec) / segment.speed) * targetFrameRate)
     );
+    const expectedOutputFrames = segmentOutputFrameCounts.reduce((sum, count) => sum + count, 0);
     const frameDurationUs = 1_000_000 / targetFrameRate;
     const epsilonSec = 0.001;
 
@@ -405,10 +406,11 @@ export class StreamingVideoDecoder {
     if (
       !this.cancelled &&
       lastDecodedFrameSec !== null &&
-      requiredEndSec - lastDecodedFrameSec > 1
+      requiredEndSec - lastDecodedFrameSec > 1 &&
+      exportFrameIndex < expectedOutputFrames
     ) {
       throw new Error(
-        `Video decode ended early at ${lastDecodedFrameSec.toFixed(3)}s (needed ${requiredEndSec.toFixed(3)}s).`
+        `Video decode ended early at ${lastDecodedFrameSec.toFixed(3)}s (needed ${requiredEndSec.toFixed(3)}s; rendered ${exportFrameIndex}/${expectedOutputFrames} frames).`
       );
     }
   }
