@@ -54,6 +54,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const chunks = useRef<Blob[]>([]);
   const startTime = useRef<number>(0);
   const nativeScreenRecording = useRef(false);
+  const wgcAudioRecorders = useRef<MediaRecorder[]>([]);
+  const wgcAudioChunks = useRef<Map<string, Blob[]>>(new Map());
   const startInFlight = useRef(false);
   const hasPromptedForReselect = useRef(false);
 
@@ -126,6 +128,95 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     return Math.round(BITRATE_BASE * highFrameRateBoost);
   };
 
+  const stopWgcAudioCapture = useCallback(async () => {
+    for (const recorder of wgcAudioRecorders.current) {
+      if (recorder.state === "recording") {
+        recorder.stop();
+      }
+    }
+
+    // Wait briefly for onstop callbacks to fire
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    for (const [type, chunks] of wgcAudioChunks.current.entries()) {
+      if (chunks.length > 0) {
+        const blob = new Blob(chunks, { type: "audio/webm" });
+        const buffer = await blob.arrayBuffer();
+        try {
+          await window.electronAPI.storeWgcAudio(buffer, type as "system" | "mic");
+        } catch (error) {
+          console.warn(`Failed to store WGC ${type} audio:`, error);
+        }
+      }
+    }
+
+    wgcAudioRecorders.current = [];
+    wgcAudioChunks.current = new Map();
+  }, []);
+
+  const startWgcAudioCapture = async (
+    source: { id?: string; display_id?: string },
+    captureSystemAudio: boolean,
+    captureMicrophone: boolean,
+    micDeviceId?: string,
+  ) => {
+    wgcAudioRecorders.current = [];
+    wgcAudioChunks.current = new Map();
+
+    if (captureSystemAudio) {
+      try {
+        const systemAudioStream = await (navigator.mediaDevices as any).getUserMedia({
+          audio: {
+            mandatory: {
+              chromeMediaSource: CHROME_MEDIA_SOURCE,
+              chromeMediaSourceId: source.id,
+            },
+          },
+          video: false,
+        });
+
+        const systemChunks: Blob[] = [];
+        wgcAudioChunks.current.set("system", systemChunks);
+        const recorder = new MediaRecorder(systemAudioStream, {
+          mimeType: "audio/webm",
+          audioBitsPerSecond: AUDIO_BITRATE_SYSTEM,
+        });
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) systemChunks.push(e.data);
+        };
+        recorder.start(RECORDER_TIMESLICE_MS);
+        wgcAudioRecorders.current.push(recorder);
+      } catch (error) {
+        console.warn("WGC: System audio capture failed:", error);
+      }
+    }
+
+    if (captureMicrophone) {
+      try {
+        const micStream = await navigator.mediaDevices.getUserMedia({
+          audio: micDeviceId
+            ? { deviceId: { exact: micDeviceId }, echoCancellation: true, noiseSuppression: true }
+            : { echoCancellation: true, noiseSuppression: true },
+          video: false,
+        });
+
+        const micChunks: Blob[] = [];
+        wgcAudioChunks.current.set("mic", micChunks);
+        const recorder = new MediaRecorder(micStream, {
+          mimeType: "audio/webm",
+          audioBitsPerSecond: AUDIO_BITRATE_VOICE,
+        });
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) micChunks.push(e.data);
+        };
+        recorder.start(RECORDER_TIMESLICE_MS);
+        wgcAudioRecorders.current.push(recorder);
+      } catch (error) {
+        console.warn("WGC: Microphone capture failed:", error);
+      }
+    }
+  };
+
   const cleanupCapturedMedia = useCallback(() => {
     if (stream.current) {
       stream.current.getTracks().forEach((track) => track.stop());
@@ -154,6 +245,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       setRecording(false);
 
       void (async () => {
+        // Stop WGC audio recorders first so audio data is stored before stop
+        if (wgcAudioRecorders.current.length > 0) {
+          await stopWgcAudioCapture();
+        }
+
         const result = await window.electronAPI.stopNativeScreenRecording();
         window.electronAPI?.setRecordingState(false);
 
@@ -256,23 +352,49 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         (selectedSource.id?.startsWith("screen:") || selectedSource.id?.startsWith("window:")) &&
         typeof window.electronAPI.startNativeScreenRecording === "function";
 
-      if (useNativeMacScreenCapture) {
+      let useWgcCapture = false;
+      if (
+        platform === "win32" &&
+        selectedSource.id?.startsWith("screen:") &&
+        typeof window.electronAPI.isWgcAvailable === "function"
+      ) {
+        try {
+          const wgcResult = await window.electronAPI.isWgcAvailable();
+          useWgcCapture = wgcResult.available;
+        } catch {
+          useWgcCapture = false;
+        }
+      }
+
+      if (useNativeMacScreenCapture || useWgcCapture) {
         const nativeResult = await window.electronAPI.startNativeScreenRecording(selectedSource, {
           capturesSystemAudio: systemAudioEnabled,
           capturesMicrophone: microphoneEnabled,
           microphoneDeviceId,
         });
         if (!nativeResult.success) {
-          throw new Error(
-            nativeResult.error ?? nativeResult.message ?? "Failed to start native screen recording",
-          );
+          if (useWgcCapture) {
+            console.warn("WGC capture failed, falling back to browser capture:", nativeResult.error ?? nativeResult.message);
+          } else {
+            throw new Error(
+              nativeResult.error ?? nativeResult.message ?? "Failed to start native screen recording",
+            );
+          }
         }
 
-        nativeScreenRecording.current = true;
-        startTime.current = Date.now();
-        setRecording(true);
-        window.electronAPI?.setRecordingState(true);
-        return;
+        if (nativeResult.success) {
+          nativeScreenRecording.current = true;
+          startTime.current = Date.now();
+          setRecording(true);
+          window.electronAPI?.setRecordingState(true);
+
+          // WGC: start audio-only MediaRecorders in parallel
+          if (useWgcCapture && (systemAudioEnabled || microphoneEnabled)) {
+            void startWgcAudioCapture(selectedSource, systemAudioEnabled, microphoneEnabled, microphoneDeviceId);
+          }
+
+          return;
+        }
       }
 
       const wantsAudioCapture = microphoneEnabled || systemAudioEnabled;

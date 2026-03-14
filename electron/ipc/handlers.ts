@@ -59,6 +59,13 @@ let nativeCaptureStopRequested = false
 let nativeCaptureMicrophonePath: string | null = null
 let nativeCursorMonitorProcess: ChildProcessWithoutNullStreams | null = null
 let nativeCursorMonitorOutputBuffer = ''
+let wgcCaptureProcess: ChildProcessWithoutNullStreams | null = null
+let wgcCaptureOutputBuffer = ''
+let wgcCaptureTargetPath: string | null = null
+let wgcScreenRecordingActive = false
+let wgcCaptureStopRequested = false
+let wgcSystemAudioPath: string | null = null
+let wgcMicAudioPath: string | null = null
 let ffmpegScreenRecordingActive = false
 let ffmpegCaptureProcess: ChildProcessWithoutNullStreams | null = null
 let ffmpegCaptureOutputBuffer = ''
@@ -676,6 +683,197 @@ async function buildFfmpegCaptureArgs(source: SelectedSource, outputPath: string
   }
 
   throw new Error(`FFmpeg capture is not supported on ${process.platform}`)
+}
+
+function getWgcCaptureExePath() {
+  return resolveUnpackedAppPath('electron', 'native', 'wgc-capture', 'build', 'Release', 'wgc-capture.exe')
+}
+
+async function isWgcCaptureAvailable(): Promise<boolean> {
+  if (process.platform !== 'win32') return false
+
+  try {
+    await fs.access(getWgcCaptureExePath(), fsConstants.X_OK)
+  } catch {
+    return false
+  }
+
+  // Windows 10 2004 (Build 19041) minimum for IsCursorCaptureEnabled
+  const os = await import('node:os')
+  const [major, , build] = os.release().split('.').map(Number)
+  return major >= 10 && build >= 19041
+}
+
+function waitForWgcCaptureStart(proc: ChildProcessWithoutNullStreams) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup()
+      reject(new Error('Timed out waiting for WGC capture to start'))
+    }, 12000)
+
+    const onStdout = (chunk: Buffer) => {
+      const text = chunk.toString()
+      if (text.includes('Recording started')) {
+        cleanup()
+        resolve()
+      }
+    }
+
+    const onError = (error: Error) => {
+      cleanup()
+      reject(error)
+    }
+
+    const onExit = (code: number | null) => {
+      cleanup()
+      reject(new Error(wgcCaptureOutputBuffer.trim() || `WGC capture exited before recording started (code ${code ?? 'unknown'})`))
+    }
+
+    const cleanup = () => {
+      clearTimeout(timer)
+      proc.stdout.off('data', onStdout)
+      proc.off('error', onError)
+      proc.off('exit', onExit)
+    }
+
+    proc.stdout.on('data', onStdout)
+    proc.once('error', onError)
+    proc.once('exit', onExit)
+  })
+}
+
+function waitForWgcCaptureStop(proc: ChildProcessWithoutNullStreams) {
+  return new Promise<string>((resolve, reject) => {
+    const onClose = (code: number | null) => {
+      cleanup()
+      const match = wgcCaptureOutputBuffer.match(/Recording stopped\. Output path: (.+)/)
+      if (match?.[1]) {
+        resolve(match[1].trim())
+        return
+      }
+      if (code === 0 && wgcCaptureTargetPath) {
+        resolve(wgcCaptureTargetPath)
+        return
+      }
+      reject(new Error(wgcCaptureOutputBuffer.trim() || `WGC capture exited with code ${code ?? 'unknown'}`))
+    }
+
+    const onError = (error: Error) => {
+      cleanup()
+      reject(error)
+    }
+
+    const cleanup = () => {
+      proc.off('close', onClose)
+      proc.off('error', onError)
+    }
+
+    proc.once('close', onClose)
+    proc.once('error', onError)
+  })
+}
+
+function attachWgcCaptureLifecycle(proc: ChildProcessWithoutNullStreams) {
+  proc.once('close', () => {
+    const wasActive = wgcScreenRecordingActive
+    wgcCaptureProcess = null
+
+    if (!wasActive || wgcCaptureStopRequested) {
+      return
+    }
+
+    wgcScreenRecordingActive = false
+    wgcCaptureTargetPath = null
+    wgcCaptureStopRequested = false
+
+    const sourceName = selectedSource?.name ?? 'Screen'
+    BrowserWindow.getAllWindows().forEach((window) => {
+      if (!window.isDestroyed()) {
+        window.webContents.send('recording-state-changed', {
+          recording: false,
+          sourceName,
+        })
+      }
+    })
+
+    emitRecordingInterrupted('capture-stopped', 'Recording stopped unexpectedly.')
+  })
+}
+
+async function muxWgcVideoWithAudio(videoPath: string, systemAudioPath: string | null, micAudioPath: string | null) {
+  const ffmpegPath = getFfmpegBinaryPath()
+  const inputs: string[] = ['-i', videoPath]
+  const audioInputs: string[] = []
+
+  if (systemAudioPath) {
+    try {
+      await fs.access(systemAudioPath)
+      inputs.push('-i', systemAudioPath)
+      audioInputs.push('system')
+    } catch {
+      // system audio file not available
+    }
+  }
+
+  if (micAudioPath) {
+    try {
+      await fs.access(micAudioPath)
+      inputs.push('-i', micAudioPath)
+      audioInputs.push('mic')
+    } catch {
+      // mic audio file not available
+    }
+  }
+
+  if (audioInputs.length === 0) return
+
+  const mixedOutputPath = `${videoPath}.muxed.mp4`
+
+  if (audioInputs.length === 2) {
+    // Both system + mic audio: mix them
+    await execFileAsync(
+      ffmpegPath,
+      [
+        '-y',
+        ...inputs,
+        '-filter_complex', '[1:a][2:a]amix=inputs=2:duration=longest:normalize=0[aout]',
+        '-map', '0:v:0',
+        '-map', '[aout]',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-shortest',
+        mixedOutputPath,
+      ],
+      { timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
+    )
+  } else {
+    // Single audio track
+    await execFileAsync(
+      ffmpegPath,
+      [
+        '-y',
+        ...inputs,
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-shortest',
+        mixedOutputPath,
+      ],
+      { timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
+    )
+  }
+
+  await moveFileWithOverwrite(mixedOutputPath, videoPath)
+
+  // Clean up audio files
+  for (const audioPath of [systemAudioPath, micAudioPath]) {
+    if (audioPath) {
+      await fs.rm(audioPath, { force: true }).catch(() => {})
+    }
+  }
 }
 
 function waitForNativeCaptureStart(process: ChildProcessWithoutNullStreams) {
@@ -1492,6 +1690,74 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('start-native-screen-recording', async (_, source: SelectedSource, options?: NativeMacRecordingOptions) => {
+    // Windows WGC path
+    if (process.platform === 'win32') {
+      const wgcAvailable = await isWgcCaptureAvailable()
+      if (!wgcAvailable) {
+        return { success: false, message: 'WGC capture is not available on this system.' }
+      }
+
+      if (wgcCaptureProcess && !wgcScreenRecordingActive) {
+        try { wgcCaptureProcess.kill() } catch { /* ignore */ }
+        wgcCaptureProcess = null
+        wgcCaptureTargetPath = null
+        wgcCaptureStopRequested = false
+      }
+
+      if (wgcCaptureProcess) {
+        return { success: false, message: 'A WGC screen recording is already active.' }
+      }
+
+      try {
+        const exePath = getWgcCaptureExePath()
+        const outputPath = path.join(RECORDINGS_DIR, `recording-${Date.now()}.mp4`)
+        const screenId = Number(source?.display_id)
+        const displayId = Number.isFinite(screenId) && screenId > 0
+          ? screenId
+          : Number(getScreen().getPrimaryDisplay().id)
+
+        const config: Record<string, unknown> = {
+          displayId,
+          outputPath,
+          fps: 60,
+        }
+
+        wgcCaptureOutputBuffer = ''
+        wgcCaptureTargetPath = outputPath
+        wgcCaptureStopRequested = false
+        wgcCaptureProcess = spawn(exePath, [JSON.stringify(config)], {
+          cwd: RECORDINGS_DIR,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+        attachWgcCaptureLifecycle(wgcCaptureProcess)
+
+        wgcCaptureProcess.stdout.on('data', (chunk: Buffer) => {
+          wgcCaptureOutputBuffer += chunk.toString()
+        })
+        wgcCaptureProcess.stderr.on('data', (chunk: Buffer) => {
+          wgcCaptureOutputBuffer += chunk.toString()
+        })
+
+        await waitForWgcCaptureStart(wgcCaptureProcess)
+        wgcScreenRecordingActive = true
+        nativeScreenRecordingActive = true
+        return { success: true }
+      } catch (error) {
+        console.error('Failed to start WGC capture:', error)
+        try { wgcCaptureProcess?.kill() } catch { /* ignore */ }
+        wgcScreenRecordingActive = false
+        nativeScreenRecordingActive = false
+        wgcCaptureProcess = null
+        wgcCaptureTargetPath = null
+        wgcCaptureStopRequested = false
+        return {
+          success: false,
+          message: 'Failed to start WGC capture',
+          error: String(error),
+        }
+      }
+    }
+
     if (process.platform !== 'darwin') {
       return { success: false, message: 'Native screen recording is only available on macOS.' }
     }
@@ -1599,6 +1865,68 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('stop-native-screen-recording', async () => {
+    // Windows WGC stop path
+    if (process.platform === 'win32' && wgcScreenRecordingActive) {
+      try {
+        if (!wgcCaptureProcess) {
+          throw new Error('WGC capture process is not running')
+        }
+
+        const proc = wgcCaptureProcess
+        const preferredVideoPath = wgcCaptureTargetPath
+        wgcCaptureStopRequested = true
+        proc.stdin.write('stop\n')
+        const tempVideoPath = await waitForWgcCaptureStop(proc)
+        wgcCaptureProcess = null
+        wgcScreenRecordingActive = false
+        nativeScreenRecordingActive = false
+        wgcCaptureTargetPath = null
+        wgcCaptureStopRequested = false
+
+        const finalVideoPath = preferredVideoPath ?? tempVideoPath
+        if (tempVideoPath !== finalVideoPath) {
+          await moveFileWithOverwrite(tempVideoPath, finalVideoPath)
+        }
+
+        if (wgcSystemAudioPath || wgcMicAudioPath) {
+          try {
+            await muxWgcVideoWithAudio(finalVideoPath, wgcSystemAudioPath, wgcMicAudioPath)
+          } catch (muxError) {
+            console.warn('Failed to mux WGC audio:', muxError)
+          }
+          wgcSystemAudioPath = null
+          wgcMicAudioPath = null
+        }
+
+        return await finalizeStoredVideo(finalVideoPath)
+      } catch (error) {
+        console.error('Failed to stop WGC capture:', error)
+        const fallbackPath = wgcCaptureTargetPath
+        wgcScreenRecordingActive = false
+        nativeScreenRecordingActive = false
+        wgcCaptureProcess = null
+        wgcCaptureTargetPath = null
+        wgcCaptureStopRequested = false
+        wgcSystemAudioPath = null
+        wgcMicAudioPath = null
+
+        if (fallbackPath) {
+          try {
+            await fs.access(fallbackPath)
+            return await finalizeStoredVideo(fallbackPath)
+          } catch {
+            // File doesn't exist
+          }
+        }
+
+        return {
+          success: false,
+          message: 'Failed to stop WGC capture',
+          error: String(error),
+        }
+      }
+    }
+
     if (process.platform !== 'darwin') {
       return { success: false, message: 'Native screen recording is only available on macOS.' }
     }
@@ -1673,6 +2001,25 @@ export function registerIpcHandlers(
     } catch (error) {
       console.error('Failed to load system cursor assets:', error)
       return { success: false, cursors: {}, error: String(error) }
+    }
+  })
+
+  ipcMain.handle('is-wgc-available', async () => {
+    return { available: await isWgcCaptureAvailable() }
+  })
+
+  ipcMain.handle('store-wgc-audio', async (_, audioData: ArrayBuffer, type: 'system' | 'mic') => {
+    try {
+      const audioPath = path.join(RECORDINGS_DIR, `recording-${Date.now()}.${type}.webm`)
+      await fs.writeFile(audioPath, Buffer.from(audioData))
+      if (type === 'system') {
+        wgcSystemAudioPath = audioPath
+      } else {
+        wgcMicAudioPath = audioPath
+      }
+      return { success: true, path: audioPath }
+    } catch (error) {
+      return { success: false, error: String(error) }
     }
   })
 

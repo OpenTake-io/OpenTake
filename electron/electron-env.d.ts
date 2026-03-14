@@ -78,6 +78,8 @@ interface Window {
     hudOverlayClose: () => void;
     setHasUnsavedChanges: (hasChanges: boolean) => void
     onRequestSaveBeforeClose: (callback: () => Promise<void>) => () => void
+    isWgcAvailable: () => Promise<{ available: boolean }>
+    storeWgcAudio: (audioData: ArrayBuffer, type: 'system' | 'mic') => Promise<{ success: boolean; path?: string; error?: string }>
     /** Hide the OS cursor before browser capture starts. */
     hideOsCursor: () => Promise<{ success: boolean }>
   }
