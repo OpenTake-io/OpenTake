@@ -40,6 +40,7 @@ interface Window {
       capturesSystemAudio?: boolean
       capturesMicrophone?: boolean
       microphoneDeviceId?: string
+      microphoneLabel?: string
     }) => Promise<{
       success: boolean
       path?: string

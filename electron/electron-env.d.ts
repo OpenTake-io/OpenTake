@@ -35,6 +35,7 @@ interface Window {
         capturesSystemAudio?: boolean
         capturesMicrophone?: boolean
         microphoneDeviceId?: string
+        microphoneLabel?: string
       }
     ) => Promise<{ success: boolean; path?: string; message?: string; error?: string }>
     stopNativeScreenRecording: () => Promise<{ success: boolean; path?: string; message?: string; error?: string }>
@@ -78,6 +79,8 @@ interface Window {
     hudOverlayClose: () => void;
     setHasUnsavedChanges: (hasChanges: boolean) => void
     onRequestSaveBeforeClose: (callback: () => Promise<void>) => () => void
+    isWgcAvailable: () => Promise<{ available: boolean }>
+    muxWgcRecording: () => Promise<{ success: boolean; path?: string; message?: string; error?: string }>
     /** Hide the OS cursor before browser capture starts. */
     hideOsCursor: () => Promise<{ success: boolean }>
   }

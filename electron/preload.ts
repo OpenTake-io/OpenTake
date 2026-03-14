@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       capturesSystemAudio?: boolean
       capturesMicrophone?: boolean
       microphoneDeviceId?: string
+      microphoneLabel?: string
     },
   ) => {
     return ipcRenderer.invoke('start-native-screen-recording', source, options)
@@ -177,6 +178,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('request-save-before-close', listener)
     return () => ipcRenderer.removeListener('request-save-before-close', listener)
   },
+  isWgcAvailable: () => ipcRenderer.invoke('is-wgc-available'),
+  muxWgcRecording: () => ipcRenderer.invoke('mux-wgc-recording'),
   // Cursor visibility control for cursor-free browser capture fallback
   hideOsCursor: () => ipcRenderer.invoke('hide-cursor'),
 })
