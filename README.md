@@ -16,7 +16,7 @@
   <img src="./recordlydemo.gif" width="750" alt="Recordly demo video">
 </p>
 
-**FAQ**: What are the changes between this and **Openscreen**? A: Recordly adds a full cursor animation/rendering pipeline, native macOS screen capture, zoom animations faithful to Screen Studio, smoother panning behaviour, and more tweaks.
+**FAQ**: What are the changes between this and **Openscreen**? A: Recordly adds a full cursor animation/rendering pipeline, native macOS screen capture, zoom animations faithful to Screen Studio, smoother panning behaviour, and more major tweaks.
 > This fork exists because the original maintainer does not wish implementing the architectural changes that make some of these features possible i.e. different recording pipeline.
 
 ---
@@ -119,13 +119,6 @@ For users:
 brew tap webadderall/tap
 brew install --cask recordly
 ```
-
-For maintainers (automated tap updates):
-
-1. Create a tap repository (for example `webadderall/homebrew-tap`) with a `main` branch.
-2. Add a repository secret in this repo: `HOMEBREW_TAP_TOKEN` (a token that can push branches and open PRs on the tap repo).
-3. Optional: set repository variable `HOMEBREW_TAP_REPO` (defaults to `webadderall/homebrew-tap`).
-4. On each published release, workflow `.github/workflows/homebrew-tap.yml` downloads release DMGs, computes checksums, updates `Casks/recordly.rb`, pushes a branch, and opens a PR in the tap repo.
 
 ---
 
