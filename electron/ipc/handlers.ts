@@ -6,6 +6,7 @@ import fs from 'node:fs/promises'
 import { constants as fsConstants } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import { RECORDINGS_DIR } from '../main'
 
@@ -182,21 +183,25 @@ async function persistRecordingsDirectorySetting(nextDir: string) {
   )
 }
 
-function normalizeVideoPathInput(videoPath: string) {
-  if (!videoPath.startsWith('file:')) {
-    return videoPath
+function normalizeVideoSourcePath(videoPath?: string | null): string | null {
+  if (typeof videoPath !== 'string') {
+    return null
   }
 
-  try {
-    const url = new URL(videoPath)
-    let filePath = decodeURIComponent(url.pathname)
-    if (/^\/[A-Za-z]:/.test(filePath)) {
-      filePath = filePath.slice(1)
-    }
-    return filePath
-  } catch {
-    return videoPath.replace(/^file:\/\//, '')
+  const trimmed = videoPath.trim()
+  if (!trimmed) {
+    return null
   }
+
+  if (/^file:\/\//i.test(trimmed)) {
+    try {
+      return fileURLToPath(trimmed)
+    } catch {
+      // Fall through and keep best-effort string path below.
+    }
+  }
+
+  return trimmed
 }
 
 async function hasSiblingProjectFile(videoPath: string) {
@@ -2223,7 +2228,7 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('get-cursor-telemetry', async (_, videoPath?: string) => {
-    const targetVideoPath = videoPath ? normalizeVideoPathInput(videoPath) : currentVideoPath
+    const targetVideoPath = normalizeVideoSourcePath(videoPath ?? currentVideoPath)
     if (!targetVideoPath) {
       return { success: true, samples: [] }
     }
@@ -2361,9 +2366,11 @@ export function registerIpcHandlers(
   ipcMain.handle('get-asset-base-path', () => {
     try {
       if (app.isPackaged) {
-        return path.join(process.resourcesPath, 'assets')
+        const assetPath = path.join(process.resourcesPath, 'assets')
+        return pathToFileURL(`${assetPath}${path.sep}`).toString()
       }
-      return path.join(app.getAppPath(), 'public')
+      const assetPath = path.join(app.getAppPath(), 'public')
+      return pathToFileURL(`${assetPath}${path.sep}`).toString()
     } catch (err) {
       console.error('Failed to resolve asset base path:', err)
       return null
@@ -2614,7 +2621,7 @@ export function registerIpcHandlers(
       const project = JSON.parse(content)
       currentProjectPath = filePath
       if (project && typeof project === 'object' && typeof project.videoPath === 'string') {
-        currentVideoPath = project.videoPath
+        currentVideoPath = normalizeVideoSourcePath(project.videoPath) ?? project.videoPath
       }
 
       return {
@@ -2641,7 +2648,7 @@ export function registerIpcHandlers(
       const content = await fs.readFile(currentProjectPath, 'utf-8')
       const project = JSON.parse(content)
       if (project && typeof project === 'object' && typeof project.videoPath === 'string') {
-        currentVideoPath = project.videoPath
+        currentVideoPath = normalizeVideoSourcePath(project.videoPath) ?? project.videoPath
       }
       return {
         success: true,
@@ -2658,10 +2665,10 @@ export function registerIpcHandlers(
     }
   })
   ipcMain.handle('set-current-video-path', (_, path: string) => {
-    currentVideoPath = path;
+    currentVideoPath = normalizeVideoSourcePath(path) ?? path
     currentProjectPath = null
-    return { success: true };
-  });
+    return { success: true }
+  })
 
   ipcMain.handle('get-current-video-path', () => {
     return currentVideoPath ? { success: true, path: currentVideoPath } : { success: false };
