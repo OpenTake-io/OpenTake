@@ -1,16 +1,30 @@
+function encodeRelativeAssetPath(relativePath: string): string {
+  return relativePath
+    .replace(/^\/+/, '')
+    .split('/')
+    .filter(Boolean)
+    .map((part) => encodeURIComponent(part))
+    .join('/')
+}
+
+function ensureTrailingSlash(value: string): string {
+  return value.endsWith('/') ? value : `${value}/`
+}
+
 export async function getAssetPath(relativePath: string): Promise<string> {
+  const encodedRelativePath = encodeRelativeAssetPath(relativePath)
+
   try {
     if (typeof window !== 'undefined') {
       // If running in a dev server (http/https), prefer the web-served path
       if (window.location && window.location.protocol && window.location.protocol.startsWith('http')) {
-        return `/${relativePath.replace(/^\//, '')}`
+        return `/${encodedRelativePath}`
       }
 
       if ((window as any).electronAPI && typeof (window as any).electronAPI.getAssetBasePath === 'function') {
         const base = await (window as any).electronAPI.getAssetBasePath()
         if (base) {
-          const normalized = base.replace(/\\/g, '/')
-          return `file://${normalized}/${relativePath}`
+          return new URL(encodedRelativePath, ensureTrailingSlash(base)).toString()
         }
       }
     }
@@ -19,7 +33,7 @@ export async function getAssetPath(relativePath: string): Promise<string> {
   }
 
   // Fallback for web/dev server: public/wallpapers are served at '/wallpapers/...'
-  return `/${relativePath.replace(/^\//, '')}`
+  return `/${encodedRelativePath}`
 }
 
 const BASE64_CHUNK_SIZE = 0x8000

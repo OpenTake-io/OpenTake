@@ -151,7 +151,13 @@ export class VideoExporter {
         if (demuxer) {
           this.audioProcessor = new AudioProcessor();
           await this.awaitWithWindowsTimeout(
-            this.audioProcessor.process(demuxer, this.muxer!, this.config.trimRegions),
+            this.audioProcessor.process(
+              demuxer,
+              this.muxer!,
+              this.config.videoUrl,
+              this.config.trimRegions,
+              this.config.speedRegions,
+            ),
             'audio processing',
           );
         }

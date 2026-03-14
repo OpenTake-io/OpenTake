@@ -216,7 +216,7 @@ export default function VideoEditor() {
     }
 
     const project = candidate;
-    const sourcePath = project.videoPath;
+    const sourcePath = fromFileUrl(project.videoPath);
     const normalizedEditor = normalizeProjectEditor(project.editor);
 
     try {
@@ -387,8 +387,9 @@ export default function VideoEditor() {
 
         const result = await window.electronAPI.getCurrentVideoPath();
         if (result.success && result.path) {
-          setVideoSourcePath(result.path);
-          setVideoPath(toFileUrl(result.path));
+          const sourcePath = fromFileUrl(result.path);
+          setVideoSourcePath(sourcePath);
+          setVideoPath(toFileUrl(sourcePath));
           setCurrentProjectPath(null);
           setLastSavedSnapshot(null);
         } else {
