@@ -49,6 +49,11 @@ let tray: Tray | null = null
 let selectedSourceName = ''
 let editorHasUnsavedChanges = false
 let isForceClosing = false
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!hasSingleInstanceLock) {
+  app.quit()
+}
 
 function closeEditorWindowBypassingUnsavedPrompt(window: BrowserWindow | null) {
   if (!window || window.isDestroyed()) {
@@ -70,6 +75,20 @@ ipcMain.on('set-has-unsaved-changes', (_event, hasChanges: boolean) => {
 
 function createWindow() {
   mainWindow = createHudOverlayWindow()
+}
+
+function focusOrCreateMainWindow() {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow()
+    return
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+    mainWindow.moveTop()
+  }
 }
 
 function isEditorWindow(window: BrowserWindow) {
@@ -321,14 +340,11 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow()
-  } else if (mainWindow && !mainWindow.isDestroyed()) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-    mainWindow.moveTop();
-  }
+  focusOrCreateMainWindow()
+})
+
+app.on('second-instance', () => {
+  focusOrCreateMainWindow()
 })
 
 
