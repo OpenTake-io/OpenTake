@@ -27,6 +27,7 @@
 		"build:mac": "npm run build:native-helpers && tsc && vite build && electron-builder --mac",
 		"build:win": "tsc && vite build && electron-builder --win",
 		"build:linux": "tsc && vite build && electron-builder --linux",
+		"i18n:check": "node scripts/i18n-check.mjs",
 		"test": "vitest --run",
 		"test:watch": "vitest"
 	},
