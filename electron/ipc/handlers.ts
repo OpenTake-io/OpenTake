@@ -419,7 +419,15 @@ function loadFfmpegStatic() {
 
 function loadUiohookModule() {
   const moduleExports = nodeRequire('uiohook-napi')
-  return (moduleExports as any)?.uIOhook ?? (moduleExports as any)?.default ?? moduleExports
+  return (
+    (moduleExports as any)?.uIOhook
+    ?? (moduleExports as any)?.uiohook
+    ?? (moduleExports as any)?.Uiohook
+    ?? (moduleExports as any)?.default?.uIOhook
+    ?? (moduleExports as any)?.default?.uiohook
+    ?? (moduleExports as any)?.default
+    ?? moduleExports
+  )
 }
 
 function getFfmpegBinaryPath() {
@@ -913,6 +921,33 @@ let lastLeftClick: { timeMs: number; cx: number; cy: number } | null = null
 let selectedWindowBounds: WindowBounds | null = null
 let windowBoundsCaptureInterval: NodeJS.Timeout | null = null
 
+function normalizeHookMouseButton(rawButton: unknown): 1 | 2 | 3 {
+  if (typeof rawButton !== 'number' || !Number.isFinite(rawButton)) {
+    return 1
+  }
+
+  // uiohook/libuiohook button codes are typically 1/2/3. Some wrappers may
+  // expose alternate constants depending on platform/runtime.
+  if (rawButton === 2 || rawButton === 39) {
+    return 2
+  }
+
+  if (rawButton === 3 || rawButton === 38) {
+    return 3
+  }
+
+  return 1
+}
+
+function getHookMouseButton(event: any): 1 | 2 | 3 {
+  return normalizeHookMouseButton(
+    event?.button
+    ?? event?.mouseButton
+    ?? event?.data?.button
+    ?? event?.data?.mouseButton
+  )
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
@@ -1113,11 +1148,13 @@ async function startInteractionCapture() {
 
   try {
     const hook = loadUiohookModule()
+    console.log('[CursorTelemetry] hook loaded:', !!hook, 'has.on:', typeof hook?.on, 'has.start:', typeof hook?.start)
     if (!isCursorCaptureActive) {
       return
     }
 
     if (!hook || typeof hook.on !== 'function' || typeof hook.start !== 'function') {
+      console.log('[CursorTelemetry] hook unusable — aborting interaction capture')
       return
     }
 
@@ -1132,7 +1169,7 @@ async function startInteractionCapture() {
       }
 
       const timeMs = Date.now() - cursorCaptureStartTimeMs
-      const button = typeof event?.button === 'number' ? event.button : 1
+      const button = getHookMouseButton(event)
       let interactionType: CursorInteractionType = 'click'
 
       if (button === 2) {
@@ -1171,6 +1208,7 @@ async function startInteractionCapture() {
 
     hook.on('mousedown', onMouseDown)
     hook.on('mouseup', onMouseUp)
+
     hook.start()
 
     interactionCaptureCleanup = () => {

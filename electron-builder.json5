@@ -5,6 +5,7 @@
   "asar": true,
   "asarUnpack": [
     "node_modules/ffmpeg-static/**",
+    "node_modules/uiohook-napi/**",
     "electron/native/**"
   ],
   "productName": "Recordly",
