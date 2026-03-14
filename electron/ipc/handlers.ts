@@ -39,6 +39,7 @@ type NativeMacRecordingOptions = {
   capturesSystemAudio?: boolean
   capturesMicrophone?: boolean
   microphoneDeviceId?: string
+  microphoneLabel?: string
 }
 
 type WindowBounds = {
@@ -66,6 +67,7 @@ let wgcScreenRecordingActive = false
 let wgcCaptureStopRequested = false
 let wgcSystemAudioPath: string | null = null
 let wgcMicAudioPath: string | null = null
+let wgcPendingVideoPath: string | null = null
 let ffmpegScreenRecordingActive = false
 let ffmpegCaptureProcess: ChildProcessWithoutNullStreams | null = null
 let ffmpegCaptureOutputBuffer = ''
@@ -90,6 +92,20 @@ let currentCursorVisualType: CursorVisualType | undefined = undefined
 /** Returns the currently selected source ID for setDisplayMediaRequestHandler */
 export function getSelectedSourceId(): string | null {
   return selectedSource?.id as string | null ?? null
+}
+
+export function killWgcCaptureProcess() {
+  if (wgcCaptureProcess) {
+    try { wgcCaptureProcess.kill() } catch { /* ignore */ }
+    wgcCaptureProcess = null
+    wgcCaptureTargetPath = null
+    wgcScreenRecordingActive = false
+    nativeScreenRecordingActive = false
+    wgcCaptureStopRequested = false
+    wgcSystemAudioPath = null
+    wgcMicAudioPath = null
+    wgcPendingVideoPath = null
+  }
 }
 
 function normalizePath(filePath: string) {
@@ -500,7 +516,7 @@ function getFfmpegBinaryPath() {
   }
 
   if (app.isPackaged) {
-    return ffmpegStatic.replace('.asar/', '.asar.unpacked/')
+    return ffmpegStatic.replace(/\.asar([\/\\])/, '.asar.unpacked$1')
   }
 
   return ffmpegStatic
@@ -836,7 +852,7 @@ async function muxWgcVideoWithAudio(videoPath: string, systemAudioPath: string |
       [
         '-y',
         ...inputs,
-        '-filter_complex', '[1:a][2:a]amix=inputs=2:duration=longest:normalize=0[aout]',
+        '-filter_complex', '[2:a]atrim=start=0.10,asetpts=PTS-STARTPTS[m];[1:a][m]amix=inputs=2:duration=longest:normalize=0[aout]',
         '-map', '0:v:0',
         '-map', '[aout]',
         '-c:v', 'copy',
@@ -1710,23 +1726,47 @@ export function registerIpcHandlers(
 
       try {
         const exePath = getWgcCaptureExePath()
-        const outputPath = path.join(RECORDINGS_DIR, `recording-${Date.now()}.mp4`)
-        const screenId = Number(source?.display_id)
-        const displayId = Number.isFinite(screenId) && screenId > 0
-          ? screenId
-          : Number(getScreen().getPrimaryDisplay().id)
+        const recordingsDir = await getRecordingsDir()
+        const timestamp = Date.now()
+        const outputPath = path.join(recordingsDir, `recording-${timestamp}.mp4`)
 
         const config: Record<string, unknown> = {
-          displayId,
           outputPath,
           fps: 60,
+        }
+
+        if (options?.capturesSystemAudio) {
+          const audioPath = path.join(recordingsDir, `recording-${timestamp}.system.wav`)
+          config.captureSystemAudio = true
+          config.audioOutputPath = audioPath
+          wgcSystemAudioPath = audioPath
+        }
+
+        if (options?.capturesMicrophone) {
+          const micPath = path.join(recordingsDir, `recording-${timestamp}.mic.wav`)
+          config.captureMic = true
+          config.micOutputPath = micPath
+          if (options.microphoneLabel) {
+            config.micDeviceName = options.microphoneLabel
+          }
+          wgcMicAudioPath = micPath
+        }
+
+        const windowId = parseWindowId(source?.id)
+        if (windowId && source?.id?.startsWith('window:')) {
+          config.windowHandle = windowId
+        } else {
+          const screenId = Number(source?.display_id)
+          config.displayId = Number.isFinite(screenId) && screenId > 0
+            ? screenId
+            : Number(getScreen().getPrimaryDisplay().id)
         }
 
         wgcCaptureOutputBuffer = ''
         wgcCaptureTargetPath = outputPath
         wgcCaptureStopRequested = false
         wgcCaptureProcess = spawn(exePath, [JSON.stringify(config)], {
-          cwd: RECORDINGS_DIR,
+          cwd: recordingsDir,
           stdio: ['pipe', 'pipe', 'pipe'],
         })
         attachWgcCaptureLifecycle(wgcCaptureProcess)
@@ -1888,17 +1928,8 @@ export function registerIpcHandlers(
           await moveFileWithOverwrite(tempVideoPath, finalVideoPath)
         }
 
-        if (wgcSystemAudioPath || wgcMicAudioPath) {
-          try {
-            await muxWgcVideoWithAudio(finalVideoPath, wgcSystemAudioPath, wgcMicAudioPath)
-          } catch (muxError) {
-            console.warn('Failed to mux WGC audio:', muxError)
-          }
-          wgcSystemAudioPath = null
-          wgcMicAudioPath = null
-        }
-
-        return await finalizeStoredVideo(finalVideoPath)
+        wgcPendingVideoPath = finalVideoPath
+        return { success: true, path: finalVideoPath }
       } catch (error) {
         console.error('Failed to stop WGC capture:', error)
         const fallbackPath = wgcCaptureTargetPath
@@ -1909,11 +1940,13 @@ export function registerIpcHandlers(
         wgcCaptureStopRequested = false
         wgcSystemAudioPath = null
         wgcMicAudioPath = null
+        wgcPendingVideoPath = null
 
         if (fallbackPath) {
           try {
             await fs.access(fallbackPath)
-            return await finalizeStoredVideo(fallbackPath)
+            wgcPendingVideoPath = fallbackPath
+            return { success: true, path: fallbackPath }
           } catch {
             // File doesn't exist
           }
@@ -2008,18 +2041,31 @@ export function registerIpcHandlers(
     return { available: await isWgcCaptureAvailable() }
   })
 
-  ipcMain.handle('store-wgc-audio', async (_, audioData: ArrayBuffer, type: 'system' | 'mic') => {
+  ipcMain.handle('mux-wgc-recording', async () => {
+    const videoPath = wgcPendingVideoPath
+    wgcPendingVideoPath = null
+
+    if (!videoPath) {
+      return { success: false, message: 'No WGC video pending for mux' }
+    }
+
     try {
-      const audioPath = path.join(RECORDINGS_DIR, `recording-${Date.now()}.${type}.webm`)
-      await fs.writeFile(audioPath, Buffer.from(audioData))
-      if (type === 'system') {
-        wgcSystemAudioPath = audioPath
-      } else {
-        wgcMicAudioPath = audioPath
+      if (wgcSystemAudioPath || wgcMicAudioPath) {
+        await muxWgcVideoWithAudio(videoPath, wgcSystemAudioPath, wgcMicAudioPath)
+        wgcSystemAudioPath = null
+        wgcMicAudioPath = null
       }
-      return { success: true, path: audioPath }
+
+      return await finalizeStoredVideo(videoPath)
     } catch (error) {
-      return { success: false, error: String(error) }
+      console.error('Failed to mux WGC recording:', error)
+      wgcSystemAudioPath = null
+      wgcMicAudioPath = null
+      try {
+        return await finalizeStoredVideo(videoPath)
+      } catch {
+        return { success: false, message: 'Failed to mux WGC recording', error: String(error) }
+      }
     }
   })
 

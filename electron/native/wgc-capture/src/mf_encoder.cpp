@@ -24,6 +24,11 @@ bool MFEncoder::initialize(const std::wstring& outputPath, int width, int height
                            ID3D11Device* device, ID3D11DeviceContext* context) {
     if (initialized_) return false;
 
+    if (width % 2 != 0 || height % 2 != 0) {
+        std::cerr << "ERROR: Encoder dimensions must be even, got " << width << "x" << height << std::endl;
+        return false;
+    }
+
     width_ = width;
     height_ = height;
     fps_ = fps;

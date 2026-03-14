@@ -1,6 +1,7 @@
 #include "wgc_session.h"
 #include "mf_encoder.h"
 #include "monitor_utils.h"
+#include "wasapi_loopback.h"
 
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.System.h>
@@ -18,10 +19,16 @@ static std::condition_variable g_stopCv;
 
 struct CaptureConfig {
     int displayId = 0;
+    int64_t windowHandle = 0;
     std::string outputPath;
+    std::string audioOutputPath;
+    std::string micOutputPath;
+    std::string micDeviceName;
     int fps = 60;
     int width = 0;
     int height = 0;
+    bool captureSystemAudio = false;
+    bool captureMic = false;
 };
 
 static bool parseSimpleJson(const std::string& json, CaptureConfig& config) {
@@ -34,6 +41,20 @@ static bool parseSimpleJson(const std::string& json, CaptureConfig& config) {
         while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) pos++;
         try {
             return std::stoi(json.substr(pos));
+        } catch (...) {
+            return -1;
+        }
+    };
+
+    auto findInt64 = [&](const std::string& key) -> int64_t {
+        auto pos = json.find("\"" + key + "\"");
+        if (pos == std::string::npos) return -1;
+        pos = json.find(':', pos);
+        if (pos == std::string::npos) return -1;
+        pos++;
+        while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) pos++;
+        try {
+            return std::stoll(json.substr(pos));
         } catch (...) {
             return -1;
         }
@@ -72,6 +93,9 @@ static bool parseSimpleJson(const std::string& json, CaptureConfig& config) {
     int displayId = findInt("displayId");
     if (displayId >= 0) config.displayId = displayId;
 
+    int64_t windowHandle = findInt64("windowHandle");
+    if (windowHandle > 0) config.windowHandle = windowHandle;
+
     int fps = findInt("fps");
     if (fps > 0) config.fps = fps;
 
@@ -80,6 +104,22 @@ static bool parseSimpleJson(const std::string& json, CaptureConfig& config) {
 
     int height = findInt("height");
     if (height > 0) config.height = height;
+
+    config.audioOutputPath = findString("audioOutputPath");
+    config.micOutputPath = findString("micOutputPath");
+    config.micDeviceName = findString("micDeviceName");
+
+    auto findBool = [&](const std::string& key) -> bool {
+        auto pos = json.find("\"" + key + "\"");
+        if (pos == std::string::npos) return false;
+        auto colonPos = json.find(':', pos);
+        if (colonPos == std::string::npos) return false;
+        auto valStart = json.find_first_not_of(" \t", colonPos + 1);
+        return valStart != std::string::npos && json.substr(valStart, 4) == "true";
+    };
+
+    config.captureSystemAudio = findBool("captureSystemAudio");
+    config.captureMic = findBool("captureMic");
 
     return true;
 }
@@ -126,18 +166,28 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Resolve monitor
-    HMONITOR monitor = findMonitorByDisplayId(config.displayId);
-    if (!monitor) {
-        std::cerr << "ERROR: Could not find monitor for displayId " << config.displayId << std::endl;
-        return 1;
-    }
-
-    // Initialize WGC session
     WgcSession session;
-    if (!session.initialize(monitor, config.fps)) {
-        std::cerr << "ERROR: Failed to initialize WGC capture session" << std::endl;
-        return 1;
+
+    if (config.windowHandle > 0) {
+        HWND hwnd = reinterpret_cast<HWND>(static_cast<intptr_t>(config.windowHandle));
+        if (!IsWindow(hwnd)) {
+            std::cerr << "ERROR: Invalid window handle " << config.windowHandle << std::endl;
+            return 1;
+        }
+        if (!session.initialize(hwnd, config.fps)) {
+            std::cerr << "ERROR: Failed to initialize WGC window capture session" << std::endl;
+            return 1;
+        }
+    } else {
+        HMONITOR monitor = findMonitorByDisplayId(config.displayId);
+        if (!monitor) {
+            std::cerr << "ERROR: Could not find monitor for displayId " << config.displayId << std::endl;
+            return 1;
+        }
+        if (!session.initialize(monitor, config.fps)) {
+            std::cerr << "ERROR: Failed to initialize WGC capture session" << std::endl;
+            return 1;
+        }
     }
 
     int captureWidth = config.width > 0 ? config.width : session.captureWidth();
@@ -169,10 +219,39 @@ int main(int argc, char* argv[]) {
     std::thread stdinThread(stdinListenerThread);
     stdinThread.detach();
 
-    // Start capture
+    // Initialize WASAPI captures (but don't start yet)
+    WasapiCapture loopback;
+    WasapiCapture micCapture;
+    bool audioActive = false;
+    bool audioInitialized = false;
+    bool micActive = false;
+    bool micInitialized = false;
+
+    if (config.captureSystemAudio && !config.audioOutputPath.empty()) {
+        audioInitialized = loopback.initializeLoopback(config.audioOutputPath);
+        if (!audioInitialized) {
+            std::cerr << "WARNING: Failed to initialize WASAPI loopback" << std::endl;
+        }
+    }
+
+    if (config.captureMic && !config.micOutputPath.empty()) {
+        micInitialized = micCapture.initializeMic(config.micOutputPath, config.micDeviceName);
+        if (!micInitialized) {
+            std::cerr << "WARNING: Failed to initialize WASAPI mic capture" << std::endl;
+        }
+    }
+
+    // Start video capture, then audio immediately after for sync
     if (!session.startCapture()) {
         std::cerr << "ERROR: Failed to start WGC capture" << std::endl;
         return 1;
+    }
+
+    if (audioInitialized) {
+        audioActive = loopback.start();
+    }
+    if (micInitialized) {
+        micActive = micCapture.start();
     }
 
     std::cout << "Recording started" << std::endl;
@@ -186,10 +265,21 @@ int main(int argc, char* argv[]) {
 
     // Stop capture and finalize
     session.stopCapture();
+    if (audioActive) loopback.stop();
+    if (micActive) micCapture.stop();
     encoder.finalize();
 
     std::cout << "Recording stopped. Output path: " << config.outputPath << std::endl;
+    if (audioActive) {
+        std::cout << "Audio path: " << config.audioOutputPath << std::endl;
+    }
+    if (micActive) {
+        std::cout << "Mic path: " << config.micOutputPath << std::endl;
+    }
     std::cout.flush();
+
+    // Allow pipe buffers to drain before forceful exit
+    Sleep(100);
 
     // Fast exit to avoid WinRT/COM teardown crashes during apartment cleanup
     ExitProcess(0);
