@@ -70,6 +70,8 @@ interface Window {
     getPlatform: () => Promise<string>
     revealInFolder: (filePath: string) => Promise<{ success: boolean; error?: string; message?: string }>,
     openRecordingsFolder: () => Promise<{ success: boolean; error?: string; message?: string }>,
+    getRecordingsDirectory: () => Promise<{ success: boolean; path: string; isDefault: boolean; error?: string }>
+    chooseRecordingsDirectory: () => Promise<{ success: boolean; canceled?: boolean; path?: string; isDefault?: boolean; message?: string; error?: string }>
     getShortcuts: () => Promise<Record<string, unknown> | null>
     saveShortcuts: (shortcuts: unknown) => Promise<{ success: boolean; error?: string }>
     hudOverlayHide: () => void;

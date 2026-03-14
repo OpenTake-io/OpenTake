@@ -66,6 +66,7 @@ export function LaunchWindow() {
 
   const [selectedSource, setSelectedSource] = useState("Screen");
   const [hasSelectedSource, setHasSelectedSource] = useState(false);
+  const [recordingsDirectory, setRecordingsDirectory] = useState<string | null>(null);
 
   useEffect(() => {
     const checkSelectedSource = async () => {
@@ -117,6 +118,32 @@ export function LaunchWindow() {
   const sendHudOverlayClose = () => {
     window.electronAPI?.hudOverlayClose?.();
   };
+
+  const chooseRecordingsDirectory = async () => {
+    const result = await window.electronAPI.chooseRecordingsDirectory();
+    if (result.canceled) {
+      return;
+    }
+    if (result.success && result.path) {
+      setRecordingsDirectory(result.path);
+    }
+  };
+
+  useEffect(() => {
+    const loadRecordingsDirectory = async () => {
+      const result = await window.electronAPI.getRecordingsDirectory();
+      if (result.success) {
+        setRecordingsDirectory(result.path);
+      }
+    };
+
+    void loadRecordingsDirectory();
+  }, []);
+
+  const recordingsDirectoryName = recordingsDirectory
+    ? recordingsDirectory.split(/[\\/]/).filter(Boolean).pop() || recordingsDirectory
+    : "recordings";
+  const dividerClass = "mx-1 h-5 w-px shrink-0 bg-white/35";
 
   const toggleMicrophone = () => {
     if (!recording) {
@@ -176,7 +203,7 @@ export function LaunchWindow() {
             <ContentClamp truncateLength={6}>{selectedSource}</ContentClamp>
           </Button>
 
-          <div className="h-6 w-px bg-white/20" />
+          <div className={dividerClass} />
 
           <div className={`flex items-center gap-1 ${styles.electronNoDrag}`}>
             <Button
@@ -201,7 +228,7 @@ export function LaunchWindow() {
             </Button>
           </div>
 
-          <div className="h-6 w-px bg-white/20" />
+          <div className={dividerClass} />
 
           <Button
             variant="link"
@@ -223,7 +250,19 @@ export function LaunchWindow() {
             )}
           </Button>
 
+          <Button
+            variant="link"
+            size="sm"
+            onClick={chooseRecordingsDirectory}
+            disabled={recording}
+            title={recordingsDirectory ? `Recording folder: ${recordingsDirectory}` : "Choose recordings folder"}
+            className={`text-white/75 hover:bg-transparent px-1 text-[11px] underline decoration-white/45 underline-offset-2 ${styles.electronNoDrag}`}
+          >
+            <ContentClamp truncateLength={18}>{`Path: /${recordingsDirectoryName}/`}</ContentClamp>
+          </Button>
+
           <div className="ml-auto flex items-center gap-0.5">
+            <div className={dividerClass} />
             <Button
               variant="link"
               size="icon"
@@ -244,6 +283,7 @@ export function LaunchWindow() {
             >
               <FaFolderOpen size={14} />
             </Button>
+            <div className={dividerClass} />
             <Button
               variant="link"
               size="icon"
