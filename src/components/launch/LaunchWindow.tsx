@@ -164,7 +164,7 @@ export function LaunchWindow() {
                 setSelectedDeviceId(event.target.value);
                 setMicrophoneDeviceId(event.target.value);
               }}
-              className="max-w-[230px] rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs text-white outline-none"
+              className={`max-w-[230px] rounded-full border border-white/15 bg-[#131722] px-3 py-1 text-xs text-slate-100 outline-none ${styles.micSelect}`}
             >
               {devices.map((device) => (
                 <option key={device.deviceId} value={device.deviceId}>
@@ -177,7 +177,7 @@ export function LaunchWindow() {
         )}
 
         <div
-          className={`w-full max-w-[500px] mx-auto flex items-center gap-1.5 px-3 py-2 ${styles.electronDrag} ${styles.hudBar}`}
+          className={`w-full max-w-[560px] mx-auto flex items-center gap-1.5 px-3 py-2 ${styles.electronDrag} ${styles.hudBar}`}
           style={{
             borderRadius: 9999,
             background: "linear-gradient(135deg, rgba(28,28,36,0.97) 0%, rgba(18,18,26,0.96) 100%)",

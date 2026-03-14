@@ -40,3 +40,12 @@
   opacity: 0.7;
   background: none !important;
 }
+
+.micSelect {
+  color-scheme: dark;
+}
+
+.micSelect option {
+  background-color: #131722;
+  color: #e5e7eb;
+}
