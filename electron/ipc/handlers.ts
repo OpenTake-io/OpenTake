@@ -121,6 +121,23 @@ function getTelemetryPathForVideo(videoPath: string) {
   return `${videoPath}.cursor.json`
 }
 
+function normalizeVideoPathInput(videoPath: string) {
+  if (!videoPath.startsWith('file:')) {
+    return videoPath
+  }
+
+  try {
+    const url = new URL(videoPath)
+    let filePath = decodeURIComponent(url.pathname)
+    if (/^\/[A-Za-z]:/.test(filePath)) {
+      filePath = filePath.slice(1)
+    }
+    return filePath
+  } catch {
+    return videoPath.replace(/^file:\/\//, '')
+  }
+}
+
 async function hasSiblingProjectFile(videoPath: string) {
   const baseName = path.basename(videoPath, path.extname(videoPath))
   const candidateExtensions = [PROJECT_FILE_EXTENSION, ...LEGACY_PROJECT_FILE_EXTENSIONS]
@@ -1770,12 +1787,12 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('get-cursor-telemetry', async (_, videoPath?: string) => {
-    const targetVideoPath = videoPath ?? currentVideoPath
+    const targetVideoPath = videoPath ? normalizeVideoPathInput(videoPath) : currentVideoPath
     if (!targetVideoPath) {
       return { success: true, samples: [] }
     }
 
-    const telemetryPath = `${targetVideoPath}.cursor.json`
+    const telemetryPath = getTelemetryPathForVideo(targetVideoPath)
     try {
       const content = await fs.readFile(telemetryPath, 'utf-8')
       const parsed = JSON.parse(content)

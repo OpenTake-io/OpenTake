@@ -8,6 +8,7 @@ import type { ZoomRegion, CropRegion, TrimRegion, AnnotationRegion, SpeedRegion,
 interface VideoExporterConfig extends ExportConfig {
   videoUrl: string;
   wallpaper: string;
+  backgroundTransparency?: boolean;
   zoomRegions: ZoomRegion[];
   trimRegions?: TrimRegion[];
   speedRegions?: SpeedRegion[];
@@ -47,6 +48,7 @@ export class VideoExporter {
   private videoColorSpace: VideoColorSpaceInit | undefined;
   private pendingMuxing: Promise<void> = Promise.resolve();
   private chunkCount = 0;
+  private readonly WINDOWS_FINALIZATION_TIMEOUT_MS = 60_000;
 
   constructor(config: VideoExporterConfig) {
     this.config = config;
@@ -66,6 +68,7 @@ export class VideoExporter {
         width: this.config.width,
         height: this.config.height,
         wallpaper: this.config.wallpaper,
+        backgroundTransparency: this.config.backgroundTransparency,
         zoomRegions: this.config.zoomRegions,
         showShadow: this.config.showShadow,
         shadowIntensity: this.config.shadowIntensity,
@@ -139,22 +142,25 @@ export class VideoExporter {
 
       // Finalize encoding
       if (this.encoder && this.encoder.state === 'configured') {
-        await this.encoder.flush();
+        await this.awaitWithWindowsTimeout(this.encoder.flush(), 'encoder flush');
       }
 
       // Wait for queued muxing operations to complete
-      await this.pendingMuxing;
+      await this.awaitWithWindowsTimeout(this.pendingMuxing, 'muxing queued video chunks');
 
       if (hasAudio && !this.cancelled) {
         const demuxer = this.streamingDecoder.getDemuxer();
         if (demuxer) {
           this.audioProcessor = new AudioProcessor();
-          await this.audioProcessor.process(demuxer, this.muxer!, this.config.trimRegions);
+          await this.awaitWithWindowsTimeout(
+            this.audioProcessor.process(demuxer, this.muxer!, this.config.trimRegions),
+            'audio processing',
+          );
         }
       }
 
       // Finalize muxer and get output blob
-      const blob = await this.muxer!.finalize();
+      const blob = await this.awaitWithWindowsTimeout(this.muxer!.finalize(), 'muxer finalization');
 
       return { success: true, blob };
     } catch (error) {
@@ -165,6 +171,36 @@ export class VideoExporter {
       };
     } finally {
       this.cleanup();
+    }
+  }
+
+  private isWindowsPlatform(): boolean {
+    if (typeof navigator === 'undefined') {
+      return false;
+    }
+    return /Win/i.test(navigator.platform);
+  }
+
+  private async awaitWithWindowsTimeout<T>(promise: Promise<T>, stage: string): Promise<T> {
+    if (!this.isWindowsPlatform()) {
+      return promise;
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error(`Export timed out during ${stage} on Windows`));
+          }, this.WINDOWS_FINALIZATION_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     }
   }
 

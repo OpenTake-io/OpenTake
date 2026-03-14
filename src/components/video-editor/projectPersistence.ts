@@ -25,6 +25,7 @@ export const PROJECT_VERSION = 1;
 
 export interface ProjectEditorState {
   wallpaper: string;
+  backgroundTransparency: boolean;
   shadowIntensity: number;
   backgroundBlur: number;
   zoomMotionBlur: number;
@@ -78,7 +79,11 @@ export function fromFileUrl(fileUrl: string): string {
 
   try {
     const url = new URL(fileUrl);
-    return decodeURIComponent(url.pathname);
+    let filePath = decodeURIComponent(url.pathname);
+    if (/^\/[A-Za-z]:/.test(filePath)) {
+      filePath = filePath.slice(1);
+    }
+    return filePath;
   } catch {
     return fileUrl.replace(/^file:\/\//, "");
   }
@@ -255,6 +260,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 
   return {
     wallpaper: typeof editor.wallpaper === "string" ? editor.wallpaper : WALLPAPER_PATHS[0],
+    backgroundTransparency: typeof (editor as Partial<ProjectEditorState>).backgroundTransparency === "boolean"
+      ? (editor as Partial<ProjectEditorState>).backgroundTransparency as boolean
+      : false,
     shadowIntensity: typeof editor.shadowIntensity === "number" ? editor.shadowIntensity : 0.67,
     backgroundBlur: normalizedBackgroundBlur,
     zoomMotionBlur: normalizedZoomMotionBlur,
