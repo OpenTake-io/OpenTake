@@ -54,6 +54,17 @@ import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { detectInteractionCandidates, normalizeCursorTelemetry } from "./timeline/zoomSuggestionUtils";
 
+type EditorHistorySnapshot = {
+  zoomRegions: ZoomRegion[];
+  trimRegions: TrimRegion[];
+  speedRegions: SpeedRegion[];
+  annotationRegions: AnnotationRegion[];
+  selectedZoomId: string | null;
+  selectedTrimId: string | null;
+  selectedSpeedId: string | null;
+  selectedAnnotationId: string | null;
+};
+
 export default function VideoEditor() {
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const [videoSourcePath, setVideoSourcePath] = useState<string | null>(null);
@@ -108,6 +119,89 @@ export default function VideoEditor() {
   const nextAnnotationZIndexRef = useRef(1); // Track z-index for stacking order
   const exporterRef = useRef<VideoExporter | null>(null);
   const autoSuggestedVideoPathRef = useRef<string | null>(null);
+  const historyPastRef = useRef<EditorHistorySnapshot[]>([]);
+  const historyFutureRef = useRef<EditorHistorySnapshot[]>([]);
+  const historyCurrentRef = useRef<EditorHistorySnapshot | null>(null);
+  const applyingHistoryRef = useRef(false);
+
+  const cloneSnapshot = useCallback((snapshot: EditorHistorySnapshot): EditorHistorySnapshot => {
+    return {
+      zoomRegions: JSON.parse(JSON.stringify(snapshot.zoomRegions)),
+      trimRegions: JSON.parse(JSON.stringify(snapshot.trimRegions)),
+      speedRegions: JSON.parse(JSON.stringify(snapshot.speedRegions)),
+      annotationRegions: JSON.parse(JSON.stringify(snapshot.annotationRegions)),
+      selectedZoomId: snapshot.selectedZoomId,
+      selectedTrimId: snapshot.selectedTrimId,
+      selectedSpeedId: snapshot.selectedSpeedId,
+      selectedAnnotationId: snapshot.selectedAnnotationId,
+    };
+  }, []);
+
+  const buildHistorySnapshot = useCallback((): EditorHistorySnapshot => {
+    return {
+      zoomRegions,
+      trimRegions,
+      speedRegions,
+      annotationRegions,
+      selectedZoomId,
+      selectedTrimId,
+      selectedSpeedId,
+      selectedAnnotationId,
+    };
+  }, [
+    zoomRegions,
+    trimRegions,
+    speedRegions,
+    annotationRegions,
+    selectedZoomId,
+    selectedTrimId,
+    selectedSpeedId,
+    selectedAnnotationId,
+  ]);
+
+  const applyHistorySnapshot = useCallback((snapshot: EditorHistorySnapshot) => {
+    applyingHistoryRef.current = true;
+    const cloned = cloneSnapshot(snapshot);
+    setZoomRegions(cloned.zoomRegions);
+    setTrimRegions(cloned.trimRegions);
+    setSpeedRegions(cloned.speedRegions);
+    setAnnotationRegions(cloned.annotationRegions);
+    setSelectedZoomId(cloned.selectedZoomId);
+    setSelectedTrimId(cloned.selectedTrimId);
+    setSelectedSpeedId(cloned.selectedSpeedId);
+    setSelectedAnnotationId(cloned.selectedAnnotationId);
+
+    nextZoomIdRef.current = deriveNextId("zoom", cloned.zoomRegions.map((region) => region.id));
+    nextTrimIdRef.current = deriveNextId("trim", cloned.trimRegions.map((region) => region.id));
+    nextSpeedIdRef.current = deriveNextId("speed", cloned.speedRegions.map((region) => region.id));
+    nextAnnotationIdRef.current = deriveNextId("annotation", cloned.annotationRegions.map((region) => region.id));
+    nextAnnotationZIndexRef.current =
+      cloned.annotationRegions.reduce((max, region) => Math.max(max, region.zIndex), 0) + 1;
+  }, [cloneSnapshot]);
+
+  const handleUndo = useCallback(() => {
+    if (historyPastRef.current.length === 0) return;
+
+    const current = historyCurrentRef.current ?? cloneSnapshot(buildHistorySnapshot());
+    const previous = historyPastRef.current.pop();
+    if (!previous) return;
+
+    historyFutureRef.current.push(cloneSnapshot(current));
+    historyCurrentRef.current = cloneSnapshot(previous);
+    applyHistorySnapshot(previous);
+  }, [applyHistorySnapshot, buildHistorySnapshot, cloneSnapshot]);
+
+  const handleRedo = useCallback(() => {
+    if (historyFutureRef.current.length === 0) return;
+
+    const current = historyCurrentRef.current ?? cloneSnapshot(buildHistorySnapshot());
+    const next = historyFutureRef.current.pop();
+    if (!next) return;
+
+    historyPastRef.current.push(cloneSnapshot(current));
+    historyCurrentRef.current = cloneSnapshot(next);
+    applyHistorySnapshot(next);
+  }, [applyHistorySnapshot, buildHistorySnapshot, cloneSnapshot]);
 
   const applyLoadedProject = useCallback(async (candidate: unknown, path?: string | null) => {
     if (!validateProjectData(candidate)) {
@@ -234,6 +328,34 @@ export default function VideoEditor() {
     gifLoop,
     gifSizePreset,
   ]);
+
+  useEffect(() => {
+    const snapshot = cloneSnapshot(buildHistorySnapshot());
+
+    if (!historyCurrentRef.current) {
+      historyCurrentRef.current = snapshot;
+      return;
+    }
+
+    if (applyingHistoryRef.current) {
+      historyCurrentRef.current = snapshot;
+      applyingHistoryRef.current = false;
+      return;
+    }
+
+    const currentSerialized = JSON.stringify(historyCurrentRef.current);
+    const nextSerialized = JSON.stringify(snapshot);
+    if (currentSerialized === nextSerialized) {
+      return;
+    }
+
+    historyPastRef.current.push(cloneSnapshot(historyCurrentRef.current));
+    if (historyPastRef.current.length > 100) {
+      historyPastRef.current.shift();
+    }
+    historyCurrentRef.current = snapshot;
+    historyFutureRef.current = [];
+  }, [buildHistorySnapshot, cloneSnapshot]);
 
   const hasUnsavedChanges = Boolean(
     currentProjectPath &&
@@ -898,9 +1020,38 @@ export default function VideoEditor() {
   // Global Tab prevention
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isEditableTarget =
+        target instanceof HTMLInputElement
+        || target instanceof HTMLTextAreaElement
+        || target?.isContentEditable;
+
+      const usesPrimaryModifier = isMac ? e.metaKey : e.ctrlKey;
+      const key = e.key.toLowerCase();
+
+      if (usesPrimaryModifier && !e.altKey && key === 'z') {
+        if (!isEditableTarget) {
+          e.preventDefault();
+          if (e.shiftKey) {
+            handleRedo();
+          } else {
+            handleUndo();
+          }
+        }
+        return;
+      }
+
+      if (!isMac && e.ctrlKey && !e.metaKey && !e.altKey && key === 'y') {
+        if (!isEditableTarget) {
+          e.preventDefault();
+          handleRedo();
+        }
+        return;
+      }
+
       if (e.key === 'Tab') {
         // Allow tab only in inputs/textareas
-        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        if (isEditableTarget) {
           return;
         }
         e.preventDefault();
@@ -908,7 +1059,7 @@ export default function VideoEditor() {
 
       if (matchesShortcut(e, shortcuts.playPause, isMac)) {
         // Allow space only in inputs/textareas
-        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        if (isEditableTarget) {
           return;
         }
         e.preventDefault();
@@ -926,7 +1077,7 @@ export default function VideoEditor() {
     
     window.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-  }, [shortcuts, isMac]);
+  }, [shortcuts, isMac, handleUndo, handleRedo]);
 
   useEffect(() => {
     if (selectedZoomId && !zoomRegions.some((region) => region.id === selectedZoomId)) {
