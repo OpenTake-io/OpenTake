@@ -39,6 +39,18 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
     },
   },
+  optimizeDeps: {
+    entries: ['index.html'],
+    exclude: [
+      'lucide-react',
+      'react-icons/bs',
+      'react-icons/fa',
+      'react-icons/fa6',
+      'react-icons/fi',
+      'react-icons/md',
+      'react-icons/rx',
+    ],
+  },
   build: {
     target: 'esnext',
     minify: 'terser',
