@@ -1043,7 +1043,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
 
   return (
     <div className="relative rounded-sm overflow-hidden" style={{ width: '100%', aspectRatio: formatAspectRatioForCSS(aspectRatio, nativeAspectRatio) }}>
-      {/* Background layer - always render as DOM element with blur */}
+      {/* Background layer */}
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{

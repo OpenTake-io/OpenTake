@@ -8,7 +8,6 @@ import type { ZoomRegion, CropRegion, TrimRegion, AnnotationRegion, SpeedRegion,
 interface VideoExporterConfig extends ExportConfig {
   videoUrl: string;
   wallpaper: string;
-  backgroundTransparency?: boolean;
   zoomRegions: ZoomRegion[];
   trimRegions?: TrimRegion[];
   speedRegions?: SpeedRegion[];
@@ -68,7 +67,6 @@ export class VideoExporter {
         width: this.config.width,
         height: this.config.height,
         wallpaper: this.config.wallpaper,
-        backgroundTransparency: this.config.backgroundTransparency,
         zoomRegions: this.config.zoomRegions,
         showShadow: this.config.showShadow,
         shadowIntensity: this.config.shadowIntensity,
