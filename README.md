@@ -296,10 +296,12 @@ Recordly is licensed under the **MIT License**.
 
 # Credits
 
+## Acknowledgements
+
+Built on top of the excellent [OpenScreen](https://github.com/siddharthvaddem/openscreen) project, you should go check it out!
+
 Created by  
 [@webadderall](https://x.com/webadderall)
-
-Built on top of OpenScreen
 
 ---
 
