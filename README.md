@@ -243,20 +243,22 @@ Recordly is a **desktop video editor with a renderer-driven motion pipeline and 
 
 ---
 
-# Contributing
+# Contribution
 
-Contributions are welcome.
-
-Please:
-
-- Keep pull requests **focused and modular**
-- Test playback, editing, and export flows
-- Avoid large unrelated refactors
+All contributors welcomed!
 
 Areas where help is especially valuable:
 
 - Smooth cursor pipeline for **Windows and Linux**
-- **Export speed improvements**
+- **Webcam** overlay bubble
+- **Localisation** support, especially Chinese
+- UI/UX **design** **improvements**
+- **Export speed** improvements
+
+Please:
+- Keep pull requests **focused and modular**
+- Test playback, editing, and export flows
+- Avoid large unrelated refactors
 
 See `CONTRIBUTING.md` for guidelines.
 
