@@ -154,6 +154,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openRecordingsFolder: () => {
     return ipcRenderer.invoke('open-recordings-folder')
   },
+  getRecordingsDirectory: () => {
+    return ipcRenderer.invoke('get-recordings-directory')
+  },
+  chooseRecordingsDirectory: () => {
+    return ipcRenderer.invoke('choose-recordings-directory')
+  },
   getShortcuts: () => {
     return ipcRenderer.invoke('get-shortcuts')
   },

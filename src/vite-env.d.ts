@@ -143,6 +143,8 @@ interface Window {
     hideOsCursor: () => Promise<{ success: boolean }>
     setHasUnsavedChanges: (hasChanges: boolean) => void
     onRequestSaveBeforeClose: (callback: () => Promise<void>) => () => void
+    getRecordingsDirectory: () => Promise<{ success: boolean; path: string; isDefault: boolean; error?: string }>
+    chooseRecordingsDirectory: () => Promise<{ success: boolean; canceled?: boolean; path?: string; isDefault?: boolean; message?: string; error?: string }>
   }
 }
 

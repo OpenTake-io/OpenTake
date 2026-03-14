@@ -15,6 +15,7 @@ const nodeRequire = createRequire(import.meta.url)
 const PROJECT_FILE_EXTENSION = 'recordly'
 const LEGACY_PROJECT_FILE_EXTENSIONS = ['openscreen']
 const SHORTCUTS_FILE = path.join(app.getPath('userData'), 'shortcuts.json')
+const RECORDINGS_SETTINGS_FILE = path.join(app.getPath('userData'), 'recordings-settings.json')
 const AUTO_RECORDING_PREFIX = 'recording-'
 const AUTO_RECORDING_RETENTION_COUNT = 20
 const AUTO_RECORDING_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000
@@ -62,6 +63,8 @@ let ffmpegScreenRecordingActive = false
 let ffmpegCaptureProcess: ChildProcessWithoutNullStreams | null = null
 let ffmpegCaptureOutputBuffer = ''
 let ffmpegCaptureTargetPath: string | null = null
+let customRecordingsDir: string | null = null
+let recordingsDirLoaded = false
 let cachedSystemCursorAssets: Record<string, SystemCursorAsset> | null = null
 let cachedSystemCursorAssetsSourceMtimeMs: number | null = null
 
@@ -121,6 +124,41 @@ function getTelemetryPathForVideo(videoPath: string) {
   return `${videoPath}.cursor.json`
 }
 
+async function loadRecordingsDirectorySetting() {
+  if (recordingsDirLoaded) {
+    return
+  }
+
+  recordingsDirLoaded = true
+
+  try {
+    const content = await fs.readFile(RECORDINGS_SETTINGS_FILE, 'utf-8')
+    const parsed = JSON.parse(content) as { recordingsDir?: unknown }
+    if (typeof parsed.recordingsDir === 'string' && parsed.recordingsDir.trim()) {
+      customRecordingsDir = path.resolve(parsed.recordingsDir)
+    }
+  } catch {
+    customRecordingsDir = null
+  }
+}
+
+async function getRecordingsDir() {
+  await loadRecordingsDirectorySetting()
+  const targetDir = customRecordingsDir ?? RECORDINGS_DIR
+  await fs.mkdir(targetDir, { recursive: true })
+  return targetDir
+}
+
+async function persistRecordingsDirectorySetting(nextDir: string) {
+  customRecordingsDir = path.resolve(nextDir)
+  recordingsDirLoaded = true
+  await fs.writeFile(
+    RECORDINGS_SETTINGS_FILE,
+    JSON.stringify({ recordingsDir: customRecordingsDir }, null, 2),
+    'utf-8',
+  )
+}
+
 function normalizeVideoPathInput(videoPath: string) {
   if (!videoPath.startsWith('file:')) {
     return videoPath
@@ -157,18 +195,19 @@ async function hasSiblingProjectFile(videoPath: string) {
 }
 
 async function pruneAutoRecordings(exemptPaths: string[] = []) {
+  const recordingsDir = await getRecordingsDir()
   const exempt = new Set(
     [currentVideoPath, ...exemptPaths]
       .filter((value): value is string => Boolean(value))
       .map((value) => normalizePath(value)),
   )
 
-  const entries = await fs.readdir(RECORDINGS_DIR, { withFileTypes: true })
+  const entries = await fs.readdir(recordingsDir, { withFileTypes: true })
   const autoRecordingStats = await Promise.all(
     entries
       .filter((entry) => entry.isFile() && /^recording-.*\.(mp4|mov|webm)$/i.test(entry.name))
       .map(async (entry) => {
-        const filePath = path.join(RECORDINGS_DIR, entry.name)
+        const filePath = path.join(recordingsDir, entry.name)
         const stats = await fs.stat(filePath)
         return { filePath, stats }
       }),
@@ -1473,6 +1512,7 @@ export function registerIpcHandlers(
     }
 
     try {
+      const recordingsDir = await getRecordingsDir()
       const appName = normalizeDesktopSourceName(String(source?.appName ?? ''))
       const ownAppName = normalizeDesktopSourceName(app.getName())
       if (
@@ -1486,11 +1526,11 @@ export function registerIpcHandlers(
       }
 
       const helperPath = await ensureNativeCaptureHelperBinary()
-      const outputPath = path.join(RECORDINGS_DIR, `recording-${Date.now()}.mp4`)
+      const outputPath = path.join(recordingsDir, `recording-${Date.now()}.mp4`)
       const capturesSystemAudio = Boolean(options?.capturesSystemAudio)
       const capturesMicrophone = Boolean(options?.capturesMicrophone)
       const microphoneOutputPath = capturesSystemAudio && capturesMicrophone
-        ? path.join(RECORDINGS_DIR, `recording-${Date.now()}.mic.m4a`)
+        ? path.join(recordingsDir, `recording-${Date.now()}.mic.m4a`)
         : null
       const config: Record<string, unknown> = {
         fps: 60,
@@ -1523,7 +1563,7 @@ export function registerIpcHandlers(
       nativeCaptureMicrophonePath = microphoneOutputPath
       nativeCaptureStopRequested = false
       nativeCaptureProcess = spawn(helperPath, [JSON.stringify(config)], {
-        cwd: RECORDINGS_DIR,
+        cwd: recordingsDir,
         stdio: ['pipe', 'pipe', 'pipe'],
       })
       attachNativeCaptureLifecycle(nativeCaptureProcess)
@@ -1642,14 +1682,15 @@ export function registerIpcHandlers(
     }
 
     try {
+      const recordingsDir = await getRecordingsDir()
       const ffmpegPath = getFfmpegBinaryPath()
-      const outputPath = path.join(RECORDINGS_DIR, `recording-${Date.now()}.mp4`)
+      const outputPath = path.join(recordingsDir, `recording-${Date.now()}.mp4`)
       const args = await buildFfmpegCaptureArgs(source, outputPath)
 
       ffmpegCaptureOutputBuffer = ''
       ffmpegCaptureTargetPath = outputPath
       ffmpegCaptureProcess = spawn(ffmpegPath, args, {
-        cwd: RECORDINGS_DIR,
+        cwd: recordingsDir,
         stdio: ['pipe', 'pipe', 'pipe'],
       })
 
@@ -1713,7 +1754,8 @@ export function registerIpcHandlers(
 
   ipcMain.handle('store-recorded-video', async (_, videoData: ArrayBuffer, fileName: string) => {
     try {
-      const videoPath = path.join(RECORDINGS_DIR, fileName)
+      const recordingsDir = await getRecordingsDir()
+      const videoPath = path.join(recordingsDir, fileName)
       await fs.writeFile(videoPath, Buffer.from(videoData))
       return await finalizeStoredVideo(videoPath)
     } catch (error) {
@@ -1730,7 +1772,8 @@ export function registerIpcHandlers(
 
   ipcMain.handle('get-recorded-video-path', async () => {
     try {
-      const files = await fs.readdir(RECORDINGS_DIR)
+      const recordingsDir = await getRecordingsDir()
+      const files = await fs.readdir(recordingsDir)
       const videoFiles = files.filter(file => /\.(webm|mov|mp4)$/i.test(file))
       
       if (videoFiles.length === 0) {
@@ -1738,7 +1781,7 @@ export function registerIpcHandlers(
       }
       
       const latestVideo = videoFiles.sort().reverse()[0]
-      const videoPath = path.join(RECORDINGS_DIR, latestVideo)
+      const videoPath = path.join(recordingsDir, latestVideo)
       
       return { success: true, path: videoPath }
     } catch (error) {
@@ -1986,9 +2029,10 @@ export function registerIpcHandlers(
 
   ipcMain.handle('open-video-file-picker', async () => {
     try {
+      const recordingsDir = await getRecordingsDir()
       const result = await dialog.showOpenDialog({
         title: 'Select Video File',
-        defaultPath: RECORDINGS_DIR,
+        defaultPath: recordingsDir,
         filters: [
           { name: 'Video Files', extensions: ['webm', 'mp4', 'mov', 'avi', 'mkv'] },
           { name: 'All Files', extensions: ['*'] }
@@ -2041,8 +2085,8 @@ export function registerIpcHandlers(
 
   ipcMain.handle('open-recordings-folder', async () => {
     try {
-      await fs.mkdir(RECORDINGS_DIR, { recursive: true });
-      const openPathResult = await shell.openPath(RECORDINGS_DIR);
+      const recordingsDir = await getRecordingsDir();
+      const openPathResult = await shell.openPath(recordingsDir);
       if (openPathResult) {
         return { success: false, error: openPathResult, message: 'Failed to open recordings folder.' };
       }
@@ -2054,8 +2098,51 @@ export function registerIpcHandlers(
     }
   });
 
+  ipcMain.handle('get-recordings-directory', async () => {
+    try {
+      const recordingsDir = await getRecordingsDir()
+      return {
+        success: true,
+        path: recordingsDir,
+        isDefault: recordingsDir === RECORDINGS_DIR,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        path: RECORDINGS_DIR,
+        isDefault: true,
+        error: String(error),
+      }
+    }
+  })
+
+  ipcMain.handle('choose-recordings-directory', async () => {
+    try {
+      const current = await getRecordingsDir()
+      const result = await dialog.showOpenDialog({
+        title: 'Choose recordings folder',
+        defaultPath: current,
+        properties: ['openDirectory', 'createDirectory', 'promptToCreate'],
+      })
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true, path: current }
+      }
+
+      const selectedPath = path.resolve(result.filePaths[0])
+      await fs.mkdir(selectedPath, { recursive: true })
+      await fs.access(selectedPath, fsConstants.W_OK)
+      await persistRecordingsDirectorySetting(selectedPath)
+
+      return { success: true, path: selectedPath, isDefault: selectedPath === RECORDINGS_DIR }
+    } catch (error) {
+      return { success: false, error: String(error), message: 'Failed to set recordings folder' }
+    }
+  })
+
   ipcMain.handle('save-project-file', async (_, projectData: unknown, suggestedName?: string, existingProjectPath?: string) => {
     try {
+      const recordingsDir = await getRecordingsDir()
       const trustedExistingProjectPath = isTrustedProjectPath(existingProjectPath)
         ? existingProjectPath
         : null
@@ -2077,7 +2164,7 @@ export function registerIpcHandlers(
 
       const result = await dialog.showSaveDialog({
         title: 'Save Recordly Project',
-        defaultPath: path.join(RECORDINGS_DIR, defaultName),
+        defaultPath: path.join(recordingsDir, defaultName),
         filters: [
           { name: 'Recordly Project', extensions: [PROJECT_FILE_EXTENSION] },
           { name: 'JSON', extensions: ['json'] }
@@ -2113,9 +2200,10 @@ export function registerIpcHandlers(
 
   ipcMain.handle('load-project-file', async () => {
     try {
+      const recordingsDir = await getRecordingsDir()
       const result = await dialog.showOpenDialog({
         title: 'Open Recordly Project',
-        defaultPath: RECORDINGS_DIR,
+        defaultPath: recordingsDir,
         filters: [
           { name: 'Recordly Project', extensions: [PROJECT_FILE_EXTENSION, ...LEGACY_PROJECT_FILE_EXTENSIONS] },
           { name: 'JSON', extensions: ['json'] },
