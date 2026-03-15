@@ -10,6 +10,7 @@ import { useState } from "react";
 import Block from '@uiw/react-color-block';
 import { Trash2, Download, Crop, X, Bug, Upload, Star, Film, Image, Sparkles, Palette, Save, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
+import { useI18n, useScopedT } from "../../contexts/I18nContext";
 import type { ZoomDepth, CropRegion, AnnotationRegion, AnnotationType, PlaybackSpeed } from "./types";
 import { SPEED_OPTIONS } from "./types";
 import { CropControl } from "./CropControl";
@@ -185,6 +186,9 @@ export function SettingsPanel({
   onSpeedChange,
   onSpeedDelete,
 }: SettingsPanelProps) {
+  const tSettings = useScopedT('settings');
+  const tEditor = useScopedT('editor');
+  const { t } = useI18n();
   const [wallpaperPreviewPaths, setWallpaperPreviewPaths] = useState<string[]>([]);
   const [customImages, setCustomImages] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -252,8 +256,8 @@ export function SettingsPanel({
     // Validate file type - only allow JPG/JPEG
     const validTypes = ['image/jpeg', 'image/jpg'];
     if (!validTypes.includes(file.type)) {
-      toast.error('Invalid file type', {
-        description: 'Please upload a JPG or JPEG image file.',
+      toast.error(tSettings('background.uploadError'), {
+        description: tSettings('background.uploadErrorDescription'),
       });
       event.target.value = '';
       return;
@@ -266,13 +270,13 @@ export function SettingsPanel({
       if (dataUrl) {
         setCustomImages(prev => [...prev, dataUrl]);
         onWallpaperChange(dataUrl);
-        toast.success('Custom image uploaded successfully!');
+        toast.success(tSettings('background.uploadSuccess'));
       }
     };
 
     reader.onerror = () => {
-      toast.error('Failed to upload image', {
-        description: 'There was an error reading the file.',
+      toast.error(t('common.failedToUploadImage'), {
+        description: t('common.errorReadingFile'),
       });
     };
 
@@ -314,7 +318,7 @@ export function SettingsPanel({
       <div className="flex-1 overflow-y-auto custom-scrollbar p-4 pb-0">
         <div className="mb-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-slate-200">Zoom Level</span>
+            <span className="text-sm font-medium text-slate-200">{tSettings('zoom.level')}</span>
             <div className="flex items-center gap-2">
               {zoomEnabled && selectedZoomDepth && (
                 <span className="text-[10px] uppercase tracking-wider font-medium text-[#2563EB] bg-[#2563EB]/10 px-2 py-0.5 rounded-full">
@@ -348,7 +352,7 @@ export function SettingsPanel({
             })}
           </div>
           {!zoomEnabled && (
-            <p className="text-[10px] text-slate-500 mt-2 text-center">Select a zoom region to adjust</p>
+            <p className="text-[10px] text-slate-500 mt-2 text-center">{tSettings('zoom.selectRegion')}</p>
           )}
           {zoomEnabled && (
             <Button
@@ -358,7 +362,7 @@ export function SettingsPanel({
               className="mt-2 w-full gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/30 transition-all h-8 text-xs"
             >
               <Trash2 className="w-3 h-3" />
-              Delete Zoom
+              {tSettings('zoom.deleteZoom')}
             </Button>
           )}
         </div>
@@ -372,14 +376,14 @@ export function SettingsPanel({
               className="w-full gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/30 transition-all h-8 text-xs"
             >
               <Trash2 className="w-3 h-3" />
-              Delete Trim Region
+              {tSettings('trim.deleteRegion')}
             </Button>
           </div>
         )}
 
         <div className="mb-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-slate-200">Playback Speed</span>
+            <span className="text-sm font-medium text-slate-200">{tSettings('speed.playbackSpeed')}</span>
             {selectedSpeedId && selectedSpeedValue && (
               <span className="text-[10px] uppercase tracking-wider font-medium text-[#d97706] bg-[#d97706]/10 px-2 py-0.5 rounded-full">
                 {SPEED_OPTIONS.find(o => o.speed === selectedSpeedValue)?.label ?? `${selectedSpeedValue}×`}
@@ -410,7 +414,7 @@ export function SettingsPanel({
             })}
           </div>
           {!selectedSpeedId && (
-            <p className="text-[10px] text-slate-500 mt-2 text-center">Select a speed region to adjust</p>
+            <p className="text-[10px] text-slate-500 mt-2 text-center">{tSettings('speed.selectRegion')}</p>
           )}
           {selectedSpeedId && (
             <Button
@@ -420,7 +424,7 @@ export function SettingsPanel({
               className="mt-2 w-full gap-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/30 transition-all h-8 text-xs"
             >
               <Trash2 className="w-3 h-3" />
-              Delete Speed Region
+              {tSettings('speed.deleteRegion')}
             </Button>
           )}
         </div>
@@ -430,13 +434,13 @@ export function SettingsPanel({
             <AccordionTrigger className="py-2.5 hover:no-underline">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-[#2563EB]" />
-                <span className="text-xs font-medium">Video Effects</span>
+                <span className="text-xs font-medium">{tSettings('effects.title')}</span>
               </div>
             </AccordionTrigger>
             <AccordionContent className="pb-3">
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5">
-                  <div className="text-[10px] font-medium text-slate-300">Show Cursor</div>
+                  <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.showCursor')}</div>
                   <Switch
                     checked={showCursor}
                     onCheckedChange={onShowCursorChange}
@@ -445,7 +449,7 @@ export function SettingsPanel({
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5">
                   <div>
-                    <div className="text-[10px] font-medium text-slate-300">Loop cursor</div>
+                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.loopCursor')}</div>
                   </div>
                   <Switch
                     checked={loopCursor}
@@ -455,7 +459,7 @@ export function SettingsPanel({
                 </div>
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
                   <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">Background Blur</div>
+                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.backgroundBlur')}</div>
                     <span className="text-[10px] text-slate-500 font-mono">{backgroundBlur.toFixed(1)}px</span>
                   </div>
                   <Slider
@@ -472,7 +476,7 @@ export function SettingsPanel({
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
                   <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">Zoom Motion Blur</div>
+                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.zoomMotionBlur')}</div>
                     <span className="text-[10px] text-slate-500 font-mono">{zoomMotionBlur.toFixed(2)}×</span>
                   </div>
                   <Slider
@@ -486,7 +490,7 @@ export function SettingsPanel({
                 </div>
 
                 <div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5">
-                  <div className="text-[10px] font-medium text-slate-300">Connect Zooms</div>
+                  <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.connectZooms')}</div>
                   <Switch
                     checked={connectZooms}
                     onCheckedChange={onConnectZoomsChange}
@@ -498,7 +502,7 @@ export function SettingsPanel({
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
                   <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">Cursor Size</div>
+                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.cursorSize')}</div>
                     <span className="text-[10px] text-slate-500 font-mono">{cursorSize.toFixed(2)}×</span>
                   </div>
                   <Slider
@@ -512,8 +516,8 @@ export function SettingsPanel({
                 </div>
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
                   <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">Cursor Smoothing</div>
-                    <span className="text-[10px] text-slate-500 font-mono">{cursorSmoothing <= 0 ? 'Off' : cursorSmoothing.toFixed(2)}</span>
+                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.cursorSmoothing')}</div>
+                    <span className="text-[10px] text-slate-500 font-mono">{cursorSmoothing <= 0 ? tSettings('effects.off') : cursorSmoothing.toFixed(2)}</span>
                   </div>
                   <Slider
                     value={[cursorSmoothing]}
@@ -529,7 +533,7 @@ export function SettingsPanel({
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
                   <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">Cursor Motion Blur</div>
+                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.cursorMotionBlur')}</div>
                     <span className="text-[10px] text-slate-500 font-mono">{cursorMotionBlur.toFixed(2)}×</span>
                   </div>
                   <Slider
@@ -543,7 +547,7 @@ export function SettingsPanel({
                 </div>
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
                   <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">Cursor Click Bounce</div>
+                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.cursorClickBounce')}</div>
                     <span className="text-[10px] text-slate-500 font-mono">{cursorClickBounce.toFixed(2)}×</span>
                   </div>
                   <Slider
@@ -560,7 +564,7 @@ export function SettingsPanel({
               <div className="grid grid-cols-2 gap-2">
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
                   <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">Shadow</div>
+                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.shadow')}</div>
                     <span className="text-[10px] text-slate-500 font-mono">{Math.round(shadowIntensity * 100)}%</span>
                   </div>
                   <Slider
@@ -574,7 +578,7 @@ export function SettingsPanel({
                 </div>
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
                   <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">Roundness</div>
+                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.roundness')}</div>
                     <span className="text-[10px] text-slate-500 font-mono">{borderRadius}px</span>
                   </div>
                   <Slider
@@ -588,7 +592,7 @@ export function SettingsPanel({
                 </div>
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
                   <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">Padding</div>
+                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.padding')}</div>
                     <span className="text-[10px] text-slate-500 font-mono">{padding}%</span>
                   </div>
                   <Slider
@@ -608,7 +612,7 @@ export function SettingsPanel({
                 className="w-full mt-2 gap-1.5 bg-white/5 text-slate-200 border-white/10 hover:bg-white/10 hover:border-white/20 hover:text-white text-[10px] h-8 transition-all"
               >
                 <Crop className="w-3 h-3" />
-                Crop Video
+                {tSettings('crop.title')}
               </Button>
             </AccordionContent>
           </AccordionItem>
@@ -617,15 +621,15 @@ export function SettingsPanel({
             <AccordionTrigger className="py-2.5 hover:no-underline">
               <div className="flex items-center gap-2">
                 <Palette className="w-4 h-4 text-[#2563EB]" />
-                <span className="text-xs font-medium">Background</span>
+                <span className="text-xs font-medium">{tSettings('background.title')}</span>
               </div>
             </AccordionTrigger>
             <AccordionContent className="pb-3">
               <Tabs defaultValue="image" className="w-full">
                 <TabsList className="mb-2 bg-white/5 border border-white/5 p-0.5 w-full grid grid-cols-3 h-7 rounded-lg">
-                  <TabsTrigger value="image" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all">Image</TabsTrigger>
-                  <TabsTrigger value="color" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all">Color</TabsTrigger>
-                  <TabsTrigger value="gradient" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all">Gradient</TabsTrigger>
+                  <TabsTrigger value="image" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all">{tSettings('background.image')}</TabsTrigger>
+                  <TabsTrigger value="color" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all">{tSettings('background.color')}</TabsTrigger>
+                  <TabsTrigger value="gradient" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 text-[10px] py-1 rounded-md transition-all">{tSettings('background.gradient')}</TabsTrigger>
                 </TabsList>
                 
                 <div className="max-h-[min(200px,25vh)] overflow-y-auto custom-scrollbar">
@@ -643,7 +647,7 @@ export function SettingsPanel({
                       className="w-full gap-2 bg-white/5 text-slate-200 border-white/10 hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] transition-all h-7 text-[10px]"
                     >
                       <Upload className="w-3 h-3" />
-                      Upload Custom
+                      {tSettings('background.uploadCustom')}
                     </Button>
 
                     <div className="grid grid-cols-7 gap-1.5">
@@ -759,8 +763,8 @@ export function SettingsPanel({
           <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[60] bg-[#09090b] rounded-2xl shadow-2xl border border-white/10 p-8 w-[90vw] max-w-5xl max-h-[90vh] overflow-auto animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <span className="text-xl font-bold text-slate-200">Crop Video</span>
-                <p className="text-sm text-slate-400 mt-2">Drag on each side to adjust the crop area</p>
+                <span className="text-xl font-bold text-slate-200">{tSettings('crop.title')}</span>
+                <p className="text-sm text-slate-400 mt-2">{tSettings('crop.instruction')}</p>
               </div>
               <Button
                 variant="ghost"
@@ -783,7 +787,7 @@ export function SettingsPanel({
                 size="lg"
                 className="bg-[#2563EB] hover:bg-[#2563EB]/90 text-white"
               >
-                Done
+                {t('common.actions.done')}
               </Button>
             </div>
           </div>
@@ -802,7 +806,7 @@ export function SettingsPanel({
             )}
           >
             <Film className="w-3.5 h-3.5" />
-            MP4
+            {tSettings('export.mp4')}
           </button>
           <button
             onClick={() => onExportFormatChange?.('gif')}
@@ -814,7 +818,7 @@ export function SettingsPanel({
             )}
           >
             <Image className="w-3.5 h-3.5" />
-            GIF
+            {tSettings('export.gif')}
           </button>
         </div>
 
@@ -827,7 +831,7 @@ export function SettingsPanel({
                 exportQuality === 'medium' ? "bg-white text-black" : "text-slate-400 hover:text-slate-200"
               )}
             >
-              Low
+              {tSettings('export.quality.low')}
             </button>
             <button
               onClick={() => onExportQualityChange?.('good')}
@@ -836,7 +840,7 @@ export function SettingsPanel({
                 exportQuality === 'good' ? "bg-white text-black" : "text-slate-400 hover:text-slate-200"
               )}
             >
-              Medium
+              {tSettings('export.quality.medium')}
             </button>
             <button
               onClick={() => onExportQualityChange?.('source')}
@@ -845,7 +849,7 @@ export function SettingsPanel({
                 exportQuality === 'source' ? "bg-white text-black" : "text-slate-400 hover:text-slate-200"
               )}
             >
-              High
+              {tSettings('export.quality.high')}
             </button>
           </div>
         )}
@@ -885,7 +889,7 @@ export function SettingsPanel({
             <div className="flex items-center justify-between">
               <span className="text-[10px] text-slate-500">{gifOutputDimensions.width} × {gifOutputDimensions.height}px</span>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-400">Loop</span>
+                <span className="text-[10px] text-slate-400">{tSettings('export.loop')}</span>
                 <Switch
                   checked={gifLoop}
                   onCheckedChange={onGifLoopChange}
@@ -904,7 +908,7 @@ export function SettingsPanel({
             className="h-8 text-[10px] font-medium gap-1.5 bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
           >
             <FolderOpen className="w-3.5 h-3.5" />
-            Load Project
+            {tSettings('export.loadProject')}
           </Button>
           <Button
             type="button"
@@ -913,7 +917,7 @@ export function SettingsPanel({
             className="h-8 text-[10px] font-medium gap-1.5 bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
           >
             <Save className="w-3.5 h-3.5" />
-            Save Project
+            {tSettings('export.saveProject')}
           </Button>
         </div>
 
@@ -924,7 +928,7 @@ export function SettingsPanel({
           className="w-full py-5 text-sm font-semibold flex items-center justify-center gap-2 bg-[#2563EB] text-white rounded-xl shadow-lg shadow-[#2563EB]/20 hover:bg-[#2563EB]/90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
         >
           <Download className="w-4 h-4" />
-          Export {exportFormat === 'gif' ? 'GIF' : 'Video'}
+          {tSettings('export.exportVideo', undefined, { format: exportFormat === 'gif' ? 'GIF' : 'Video' })}
         </Button>
 
         <div className="flex gap-2 mt-3">
@@ -936,7 +940,7 @@ export function SettingsPanel({
             className="flex-1 flex items-center justify-center gap-1.5 text-[10px] text-slate-500 hover:text-slate-300 py-1.5 transition-colors"
           >
             <Bug className="w-3 h-3 text-[#2563EB]" />
-            Report Bug
+            {tSettings('export.reportBug')}
           </button>
           <button
             type="button"
@@ -946,7 +950,7 @@ export function SettingsPanel({
             className="flex-1 flex items-center justify-center gap-1.5 text-[10px] text-slate-500 hover:text-slate-300 py-1.5 transition-colors"
           >
             <Star className="w-3 h-3 text-yellow-400" />
-            Star on GitHub
+            {tSettings('export.starOnGithub')}
           </button>
         </div>
       </div>
