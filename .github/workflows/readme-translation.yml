@@ -1,0 +1,46 @@
+name: Auto Translate README (zh-CN)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - README.md
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  translate-readme:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Translate README.md to Simplified Chinese
+        id: translate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          README_TRANSLATION_MODEL: openai/gpt-4.1-mini
+          GITHUB_MODELS_API_URL: https://models.inference.ai.azure.com/chat/completions
+        run: node scripts/translate-readme-zh.mjs
+
+      - name: Create PR with translation update
+        if: steps.translate.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "docs(readme): auto-update Simplified Chinese translation"
+          title: "docs(readme): auto-update Simplified Chinese translation"
+          body: |
+            Automated update of README Simplified Chinese translation based on latest README.md changes.
+          branch: chore/auto-update-readme-zh
+          delete-branch: true
+          add-paths: |
+            README.zh-CN.md
