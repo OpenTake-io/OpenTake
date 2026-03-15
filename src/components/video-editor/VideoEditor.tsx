@@ -1569,6 +1569,7 @@ export default function VideoEditor() {
           cursorSmoothing,
           cursorMotionBlur,
           cursorClickBounce,
+          audioRegions,
           previewWidth,
           previewHeight,
           onProgress: (progress: ExportProgress) => {
