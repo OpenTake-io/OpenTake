@@ -1,80 +1,93 @@
-
-
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Toaster } from "@/components/ui/sonner";
-import { toast } from "sonner";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import type { Span } from "dnd-timeline";
 import { FolderOpen, Languages } from "lucide-react";
-import { useI18n } from "@/contexts/I18nContext";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { toast } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
+import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { SUPPORTED_LOCALES } from "@/i18n/config";
 import type { AppLocale } from "@/i18n/config";
-
-import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
-import PlaybackControls from "./PlaybackControls";
-import TimelineEditor from "./timeline/TimelineEditor";
-import { SettingsPanel } from "./SettingsPanel";
-import { ExportDialog } from "./ExportDialog";
-import { DEFAULT_WALLPAPER_RELATIVE_PATH, WALLPAPER_PATHS } from "@/lib/wallpapers";
-import {
-  createProjectData,
-  deriveNextId,
-  fromFileUrl,
-  normalizeProjectEditor,
-  toFileUrl,
-  validateProjectData,
-} from "./projectPersistence";
-
-import type { Span } from "dnd-timeline";
-import {
-  DEFAULT_CURSOR_CLICK_BOUNCE,
-  DEFAULT_CURSOR_MOTION_BLUR,
-  DEFAULT_CURSOR_SIZE,
-  DEFAULT_CURSOR_SMOOTHING,
-  DEFAULT_ZOOM_DEPTH,
-  DEFAULT_ZOOM_MOTION_BLUR,
-  clampFocusToDepth,
-  DEFAULT_CROP_REGION,
-  DEFAULT_ANNOTATION_POSITION,
-  DEFAULT_ANNOTATION_SIZE,
-  DEFAULT_ANNOTATION_STYLE,
-  DEFAULT_FIGURE_DATA,
-  DEFAULT_PLAYBACK_SPEED,
-  type ZoomDepth,
-  type ZoomFocus,
-  type ZoomRegion,
-  type CursorTelemetryPoint,
-  type TrimRegion,
-  type AnnotationRegion,
-  type CropRegion,
-  type FigureData,
-  type SpeedRegion,
-  type PlaybackSpeed,
-} from "./types";
-import { VideoExporter, GifExporter, type ExportProgress, type ExportQuality, type ExportSettings, type ExportFormat, type GifFrameRate, type GifSizePreset, GIF_SIZE_PRESETS, calculateOutputDimensions } from "@/lib/exporter";
-import { type AspectRatio, getAspectRatioValue } from "@/utils/aspectRatioUtils";
-import { getAssetPath } from "@/lib/assetPath";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
+import { getAssetPath } from "@/lib/assetPath";
+import {
+	calculateOutputDimensions,
+	type ExportFormat,
+	type ExportProgress,
+	type ExportQuality,
+	type ExportSettings,
+	GIF_SIZE_PRESETS,
+	GifExporter,
+	type GifFrameRate,
+	type GifSizePreset,
+	VideoExporter,
+} from "@/lib/exporter";
 import { matchesShortcut } from "@/lib/shortcuts";
-import { detectInteractionCandidates, normalizeCursorTelemetry } from "./timeline/zoomSuggestionUtils";
-import { buildLoopedCursorTelemetry, getDisplayedTimelineWindowMs } from "./videoPlayback/cursorLoopTelemetry";
+import { DEFAULT_WALLPAPER_RELATIVE_PATH, WALLPAPER_PATHS } from "@/lib/wallpapers";
+import { type AspectRatio, getAspectRatioValue } from "@/utils/aspectRatioUtils";
+import { ExportDialog } from "./ExportDialog";
+import PlaybackControls from "./PlaybackControls";
+import {
+	createProjectData,
+	deriveNextId,
+	fromFileUrl,
+	normalizeProjectEditor,
+	toFileUrl,
+	validateProjectData,
+} from "./projectPersistence";
+import { SettingsPanel } from "./SettingsPanel";
+import TimelineEditor from "./timeline/TimelineEditor";
+import {
+	detectInteractionCandidates,
+	normalizeCursorTelemetry,
+} from "./timeline/zoomSuggestionUtils";
+import {
+	type AnnotationRegion,
+	type CropRegion,
+	type CursorTelemetryPoint,
+	clampFocusToDepth,
+	DEFAULT_ANNOTATION_POSITION,
+	DEFAULT_ANNOTATION_SIZE,
+	DEFAULT_ANNOTATION_STYLE,
+	DEFAULT_CROP_REGION,
+	DEFAULT_CURSOR_CLICK_BOUNCE,
+	DEFAULT_CURSOR_MOTION_BLUR,
+	DEFAULT_CURSOR_SIZE,
+	DEFAULT_CURSOR_SMOOTHING,
+	DEFAULT_FIGURE_DATA,
+	DEFAULT_PLAYBACK_SPEED,
+	DEFAULT_ZOOM_DEPTH,
+	DEFAULT_ZOOM_MOTION_BLUR,
+	type FigureData,
+	type PlaybackSpeed,
+	type SpeedRegion,
+	type TrimRegion,
+	type ZoomDepth,
+	type ZoomFocus,
+	type ZoomRegion,
+} from "./types";
+import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
+import {
+	buildLoopedCursorTelemetry,
+	getDisplayedTimelineWindowMs,
+} from "./videoPlayback/cursorLoopTelemetry";
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
 
 const LOOP_CURSOR_END_WINDOW_MS = 670;
 
 type EditorHistorySnapshot = {
-  zoomRegions: ZoomRegion[];
-  trimRegions: TrimRegion[];
-  speedRegions: SpeedRegion[];
-  annotationRegions: AnnotationRegion[];
-  selectedZoomId: string | null;
-  selectedTrimId: string | null;
-  selectedSpeedId: string | null;
-  selectedAnnotationId: string | null;
+	zoomRegions: ZoomRegion[];
+	trimRegions: TrimRegion[];
+	speedRegions: SpeedRegion[];
+	annotationRegions: AnnotationRegion[];
+	selectedZoomId: string | null;
+	selectedTrimId: string | null;
+	selectedSpeedId: string | null;
+	selectedAnnotationId: string | null;
 };
 
 type PendingExportSave = {
-  fileName: string;
-  arrayBuffer: ArrayBuffer;
+	fileName: string;
+	arrayBuffer: ArrayBuffer;
 };
 
 function LanguageSwitcher() {
@@ -98,6 +111,7 @@ function LanguageSwitcher() {
 
 export default function VideoEditor() {
   const { t } = useI18n();
+  const tEditor = useScopedT("editor");
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const [videoSourcePath, setVideoSourcePath] = useState<string | null>(null);
   const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(null);
@@ -1835,4 +1849,3 @@ export default function VideoEditor() {
     </div>
   );
 }
-
