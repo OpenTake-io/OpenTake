@@ -1,6 +1,37 @@
 export const ASPECT_RATIOS = ['native', '16:9', '9:16', '1:1', '4:3', '4:5', '16:10', '10:16'] as const;
 
-export type AspectRatio = typeof ASPECT_RATIOS[number];
+type PresetAspectRatio = typeof ASPECT_RATIOS[number];
+type CustomAspectRatio = `${number}:${number}`;
+
+export type AspectRatio = PresetAspectRatio | CustomAspectRatio;
+
+const CUSTOM_ASPECT_RATIO_REGEX = /^(\d+):(\d+)$/;
+
+export function isCustomAspectRatio(aspectRatio: string): aspectRatio is CustomAspectRatio {
+  if ((ASPECT_RATIOS as readonly string[]).includes(aspectRatio)) {
+    return false;
+  }
+  const match = aspectRatio.match(CUSTOM_ASPECT_RATIO_REGEX);
+  if (!match) {
+    return false;
+  }
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0;
+}
+
+function parseCustomAspectRatioValue(aspectRatio: string): number | null {
+  if (!isCustomAspectRatio(aspectRatio)) {
+    return null;
+  }
+  const [widthText, heightText] = aspectRatio.split(':');
+  const width = Number(widthText);
+  const height = Number(heightText);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null;
+  }
+  return width / height;
+}
 
 /**
  * Returns the numeric value of an aspect ratio.
@@ -17,11 +48,8 @@ export function getAspectRatioValue(aspectRatio: AspectRatio, nativeAspectRatio 
     case '4:5':  return 4 / 5;
     case '16:10': return 16 / 10;
     case '10:16': return 10 / 16;
-    default: {
-      // Ensures all cases are handled - TypeScript errors if missing
-      const _exhaustiveCheck: never = aspectRatio;
-      return _exhaustiveCheck;
-    }
+    default:
+      return parseCustomAspectRatioValue(aspectRatio) ?? 16 / 9;
   }
 }
 
@@ -40,6 +68,9 @@ export function getAspectRatioDimensions(
 export function getAspectRatioLabel(aspectRatio: AspectRatio): string {
   if (aspectRatio === 'native') {
     return 'Native';
+  }
+  if (isCustomAspectRatio(aspectRatio)) {
+    return `Custom ${aspectRatio}`;
   }
   return aspectRatio;
 }
