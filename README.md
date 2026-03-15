@@ -66,12 +66,12 @@ Linux currently use Electron's capture path, which means the OS cursor cannot al
 - Click bounce animation
 - macOS-style cursor assets
 
-### GIF Infinite Loops
+### Cursor Loops
 <p>
   <img src="./CursorLoop.gif" width="450" alt="Recordly demo video">
 </p>
 
-- Cursor returns to original position in a freeze-frame at end of GIF.
+- Cursor returns to original position in a freeze-frame at end of video/GIF (off by default)
 
 ### Editing Tools
 
