@@ -49,6 +49,7 @@ export function createHudOverlayWindow(): BrowserWindow {
     alwaysOnTop: true,
     skipTaskbar: true,
     hasShadow: false,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
       nodeIntegration: false,
@@ -60,6 +61,11 @@ export function createHudOverlayWindow(): BrowserWindow {
 
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
+    setTimeout(() => {
+      if (!win.isDestroyed()) {
+        win.show()
+      }
+    }, 100)
   })
 
   hudOverlayWindow = win;
@@ -102,6 +108,7 @@ export function createEditorWindow(): BrowserWindow {
     alwaysOnTop: false,
     skipTaskbar: false,
     title: 'Recordly',
+    show: false,
     backgroundColor: '#000000',
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
@@ -112,8 +119,10 @@ export function createEditorWindow(): BrowserWindow {
     },
   })
 
-  // Maximize the window by default
-  win.maximize();
+  win.once('ready-to-show', () => {
+    win.show()
+    win.maximize()
+  })
 
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
@@ -144,6 +153,7 @@ export function createSourceSelectorWindow(): BrowserWindow {
     resizable: false,
     alwaysOnTop: true,
     transparent: true,
+    show: false,
     ...(process.platform !== 'darwin' && {
       icon: WINDOW_ICON_PATH,
     }),
@@ -153,6 +163,14 @@ export function createSourceSelectorWindow(): BrowserWindow {
       nodeIntegration: false,
       contextIsolation: true,
     },
+  })
+
+  win.webContents.on('did-finish-load', () => {
+    setTimeout(() => {
+      if (!win.isDestroyed()) {
+        win.show()
+      }
+    }, 100)
   })
 
   if (VITE_DEV_SERVER_URL) {
