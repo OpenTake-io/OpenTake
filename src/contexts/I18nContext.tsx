@@ -28,6 +28,13 @@ import esLaunch from '@/i18n/locales/es/launch.json'
 import esSettings from '@/i18n/locales/es/settings.json'
 import esShortcuts from '@/i18n/locales/es/shortcuts.json'
 import esTimeline from '@/i18n/locales/es/timeline.json'
+import zhCNCommon from '@/i18n/locales/zh-CN/common.json'
+import zhCNDialogs from '@/i18n/locales/zh-CN/dialogs.json'
+import zhCNEditor from '@/i18n/locales/zh-CN/editor.json'
+import zhCNLaunch from '@/i18n/locales/zh-CN/launch.json'
+import zhCNSettings from '@/i18n/locales/zh-CN/settings.json'
+import zhCNShortcuts from '@/i18n/locales/zh-CN/shortcuts.json'
+import zhCNTimeline from '@/i18n/locales/zh-CN/timeline.json'
 
 const LOCALE_STORAGE_KEY = 'recordly.locale'
 
@@ -52,6 +59,15 @@ const messages: Record<AppLocale, LocaleBundle> = {
     dialogs: esDialogs,
     shortcuts: esShortcuts,
   },
+  'zh-CN': {
+    common: zhCNCommon,
+    launch: zhCNLaunch,
+    editor: zhCNEditor,
+    timeline: zhCNTimeline,
+    settings: zhCNSettings,
+    dialogs: zhCNDialogs,
+    shortcuts: zhCNShortcuts,
+  },
 } as const
 
 interface I18nContextValue {
@@ -71,8 +87,21 @@ function normalizeLocale(locale: string | null | undefined): AppLocale {
     return DEFAULT_LOCALE
   }
 
-  const normalized = locale.toLowerCase().split('-')[0]
-  return isSupportedLocale(normalized) ? normalized : DEFAULT_LOCALE
+  // Exact match first (e.g. "zh-CN")
+  if (isSupportedLocale(locale)) return locale
+
+  // Canonicalize case (e.g. "zh-cn" → "zh-CN")
+  const canonical = SUPPORTED_LOCALES.find(
+    (l) => l.toLowerCase() === locale.toLowerCase(),
+  )
+  if (canonical) return canonical
+
+  // Language-only fallback (e.g. "zh" matches "zh-CN")
+  const lang = locale.split('-')[0].toLowerCase()
+  const byLang = SUPPORTED_LOCALES.find((l) => l.split('-')[0].toLowerCase() === lang)
+  if (byLang) return byLang
+
+  return DEFAULT_LOCALE
 }
 
 function getInitialLocale(): AppLocale {

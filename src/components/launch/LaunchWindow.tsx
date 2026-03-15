@@ -4,6 +4,7 @@ import { FaRegStopCircle } from "react-icons/fa";
 import { FaFolderOpen } from "react-icons/fa6";
 import { FiMinus, FiX } from "react-icons/fi";
 import { MdMic, MdMicOff, MdMonitor, MdVideoFile, MdVolumeOff, MdVolumeUp } from "react-icons/md";
+import { Languages } from "lucide-react";
 import { RxDragHandleDots2 } from "react-icons/rx";
 import { useAudioLevelMeter } from "../../hooks/useAudioLevelMeter";
 import { useMicrophoneDevices } from "../../hooks/useMicrophoneDevices";
@@ -11,9 +12,21 @@ import { useScreenRecorder } from "../../hooks/useScreenRecorder";
 import { Button } from "../ui/button";
 import { AudioLevelMeter } from "../ui/audio-level-meter";
 import { ContentClamp } from "../ui/content-clamp";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import { useI18n } from "@/contexts/I18nContext";
+import { SUPPORTED_LOCALES } from "@/i18n/config";
+import type { AppLocale } from "@/i18n/config";
 import styles from "./LaunchWindow.module.css";
 
 export function LaunchWindow() {
+  const { locale, setLocale } = useI18n();
+
+  const LOCALE_LABELS: Record<string, string> = { en: "EN", es: "ES", "zh-CN": "中文" };
   const {
     recording,
     toggleRecording,
@@ -283,6 +296,35 @@ export function LaunchWindow() {
             >
               <FaFolderOpen size={14} />
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="link"
+                  size="icon"
+                  title="Language"
+                  className={`text-white/70 hover:bg-transparent ${styles.electronNoDrag}`}
+                >
+                  <Languages size={14} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                side="top"
+                align="end"
+                className="min-w-[90px] bg-[rgba(28,28,36,0.97)] border-white/15 text-white/90 backdrop-blur-xl"
+              >
+                {SUPPORTED_LOCALES.map((code) => (
+                  <DropdownMenuItem
+                    key={code}
+                    onSelect={() => setLocale(code as AppLocale)}
+                    className={`text-xs cursor-pointer ${
+                      locale === code ? "text-white font-medium" : "text-white/60"
+                    }`}
+                  >
+                    {LOCALE_LABELS[code] ?? code}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <div className={dividerClass} />
             <Button
               variant="link"

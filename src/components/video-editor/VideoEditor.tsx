@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, Languages } from "lucide-react";
+import { useI18n } from "@/contexts/I18nContext";
+import { SUPPORTED_LOCALES } from "@/i18n/config";
+import type { AppLocale } from "@/i18n/config";
 
 import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
 import PlaybackControls from "./PlaybackControls";
@@ -74,7 +77,27 @@ type PendingExportSave = {
   arrayBuffer: ArrayBuffer;
 };
 
+function LanguageSwitcher() {
+  const { locale, setLocale, t } = useI18n();
+  const idx = SUPPORTED_LOCALES.indexOf(locale as typeof SUPPORTED_LOCALES[number]);
+  const next = SUPPORTED_LOCALES[(idx + 1) % SUPPORTED_LOCALES.length] as AppLocale;
+  const labels: Record<string, string> = { en: "EN", es: "ES", "zh-CN": "中文" };
+  return (
+    <button
+      type="button"
+      onClick={() => setLocale(next)}
+      className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-white/90 transition hover:bg-white/8 hover:text-white cursor-pointer"
+      title={t("common.app.language", "Language")}
+      aria-label={t("common.app.language", "Language")}
+    >
+      <Languages className="h-4 w-4" />
+      <span className="text-xs font-normal">{labels[locale] ?? locale.toUpperCase()}</span>
+    </button>
+  );
+}
+
 export default function VideoEditor() {
+  const { t } = useI18n();
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const [videoSourcePath, setVideoSourcePath] = useState<string | null>(null);
   const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(null);
@@ -1590,17 +1613,22 @@ export default function VideoEditor() {
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
         <span className="text-sm font-semibold tracking-tight text-white/90">Recordly</span>
-        <button
-          type="button"
-          onClick={() => void openRecordingsFolder()}
-          className="absolute right-4 inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-white/90 transition hover:bg-white/8 hover:text-white cursor-pointer"
+        <div
+          className="absolute right-4 flex items-center gap-1"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-          title="Open recordings folder"
-          aria-label="Open recordings folder"
         >
-          <FolderOpen className="h-4 w-4" />
-          <span className="text-xs font-normal">Manage recordings</span>
-        </button>
+          <LanguageSwitcher />
+          <button
+            type="button"
+            onClick={() => void openRecordingsFolder()}
+            className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-white/90 transition hover:bg-white/8 hover:text-white cursor-pointer"
+            title={t("common.app.manageRecordings", "Open recordings folder")}
+            aria-label={t("common.app.manageRecordings", "Open recordings folder")}
+          >
+            <FolderOpen className="h-4 w-4" />
+            <span className="text-xs font-normal">{t("common.app.manageRecordings", "Manage recordings")}</span>
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 p-5 gap-4 flex min-h-0 relative">
