@@ -148,7 +148,7 @@ export default function Item({
               ) : isAudio ? (
                 <>
                   <Music className="w-3.5 h-3.5 shrink-0" />
-                  <span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
+                  <span className="text-[11px] font-semibold tracking-tight truncate max-w-full">
                     {children}
                   </span>
                 </>

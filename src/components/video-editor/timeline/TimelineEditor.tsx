@@ -1245,13 +1245,16 @@ export default function TimelineEditor({
       variant: 'speed',
     }));
 
-    const audios: TimelineRenderItem[] = audioRegions.map((region, index) => ({
-      id: region.id,
-      rowId: AUDIO_ROW_ID,
-      span: { start: region.startMs, end: region.endMs },
-      label: `Audio ${index + 1}`,
-      variant: 'audio',
-    }));
+    const audios: TimelineRenderItem[] = audioRegions.map((region) => {
+      const fileName = region.audioPath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || 'Audio';
+      return {
+        id: region.id,
+        rowId: AUDIO_ROW_ID,
+        span: { start: region.startMs, end: region.endMs },
+        label: fileName,
+        variant: 'audio',
+      };
+    });
 
     return [...zooms, ...trims, ...annotations, ...speeds, ...audios];
   }, [zoomRegions, trimRegions, annotationRegions, speedRegions, audioRegions]);
