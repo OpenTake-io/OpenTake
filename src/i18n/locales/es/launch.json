@@ -23,10 +23,10 @@
 		"share": "Compartir"
 	},
 	"permissions": {
-		"screenRecordingNeeded": "Recordly needs Screen Recording permission before you start. System Settings has been opened. After enabling it, quit and reopen Recordly.",
-		"screenRecordingMissing": "Screen Recording permission is still missing. System Settings has been opened again. Enable it, then quit and reopen Recordly before recording.",
-		"accessibilityNeeded": "Recordly also needs Accessibility permission for cursor tracking. System Settings has been opened. After enabling it, quit and reopen Recordly.",
-		"accessibilityMissing": "Accessibility permission is still missing. System Settings has been opened again. Enable it, then quit and reopen Recordly before recording.",
+		"screenRecordingNeeded": "Recordly necesita permiso de grabación de pantalla antes de comenzar. Se ha abierto Configuración del sistema. Después de habilitarlo, cierra y vuelve a abrir Recordly.",
+		"screenRecordingMissing": "El permiso de grabación de pantalla aún falta. Se ha abierto Configuración del sistema nuevamente. Habilítalo, luego cierra y vuelve a abrir Recordly antes de grabar.",
+		"accessibilityNeeded": "Recordly también necesita permiso de accesibilidad para el seguimiento del cursor. Se ha abierto Configuración del sistema. Después de habilitarlo, cierra y vuelve a abrir Recordly.",
+		"accessibilityMissing": "El permiso de accesibilidad aún falta. Se ha abierto Configuración del sistema nuevamente. Habilítalo, luego cierra y vuelve a abrir Recordly antes de grabar.",
 		"selectSource": "Por favor selecciona una fuente para grabar",
 		"systemAudioUnavailable": "El audio del sistema no está disponible para esta fuente. La grabación continuará sin audio del sistema.",
 		"microphoneDenied": "Se denegó el acceso al micrófono. La grabación continuará sin audio del micrófono.",
