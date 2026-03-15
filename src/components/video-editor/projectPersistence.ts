@@ -305,7 +305,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
             startMs,
             endMs,
             audioPath: typeof region.audioPath === "string" ? region.audioPath : "",
-            volume: isFiniteNumber(region.volume) ? clamp(region.volume, 0, 2) : 1,
+            volume: isFiniteNumber(region.volume) ? clamp(region.volume, 0, 1) : 1,
           };
         })
     : [];

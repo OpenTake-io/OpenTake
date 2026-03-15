@@ -1304,7 +1304,7 @@ export default function VideoEditor() {
       if (audio.src !== expectedSrc) {
         audio.src = expectedSrc;
       }
-      audio.volume = region.volume;
+      audio.volume = Math.max(0, Math.min(1, region.volume));
     }
 
     return () => {
