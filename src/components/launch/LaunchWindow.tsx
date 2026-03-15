@@ -4,7 +4,7 @@ import { FaRegStopCircle } from "react-icons/fa";
 import { FaFolderOpen } from "react-icons/fa6";
 import { FiMinus, FiX } from "react-icons/fi";
 import { MdMic, MdMicOff, MdMonitor, MdVideoFile, MdVolumeOff, MdVolumeUp } from "react-icons/md";
-import { Languages } from "lucide-react";
+import { Languages, Timer } from "lucide-react";
 import { RxDragHandleDots2 } from "react-icons/rx";
 import { useAudioLevelMeter } from "../../hooks/useAudioLevelMeter";
 import { useMicrophoneDevices } from "../../hooks/useMicrophoneDevices";
@@ -38,6 +38,8 @@ export function LaunchWindow() {
     setMicrophoneDeviceId,
     systemAudioEnabled,
     setSystemAudioEnabled,
+    countdownDelay,
+    setCountdownDelay,
   } = useScreenRecorder();
   const [recordingStart, setRecordingStart] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -244,6 +246,38 @@ export function LaunchWindow() {
           </div>
 
           <div className={dividerClass} />
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="link"
+                size="sm"
+                disabled={recording}
+                title={t('recording.countdownDelay')}
+                className={`gap-1 text-white/70 hover:bg-transparent px-1 text-xs ${styles.electronNoDrag}`}
+              >
+                <Timer size={14} />
+                <span>{countdownDelay > 0 ? `${countdownDelay}s` : t('recording.noDelay')}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              side="top"
+              align="center"
+              className="min-w-[80px] max-h-none overflow-visible bg-[rgba(28,28,36,0.97)] border-white/15 text-white/90 backdrop-blur-xl"
+            >
+              {[0, 3, 5, 10].map((delay) => (
+                <DropdownMenuItem
+                  key={delay}
+                  onSelect={() => setCountdownDelay(delay)}
+                  className={`text-xs cursor-pointer ${
+                    countdownDelay === delay ? "text-white font-medium" : "text-white/60"
+                  }`}
+                >
+                  {delay === 0 ? t('recording.noDelay') : `${delay}s`}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <Button
             variant="link"
