@@ -12,7 +12,7 @@
 ### Create polished, pro-grade screen recordings.
 [Recordly](https://www.recordly.dev) is an **open-source screen recorder and editor** for creating **polished walkthroughs, demos, tutorials, and product videos**. Contribution encouraged.
 
-**FAQ**: What are the changes between this and **Openscreen**? A: Recordly adds a full cursor animation/rendering pipeline, native screen capture for Mac and Windows, zoom animations faithful to Screen Studio, smoother panning behaviour, and more major tweaks.
+**FAQ**: What are the changes between this and **Openscreen**? A: Recordly adds a full cursor animation/rendering pipeline, native screen capture for Mac and Windows, zoom animations faithful to Screen Studio, cursor loops, smoother panning behaviour, and more major tweaks.
 > This fork exists because the original maintainer does not wish implementing the architectural changes that make some of these features possible i.e. different recording pipeline.
 
 > [!NOTE]
@@ -51,8 +51,6 @@ Linux currently use Electron's capture path, which means the OS cursor cannot al
 - Native **ScreenCaptureKit** capture on macOS
 - native WGC recording helper for display and app-window capture on Windows, native WASAPI for system/mic audio, and more
 
-
-
 ### Smart Motion
 
 - Apple-style zoom animations
@@ -67,6 +65,13 @@ Linux currently use Electron's capture path, which means the OS cursor cannot al
 - Motion blur
 - Click bounce animation
 - macOS-style cursor assets
+
+### GIF Infinite Loops
+<p>
+  <img src="./CursorLoop.gif" width="450" alt="Recordly demo video">
+</p>
+
+- Cursor returns to original position in a freeze-frame at end of GIF.
 
 ### Editing Tools
 
