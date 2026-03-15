@@ -710,6 +710,10 @@ function getWgcCaptureExePath() {
   return resolveUnpackedAppPath('electron', 'native', 'wgc-capture', 'build', 'Release', 'wgc-capture.exe')
 }
 
+function getCursorMonitorExePath() {
+  return resolveUnpackedAppPath('electron', 'native', 'cursor-monitor', 'build', 'Release', 'cursor-monitor.exe')
+}
+
 async function isWgcCaptureAvailable(): Promise<boolean> {
   if (process.platform !== 'win32') return false
 
@@ -1067,50 +1071,58 @@ async function ensureNativeCursorMonitorBinary() {
   )
 }
 
+function handleCursorMonitorStdout(chunk: Buffer) {
+  nativeCursorMonitorOutputBuffer += chunk.toString()
+  const lines = nativeCursorMonitorOutputBuffer.split(/\r?\n/)
+  nativeCursorMonitorOutputBuffer = lines.pop() ?? ''
+
+  for (const line of lines) {
+    const match = line.match(/^STATE:(.+)$/)
+    if (!match) continue
+    const next = match[1].trim() as CursorVisualType
+    if (
+      next === 'arrow'
+      || next === 'text'
+      || next === 'pointer'
+      || next === 'crosshair'
+      || next === 'open-hand'
+      || next === 'closed-hand'
+      || next === 'resize-ew'
+      || next === 'resize-ns'
+      || next === 'not-allowed'
+    ) {
+      if (currentCursorVisualType !== next) {
+        currentCursorVisualType = next
+        sampleCursorStateChange(next)
+        emitCursorStateChanged(next)
+      }
+    }
+  }
+}
+
 async function startNativeCursorMonitor() {
   stopNativeCursorMonitor()
 
-  if (process.platform !== 'darwin') {
+  if (process.platform !== 'darwin' && process.platform !== 'win32') {
     currentCursorVisualType = undefined
     return
   }
 
   try {
-    const helperPath = await ensureNativeCursorMonitorBinary()
+    let helperPath: string
+    if (process.platform === 'win32') {
+      helperPath = getCursorMonitorExePath()
+    } else {
+      helperPath = await ensureNativeCursorMonitorBinary()
+    }
+
     nativeCursorMonitorOutputBuffer = ''
     currentCursorVisualType = undefined
     nativeCursorMonitorProcess = spawn(helperPath, [], {
       stdio: ['pipe', 'pipe', 'pipe'],
     })
 
-    nativeCursorMonitorProcess.stdout.on('data', (chunk: Buffer) => {
-      nativeCursorMonitorOutputBuffer += chunk.toString()
-      const lines = nativeCursorMonitorOutputBuffer.split(/\r?\n/)
-      nativeCursorMonitorOutputBuffer = lines.pop() ?? ''
-
-      for (const line of lines) {
-        const match = line.match(/^STATE:(.+)$/)
-        if (!match) continue
-        const next = match[1].trim() as CursorVisualType
-        if (
-          next === 'arrow'
-          || next === 'text'
-          || next === 'pointer'
-          || next === 'crosshair'
-          || next === 'open-hand'
-          || next === 'closed-hand'
-          || next === 'resize-ew'
-          || next === 'resize-ns'
-          || next === 'not-allowed'
-        ) {
-          if (currentCursorVisualType !== next) {
-            currentCursorVisualType = next
-            sampleCursorStateChange(next)
-            emitCursorStateChanged(next)
-          }
-        }
-      }
-    })
+    nativeCursorMonitorProcess.stdout.on('data', handleCursorMonitorStdout)
 
     nativeCursorMonitorProcess.once('close', () => {
       nativeCursorMonitorProcess = null
