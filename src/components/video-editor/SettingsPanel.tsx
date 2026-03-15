@@ -187,7 +187,6 @@ export function SettingsPanel({
   onSpeedDelete,
 }: SettingsPanelProps) {
   const tSettings = useScopedT('settings');
-  const tEditor = useScopedT('editor');
   const { t } = useI18n();
   const [wallpaperPreviewPaths, setWallpaperPreviewPaths] = useState<string[]>([]);
   const [customImages, setCustomImages] = useState<string[]>([]);
