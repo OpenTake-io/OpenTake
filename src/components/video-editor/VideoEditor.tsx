@@ -53,7 +53,7 @@ import { getAssetPath } from "@/lib/assetPath";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { detectInteractionCandidates, normalizeCursorTelemetry } from "./timeline/zoomSuggestionUtils";
-import { buildLoopedCursorTelemetry } from "./videoPlayback/cursorLoopTelemetry";
+import { buildLoopedCursorTelemetry, getDisplayedTimelineWindowMs } from "./videoPlayback/cursorLoopTelemetry";
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
 
 const LOOP_CURSOR_END_WINDOW_MS = 670;
@@ -613,39 +613,46 @@ export default function VideoEditor() {
     return normalizeCursorTelemetry(cursorTelemetry, totalMs > 0 ? totalMs : Number.MAX_SAFE_INTEGER);
   }, [cursorTelemetry, duration]);
 
+  const displayedTimelineWindow = useMemo(() => {
+    const totalMs = Math.max(0, Math.round(duration * 1000));
+    return getDisplayedTimelineWindowMs(totalMs, trimRegions);
+  }, [duration, trimRegions]);
+
   const effectiveCursorTelemetry = useMemo(() => {
     if (!loopCursor) {
       return normalizedCursorTelemetry;
     }
 
-    const totalMs = Math.max(0, Math.round(duration * 1000));
-    if (normalizedCursorTelemetry.length < 2 || totalMs <= 0) {
+    if (normalizedCursorTelemetry.length < 2 || displayedTimelineWindow.endMs <= displayedTimelineWindow.startMs) {
       return normalizedCursorTelemetry;
     }
 
-    return buildLoopedCursorTelemetry(normalizedCursorTelemetry, totalMs);
-  }, [loopCursor, normalizedCursorTelemetry, duration]);
+    return buildLoopedCursorTelemetry(
+      normalizedCursorTelemetry,
+      displayedTimelineWindow.endMs,
+      displayedTimelineWindow.startMs,
+    );
+  }, [loopCursor, normalizedCursorTelemetry, displayedTimelineWindow]);
 
   const effectiveZoomRegions = useMemo(() => {
     if (!loopCursor || zoomRegions.length === 0) {
       return zoomRegions;
     }
 
-    const totalMs = Math.max(0, Math.round(duration * 1000));
-    if (totalMs <= 0) {
+    if (displayedTimelineWindow.endMs <= displayedTimelineWindow.startMs) {
       return zoomRegions;
     }
 
-    const dominantAtStart = findDominantRegion(zoomRegions, 0, { connectZooms }).region;
+    const dominantAtStart = findDominantRegion(zoomRegions, displayedTimelineWindow.startMs, { connectZooms }).region;
     if (!dominantAtStart) {
       return zoomRegions;
     }
 
-    const endWindowStartMs = Math.max(0, totalMs - LOOP_CURSOR_END_WINDOW_MS);
+    const endWindowStartMs = Math.max(displayedTimelineWindow.startMs, displayedTimelineWindow.endMs - LOOP_CURSOR_END_WINDOW_MS);
     const loopEndRegion: ZoomRegion = {
       id: `${dominantAtStart.id}__loop-end-sync`,
       startMs: endWindowStartMs,
-      endMs: totalMs,
+      endMs: displayedTimelineWindow.endMs,
       depth: dominantAtStart.depth,
       focus: {
         cx: dominantAtStart.focus.cx,
@@ -657,7 +664,7 @@ export default function VideoEditor() {
       ...zoomRegions.filter((region) => region.id !== loopEndRegion.id),
       loopEndRegion,
     ];
-  }, [loopCursor, zoomRegions, duration, connectZooms]);
+  }, [loopCursor, zoomRegions, displayedTimelineWindow, connectZooms]);
 
   useEffect(() => {
     if (!videoPath || duration <= 0 || zoomRegions.length > 0 || normalizedCursorTelemetry.length < 2) {

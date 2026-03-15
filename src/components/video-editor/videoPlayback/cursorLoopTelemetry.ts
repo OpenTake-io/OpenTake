@@ -1,4 +1,4 @@
-import type { CursorTelemetryPoint } from '../types';
+import type { CursorTelemetryPoint, TrimRegion } from '../types';
 
 const LOOP_CURSOR_FREEZE_DURATION_MS = 670;
 const LOOP_CURSOR_RETURN_STEPS = 20;
@@ -141,21 +141,30 @@ function findLatestSample(samples: CursorTelemetryPoint[], timeMs: number) {
 export function buildLoopedCursorTelemetry(
   samples: CursorTelemetryPoint[],
   totalDurationMs: number,
+  timelineStartMs = 0,
 ): CursorTelemetryPoint[] {
   if (!samples || samples.length === 0) {
     return [];
   }
 
   const timelineEndMs = Math.max(0, Math.round(totalDurationMs));
-  if (timelineEndMs <= 0) {
+  const timelineStartClampedMs = clamp(Math.round(timelineStartMs), 0, timelineEndMs);
+  if (timelineEndMs <= timelineStartClampedMs) {
     return samples;
   }
 
-  const firstSample = samples[0];
-  const lastSample = samples[samples.length - 1];
+  const boundedSamples = samples.filter(
+    (sample) => sample.timeMs >= timelineStartClampedMs && sample.timeMs <= timelineEndMs,
+  );
+  if (boundedSamples.length === 0) {
+    return samples;
+  }
+
+  const firstSample = boundedSamples[0];
+  const lastSample = boundedSamples[boundedSamples.length - 1];
   const maxFreezeWindowMs = timelineEndMs - firstSample.timeMs;
   if (maxFreezeWindowMs <= 1) {
-    return samples;
+    return boundedSamples;
   }
 
   const freezeDurationMs = Math.min(LOOP_CURSOR_FREEZE_DURATION_MS, maxFreezeWindowMs);
@@ -163,10 +172,10 @@ export function buildLoopedCursorTelemetry(
   const clampedSettleDurationMs = Math.min(LOOP_CURSOR_SETTLE_DURATION_MS, Math.max(0, freezeDurationMs - 1));
   const returnMotionDurationMs = Math.max(1, freezeDurationMs - clampedSettleDurationMs);
   const sourceStartMs = firstSample.timeMs;
-  const sourceEndMs = Math.max(sourceStartMs, findLastMovingSampleTime(samples));
+  const sourceEndMs = Math.max(sourceStartMs, findLastMovingSampleTime(boundedSamples));
   const sourceDurationMs = Math.max(1, sourceEndMs - sourceStartMs);
   const playbackWindowMs = Math.max(1, motionEndMs);
-  const startingCursorType = findFirstStableCursorType(samples);
+  const startingCursorType = findFirstStableCursorType(boundedSamples);
   const loopedSamples: CursorTelemetryPoint[] = [
     {
       ...firstSample,
@@ -176,7 +185,7 @@ export function buildLoopedCursorTelemetry(
     },
   ];
 
-  for (const sample of samples) {
+  for (const sample of boundedSamples) {
     const progress = clamp((sample.timeMs - sourceStartMs) / sourceDurationMs, 0, 1);
     const mappedTimeMs = Math.round(playbackWindowMs * progress);
 
@@ -230,4 +239,56 @@ export function buildLoopedCursorTelemetry(
   }
 
   return loopedSamples;
+}
+
+export function getDisplayedTimelineEndMs(totalDurationMs: number, trimRegions: TrimRegion[]) {
+  return getDisplayedTimelineWindowMs(totalDurationMs, trimRegions).endMs;
+}
+
+export function getDisplayedTimelineWindowMs(totalDurationMs: number, trimRegions: TrimRegion[]) {
+  const durationMs = Math.max(0, Math.round(totalDurationMs));
+  if (durationMs <= 0) {
+    return { startMs: 0, endMs: 0 };
+  }
+
+  if (!trimRegions || trimRegions.length === 0) {
+    return { startMs: 0, endMs: durationMs };
+  }
+
+  const sortedTrimRegions = trimRegions
+    .map((region) => ({
+      startMs: clamp(Math.round(region.startMs), 0, durationMs),
+      endMs: clamp(Math.round(region.endMs), 0, durationMs),
+    }))
+    .filter((region) => region.endMs > region.startMs)
+    .sort((a, b) => a.startMs - b.startMs);
+
+  if (sortedTrimRegions.length === 0) {
+    return { startMs: 0, endMs: durationMs };
+  }
+
+  let cursorMs = 0;
+  let firstVisibleStartMs: number | null = null;
+  let lastVisibleEndMs = 0;
+
+  for (const trimRegion of sortedTrimRegions) {
+    if (trimRegion.startMs > cursorMs) {
+      if (firstVisibleStartMs === null) {
+        firstVisibleStartMs = cursorMs;
+      }
+      lastVisibleEndMs = trimRegion.startMs;
+    }
+    cursorMs = Math.max(cursorMs, trimRegion.endMs);
+  }
+
+  if (cursorMs < durationMs) {
+    if (firstVisibleStartMs === null) {
+      firstVisibleStartMs = cursorMs;
+    }
+    lastVisibleEndMs = durationMs;
+  }
+
+  const clampedEndMs = clamp(lastVisibleEndMs, 0, durationMs);
+  const clampedStartMs = clamp(firstVisibleStartMs ?? 0, 0, clampedEndMs);
+  return { startMs: clampedStartMs, endMs: clampedEndMs };
 }
