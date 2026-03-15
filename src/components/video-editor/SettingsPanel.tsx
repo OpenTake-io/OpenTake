@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import { useEffect, useRef } from "react";
 import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
 import { BUILT_IN_WALLPAPERS, WALLPAPER_PATHS, WALLPAPER_RELATIVE_PATHS } from "@/lib/wallpapers";
-import { Slider } from "@/components/ui/slider";
+import { SliderControl } from "./SliderControl";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Trash2, Download, Crop, X, Bug, Upload, Star, Film, Image, Sparkles, Pa
 import { toast } from "sonner";
 import { useI18n, useScopedT } from "../../contexts/I18nContext";
 import type { ZoomDepth, CropRegion, AnnotationRegion, AnnotationType, PlaybackSpeed } from "./types";
-import { SPEED_OPTIONS } from "./types";
+import { SPEED_OPTIONS, DEFAULT_CURSOR_SIZE, DEFAULT_CURSOR_SMOOTHING, DEFAULT_CURSOR_MOTION_BLUR, DEFAULT_CURSOR_CLICK_BOUNCE, DEFAULT_ZOOM_MOTION_BLUR } from "./types";
 import { CropControl } from "./CropControl";
 import { KeyboardShortcutsHelp } from "./KeyboardShortcutsHelp";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
@@ -457,34 +457,32 @@ export function SettingsPanel({
                   />
                 </div>
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.backgroundBlur')}</div>
-                    <span className="text-[10px] text-slate-500 font-mono">{backgroundBlur.toFixed(1)}px</span>
-                  </div>
-                  <Slider
-                    value={[backgroundBlur]}
-                    onValueChange={(values) => onBackgroundBlurChange?.(values[0])}
+                  <SliderControl
+                    label={tSettings('effects.backgroundBlur')}
+                    value={backgroundBlur}
+                    defaultValue={0}
                     min={0}
                     max={8}
                     step={0.25}
-                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                    onChange={(v) => onBackgroundBlurChange?.(v)}
+                    formatValue={(v) => `${v.toFixed(1)}px`}
+                    parseInput={(t) => parseFloat(t.replace(/px$/, ''))}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.zoomMotionBlur')}</div>
-                    <span className="text-[10px] text-slate-500 font-mono">{zoomMotionBlur.toFixed(2)}×</span>
-                  </div>
-                  <Slider
-                    value={[zoomMotionBlur]}
-                    onValueChange={(values) => onZoomMotionBlurChange?.(values[0])}
+                  <SliderControl
+                    label={tSettings('effects.zoomMotionBlur')}
+                    value={zoomMotionBlur}
+                    defaultValue={DEFAULT_ZOOM_MOTION_BLUR}
                     min={0}
                     max={2}
                     step={0.05}
-                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                    onChange={(v) => onZoomMotionBlurChange?.(v)}
+                    formatValue={(v) => `${v.toFixed(2)}×`}
+                    parseInput={(t) => parseFloat(t.replace(/×$/, ''))}
                   />
                 </div>
 
@@ -500,107 +498,100 @@ export function SettingsPanel({
 
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.cursorSize')}</div>
-                    <span className="text-[10px] text-slate-500 font-mono">{cursorSize.toFixed(2)}×</span>
-                  </div>
-                  <Slider
-                    value={[cursorSize]}
-                    onValueChange={(values) => onCursorSizeChange?.(values[0])}
+                  <SliderControl
+                    label={tSettings('effects.cursorSize')}
+                    value={cursorSize}
+                    defaultValue={DEFAULT_CURSOR_SIZE}
                     min={0.5}
                     max={10}
                     step={0.05}
-                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                    onChange={(v) => onCursorSizeChange?.(v)}
+                    formatValue={(v) => `${v.toFixed(2)}×`}
+                    parseInput={(t) => parseFloat(t.replace(/×$/, ''))}
                   />
                 </div>
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.cursorSmoothing')}</div>
-                    <span className="text-[10px] text-slate-500 font-mono">{cursorSmoothing <= 0 ? tSettings('effects.off') : cursorSmoothing.toFixed(2)}</span>
-                  </div>
-                  <Slider
-                    value={[cursorSmoothing]}
-                    onValueChange={(values) => onCursorSmoothingChange?.(values[0])}
+                  <SliderControl
+                    label={tSettings('effects.cursorSmoothing')}
+                    value={cursorSmoothing}
+                    defaultValue={DEFAULT_CURSOR_SMOOTHING}
                     min={0}
                     max={2}
                     step={0.01}
-                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                    onChange={(v) => onCursorSmoothingChange?.(v)}
+                    formatValue={(v) => v <= 0 ? 'Off' : v.toFixed(2)}
+                    parseInput={(t) => parseFloat(t)}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2 mb-3">
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.cursorMotionBlur')}</div>
-                    <span className="text-[10px] text-slate-500 font-mono">{cursorMotionBlur.toFixed(2)}×</span>
-                  </div>
-                  <Slider
-                    value={[cursorMotionBlur]}
-                    onValueChange={(values) => onCursorMotionBlurChange?.(values[0])}
+                  <SliderControl
+                    label={tSettings('effects.cursorMotionBlur')}
+                    value={cursorMotionBlur}
+                    defaultValue={DEFAULT_CURSOR_MOTION_BLUR}
                     min={0}
                     max={2}
                     step={0.05}
-                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                    onChange={(v) => onCursorMotionBlurChange?.(v)}
+                    formatValue={(v) => `${v.toFixed(2)}×`}
+                    parseInput={(t) => parseFloat(t.replace(/×$/, ''))}
                   />
                 </div>
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.cursorClickBounce')}</div>
-                    <span className="text-[10px] text-slate-500 font-mono">{cursorClickBounce.toFixed(2)}×</span>
-                  </div>
-                  <Slider
-                    value={[cursorClickBounce]}
-                    onValueChange={(values) => onCursorClickBounceChange?.(values[0])}
+                  <SliderControl
+                    label={tSettings('effects.cursorClickBounce')}
+                    value={cursorClickBounce}
+                    defaultValue={DEFAULT_CURSOR_CLICK_BOUNCE}
                     min={0}
                     max={5}
                     step={0.05}
-                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                    onChange={(v) => onCursorClickBounceChange?.(v)}
+                    formatValue={(v) => `${v.toFixed(2)}×`}
+                    parseInput={(t) => parseFloat(t.replace(/×$/, ''))}
                   />
                 </div>
               </div>
               
               <div className="grid grid-cols-2 gap-2">
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.shadow')}</div>
-                    <span className="text-[10px] text-slate-500 font-mono">{Math.round(shadowIntensity * 100)}%</span>
-                  </div>
-                  <Slider
-                    value={[shadowIntensity]}
-                    onValueChange={(values) => onShadowChange?.(values[0])}
+                  <SliderControl
+                    label={tSettings('effects.shadow')}
+                    value={shadowIntensity}
+                    defaultValue={0}
                     min={0}
                     max={1}
                     step={0.01}
-                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                    onChange={(v) => onShadowChange?.(v)}
+                    formatValue={(v) => `${Math.round(v * 100)}%`}
+                    parseInput={(t) => parseFloat(t.replace(/%$/, '')) / 100}
                   />
                 </div>
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.roundness')}</div>
-                    <span className="text-[10px] text-slate-500 font-mono">{borderRadius}px</span>
-                  </div>
-                  <Slider
-                    value={[borderRadius]}
-                    onValueChange={(values) => onBorderRadiusChange?.(values[0])}
+                  <SliderControl
+                    label={tSettings('effects.roundness')}
+                    value={borderRadius}
+                    defaultValue={12.5}
                     min={0}
                     max={25}
                     step={0.5}
-                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                    onChange={(v) => onBorderRadiusChange?.(v)}
+                    formatValue={(v) => `${v}px`}
+                    parseInput={(t) => parseFloat(t.replace(/px$/, ''))}
                   />
                 </div>
                 <div className="p-2 rounded-lg bg-white/5 border border-white/5">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-[10px] font-medium text-slate-300">{tSettings('effects.padding')}</div>
-                    <span className="text-[10px] text-slate-500 font-mono">{padding}%</span>
-                  </div>
-                  <Slider
-                    value={[padding]}
-                    onValueChange={(values) => onPaddingChange?.(values[0])}
+                  <SliderControl
+                    label={tSettings('effects.padding')}
+                    value={padding}
+                    defaultValue={50}
                     min={0}
                     max={100}
                     step={1}
-                    className="w-full [&_[role=slider]]:bg-[#2563EB] [&_[role=slider]]:border-[#2563EB] [&_[role=slider]]:h-3 [&_[role=slider]]:w-3"
+                    onChange={(v) => onPaddingChange?.(v)}
+                    formatValue={(v) => `${v}%`}
+                    parseInput={(t) => parseFloat(t.replace(/%$/, ''))}
                   />
                 </div>
               </div>
