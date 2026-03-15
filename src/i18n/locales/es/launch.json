@@ -1,1 +1,36 @@
-{}
+{
+	"recording": {
+		"disableSystemAudio": "Desactivar audio del sistema",
+		"enableSystemAudio": "Activar audio del sistema",
+		"disableMicrophone": "Desactivar micrófono",
+		"enableMicrophone": "Activar micrófono",
+		"record": "Grabar",
+		"recordingFolder": "Carpeta de grabaciones: {{path}}",
+		"chooseRecordingsFolder": "Elegir carpeta de grabaciones",
+		"folderPath": "Ruta: /{{name}}/",
+		"openVideoFile": "Abrir archivo de video",
+		"openProject": "Abrir proyecto",
+		"hideHud": "Ocultar HUD",
+		"closeApp": "Cerrar aplicación"
+	},
+	"sourceSelector": {
+		"loadingSources": "Cargando fuentes...",
+		"screens": "Pantallas",
+		"windows": "Ventanas",
+		"windowsNote": "Solo se pueden grabar las ventanas visibles (no minimizadas).",
+		"windowPlaceholder": "Ventana",
+		"cancel": "Cancelar",
+		"share": "Compartir"
+	},
+	"permissions": {
+		"screenRecordingNeeded": "Recordly needs Screen Recording permission before you start. System Settings has been opened. After enabling it, quit and reopen Recordly.",
+		"screenRecordingMissing": "Screen Recording permission is still missing. System Settings has been opened again. Enable it, then quit and reopen Recordly before recording.",
+		"accessibilityNeeded": "Recordly also needs Accessibility permission for cursor tracking. System Settings has been opened. After enabling it, quit and reopen Recordly.",
+		"accessibilityMissing": "Accessibility permission is still missing. System Settings has been opened again. Enable it, then quit and reopen Recordly before recording.",
+		"selectSource": "Por favor selecciona una fuente para grabar",
+		"systemAudioUnavailable": "El audio del sistema no está disponible para esta fuente. La grabación continuará sin audio del sistema.",
+		"microphoneDenied": "Se denegó el acceso al micrófono. La grabación continuará sin audio del micrófono.",
+		"failedToStart": "Error al iniciar la grabación: {{error}}",
+		"failedToStartGeneric": "Error al iniciar la grabación"
+	}
+}

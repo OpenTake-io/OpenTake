@@ -1,7 +1,18 @@
 {
-  "app": {
-    "name": "Recordly",
-    "editorTitle": "Recordly Editor",
-    "subtitle": "Screen recording and editing"
-  }
+	"app": {
+		"name": "Recordly",
+		"editorTitle": "Recordly Editor",
+		"subtitle": "Screen recording and editing"
+	},
+	"actions": {
+		"cancel": "Cancel",
+		"save": "Save",
+		"delete": "Delete",
+		"done": "Done"
+	},
+	"errors": {
+		"invalidFileType": "Invalid file type",
+		"failedToUploadImage": "Failed to upload image",
+		"fileReadError": "There was an error reading the file."
+	}
 }
