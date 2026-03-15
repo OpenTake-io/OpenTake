@@ -23,6 +23,7 @@ import Item from "./Item";
 import KeyframeMarkers from "./KeyframeMarkers";
 import type { Range, Span } from "dnd-timeline";
 import type { ZoomRegion, TrimRegion, AnnotationRegion, SpeedRegion, AudioRegion, CursorTelemetryPoint, ZoomFocus } from "../types";
+import { toFileUrl } from "../projectPersistence";
 import { detectInteractionCandidates, normalizeCursorTelemetry } from "./zoomSuggestionUtils";
 
 const ZOOM_ROW_ID = "row-zoom";
@@ -1068,7 +1069,7 @@ export default function TimelineEditor({
 
     // Load the audio file to get its full duration
     const audioDurationMs = await new Promise<number>((resolve) => {
-      const audio = new Audio(`file://${result.path}`);
+      const audio = new Audio(toFileUrl(result.path));
       audio.addEventListener('loadedmetadata', () => {
         resolve(Math.round(audio.duration * 1000));
       });
