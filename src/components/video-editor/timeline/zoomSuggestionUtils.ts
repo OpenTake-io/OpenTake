@@ -42,38 +42,34 @@ export function normalizeCursorTelemetry(
     .sort((a, b) => a.timeMs - b.timeMs)
     .map((sample) => normalizeTelemetrySample(sample, totalMs));
 
-  const hasExplicitCursorTypeSamples = normalized.some((sample) => Boolean(sample.cursorType));
-
-  if (hasExplicitCursorTypeSamples) {
-    const interactions = detectInteractionCandidates(normalized);
-    for (const candidate of interactions) {
-      if (candidate.kind === 'text-selection') {
-        applyCursorTypeInRange(normalized, candidate.centerTimeMs - 140, candidate.centerTimeMs + 1200, 'text');
-        continue;
-      }
-
-      if (candidate.kind === 'text-field-click' || candidate.kind === 'text-focus-like') {
-        applyCursorTypeInRange(normalized, candidate.centerTimeMs - 100, candidate.centerTimeMs + 900, 'text');
-        continue;
-      }
+  const interactions = detectInteractionCandidates(normalized);
+  for (const candidate of interactions) {
+    if (candidate.kind === 'text-selection') {
+      applyCursorTypeInRange(normalized, candidate.centerTimeMs - 140, candidate.centerTimeMs + 1200, 'text');
+      continue;
     }
 
-    for (const sample of normalized) {
-      if (sample.interactionType !== 'click' && sample.interactionType !== 'double-click') {
-        continue;
-      }
+    if (candidate.kind === 'text-field-click' || candidate.kind === 'text-focus-like') {
+      applyCursorTypeInRange(normalized, candidate.centerTimeMs - 100, candidate.centerTimeMs + 900, 'text');
+      continue;
+    }
+  }
 
-      const mouseUp = normalized.find((candidate) => candidate.timeMs > sample.timeMs && candidate.interactionType === 'mouseup');
-      if (!mouseUp) {
-        continue;
-      }
+  for (const sample of normalized) {
+    if (sample.interactionType !== 'click' && sample.interactionType !== 'double-click') {
+      continue;
+    }
 
-      const dragDuration = mouseUp.timeMs - sample.timeMs;
-      const dragDistance = Math.hypot(mouseUp.cx - sample.cx, mouseUp.cy - sample.cy);
-      if (dragDuration >= 160 && dragDistance > 0.015) {
-        const isTextDrag = Math.abs(mouseUp.cx - sample.cx) > Math.abs(mouseUp.cy - sample.cy) * 1.8;
-        applyCursorTypeInRange(normalized, sample.timeMs, mouseUp.timeMs, isTextDrag ? 'text' : 'closed-hand');
-      }
+    const mouseUp = normalized.find((candidate) => candidate.timeMs > sample.timeMs && candidate.interactionType === 'mouseup');
+    if (!mouseUp) {
+      continue;
+    }
+
+    const dragDuration = mouseUp.timeMs - sample.timeMs;
+    const dragDistance = Math.hypot(mouseUp.cx - sample.cx, mouseUp.cy - sample.cy);
+    if (dragDuration >= 160 && dragDistance > 0.015) {
+      const isTextDrag = Math.abs(mouseUp.cx - sample.cx) > Math.abs(mouseUp.cy - sample.cy) * 1.8;
+      applyCursorTypeInRange(normalized, sample.timeMs, mouseUp.timeMs, isTextDrag ? 'text' : 'closed-hand');
     }
   }
 
