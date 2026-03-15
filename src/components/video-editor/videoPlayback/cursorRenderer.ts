@@ -57,9 +57,6 @@ const CLICK_ANIMATION_MS = 140;
 const CLICK_RING_FADE_MS = 240;
 const CURSOR_MOTION_BLUR_BASE_MULTIPLIER = 0.08;
 const CURSOR_TIME_DISCONTINUITY_MS = 100;
-const CURSOR_STATIONARY_TARGET_EPSILON = 0.0008;
-const CURSOR_STATIONARY_SNAP_DELAY_MS = 52;
-const CURSOR_STATIONARY_SNAP_DISTANCE = 0.012;
 const CURSOR_SVG_DROP_SHADOW_FILTER = 'drop-shadow(0px 2px 3px rgba(0, 0, 0, 0.35))';
 const CURSOR_SHADOW_COLOR = 0x000000;
 const CURSOR_SHADOW_ALPHA = 0.35;
@@ -402,9 +399,6 @@ export class SmoothedCursorState {
   private trailLength: number;
   private initialized = false;
   private lastTimeMs: number | null = null;
-  private lastTargetX = 0.5;
-  private lastTargetY = 0.5;
-  private stationaryTargetSinceMs: number | null = null;
   private xSpring = createSpringState(0.5);
   private ySpring = createSpringState(0.5);
 
@@ -419,9 +413,6 @@ export class SmoothedCursorState {
       this.y = targetY;
       this.initialized = true;
       this.lastTimeMs = timeMs;
-      this.lastTargetX = targetX;
-      this.lastTargetY = targetY;
-      this.stationaryTargetSinceMs = timeMs;
       this.xSpring.value = targetX;
       this.ySpring.value = targetY;
       this.xSpring.velocity = 0;
@@ -435,28 +426,6 @@ export class SmoothedCursorState {
     if (this.smoothingFactor <= 0 || (this.lastTimeMs !== null && timeMs < this.lastTimeMs)) {
       this.snapTo(targetX, targetY, timeMs);
       return;
-    }
-
-    const targetDelta = Math.hypot(targetX - this.lastTargetX, targetY - this.lastTargetY);
-    if (targetDelta <= CURSOR_STATIONARY_TARGET_EPSILON) {
-      if (this.stationaryTargetSinceMs === null) {
-        this.stationaryTargetSinceMs = this.lastTimeMs ?? timeMs;
-      }
-    } else {
-      this.stationaryTargetSinceMs = null;
-    }
-
-    this.lastTargetX = targetX;
-    this.lastTargetY = targetY;
-
-    if (this.stationaryTargetSinceMs !== null) {
-      const stationaryDurationMs = Math.max(0, timeMs - this.stationaryTargetSinceMs);
-      const distanceToTarget = Math.hypot(targetX - this.x, targetY - this.y);
-      if (stationaryDurationMs >= CURSOR_STATIONARY_SNAP_DELAY_MS
-        && distanceToTarget <= CURSOR_STATIONARY_SNAP_DISTANCE) {
-        this.snapTo(targetX, targetY, timeMs);
-        return;
-      }
     }
 
     this.trail.unshift({ x: this.x, y: this.y });
@@ -481,9 +450,6 @@ export class SmoothedCursorState {
     this.y = targetY;
     this.initialized = true;
     this.lastTimeMs = timeMs;
-    this.lastTargetX = targetX;
-    this.lastTargetY = targetY;
-    this.stationaryTargetSinceMs = timeMs;
     this.xSpring.value = targetX;
     this.ySpring.value = targetY;
     this.xSpring.velocity = 0;
@@ -496,9 +462,6 @@ export class SmoothedCursorState {
   reset(): void {
     this.initialized = false;
     this.lastTimeMs = null;
-    this.lastTargetX = this.x;
-    this.lastTargetY = this.y;
-    this.stationaryTargetSinceMs = null;
     this.trail = [];
     resetSpringState(this.xSpring, this.x);
     resetSpringState(this.ySpring, this.y);
