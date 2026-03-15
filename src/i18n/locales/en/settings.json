@@ -1,1 +1,60 @@
-{}
+{
+	"zoom": {
+		"level": "Zoom Level",
+		"selectRegion": "Select a zoom region to adjust",
+		"deleteZoom": "Delete Zoom"
+	},
+	"trim": {
+		"deleteRegion": "Delete Trim Region"
+	},
+	"speed": {
+		"playbackSpeed": "Playback Speed",
+		"selectRegion": "Select a speed region to adjust",
+		"deleteRegion": "Delete Speed Region"
+	},
+	"effects": {
+		"title": "Video Effects",
+		"showCursor": "Show Cursor",
+		"loopCursor": "Loop cursor",
+		"backgroundBlur": "Background Blur",
+		"zoomMotionBlur": "Zoom Motion Blur",
+		"connectZooms": "Connect Zooms",
+		"cursorSize": "Cursor Size",
+		"cursorSmoothing": "Cursor Smoothing",
+		"off": "Off",
+		"cursorMotionBlur": "Cursor Motion Blur",
+		"cursorClickBounce": "Cursor Click Bounce",
+		"shadow": "Shadow",
+		"roundness": "Roundness",
+		"padding": "Padding"
+	},
+	"crop": {
+		"title": "Crop Video",
+		"instruction": "Drag on each side to adjust the crop area"
+	},
+	"background": {
+		"title": "Background",
+		"image": "Image",
+		"color": "Color",
+		"gradient": "Gradient",
+		"uploadCustom": "Upload Custom",
+		"uploadSuccess": "Custom image uploaded successfully!",
+		"uploadError": "Please upload a JPG or JPEG image file."
+	},
+	"export": {
+		"mp4": "MP4",
+		"gif": "GIF",
+		"quality": {
+			"low": "Low",
+			"medium": "Medium",
+			"high": "High"
+		},
+		"loop": "Loop",
+		"outputDimensions": "Output: {{dimensions}}px",
+		"loadProject": "Load Project",
+		"saveProject": "Save Project",
+		"exportVideo": "Export {{format}}",
+		"reportBug": "Report Bug",
+		"starOnGithub": "Star on GitHub"
+	}
+}

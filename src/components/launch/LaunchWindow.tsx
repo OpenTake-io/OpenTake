@@ -9,6 +9,7 @@ import { RxDragHandleDots2 } from "react-icons/rx";
 import { useAudioLevelMeter } from "../../hooks/useAudioLevelMeter";
 import { useMicrophoneDevices } from "../../hooks/useMicrophoneDevices";
 import { useScreenRecorder } from "../../hooks/useScreenRecorder";
+import { useScopedT } from "../../contexts/I18nContext";
 import { Button } from "../ui/button";
 import { AudioLevelMeter } from "../ui/audio-level-meter";
 import { ContentClamp } from "../ui/content-clamp";
@@ -25,6 +26,7 @@ import styles from "./LaunchWindow.module.css";
 
 export function LaunchWindow() {
   const { locale, setLocale } = useI18n();
+  const t = useScopedT('launch');
 
   const LOCALE_LABELS: Record<string, string> = { en: "EN", es: "ES", "zh-CN": "中文" };
   const {
@@ -224,7 +226,7 @@ export function LaunchWindow() {
               size="icon"
               onClick={() => !recording && setSystemAudioEnabled(!systemAudioEnabled)}
               disabled={recording}
-              title={systemAudioEnabled ? "Disable system audio" : "Enable system audio"}
+              title={systemAudioEnabled ? t('recording.disableSystemAudio') : t('recording.enableSystemAudio')}
               className="text-white/80 hover:bg-transparent"
             >
               {systemAudioEnabled ? <MdVolumeUp size={16} className="text-[#2563EB]" /> : <MdVolumeOff size={16} className="text-white/35" />}
@@ -234,7 +236,7 @@ export function LaunchWindow() {
               size="icon"
               onClick={toggleMicrophone}
               disabled={recording}
-              title={microphoneEnabled ? "Disable microphone" : "Enable microphone"}
+              title={microphoneEnabled ? t('recording.disableMicrophone') : t('recording.enableMicrophone')}
               className="text-white/80 hover:bg-transparent"
             >
               {microphoneEnabled ? <MdMic size={16} className="text-[#2563EB]" /> : <MdMicOff size={16} className="text-white/35" />}
@@ -258,7 +260,7 @@ export function LaunchWindow() {
             ) : (
               <>
                 <BsRecordCircle size={14} className={hasSelectedSource ? "text-white/85" : "text-white/35"} />
-                <span className={hasSelectedSource ? "text-white/80" : "text-white/35"}>Record</span>
+                <span className={hasSelectedSource ? "text-white/80" : "text-white/35"}>{t('recording.record')}</span>
               </>
             )}
           </Button>
@@ -268,10 +270,10 @@ export function LaunchWindow() {
             size="sm"
             onClick={chooseRecordingsDirectory}
             disabled={recording}
-            title={recordingsDirectory ? `Recording folder: ${recordingsDirectory}` : "Choose recordings folder"}
+            title={recordingsDirectory ? t('recording.recordingFolder', undefined, { path: recordingsDirectory }) : t('recording.chooseRecordingsFolder')}
             className={`text-white/75 hover:bg-transparent px-1 text-[11px] underline decoration-white/45 underline-offset-2 ${styles.electronNoDrag}`}
           >
-            <ContentClamp truncateLength={18}>{`Path: /${recordingsDirectoryName}/`}</ContentClamp>
+            <ContentClamp truncateLength={18}>{t('recording.folderPath', undefined, { name: recordingsDirectoryName })}</ContentClamp>
           </Button>
 
           <div className="ml-auto flex items-center gap-0.5">
@@ -281,7 +283,7 @@ export function LaunchWindow() {
               size="icon"
               onClick={openVideoFile}
               disabled={recording}
-              title="Open video file"
+              title={t('recording.openVideoFile')}
               className={`text-white/70 hover:bg-transparent ${styles.electronNoDrag}`}
             >
               <MdVideoFile size={15} />
@@ -291,7 +293,7 @@ export function LaunchWindow() {
               size="icon"
               onClick={openProjectFile}
               disabled={recording}
-              title="Open project"
+              title={t('recording.openProject')}
               className={`text-white/70 hover:bg-transparent ${styles.electronNoDrag}`}
             >
               <FaFolderOpen size={14} />
@@ -330,7 +332,7 @@ export function LaunchWindow() {
               variant="link"
               size="icon"
               onClick={sendHudOverlayHide}
-              title="Hide HUD"
+              title={t('recording.hideHud')}
               className={`text-white/70 hover:bg-transparent ${styles.electronNoDrag}`}
             >
               <FiMinus size={16} />
@@ -339,7 +341,7 @@ export function LaunchWindow() {
               variant="link"
               size="icon"
               onClick={sendHudOverlayClose}
-              title="Close App"
+              title={t('recording.closeApp')}
               className={`text-white/70 hover:bg-transparent ${styles.electronNoDrag}`}
             >
               <FiX size={16} />

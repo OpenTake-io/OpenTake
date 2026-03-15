@@ -1,1 +1,91 @@
-{}
+{
+	"playback": {
+		"play": "Play",
+		"pause": "Pause"
+	},
+	"annotations": {
+		"settings": "Annotation Settings",
+		"active": "Active",
+		"text": "Text",
+		"image": "Image",
+		"arrow": "Arrow",
+		"textContent": "Text Content",
+		"textPlaceholder": "Enter your text...",
+		"fontStyle": "Font Style",
+		"selectStyle": "Select style",
+		"size": "Size",
+		"toggleBold": "Toggle bold",
+		"toggleItalic": "Toggle italic",
+		"toggleUnderline": "Toggle underline",
+		"alignLeft": "Align left",
+		"alignCenter": "Align center",
+		"alignRight": "Align right",
+		"textColor": "Text Color",
+		"background": "Background",
+		"none": "None",
+		"clearBackground": "Clear Background",
+		"uploadImage": "Upload Image",
+		"supportedFormats": "Supported formats: JPG, PNG, GIF, WebP",
+		"arrowDirection": "Arrow Direction",
+		"strokeWidth": "Stroke Width: {{width}}px",
+		"arrowColor": "Arrow Color",
+		"deleteAnnotation": "Delete Annotation",
+		"shortcutsAndTips": "Shortcuts & Tips",
+		"tipSelectAnnotation": "Move playhead to overlapping annotation section and select an item.",
+		"tipCycleForward": "Use Tab to cycle through overlapping items.",
+		"tipCycleBackward": "Use Shift+Tab to cycle backwards.",
+		"imageUploadSuccess": "Image uploaded successfully!",
+		"imageUploadError": "Please upload a JPG, PNG, GIF, or WebP image file."
+	},
+	"fontStyles": {
+		"classic": "Classic",
+		"editor": "Editor",
+		"strong": "Strong",
+		"typewriter": "Typewriter",
+		"deco": "Deco",
+		"simple": "Simple",
+		"modern": "Modern",
+		"clean": "Clean"
+	},
+	"format": {
+		"mp4Video": "MP4 Video",
+		"mp4Description": "High quality video file",
+		"gifAnimation": "GIF Animation",
+		"gifDescription": "Animated image for sharing"
+	},
+	"gifOptions": {
+		"frameRate": "Frame Rate",
+		"outputSize": "Output Size",
+		"outputDimensions": "Output: {{width}} × {{height}}px",
+		"loopAnimation": "Loop Animation",
+		"loopDescription": "GIF will play continuously"
+	},
+	"tutorial": {
+		"howTrimmingWorks": "How trimming works",
+		"title": "How Trimming Works",
+		"understanding": "Understanding how to cut out unwanted parts of your video.",
+		"descriptionP1": "The Trim tool works by defining the segments you want to",
+		"descriptionRemove": "remove",
+		"descriptionP2": "from your video.",
+		"descriptionP3": "Any part of the timeline that is covered by a red trim segment will be cut out when you export.",
+		"visualExample": "Visual Example",
+		"removed": "REMOVED",
+		"kept": "Kept",
+		"finalVideo": "Final Video",
+		"part": "Part {{number}}",
+		"addTrimStep": "1. Add Trim",
+		"addTrimDesc": "Press T or click the scissors icon to mark a section for removal.",
+		"adjustStep": "2. Adjust",
+		"adjustDesc": "Drag the edges of the red region to cover exactly what you want to cut out."
+	},
+	"keyboardShortcuts": {
+		"title": "Keyboard Shortcuts",
+		"customizeTooltip": "Customize shortcuts",
+		"customize": "Customize",
+		"panTimeline": "Pan Timeline",
+		"zoomTimeline": "Zoom Timeline",
+		"cycleAnnotations": "Cycle Annotations",
+		"tab": "Tab"
+	},
+	"openRecordingsFolder": "Open recordings folder"
+}
