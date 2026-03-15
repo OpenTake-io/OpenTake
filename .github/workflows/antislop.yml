@@ -1,0 +1,57 @@
+name: PR Quality
+
+on:
+  pull_request_target:
+    types: [opened, reopened, edited, synchronize]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+
+jobs:
+  anti-slop:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: peakoss/anti-slop@v0.2.1
+        with:
+          # sensitivity
+          max-failures: 4
+
+          # PR quality
+          require-description: true
+          max-description-length: 2000
+          max-emoji-count: 2
+          max-code-references: 5
+
+          # commits
+          max-commit-message-length: 300
+          require-commit-author-match: true
+
+          # contributor signals
+          min-account-age: 30
+          min-profile-completeness: 4
+          min-global-merge-ratio: 30
+
+          # spam behaviour
+          max-daily-forks: 7
+          detect-spam-usernames: true
+
+          # repo protection
+          blocked-source-branches: |
+            main
+            master
+
+          # label results
+          success-add-pr-labels: checked
+          failure-add-pr-labels: slop
+
+          # message when PR is closed
+          failure-pr-message: |
+            ⚠️ This pull request was automatically closed by **Anti-Slop**.
+
+            Our automated checks detected patterns commonly associated with
+            low-quality or automated PR submissions.
+
+            If this was a mistake, a maintainer can reopen the PR.
