@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent } from "react";
 import { useTimelineContext } from "dnd-timeline";
 import { Button } from "@/components/ui/button";
 import { Plus, Scissors, ZoomIn, MessageSquare, ChevronDown, Check, Gauge, WandSparkles } from "lucide-react";
@@ -17,7 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { type AspectRatio, getAspectRatioLabel, ASPECT_RATIOS } from "@/utils/aspectRatioUtils";
+import { type AspectRatio, getAspectRatioLabel, ASPECT_RATIOS, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
 import { formatShortcut } from "@/utils/platformUtils";
 import { TutorialHelp } from "../TutorialHelp";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
@@ -610,12 +610,44 @@ export default function TimelineEditor({
   const [range, setRange] = useState<Range>(() => createInitialRange(totalMs));
   const [keyframes, setKeyframes] = useState<{ id: string; time: number }[]>([]);
   const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null);
+  const [customAspectWidth, setCustomAspectWidth] = useState('16');
+  const [customAspectHeight, setCustomAspectHeight] = useState('9');
   const [scrollLabels, setScrollLabels] = useState({
     pan: 'Shift + Ctrl + Scroll',
     zoom: 'Ctrl + Scroll'
   });
   const timelineContainerRef = useRef<HTMLDivElement>(null);
   const { shortcuts: keyShortcuts, isMac } = useShortcuts();
+
+  useEffect(() => {
+    if (aspectRatio === 'native') {
+      return;
+    }
+    const [width, height] = aspectRatio.split(':');
+    if (width && height) {
+      setCustomAspectWidth(width);
+      setCustomAspectHeight(height);
+    }
+  }, [aspectRatio]);
+
+  const applyCustomAspectRatio = useCallback(() => {
+    const width = Number.parseInt(customAspectWidth, 10);
+    const height = Number.parseInt(customAspectHeight, 10);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      toast.error('Custom aspect ratio must be positive numbers.');
+      return;
+    }
+    onAspectRatioChange(`${width}:${height}` as AspectRatio);
+  }, [customAspectHeight, customAspectWidth, onAspectRatioChange]);
+
+  const handleCustomAspectRatioKeyDown = useCallback((event: ReactKeyboardEvent<HTMLInputElement>) => {
+    // Prevent Radix DropdownMenu typeahead from selecting preset items while typing.
+    event.stopPropagation();
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      applyCustomAspectRatio();
+    }
+  }, [applyCustomAspectRatio]);
 
   useEffect(() => {
     formatShortcut(['shift', 'mod', 'Scroll']).then(pan => {
@@ -1243,6 +1275,38 @@ export default function TimelineEditor({
                   {aspectRatio === ratio && <Check className="w-3 h-3 text-[#2563EB]" />}
                 </DropdownMenuItem>
               ))}
+              <div className="mx-1 my-1 h-px bg-white/10" />
+              <div className="px-2 py-1.5 flex items-center gap-2 text-slate-300">
+                <span className="text-sm">Custom</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={customAspectWidth}
+                  onChange={(event) => setCustomAspectWidth(event.target.value.replace(/\D/g, ''))}
+                  onKeyDown={handleCustomAspectRatioKeyDown}
+                  className="w-12 h-7 rounded border border-white/15 bg-black/20 px-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
+                  aria-label="Custom aspect width"
+                />
+                <span className="text-slate-500">:</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={customAspectHeight}
+                  onChange={(event) => setCustomAspectHeight(event.target.value.replace(/\D/g, ''))}
+                  onKeyDown={handleCustomAspectRatioKeyDown}
+                  className="w-12 h-7 rounded border border-white/15 bg-black/20 px-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
+                  aria-label="Custom aspect height"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={applyCustomAspectRatio}
+                  className="h-7 px-2 text-xs text-slate-300 hover:text-white hover:bg-white/10"
+                >
+                  Set
+                </Button>
+                {isCustomAspectRatio(aspectRatio) && <Check className="w-3 h-3 text-[#2563EB] ml-auto" />}
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
           <div className="w-[1px] h-4 bg-white/10" />
