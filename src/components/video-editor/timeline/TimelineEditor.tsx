@@ -20,7 +20,6 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
@@ -646,7 +645,6 @@ export default function TimelineEditor({
 	aspectRatio,
 	onAspectRatioChange,
 }: TimelineEditorProps) {
-  const t = useScopedT("timeline");
   const totalMs = useMemo(() => Math.max(0, Math.round(videoDuration * 1000)), [videoDuration]);
   const currentTimeMs = useMemo(() => Math.round(currentTime * 1000), [currentTime]);
   const timelineScale = useMemo(() => calculateTimelineScale(videoDuration), [videoDuration]);
