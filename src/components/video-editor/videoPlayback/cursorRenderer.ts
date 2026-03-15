@@ -60,7 +60,6 @@ const CURSOR_TIME_DISCONTINUITY_MS = 100;
 const CURSOR_STATIONARY_TARGET_EPSILON = 0.0008;
 const CURSOR_STATIONARY_SNAP_DELAY_MS = 52;
 const CURSOR_STATIONARY_SNAP_DISTANCE = 0.012;
-const CURSOR_TRAILING_MOVEMENT_EPSILON = 0.0015;
 const CURSOR_SVG_DROP_SHADOW_FILTER = 'drop-shadow(0px 2px 3px rgba(0, 0, 0, 0.35))';
 const CURSOR_SHADOW_COLOR = 0x000000;
 const CURSOR_SHADOW_ALPHA = 0.35;
@@ -68,9 +67,6 @@ const CURSOR_SHADOW_OFFSET_X = 0;
 const CURSOR_SHADOW_OFFSET_Y = 2;
 const CURSOR_SHADOW_BLUR = 3;
 const CURSOR_SHADOW_PADDING = 12;
-const LOOP_CURSOR_FREEZE_DURATION_MS = 670;
-const LOOP_CURSOR_RETURN_STEPS = 20;
-const LOOP_CURSOR_SETTLE_DURATION_MS = 120;
 
 let cursorAssetsPromise: Promise<void> | null = null;
 let loadedCursorAssets: Partial<Record<CursorAssetKey, LoadedCursorAsset>> = {};
@@ -169,46 +165,6 @@ function getCursorAsset(key: CursorAssetKey): LoadedCursorAsset {
 function getAvailableCursorKeys(): CursorAssetKey[] {
   const loadedKeys = Object.keys(loadedCursorAssets) as CursorAssetKey[];
   return loadedKeys.length > 0 ? loadedKeys : ['arrow'];
-}
-
-function findFirstStableCursorType(samples: CursorTelemetryPoint[]) {
-  for (const sample of samples) {
-    if (!sample.cursorType) {
-      continue;
-    }
-
-    if (sample.interactionType === 'click'
-      || sample.interactionType === 'double-click'
-      || sample.interactionType === 'right-click'
-      || sample.interactionType === 'middle-click') {
-      continue;
-    }
-
-    return sample.cursorType;
-  }
-
-  return samples[0]?.cursorType ?? 'arrow';
-}
-
-function easeOutQuint(progress: number) {
-  return 1 - ((1 - progress) ** 5);
-}
-
-function findLastMovingSampleTime(samples: CursorTelemetryPoint[]) {
-  if (samples.length <= 1) {
-    return samples[0]?.timeMs ?? 0;
-  }
-
-  for (let index = samples.length - 1; index > 0; index -= 1) {
-    const curr = samples[index];
-    const prev = samples[index - 1];
-    const distance = Math.hypot(curr.cx - prev.cx, curr.cy - prev.cy);
-    if (distance > CURSOR_TRAILING_MOVEMENT_EPSILON) {
-      return curr.timeMs;
-    }
-  }
-
-  return samples[samples.length - 1].timeMs;
 }
 
 export async function preloadCursorAssets() {
@@ -335,100 +291,6 @@ export function interpolateCursorPosition(
     cx: a.cx + (b.cx - a.cx) * t,
     cy: a.cy + (b.cy - a.cy) * t,
   };
-}
-
-export function buildLoopedCursorTelemetry(
-  samples: CursorTelemetryPoint[],
-  totalDurationMs: number,
-): CursorTelemetryPoint[] {
-  if (!samples || samples.length === 0) {
-    return [];
-  }
-
-  const timelineEndMs = Math.max(0, Math.round(totalDurationMs));
-  if (timelineEndMs <= 0) {
-    return samples;
-  }
-
-  const firstSample = samples[0];
-  const lastSample = samples[samples.length - 1];
-  const maxFreezeWindowMs = timelineEndMs - firstSample.timeMs;
-  if (maxFreezeWindowMs <= 1) {
-    return samples;
-  }
-
-  const freezeDurationMs = Math.min(LOOP_CURSOR_FREEZE_DURATION_MS, maxFreezeWindowMs);
-  const motionEndMs = timelineEndMs - freezeDurationMs;
-  const clampedSettleDurationMs = Math.min(LOOP_CURSOR_SETTLE_DURATION_MS, Math.max(0, freezeDurationMs - 1));
-  const returnMotionDurationMs = Math.max(1, freezeDurationMs - clampedSettleDurationMs);
-  const sourceStartMs = firstSample.timeMs;
-  const sourceEndMs = Math.max(sourceStartMs, findLastMovingSampleTime(samples));
-  const sourceDurationMs = Math.max(1, sourceEndMs - sourceStartMs);
-  const playbackWindowMs = Math.max(1, motionEndMs);
-  const startingCursorType = findFirstStableCursorType(samples);
-  const loopedSamples: CursorTelemetryPoint[] = [
-    {
-      ...firstSample,
-      timeMs: 0,
-      interactionType: undefined,
-      cursorType: startingCursorType,
-    },
-  ];
-
-  for (const sample of samples) {
-    const progress = clamp((sample.timeMs - sourceStartMs) / sourceDurationMs, 0, 1);
-    const mappedTimeMs = Math.round(playbackWindowMs * progress);
-
-    if (mappedTimeMs <= loopedSamples[loopedSamples.length - 1].timeMs) {
-      loopedSamples[loopedSamples.length - 1] = {
-        ...sample,
-        timeMs: loopedSamples[loopedSamples.length - 1].timeMs,
-      };
-      continue;
-    }
-
-    loopedSamples.push({
-      ...sample,
-      timeMs: mappedTimeMs,
-    });
-  }
-
-  const returnStartPoint = interpolateCursorPosition(loopedSamples, motionEndMs)
-    ?? { cx: lastSample.cx, cy: lastSample.cy };
-  const returnStartCursorType = findLatestStableCursorType(loopedSamples, motionEndMs);
-  const returnMotionStartMs = motionEndMs;
-
-  for (let step = 0; step <= LOOP_CURSOR_RETURN_STEPS; step += 1) {
-    const progress = step / LOOP_CURSOR_RETURN_STEPS;
-    const easedProgress = easeOutQuint(progress);
-    const timeMs = Math.round(returnMotionStartMs + returnMotionDurationMs * progress);
-    loopedSamples.push({
-      timeMs,
-      cx: returnStartPoint.cx + (firstSample.cx - returnStartPoint.cx) * easedProgress,
-      cy: returnStartPoint.cy + (firstSample.cy - returnStartPoint.cy) * easedProgress,
-      interactionType: progress > 0 ? 'move' : undefined,
-      cursorType: progress >= 1 ? startingCursorType : progress <= 0 ? returnStartCursorType : undefined,
-    });
-  }
-
-  if (clampedSettleDurationMs > 0) {
-    const settleSteps = Math.max(2, Math.round((clampedSettleDurationMs / LOOP_CURSOR_FREEZE_DURATION_MS) * LOOP_CURSOR_RETURN_STEPS));
-    const settleStartMs = returnMotionStartMs + returnMotionDurationMs;
-
-    for (let step = 1; step <= settleSteps; step += 1) {
-      const progress = step / settleSteps;
-      const timeMs = Math.round(settleStartMs + clampedSettleDurationMs * progress);
-      loopedSamples.push({
-        timeMs,
-        cx: firstSample.cx,
-        cy: firstSample.cy,
-        interactionType: 'move',
-        cursorType: startingCursorType,
-      });
-    }
-  }
-
-  return loopedSamples;
 }
 
 function findLatestSample(samples: CursorTelemetryPoint[], timeMs: number) {

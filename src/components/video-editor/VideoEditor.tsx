@@ -53,7 +53,7 @@ import { getAssetPath } from "@/lib/assetPath";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { detectInteractionCandidates, normalizeCursorTelemetry } from "./timeline/zoomSuggestionUtils";
-import { buildLoopedCursorTelemetry } from "./videoPlayback/cursorRenderer";
+import { buildLoopedCursorTelemetry } from "./videoPlayback/cursorLoopTelemetry";
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
 
 const LOOP_CURSOR_END_WINDOW_MS = 670;
