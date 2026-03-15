@@ -132,7 +132,7 @@ export function SettingsPanel({
   onZoomDelete, 
   selectedTrimId,
   onTrimDelete,
-  shadowIntensity = 0.67, 
+  shadowIntensity = 0, 
   onShadowChange, 
   backgroundBlur = 0,
   onBackgroundBlurChange,
