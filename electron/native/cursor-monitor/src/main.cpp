@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <cstdio>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -48,7 +49,7 @@ int main() {
 
             if (type != lastType) {
                 lastType = type;
-                std::cout << "STATE:" << type << "\n";
+                std::cout << "STATE:" << type << std::endl;
             }
         }
 
