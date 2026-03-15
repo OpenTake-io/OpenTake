@@ -29,5 +29,6 @@ release/**
 .tmp/
 .history/
 
-# WGC native capture build artifacts
+# Native capture build artifacts
 electron/native/wgc-capture/build/
+electron/native/cursor-monitor/build/
