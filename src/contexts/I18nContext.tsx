@@ -96,8 +96,17 @@ function normalizeLocale(locale: string | null | undefined): AppLocale {
   )
   if (canonical) return canonical
 
+  // Handle extended subtags like "zh-Hans-CN" → try "zh-CN"
+  const parts = locale.split('-')
+  if (parts.length >= 3) {
+    const langRegion = `${parts[0]}-${parts[parts.length - 1]}`
+    if (isSupportedLocale(langRegion)) {
+      return langRegion
+    }
+  }
+
   // Language-only fallback (e.g. "zh" matches "zh-CN")
-  const lang = locale.split('-')[0].toLowerCase()
+  const lang = parts[0].toLowerCase()
   const byLang = SUPPORTED_LOCALES.find((l) => l.split('-')[0].toLowerCase() === lang)
   if (byLang) return byLang
 
