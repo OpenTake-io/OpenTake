@@ -52,6 +52,7 @@ function parseSourceMetadata(source: ProcessedDesktopSource) {
 export function SourceSelector() {
   const [sources, setSources] = useState<DesktopSource[]>([]);
   const [selectedSource, setSelectedSource] = useState<DesktopSource | null>(null);
+  const [activeTab, setActiveTab] = useState<'screens' | 'windows'>('screens');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -92,6 +93,21 @@ export function SourceSelector() {
   const screenSources = sources.filter(s => s.id.startsWith('screen:'));
   const windowSources = sources.filter(s => s.id.startsWith('window:'));
 
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    if (screenSources.length === 0 && windowSources.length > 0) {
+      setActiveTab('windows');
+      return;
+    }
+
+    if (windowSources.length === 0 && screenSources.length > 0) {
+      setActiveTab('screens');
+    }
+  }, [loading, screenSources.length, windowSources.length]);
+
   const handleSourceSelect = (source: DesktopSource) => setSelectedSource(source);
   const handleShare = async () => {
     if (selectedSource) await window.electronAPI.selectSource(selectedSource);
@@ -111,14 +127,21 @@ export function SourceSelector() {
   return (
     <div className={`min-h-screen flex flex-col items-center justify-center ${styles.glassContainer}`}>
       <div className="flex-1 flex flex-col w-full max-w-xl" style={{ padding: 0 }}>
-        <Tabs defaultValue="screens">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'screens' | 'windows')}>
           <TabsList className="grid grid-cols-2 mb-3 bg-zinc-900/40 rounded-full">
-            <TabsTrigger value="screens" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-zinc-200 rounded-full text-xs py-1">Screens</TabsTrigger>
-            <TabsTrigger value="windows" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-zinc-200 rounded-full text-xs py-1">Windows</TabsTrigger>
+            <TabsTrigger value="screens" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-zinc-200 rounded-full text-xs py-1">
+              Screens ({screenSources.length})
+            </TabsTrigger>
+            <TabsTrigger value="windows" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-zinc-200 rounded-full text-xs py-1">
+              Windows ({windowSources.length})
+            </TabsTrigger>
           </TabsList>
             <div className="h-72 flex flex-col justify-stretch">
             <TabsContent value="screens" className="h-full">
               <div className={`grid grid-cols-2 gap-2 h-full overflow-y-auto pr-1 relative ${styles.sourceGridScroll}`}>
+                {screenSources.length === 0 && (
+                  <div className="col-span-2 text-center text-xs text-zinc-500 py-8">No screens available</div>
+                )}
                 {screenSources.map(source => (
                   <Card
                     key={source.id}
@@ -150,6 +173,9 @@ export function SourceSelector() {
             <TabsContent value="windows" className="h-full">
               <p className="text-[10px] text-zinc-500 mb-1 px-1">Only visible (non-minimized) windows can be recorded.</p>
               <div className={`grid grid-cols-2 gap-2 h-full overflow-y-auto pr-1 relative ${styles.sourceGridScroll}`}>
+                {windowSources.length === 0 && (
+                  <div className="col-span-2 text-center text-xs text-zinc-500 py-8">No windows available</div>
+                )}
                 {windowSources.map(source => (
                   <Card
                     key={source.id}
