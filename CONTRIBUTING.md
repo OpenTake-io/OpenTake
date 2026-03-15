@@ -6,7 +6,6 @@ Areas where help is especially valuable:
 
 - Native capture pipeline for Linux
 - **Webcam overlay bubble**
-- Localisation support, especially Chinese
 - **UI/UX design improvements**
 - Export speed improvements
 
