@@ -4,10 +4,10 @@ Thank you for considering contributing to this project! By contributing, you hel
 
 Areas where help is especially valuable:
 
-- Smooth cursor pipeline for Linux
-- Webcam overlay bubble
+- Native capture pipeline for Linux
+- **Webcam overlay bubble**
 - Localisation support, especially Chinese
-- UI/UX design improvements
+- **UI/UX design improvements**
 - Export speed improvements
 
 ## How to Contribute
