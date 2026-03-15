@@ -30,6 +30,7 @@ export interface ProjectEditorState {
   zoomMotionBlur: number;
   connectZooms: boolean;
   showCursor: boolean;
+  loopCursor: boolean;
   cursorSize: number;
   cursorSmoothing: number;
   cursorMotionBlur: number;
@@ -307,6 +308,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
     zoomMotionBlur: normalizedZoomMotionBlur,
     connectZooms: typeof editor.connectZooms === "boolean" ? editor.connectZooms : true,
     showCursor: typeof editor.showCursor === "boolean" ? editor.showCursor : true,
+    loopCursor: typeof editor.loopCursor === "boolean" ? editor.loopCursor : false,
     cursorSize: isFiniteNumber(editor.cursorSize) ? clamp(editor.cursorSize, 0.5, 10) : DEFAULT_CURSOR_SIZE,
     cursorSmoothing: isFiniteNumber(editor.cursorSmoothing)
       ? clamp(editor.cursorSmoothing, 0, 2)

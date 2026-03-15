@@ -65,6 +65,8 @@ interface SettingsPanelProps {
   onConnectZoomsChange?: (enabled: boolean) => void;
   showCursor?: boolean;
   onShowCursorChange?: (enabled: boolean) => void;
+  loopCursor?: boolean;
+  onLoopCursorChange?: (enabled: boolean) => void;
   cursorSize?: number;
   onCursorSizeChange?: (size: number) => void;
   cursorSmoothing?: number;
@@ -139,6 +141,8 @@ export function SettingsPanel({
   onConnectZoomsChange,
   showCursor = false,
   onShowCursorChange,
+  loopCursor = false,
+  onLoopCursorChange,
   cursorSize = 5,
   onCursorSizeChange,
   cursorSmoothing = 2,
@@ -421,6 +425,16 @@ export function SettingsPanel({
                   <Switch
                     checked={showCursor}
                     onCheckedChange={onShowCursorChange}
+                    className="data-[state=checked]:bg-[#2563EB] scale-90"
+                  />
+                </div>
+                <div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5">
+                  <div>
+                    <div className="text-[10px] font-medium text-slate-300">Loop cursor</div>
+                  </div>
+                  <Switch
+                    checked={loopCursor}
+                    onCheckedChange={onLoopCursorChange}
                     className="data-[state=checked]:bg-[#2563EB] scale-90"
                   />
                 </div>
@@ -902,7 +916,7 @@ export function SettingsPanel({
           <button
             type="button"
             onClick={() => {
-              window.electronAPI?.openExternalUrl('https://github.com/webadderall/bug-free-succotash/issues/new/choose');
+              window.electronAPI?.openExternalUrl('https://github.com/webadderall/Recordly/issues/new/choose');
             }}
             className="flex-1 flex items-center justify-center gap-1.5 text-[10px] text-slate-500 hover:text-slate-300 py-1.5 transition-colors"
           >
@@ -912,7 +926,7 @@ export function SettingsPanel({
           <button
             type="button"
             onClick={() => {
-              window.electronAPI?.openExternalUrl('https://github.com/webadderall/bug-free-succotash');
+              window.electronAPI?.openExternalUrl('https://github.com/webadderall/Recordly');
             }}
             className="flex-1 flex items-center justify-center gap-1.5 text-[10px] text-slate-500 hover:text-slate-300 py-1.5 transition-colors"
           >

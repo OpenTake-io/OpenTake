@@ -53,6 +53,10 @@ import { getAssetPath } from "@/lib/assetPath";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { detectInteractionCandidates, normalizeCursorTelemetry } from "./timeline/zoomSuggestionUtils";
+import { buildLoopedCursorTelemetry } from "./videoPlayback/cursorRenderer";
+import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
+
+const LOOP_CURSOR_END_WINDOW_MS = 670;
 
 type EditorHistorySnapshot = {
   zoomRegions: ZoomRegion[];
@@ -85,6 +89,7 @@ export default function VideoEditor() {
   const [zoomMotionBlur, setZoomMotionBlur] = useState(DEFAULT_ZOOM_MOTION_BLUR);
   const [connectZooms, setConnectZooms] = useState(true);
   const [showCursor, setShowCursor] = useState(true);
+  const [loopCursor, setLoopCursor] = useState(false);
   const [cursorSize, setCursorSize] = useState(DEFAULT_CURSOR_SIZE);
   const [cursorSmoothing, setCursorSmoothing] = useState(DEFAULT_CURSOR_SMOOTHING);
   const [cursorMotionBlur, setCursorMotionBlur] = useState(DEFAULT_CURSOR_MOTION_BLUR);
@@ -239,6 +244,7 @@ export default function VideoEditor() {
     setZoomMotionBlur(normalizedEditor.zoomMotionBlur);
     setConnectZooms(normalizedEditor.connectZooms);
     setShowCursor(normalizedEditor.showCursor);
+    setLoopCursor(normalizedEditor.loopCursor);
     setCursorSize(normalizedEditor.cursorSize);
     setCursorSmoothing(normalizedEditor.cursorSmoothing);
     setCursorMotionBlur(normalizedEditor.cursorMotionBlur);
@@ -289,6 +295,7 @@ export default function VideoEditor() {
         zoomMotionBlur,
         connectZooms,
         showCursor,
+        loopCursor,
         cursorSize,
         cursorSmoothing,
         cursorMotionBlur,
@@ -317,6 +324,7 @@ export default function VideoEditor() {
     zoomMotionBlur,
     connectZooms,
     showCursor,
+    loopCursor,
     cursorSize,
     cursorSmoothing,
     cursorMotionBlur,
@@ -424,6 +432,7 @@ export default function VideoEditor() {
       zoomMotionBlur,
       connectZooms,
       showCursor,
+      loopCursor,
       cursorSize,
       cursorSmoothing,
       cursorMotionBlur,
@@ -477,6 +486,7 @@ export default function VideoEditor() {
     zoomMotionBlur,
     connectZooms,
     showCursor,
+    loopCursor,
     cursorSize,
     cursorSmoothing,
     cursorMotionBlur,
@@ -602,6 +612,52 @@ export default function VideoEditor() {
     const totalMs = Math.max(0, Math.round(duration * 1000));
     return normalizeCursorTelemetry(cursorTelemetry, totalMs > 0 ? totalMs : Number.MAX_SAFE_INTEGER);
   }, [cursorTelemetry, duration]);
+
+  const effectiveCursorTelemetry = useMemo(() => {
+    if (!loopCursor) {
+      return normalizedCursorTelemetry;
+    }
+
+    const totalMs = Math.max(0, Math.round(duration * 1000));
+    if (normalizedCursorTelemetry.length < 2 || totalMs <= 0) {
+      return normalizedCursorTelemetry;
+    }
+
+    return buildLoopedCursorTelemetry(normalizedCursorTelemetry, totalMs);
+  }, [loopCursor, normalizedCursorTelemetry, duration]);
+
+  const effectiveZoomRegions = useMemo(() => {
+    if (!loopCursor || zoomRegions.length === 0) {
+      return zoomRegions;
+    }
+
+    const totalMs = Math.max(0, Math.round(duration * 1000));
+    if (totalMs <= 0) {
+      return zoomRegions;
+    }
+
+    const dominantAtStart = findDominantRegion(zoomRegions, 0, { connectZooms }).region;
+    if (!dominantAtStart) {
+      return zoomRegions;
+    }
+
+    const endWindowStartMs = Math.max(0, totalMs - LOOP_CURSOR_END_WINDOW_MS);
+    const loopEndRegion: ZoomRegion = {
+      id: `${dominantAtStart.id}__loop-end-sync`,
+      startMs: endWindowStartMs,
+      endMs: totalMs,
+      depth: dominantAtStart.depth,
+      focus: {
+        cx: dominantAtStart.focus.cx,
+        cy: dominantAtStart.focus.cy,
+      },
+    };
+
+    return [
+      ...zoomRegions.filter((region) => region.id !== loopEndRegion.id),
+      loopEndRegion,
+    ];
+  }, [loopCursor, zoomRegions, duration, connectZooms]);
 
   useEffect(() => {
     if (!videoPath || duration <= 0 || zoomRegions.length > 0 || normalizedCursorTelemetry.length < 2) {
@@ -1178,7 +1234,6 @@ export default function VideoEditor() {
           loop: settings.gifConfig.loop,
           sizePreset: settings.gifConfig.sizePreset,
           wallpaper,
-          zoomRegions,
           trimRegions,
           speedRegions,
           showShadow: shadowIntensity > 0,
@@ -1191,7 +1246,8 @@ export default function VideoEditor() {
           videoPadding: padding,
           cropRegion,
           annotationRegions,
-          cursorTelemetry: normalizedCursorTelemetry,
+          zoomRegions: effectiveZoomRegions,
+          cursorTelemetry: effectiveCursorTelemetry,
           showCursor,
           cursorSize,
           cursorSmoothing,
@@ -1320,7 +1376,6 @@ export default function VideoEditor() {
           bitrate,
           codec: 'avc1.640033',
           wallpaper,
-          zoomRegions,
           trimRegions,
           speedRegions,
           showShadow: shadowIntensity > 0,
@@ -1332,7 +1387,8 @@ export default function VideoEditor() {
           padding,
           cropRegion,
           annotationRegions,
-          cursorTelemetry: normalizedCursorTelemetry,
+          zoomRegions: effectiveZoomRegions,
+          cursorTelemetry: effectiveCursorTelemetry,
           showCursor,
           cursorSize,
           cursorSmoothing,
@@ -1394,7 +1450,7 @@ export default function VideoEditor() {
       setShowExportDialog(keepExportDialogOpen);
       setExportProgress(null);
     }
-  }, [videoPath, wallpaper, zoomRegions, trimRegions, speedRegions, shadowIntensity, backgroundBlur, zoomMotionBlur, connectZooms, showCursor, normalizedCursorTelemetry, cursorSize, cursorSmoothing, cursorMotionBlur, cursorClickBounce, borderRadius, padding, cropRegion, annotationRegions, isPlaying, aspectRatio, exportQuality, showExportSuccessToast]);
+  }, [videoPath, wallpaper, zoomRegions, trimRegions, speedRegions, shadowIntensity, backgroundBlur, zoomMotionBlur, connectZooms, showCursor, effectiveCursorTelemetry, cursorSize, cursorSmoothing, cursorMotionBlur, cursorClickBounce, borderRadius, padding, cropRegion, annotationRegions, isPlaying, aspectRatio, exportQuality, showExportSuccessToast]);
 
   const handleOpenExportDialog = useCallback(() => {
     if (!videoPath) {
@@ -1567,7 +1623,7 @@ export default function VideoEditor() {
                       onPlayStateChange={setIsPlaying}
                       onError={setError}
                       wallpaper={wallpaper}
-                      zoomRegions={zoomRegions}
+                      zoomRegions={effectiveZoomRegions}
                       selectedZoomId={selectedZoomId}
                       onSelectZoom={handleSelectZoom}
                       onZoomFocusChange={handleZoomFocusChange}
@@ -1587,7 +1643,7 @@ export default function VideoEditor() {
                       onSelectAnnotation={handleSelectAnnotation}
                       onAnnotationPositionChange={handleAnnotationPositionChange}
                       onAnnotationSizeChange={handleAnnotationSizeChange}
-                      cursorTelemetry={normalizedCursorTelemetry}
+                      cursorTelemetry={effectiveCursorTelemetry}
                       showCursor={showCursor}
                       cursorSize={cursorSize}
                       cursorSmoothing={cursorSmoothing}
@@ -1622,8 +1678,8 @@ export default function VideoEditor() {
               videoDuration={duration}
               currentTime={currentTime}
               onSeek={handleSeek}
-              cursorTelemetry={normalizedCursorTelemetry}
-              zoomRegions={zoomRegions}
+              cursorTelemetry={effectiveCursorTelemetry}
+              zoomRegions={effectiveZoomRegions}
               onZoomAdded={handleZoomAdded}
               onZoomSuggested={handleZoomSuggested}
               onZoomSpanChange={handleZoomSpanChange}
@@ -1676,6 +1732,8 @@ export default function VideoEditor() {
           onConnectZoomsChange={setConnectZooms}
           showCursor={showCursor}
           onShowCursorChange={setShowCursor}
+          loopCursor={loopCursor}
+          onLoopCursorChange={setLoopCursor}
           cursorSize={cursorSize}
           onCursorSizeChange={setCursorSize}
           cursorSmoothing={cursorSmoothing}
