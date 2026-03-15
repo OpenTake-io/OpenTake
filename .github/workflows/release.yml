@@ -119,6 +119,7 @@ jobs:
       - name: Build Windows x64
         shell: pwsh
         run: |
+          npm run build:cursor-monitor
           npx tsc
           npx vite build
           npx electron-builder --win nsis --x64 --publish never
