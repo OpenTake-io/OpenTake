@@ -1104,7 +1104,7 @@ async function startNativeCursorMonitor() {
   stopNativeCursorMonitor()
 
   if (process.platform !== 'darwin' && process.platform !== 'win32') {
-    currentCursorVisualType = undefined
+    currentCursorVisualType = 'arrow'
     return
   }
 
@@ -1117,7 +1117,7 @@ async function startNativeCursorMonitor() {
     }
 
     nativeCursorMonitorOutputBuffer = ''
-    currentCursorVisualType = undefined
+    currentCursorVisualType = 'arrow'
     nativeCursorMonitorProcess = spawn(helperPath, [], {
       stdio: ['pipe', 'pipe', 'pipe'],
     })
@@ -1127,18 +1127,18 @@ async function startNativeCursorMonitor() {
     nativeCursorMonitorProcess.once('close', () => {
       nativeCursorMonitorProcess = null
       nativeCursorMonitorOutputBuffer = ''
-      currentCursorVisualType = undefined
+      currentCursorVisualType = 'arrow'
     })
   } catch (error) {
     console.warn('Failed to start native cursor monitor:', error)
     nativeCursorMonitorProcess = null
     nativeCursorMonitorOutputBuffer = ''
-    currentCursorVisualType = undefined
+    currentCursorVisualType = 'arrow'
   }
 }
 
 function stopNativeCursorMonitor() {
-  currentCursorVisualType = undefined
+  currentCursorVisualType = 'arrow'
 
   if (!nativeCursorMonitorProcess) {
     return
