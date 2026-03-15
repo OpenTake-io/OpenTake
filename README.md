@@ -2,7 +2,6 @@
 
 Language: EN | [简中](README.zh-CN.md)
 
-[Live on Product Hunt - go check it out!](https://www.producthunt.com/products/recordly-make-stunning-product-demos?launch=recordly-2)
 <p align="center">
   <img src="https://i.postimg.cc/tRnL8gHp/Frame-5.png" width="220" alt="Recordly logo">
 </p>
