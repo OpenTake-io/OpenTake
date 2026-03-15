@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CountdownOverlay } from "./components/countdown/CountdownOverlay";
 import { LaunchWindow } from "./components/launch/LaunchWindow";
 import { SourceSelector } from "./components/launch/SourceSelector";
 import VideoEditor from "./components/video-editor/VideoEditor";
@@ -16,7 +17,7 @@ export default function App() {
     const type = params.get('windowType') || '';
     setWindowType(type);
 
-    if (type === 'hud-overlay' || type === 'source-selector') {
+    if (type === 'hud-overlay' || type === 'source-selector' || type === 'countdown') {
       document.body.style.background = 'transparent';
       document.documentElement.style.background = 'transparent';
       document.getElementById('root')?.style.setProperty('background', 'transparent');
@@ -39,6 +40,8 @@ export default function App() {
       return <LaunchWindow />;
     case 'source-selector':
       return <SourceSelector />;
+    case 'countdown':
+      return <CountdownOverlay />;
     case 'editor':
       return (
         <ShortcutsProvider>
