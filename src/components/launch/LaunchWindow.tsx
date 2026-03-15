@@ -152,7 +152,7 @@ export function LaunchWindow() {
   };
 
   return (
-    <div className="w-full h-full flex items-end justify-center bg-transparent">
+    <div className="w-full h-full flex items-end justify-center bg-transparent overflow-hidden">
       <div className={`flex flex-col items-center gap-2 mx-auto ${styles.electronDrag}`}>
         {showMicControls && (
           <div
@@ -177,7 +177,7 @@ export function LaunchWindow() {
         )}
 
         <div
-          className={`w-full max-w-[560px] mx-auto flex items-center gap-1.5 px-3 py-2 ${styles.electronDrag} ${styles.hudBar}`}
+          className={`w-full mx-auto flex items-center gap-1.5 px-3 py-2 ${styles.electronDrag} ${styles.hudBar}`}
           style={{
             borderRadius: 9999,
             background: "linear-gradient(135deg, rgba(28,28,36,0.97) 0%, rgba(18,18,26,0.96) 100%)",
