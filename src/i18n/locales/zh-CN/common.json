@@ -1,1 +1,18 @@
-{}
+{
+	"app": {
+		"name": "Recordly",
+		"editorTitle": "Recordly 编辑器",
+		"subtitle": "屏幕录制与编辑"
+	},
+	"actions": {
+		"cancel": "取消",
+		"save": "保存",
+		"delete": "删除",
+		"done": "完成"
+	},
+	"errors": {
+		"invalidFileType": "无效的文件类型",
+		"failedToUploadImage": "上传图片失败",
+		"fileReadError": "读取文件时出错。"
+	}
+}

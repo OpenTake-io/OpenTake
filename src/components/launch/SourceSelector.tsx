@@ -3,6 +3,7 @@ import { Button } from "../ui/button";
 import { MdCheck } from "react-icons/md";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Card } from "../ui/card";
+import { useScopedT } from "../../contexts/I18nContext";
 import styles from "./SourceSelector.module.css";
 
 interface DesktopSource {
@@ -50,6 +51,7 @@ function parseSourceMetadata(source: ProcessedDesktopSource) {
 }
 
 export function SourceSelector() {
+  const t = useScopedT('launch');
   const [sources, setSources] = useState<DesktopSource[]>([]);
   const [selectedSource, setSelectedSource] = useState<DesktopSource | null>(null);
   const [activeTab, setActiveTab] = useState<'screens' | 'windows'>('screens');
@@ -118,7 +120,7 @@ export function SourceSelector() {
       <div className={`h-full flex items-center justify-center ${styles.glassContainer}`} style={{ minHeight: '100vh' }}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-zinc-600 mx-auto mb-2" />
-          <p className="text-xs text-zinc-300">Loading sources...</p>
+          <p className="text-xs text-zinc-300">{t('sourceSelector.loadingSources')}</p>
         </div>
       </div>
     );
@@ -130,10 +132,10 @@ export function SourceSelector() {
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'screens' | 'windows')}>
           <TabsList className="grid grid-cols-2 mb-3 bg-zinc-900/40 rounded-full">
             <TabsTrigger value="screens" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-zinc-200 rounded-full text-xs py-1">
-              Screens ({screenSources.length})
+              {t('sourceSelector.screens')} ({screenSources.length})
             </TabsTrigger>
             <TabsTrigger value="windows" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-zinc-200 rounded-full text-xs py-1">
-              Windows ({windowSources.length})
+              {t('sourceSelector.windows')} ({windowSources.length})
             </TabsTrigger>
           </TabsList>
             <div className="h-72 flex flex-col justify-stretch">
@@ -171,7 +173,7 @@ export function SourceSelector() {
               </div>
             </TabsContent>
             <TabsContent value="windows" className="h-full">
-              <p className="text-[10px] text-zinc-500 mb-1 px-1">Only visible (non-minimized) windows can be recorded.</p>
+              <p className="text-[10px] text-zinc-500 mb-1 px-1">{t('sourceSelector.windowsNote')}</p>
               <div className={`grid grid-cols-2 gap-2 h-full overflow-y-auto pr-1 relative ${styles.sourceGridScroll}`}>
                 {windowSources.length === 0 && (
                   <div className="col-span-2 text-center text-xs text-zinc-500 py-8">No windows available</div>
@@ -202,7 +204,7 @@ export function SourceSelector() {
                             ) : (
                               <div className="w-8 h-8 rounded-md bg-zinc-800 border border-zinc-700" />
                             )}
-                            <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Window</div>
+                            <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">{t('sourceSelector.windowPlaceholder')}</div>
                           </div>
                         )}
                         {selectedSource?.id === source.id && (
@@ -233,8 +235,8 @@ export function SourceSelector() {
       </div>
       <div className="border-t border-zinc-800 p-2 w-full max-w-xl">
         <div className="flex justify-center gap-2">
-          <Button variant="outline" onClick={() => window.close()} className="px-4 py-1 text-xs bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700">Cancel</Button>
-          <Button onClick={handleShare} disabled={!selectedSource} className="px-4 py-1 text-xs bg-[#2563EB] text-white hover:bg-[#2563EB]/80 disabled:opacity-50 disabled:bg-zinc-700">Share</Button>
+          <Button variant="outline" onClick={() => window.close()} className="px-4 py-1 text-xs bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700">{t('sourceSelector.cancel')}</Button>
+          <Button onClick={handleShare} disabled={!selectedSource} className="px-4 py-1 text-xs bg-[#2563EB] text-white hover:bg-[#2563EB]/80 disabled:opacity-50 disabled:bg-zinc-700">{t('sourceSelector.share')}</Button>
         </div>
       </div>
     </div>

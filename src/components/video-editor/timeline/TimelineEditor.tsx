@@ -1,27 +1,44 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent } from "react";
-import { useTimelineContext } from "dnd-timeline";
-import { Button } from "@/components/ui/button";
-import { Plus, Scissors, ZoomIn, MessageSquare, ChevronDown, Check, Gauge, WandSparkles } from "lucide-react";
-import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import TimelineWrapper from "./TimelineWrapper";
-import Row from "./Row";
-import Item from "./Item";
-import KeyframeMarkers from "./KeyframeMarkers";
 import type { Range, Span } from "dnd-timeline";
-import type { ZoomRegion, TrimRegion, AnnotationRegion, SpeedRegion, CursorTelemetryPoint, ZoomFocus } from "../types";
-import { v4 as uuidv4 } from 'uuid';
+import { useTimelineContext } from "dnd-timeline";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+	Check,
+	ChevronDown,
+	Gauge,
+	MessageSquare,
+	Plus,
+	Scissors,
+	WandSparkles,
+	ZoomIn,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent } from "react";
+import { toast } from "sonner";
+import { v4 as uuidv4 } from "uuid";
+import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { type AspectRatio, getAspectRatioLabel, ASPECT_RATIOS, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
-import { formatShortcut } from "@/utils/platformUtils";
-import { TutorialHelp } from "../TutorialHelp";
+import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
+import { cn } from "@/lib/utils";
+import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
+import { formatShortcut } from "@/utils/platformUtils";
+import { TutorialHelp } from "../TutorialHelp";
+import type {
+	AnnotationRegion,
+	CursorTelemetryPoint,
+	SpeedRegion,
+	TrimRegion,
+	ZoomFocus,
+	ZoomRegion,
+} from "../types";
+import Item from "./Item";
+import KeyframeMarkers from "./KeyframeMarkers";
+import Row from "./Row";
+import TimelineWrapper from "./TimelineWrapper";
 import { detectInteractionCandidates, normalizeCursorTelemetry } from "./zoomSuggestionUtils";
 
 const ZOOM_ROW_ID = "row-zoom";
@@ -33,572 +50,603 @@ const TARGET_MARKER_COUNT = 12;
 const SUGGESTION_SPACING_MS = 1800;
 
 interface TimelineEditorProps {
-  videoDuration: number;
-  currentTime: number;
-  onSeek?: (time: number) => void;
-  cursorTelemetry?: CursorTelemetryPoint[];
-  zoomRegions: ZoomRegion[];
-  onZoomAdded: (span: Span) => void;
-  onZoomSuggested?: (span: Span, focus: ZoomFocus) => void;
-  onZoomSpanChange: (id: string, span: Span) => void;
-  onZoomDelete: (id: string) => void;
-  selectedZoomId: string | null;
-  onSelectZoom: (id: string | null) => void;
-  trimRegions?: TrimRegion[];
-  onTrimAdded?: (span: Span) => void;
-  onTrimSpanChange?: (id: string, span: Span) => void;
-  onTrimDelete?: (id: string) => void;
-  selectedTrimId?: string | null;
-  onSelectTrim?: (id: string | null) => void;
-  annotationRegions?: AnnotationRegion[];
-  onAnnotationAdded?: (span: Span) => void;
-  onAnnotationSpanChange?: (id: string, span: Span) => void;
-  onAnnotationDelete?: (id: string) => void;
-  selectedAnnotationId?: string | null;
-  onSelectAnnotation?: (id: string | null) => void;
-  speedRegions?: SpeedRegion[];
-  onSpeedAdded?: (span: Span) => void;
-  onSpeedSpanChange?: (id: string, span: Span) => void;
-  onSpeedDelete?: (id: string) => void;
-  selectedSpeedId?: string | null;
-  onSelectSpeed?: (id: string | null) => void;
-  aspectRatio: AspectRatio;
-  onAspectRatioChange: (aspectRatio: AspectRatio) => void;
+	videoDuration: number;
+	currentTime: number;
+	onSeek?: (time: number) => void;
+	cursorTelemetry?: CursorTelemetryPoint[];
+	zoomRegions: ZoomRegion[];
+	onZoomAdded: (span: Span) => void;
+	onZoomSuggested?: (span: Span, focus: ZoomFocus) => void;
+	onZoomSpanChange: (id: string, span: Span) => void;
+	onZoomDelete: (id: string) => void;
+	selectedZoomId: string | null;
+	onSelectZoom: (id: string | null) => void;
+	trimRegions?: TrimRegion[];
+	onTrimAdded?: (span: Span) => void;
+	onTrimSpanChange?: (id: string, span: Span) => void;
+	onTrimDelete?: (id: string) => void;
+	selectedTrimId?: string | null;
+	onSelectTrim?: (id: string | null) => void;
+	annotationRegions?: AnnotationRegion[];
+	onAnnotationAdded?: (span: Span) => void;
+	onAnnotationSpanChange?: (id: string, span: Span) => void;
+	onAnnotationDelete?: (id: string) => void;
+	selectedAnnotationId?: string | null;
+	onSelectAnnotation?: (id: string | null) => void;
+	speedRegions?: SpeedRegion[];
+	onSpeedAdded?: (span: Span) => void;
+	onSpeedSpanChange?: (id: string, span: Span) => void;
+	onSpeedDelete?: (id: string) => void;
+	selectedSpeedId?: string | null;
+	onSelectSpeed?: (id: string | null) => void;
+	aspectRatio: AspectRatio;
+	onAspectRatioChange: (aspectRatio: AspectRatio) => void;
 }
 
 interface TimelineScaleConfig {
-  minItemDurationMs: number;
-  defaultItemDurationMs: number;
-  minVisibleRangeMs: number;
+	minItemDurationMs: number;
+	defaultItemDurationMs: number;
+	minVisibleRangeMs: number;
 }
 
 interface TimelineRenderItem {
-  id: string;
-  rowId: string;
-  span: Span;
-  label: string;
-  zoomDepth?: number;
-  speedValue?: number;
-  variant: 'zoom' | 'trim' | 'annotation' | 'speed';
+	id: string;
+	rowId: string;
+	span: Span;
+	label: string;
+	zoomDepth?: number;
+	speedValue?: number;
+	variant: "zoom" | "trim" | "annotation" | "speed";
 }
 
 const SCALE_CANDIDATES = [
-  { intervalSeconds: 0.05, gridSeconds: 0.01 },
-  { intervalSeconds: 0.1, gridSeconds: 0.02 },
-  { intervalSeconds: 0.25, gridSeconds: 0.05 },
-  { intervalSeconds: 0.5, gridSeconds: 0.1 },
-  { intervalSeconds: 1, gridSeconds: 0.25 },
-  { intervalSeconds: 2, gridSeconds: 0.5 },
-  { intervalSeconds: 5, gridSeconds: 1 },
-  { intervalSeconds: 10, gridSeconds: 2 },
-  { intervalSeconds: 15, gridSeconds: 3 },
-  { intervalSeconds: 30, gridSeconds: 5 },
-  { intervalSeconds: 60, gridSeconds: 10 },
-  { intervalSeconds: 120, gridSeconds: 20 },
-  { intervalSeconds: 300, gridSeconds: 30 },
-  { intervalSeconds: 600, gridSeconds: 60 },
-  { intervalSeconds: 900, gridSeconds: 120 },
-  { intervalSeconds: 1800, gridSeconds: 180 },
-  { intervalSeconds: 3600, gridSeconds: 300 },
+	{ intervalSeconds: 0.05, gridSeconds: 0.01 },
+	{ intervalSeconds: 0.1, gridSeconds: 0.02 },
+	{ intervalSeconds: 0.25, gridSeconds: 0.05 },
+	{ intervalSeconds: 0.5, gridSeconds: 0.1 },
+	{ intervalSeconds: 1, gridSeconds: 0.25 },
+	{ intervalSeconds: 2, gridSeconds: 0.5 },
+	{ intervalSeconds: 5, gridSeconds: 1 },
+	{ intervalSeconds: 10, gridSeconds: 2 },
+	{ intervalSeconds: 15, gridSeconds: 3 },
+	{ intervalSeconds: 30, gridSeconds: 5 },
+	{ intervalSeconds: 60, gridSeconds: 10 },
+	{ intervalSeconds: 120, gridSeconds: 20 },
+	{ intervalSeconds: 300, gridSeconds: 30 },
+	{ intervalSeconds: 600, gridSeconds: 60 },
+	{ intervalSeconds: 900, gridSeconds: 120 },
+	{ intervalSeconds: 1800, gridSeconds: 180 },
+	{ intervalSeconds: 3600, gridSeconds: 300 },
 ];
 
 function calculateAxisScale(visibleRangeMs: number): { intervalMs: number; gridMs: number } {
-  const visibleSeconds = visibleRangeMs / 1000;
-  const candidate =
-    SCALE_CANDIDATES.find((scaleCandidate) => {
-      if (visibleSeconds <= 0) {
-        return true;
-      }
-      return visibleSeconds / scaleCandidate.intervalSeconds <= TARGET_MARKER_COUNT;
-    }) ?? SCALE_CANDIDATES[SCALE_CANDIDATES.length - 1];
+	const visibleSeconds = visibleRangeMs / 1000;
+	const candidate =
+		SCALE_CANDIDATES.find((scaleCandidate) => {
+			if (visibleSeconds <= 0) {
+				return true;
+			}
+			return visibleSeconds / scaleCandidate.intervalSeconds <= TARGET_MARKER_COUNT;
+		}) ?? SCALE_CANDIDATES[SCALE_CANDIDATES.length - 1];
 
-  return {
-    intervalMs: Math.round(candidate.intervalSeconds * 1000),
-    gridMs: Math.round(candidate.gridSeconds * 1000),
-  };
+	return {
+		intervalMs: Math.round(candidate.intervalSeconds * 1000),
+		gridMs: Math.round(candidate.gridSeconds * 1000),
+	};
 }
 
 function calculateTimelineScale(durationSeconds: number): TimelineScaleConfig {
-  const totalMs = Math.max(0, Math.round(durationSeconds * 1000));
+	const totalMs = Math.max(0, Math.round(durationSeconds * 1000));
 
-  const minItemDurationMs = 100;
+	const minItemDurationMs = 100;
 
-  const defaultItemDurationMs = totalMs > 0
-    ? Math.max(minItemDurationMs, Math.min(Math.round(totalMs * 0.05), 30000))
-    : Math.max(minItemDurationMs, 1000);
+	const defaultItemDurationMs =
+		totalMs > 0
+			? Math.max(minItemDurationMs, Math.min(Math.round(totalMs * 0.05), 30000))
+			: Math.max(minItemDurationMs, 1000);
 
-  const minVisibleRangeMs = 300;
+	const minVisibleRangeMs = 300;
 
-  return {
-    minItemDurationMs,
-    defaultItemDurationMs,
-    minVisibleRangeMs,
-  };
+	return {
+		minItemDurationMs,
+		defaultItemDurationMs,
+		minVisibleRangeMs,
+	};
 }
 
 function createInitialRange(totalMs: number): Range {
-  if (totalMs > 0) {
-    return { start: 0, end: totalMs };
-  }
+	if (totalMs > 0) {
+		return { start: 0, end: totalMs };
+	}
 
-  return { start: 0, end: FALLBACK_RANGE_MS };
+	return { start: 0, end: FALLBACK_RANGE_MS };
 }
 
 function normalizeWheelDeltaToPixels(delta: number, deltaMode: number) {
-  if (deltaMode === 1) {
-    return delta * 16;
-  }
+	if (deltaMode === 1) {
+		return delta * 16;
+	}
 
-  if (deltaMode === 2) {
-    return delta * 240;
-  }
+	if (deltaMode === 2) {
+		return delta * 240;
+	}
 
-  return delta;
+	return delta;
 }
 
 function formatTimeLabel(milliseconds: number, intervalMs: number) {
-  const totalSeconds = milliseconds / 1000;
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
+	const totalSeconds = milliseconds / 1000;
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
 
-  const fractionalDigits = intervalMs < 250 ? 2 : intervalMs < 1000 ? 1 : 0;
+	const fractionalDigits = intervalMs < 250 ? 2 : intervalMs < 1000 ? 1 : 0;
 
-  if (hours > 0) {
-    const minutesString = minutes.toString().padStart(2, "0");
-    const secondsString = Math.floor(seconds)
-      .toString()
-      .padStart(2, "0");
-    return `${hours}:${minutesString}:${secondsString}`;
-  }
+	if (hours > 0) {
+		const minutesString = minutes.toString().padStart(2, "0");
+		const secondsString = Math.floor(seconds).toString().padStart(2, "0");
+		return `${hours}:${minutesString}:${secondsString}`;
+	}
 
-  if (fractionalDigits > 0) {
-    const secondsWithFraction = seconds.toFixed(fractionalDigits);
-    const [wholeSeconds, fraction] = secondsWithFraction.split(".");
-    return `${minutes}:${wholeSeconds.padStart(2, "0")}.${fraction}`;
-  }
+	if (fractionalDigits > 0) {
+		const secondsWithFraction = seconds.toFixed(fractionalDigits);
+		const [wholeSeconds, fraction] = secondsWithFraction.split(".");
+		return `${minutes}:${wholeSeconds.padStart(2, "0")}.${fraction}`;
+	}
 
-  return `${minutes}:${Math.floor(seconds).toString().padStart(2, "0")}`;
+	return `${minutes}:${Math.floor(seconds).toString().padStart(2, "0")}`;
 }
 
 function formatPlayheadTime(ms: number): string {
-  const s = ms / 1000;
-  const min = Math.floor(s / 60);
-  const sec = s % 60;
-  if (min > 0) return `${min}:${sec.toFixed(1).padStart(4, '0')}`;
-  return `${sec.toFixed(1)}s`;
+	const s = ms / 1000;
+	const min = Math.floor(s / 60);
+	const sec = s % 60;
+	if (min > 0) return `${min}:${sec.toFixed(1).padStart(4, "0")}`;
+	return `${sec.toFixed(1)}s`;
 }
 
 function PlaybackCursor({
-  currentTimeMs,
-  videoDurationMs,
-  onSeek,
-  timelineRef,
-  keyframes = [],
+	currentTimeMs,
+	videoDurationMs,
+	onSeek,
+	timelineRef,
+	keyframes = [],
 }: {
-  currentTimeMs: number;
-  videoDurationMs: number;
-  onSeek?: (time: number) => void;
-  timelineRef: React.RefObject<HTMLDivElement>;
-  keyframes?: { id: string; time: number }[];
+	currentTimeMs: number;
+	videoDurationMs: number;
+	onSeek?: (time: number) => void;
+	timelineRef: React.RefObject<HTMLDivElement>;
+	keyframes?: { id: string; time: number }[];
 }) {
-  const { sidebarWidth, direction, range, valueToPixels, pixelsToValue } = useTimelineContext();
-  const sideProperty = direction === "rtl" ? "right" : "left";
-  const [isDragging, setIsDragging] = useState(false);
+	const { sidebarWidth, direction, range, valueToPixels, pixelsToValue } = useTimelineContext();
+	const sideProperty = direction === "rtl" ? "right" : "left";
+	const [isDragging, setIsDragging] = useState(false);
 
-  useEffect(() => {
-    if (!isDragging) return;
+	useEffect(() => {
+		if (!isDragging) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!timelineRef.current || !onSeek) return;
+		const handleMouseMove = (e: MouseEvent) => {
+			if (!timelineRef.current || !onSeek) return;
 
-      const rect = timelineRef.current.getBoundingClientRect();
-      const clickX = e.clientX - rect.left - sidebarWidth;
+			const rect = timelineRef.current.getBoundingClientRect();
+			const clickX = e.clientX - rect.left - sidebarWidth;
 
-      // Allow dragging outside to 0 or max, but clamp the value
-      const relativeMs = pixelsToValue(clickX);
-      let absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
+			// Allow dragging outside to 0 or max, but clamp the value
+			const relativeMs = pixelsToValue(clickX);
+			let absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
 
-      // Snap to nearby keyframe if within threshold (150ms)
-      const snapThresholdMs = 150;
-      const nearbyKeyframe = keyframes.find(kf =>
-        Math.abs(kf.time - absoluteMs) <= snapThresholdMs &&
-        kf.time >= range.start &&
-        kf.time <= range.end
-      );
+			// Snap to nearby keyframe if within threshold (150ms)
+			const snapThresholdMs = 150;
+			const nearbyKeyframe = keyframes.find(
+				(kf) =>
+					Math.abs(kf.time - absoluteMs) <= snapThresholdMs &&
+					kf.time >= range.start &&
+					kf.time <= range.end,
+			);
 
-      if (nearbyKeyframe) {
-        absoluteMs = nearbyKeyframe.time;
-      }
+			if (nearbyKeyframe) {
+				absoluteMs = nearbyKeyframe.time;
+			}
 
-      onSeek(absoluteMs / 1000);
-    };
+			onSeek(absoluteMs / 1000);
+		};
 
-    const handleMouseUp = () => {
-      setIsDragging(false);
-      document.body.style.cursor = '';
-    };
+		const handleMouseUp = () => {
+			setIsDragging(false);
+			document.body.style.cursor = "";
+		};
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = 'ew-resize';
+		window.addEventListener("mousemove", handleMouseMove);
+		window.addEventListener("mouseup", handleMouseUp);
+		document.body.style.cursor = "ew-resize";
 
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-    };
-  }, [isDragging, onSeek, timelineRef, sidebarWidth, range.start, range.end, videoDurationMs, pixelsToValue, keyframes]);
+		return () => {
+			window.removeEventListener("mousemove", handleMouseMove);
+			window.removeEventListener("mouseup", handleMouseUp);
+			document.body.style.cursor = "";
+		};
+	}, [
+		isDragging,
+		onSeek,
+		timelineRef,
+		sidebarWidth,
+		range.start,
+		range.end,
+		videoDurationMs,
+		pixelsToValue,
+		keyframes,
+	]);
 
-  if (videoDurationMs <= 0 || currentTimeMs < 0) {
-    return null;
-  }
+	if (videoDurationMs <= 0 || currentTimeMs < 0) {
+		return null;
+	}
 
-  const clampedTime = Math.min(currentTimeMs, videoDurationMs);
+	const clampedTime = Math.min(currentTimeMs, videoDurationMs);
 
-  if (clampedTime < range.start || clampedTime > range.end) {
-    return null;
-  }
+	if (clampedTime < range.start || clampedTime > range.end) {
+		return null;
+	}
 
-  const offset = valueToPixels(clampedTime - range.start);
+	const offset = valueToPixels(clampedTime - range.start);
 
-  return (
-    <div
-      className="absolute top-0 bottom-0 z-50 group/cursor"
-      style={{
-        [sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth - 1}px`,
-        pointerEvents: 'none', // Allow clicks to pass through to timeline, but we'll enable pointer events on the handle
-      }}
-    >
-      <div
-        className="absolute top-0 bottom-0 w-[2px] bg-[#2563EB] shadow-[0_0_10px_rgba(37,99,235,0.5)] cursor-ew-resize pointer-events-auto hover:shadow-[0_0_15px_rgba(37,99,235,0.7)] transition-shadow"
-        style={{
-          [sideProperty]: `${offset}px`,
-        }}
-        onMouseDown={(e) => {
-          e.stopPropagation(); // Prevent timeline click
-          setIsDragging(true);
-        }}
-      >
-        <div
-          className="absolute -top-1 left-1/2 -translate-x-1/2 hover:scale-125 transition-transform"
-          style={{ width: '16px', height: '16px' }}
-        >
-          <div className="w-3 h-3 mx-auto mt-[2px] bg-[#2563EB] rotate-45 rounded-sm shadow-lg border border-white/20" />
-        </div>
-        {isDragging && (
-          <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/80 text-[10px] text-white/90 font-medium tabular-nums whitespace-nowrap border border-white/10 shadow-lg pointer-events-none">
-            {formatPlayheadTime(clampedTime)}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+	return (
+		<div
+			className="absolute top-0 bottom-0 z-50 group/cursor"
+			style={{
+				[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth - 1}px`,
+				pointerEvents: "none", // Allow clicks to pass through to timeline, but we'll enable pointer events on the handle
+			}}
+		>
+			<div
+				className="absolute top-0 bottom-0 w-[2px] bg-[#2563EB] shadow-[0_0_10px_rgba(37,99,235,0.5)] cursor-ew-resize pointer-events-auto hover:shadow-[0_0_15px_rgba(37,99,235,0.7)] transition-shadow"
+				style={{
+					[sideProperty]: `${offset}px`,
+				}}
+				onMouseDown={(e) => {
+					e.stopPropagation(); // Prevent timeline click
+					setIsDragging(true);
+				}}
+			>
+				<div
+					className="absolute -top-1 left-1/2 -translate-x-1/2 hover:scale-125 transition-transform"
+					style={{ width: "16px", height: "16px" }}
+				>
+					<div className="w-3 h-3 mx-auto mt-[2px] bg-[#2563EB] rotate-45 rounded-sm shadow-lg border border-white/20" />
+				</div>
+				{isDragging && (
+					<div className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/80 text-[10px] text-white/90 font-medium tabular-nums whitespace-nowrap border border-white/10 shadow-lg pointer-events-none">
+						{formatPlayheadTime(clampedTime)}
+					</div>
+				)}
+			</div>
+		</div>
+	);
 }
 
 function TimelineAxis({
-  videoDurationMs,
-  currentTimeMs,
+	videoDurationMs,
+	currentTimeMs,
 }: {
-  videoDurationMs: number;
-  currentTimeMs: number;
+	videoDurationMs: number;
+	currentTimeMs: number;
 }) {
-  const { sidebarWidth, direction, range, valueToPixels } = useTimelineContext();
-  const sideProperty = direction === "rtl" ? "right" : "left";
+	const { sidebarWidth, direction, range, valueToPixels } = useTimelineContext();
+	const sideProperty = direction === "rtl" ? "right" : "left";
 
-  const { intervalMs } = useMemo(
-    () => calculateAxisScale(range.end - range.start),
-    [range.end, range.start],
-  );
+	const { intervalMs } = useMemo(
+		() => calculateAxisScale(range.end - range.start),
+		[range.end, range.start],
+	);
 
-  const markers = useMemo(() => {
-    if (intervalMs <= 0) {
-      return { markers: [], minorTicks: [] };
-    }
+	const markers = useMemo(() => {
+		if (intervalMs <= 0) {
+			return { markers: [], minorTicks: [] };
+		}
 
-    const maxTime = videoDurationMs > 0 ? videoDurationMs : range.end;
-    const visibleStart = Math.max(0, Math.min(range.start, maxTime));
-    const visibleEnd = Math.min(range.end, maxTime);
-    const markerTimes = new Set<number>();
+		const maxTime = videoDurationMs > 0 ? videoDurationMs : range.end;
+		const visibleStart = Math.max(0, Math.min(range.start, maxTime));
+		const visibleEnd = Math.min(range.end, maxTime);
+		const markerTimes = new Set<number>();
 
-    const firstMarker = Math.ceil(visibleStart / intervalMs) * intervalMs;
+		const firstMarker = Math.ceil(visibleStart / intervalMs) * intervalMs;
 
-    for (let time = firstMarker; time <= maxTime; time += intervalMs) {
-      if (time >= visibleStart && time <= visibleEnd) {
-        markerTimes.add(Math.round(time));
-      }
-    }
+		for (let time = firstMarker; time <= maxTime; time += intervalMs) {
+			if (time >= visibleStart && time <= visibleEnd) {
+				markerTimes.add(Math.round(time));
+			}
+		}
 
-    if (visibleStart <= maxTime) {
-      markerTimes.add(Math.round(visibleStart));
-    }
+		if (visibleStart <= maxTime) {
+			markerTimes.add(Math.round(visibleStart));
+		}
 
-    if (videoDurationMs > 0) {
-      markerTimes.add(Math.round(videoDurationMs));
-    }
+		if (videoDurationMs > 0) {
+			markerTimes.add(Math.round(videoDurationMs));
+		}
 
-    const sorted = Array.from(markerTimes)
-      .filter(time => time <= maxTime)
-      .sort((a, b) => a - b);
+		const sorted = Array.from(markerTimes)
+			.filter((time) => time <= maxTime)
+			.sort((a, b) => a - b);
 
-    // Generate minor ticks (4 ticks between major intervals)
-    const minorTicks = [];
-    const minorInterval = intervalMs / 5;
+		// Generate minor ticks (4 ticks between major intervals)
+		const minorTicks = [];
+		const minorInterval = intervalMs / 5;
 
-    for (let time = firstMarker; time <= maxTime; time += minorInterval) {
-      if (time >= visibleStart && time <= visibleEnd) {
-        // Skip if it's close to a major marker
-        const isMajor = Math.abs(time % intervalMs) < 1;
-        if (!isMajor) {
-          minorTicks.push(time);
-        }
-      }
-    }
+		for (let time = firstMarker; time <= maxTime; time += minorInterval) {
+			if (time >= visibleStart && time <= visibleEnd) {
+				// Skip if it's close to a major marker
+				const isMajor = Math.abs(time % intervalMs) < 1;
+				if (!isMajor) {
+					minorTicks.push(time);
+				}
+			}
+		}
 
-    return {
-      markers: sorted.map((time) => ({
-        time,
-        label: formatTimeLabel(time, intervalMs),
-      })),
-      minorTicks
-    };
-  }, [intervalMs, range.end, range.start, videoDurationMs]);
+		return {
+			markers: sorted.map((time) => ({
+				time,
+				label: formatTimeLabel(time, intervalMs),
+			})),
+			minorTicks,
+		};
+	}, [intervalMs, range.end, range.start, videoDurationMs]);
 
-  return (
-    <div
-      className="h-8 bg-[#09090b] border-b border-white/5 relative overflow-hidden select-none"
-      style={{
-        [sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth}px`,
-      }}
-    >
-      {/* Minor Ticks */}
-      {markers.minorTicks.map((time) => {
-        const offset = valueToPixels(time - range.start);
-        return (
-          <div
-            key={`minor-${time}`}
-            className="absolute bottom-0 h-1 w-[1px] bg-white/5"
-            style={{ [sideProperty]: `${offset}px` }}
-          />
-        );
-      })}
+	return (
+		<div
+			className="h-8 bg-[#09090b] border-b border-white/5 relative overflow-hidden select-none"
+			style={{
+				[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth}px`,
+			}}
+		>
+			{/* Minor Ticks */}
+			{markers.minorTicks.map((time) => {
+				const offset = valueToPixels(time - range.start);
+				return (
+					<div
+						key={`minor-${time}`}
+						className="absolute bottom-0 h-1 w-[1px] bg-white/5"
+						style={{ [sideProperty]: `${offset}px` }}
+					/>
+				);
+			})}
 
-      {/* Major Markers */}
-      {markers.markers.map((marker) => {
-        const offset = valueToPixels(marker.time - range.start);
-        const markerStyle: React.CSSProperties = {
-          position: "absolute",
-          bottom: 0,
-          height: "100%",
-          display: "flex",
-          flexDirection: "row",
-          alignItems: "flex-end",
-          [sideProperty]: `${offset}px`,
-        };
+			{/* Major Markers */}
+			{markers.markers.map((marker) => {
+				const offset = valueToPixels(marker.time - range.start);
+				const markerStyle: React.CSSProperties = {
+					position: "absolute",
+					bottom: 0,
+					height: "100%",
+					display: "flex",
+					flexDirection: "row",
+					alignItems: "flex-end",
+					[sideProperty]: `${offset}px`,
+				};
 
-        return (
-          <div key={marker.time} style={markerStyle}>
-            <div className="flex flex-col items-center pb-1">
-              <div className="h-2 w-[1px] bg-white/20 mb-1" />
-              <span
-                className={cn(
-                  "text-[10px] font-medium tabular-nums tracking-tight",
-                  marker.time === currentTimeMs ? "text-[#2563EB]" : "text-slate-500"
-                )}
-              >
-                {marker.label}
-              </span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+				return (
+					<div key={marker.time} style={markerStyle}>
+						<div className="flex flex-col items-center pb-1">
+							<div className="h-2 w-[1px] bg-white/20 mb-1" />
+							<span
+								className={cn(
+									"text-[10px] font-medium tabular-nums tracking-tight",
+									marker.time === currentTimeMs ? "text-[#2563EB]" : "text-slate-500",
+								)}
+							>
+								{marker.label}
+							</span>
+						</div>
+					</div>
+				);
+			})}
+		</div>
+	);
 }
 
 function Timeline({
-  items,
-  videoDurationMs,
-  currentTimeMs,
-  onSeek,
-  onSelectZoom,
-  onSelectTrim,
-  onSelectAnnotation,
-  onSelectSpeed,
-  selectedZoomId,
-  selectedTrimId,
-  selectedAnnotationId,
-  selectedSpeedId,
-  keyframes = [],
+	items,
+	videoDurationMs,
+	currentTimeMs,
+	onSeek,
+	onSelectZoom,
+	onSelectTrim,
+	onSelectAnnotation,
+	onSelectSpeed,
+	selectedZoomId,
+	selectedTrimId,
+	selectedAnnotationId,
+	selectedSpeedId,
+	keyframes = [],
 }: {
-  items: TimelineRenderItem[];
-  videoDurationMs: number;
-  currentTimeMs: number;
-  onSeek?: (time: number) => void;
-  onSelectZoom?: (id: string | null) => void;
-  onSelectTrim?: (id: string | null) => void;
-  onSelectAnnotation?: (id: string | null) => void;
-  onSelectSpeed?: (id: string | null) => void;
-  selectedZoomId: string | null;
-  selectedTrimId?: string | null;
-  selectedAnnotationId?: string | null;
-  selectedSpeedId?: string | null;
-  keyframes?: { id: string; time: number }[];
+	items: TimelineRenderItem[];
+	videoDurationMs: number;
+	currentTimeMs: number;
+	onSeek?: (time: number) => void;
+	onSelectZoom?: (id: string | null) => void;
+	onSelectTrim?: (id: string | null) => void;
+	onSelectAnnotation?: (id: string | null) => void;
+	onSelectSpeed?: (id: string | null) => void;
+	selectedZoomId: string | null;
+	selectedTrimId?: string | null;
+	selectedAnnotationId?: string | null;
+	selectedSpeedId?: string | null;
+	keyframes?: { id: string; time: number }[];
 }) {
-  const { setTimelineRef, style, sidebarWidth, range, pixelsToValue } = useTimelineContext();
-  const localTimelineRef = useRef<HTMLDivElement | null>(null);
+	const { setTimelineRef, style, sidebarWidth, range, pixelsToValue } = useTimelineContext();
+	const localTimelineRef = useRef<HTMLDivElement | null>(null);
 
-  const setRefs = useCallback((node: HTMLDivElement | null) => {
-    setTimelineRef(node);
-    localTimelineRef.current = node;
-  }, [setTimelineRef]);
+	const setRefs = useCallback(
+		(node: HTMLDivElement | null) => {
+			setTimelineRef(node);
+			localTimelineRef.current = node;
+		},
+		[setTimelineRef],
+	);
 
-  const handleTimelineClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!onSeek || videoDurationMs <= 0) return;
+	const handleTimelineClick = useCallback(
+		(e: React.MouseEvent<HTMLDivElement>) => {
+			if (!onSeek || videoDurationMs <= 0) return;
 
-    // Only clear selection if clicking on empty space (not on items)
-    // This is handled by event propagation - items stop propagation
-    onSelectZoom?.(null);
-    onSelectTrim?.(null);
-    onSelectAnnotation?.(null);
-    onSelectSpeed?.(null);
+			// Only clear selection if clicking on empty space (not on items)
+			// This is handled by event propagation - items stop propagation
+			onSelectZoom?.(null);
+			onSelectTrim?.(null);
+			onSelectAnnotation?.(null);
+			onSelectSpeed?.(null);
 
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left - sidebarWidth;
+			const rect = e.currentTarget.getBoundingClientRect();
+			const clickX = e.clientX - rect.left - sidebarWidth;
 
-    if (clickX < 0) return;
+			if (clickX < 0) return;
 
-    const relativeMs = pixelsToValue(clickX);
-    const absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
-    const timeInSeconds = absoluteMs / 1000;
+			const relativeMs = pixelsToValue(clickX);
+			const absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
+			const timeInSeconds = absoluteMs / 1000;
 
-    onSeek(timeInSeconds);
-  }, [onSeek, onSelectZoom, onSelectTrim, onSelectAnnotation, onSelectSpeed, videoDurationMs, sidebarWidth, range.start, pixelsToValue]);
+			onSeek(timeInSeconds);
+		},
+		[
+			onSeek,
+			onSelectZoom,
+			onSelectTrim,
+			onSelectAnnotation,
+			onSelectSpeed,
+			videoDurationMs,
+			sidebarWidth,
+			range.start,
+			pixelsToValue,
+		],
+	);
 
-  const zoomItems = items.filter(item => item.rowId === ZOOM_ROW_ID);
-  const trimItems = items.filter(item => item.rowId === TRIM_ROW_ID);
-  const annotationItems = items.filter(item => item.rowId === ANNOTATION_ROW_ID);
-  const speedItems = items.filter(item => item.rowId === SPEED_ROW_ID);
+	const zoomItems = items.filter((item) => item.rowId === ZOOM_ROW_ID);
+	const trimItems = items.filter((item) => item.rowId === TRIM_ROW_ID);
+	const annotationItems = items.filter((item) => item.rowId === ANNOTATION_ROW_ID);
+	const speedItems = items.filter((item) => item.rowId === SPEED_ROW_ID);
 
-  return (
-    <div
-      ref={setRefs}
-      style={style}
-      className="select-none bg-[#09090b] min-h-[140px] relative cursor-pointer group"
-      onClick={handleTimelineClick}
-    >
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px)] bg-[length:20px_100%] pointer-events-none" />
-      <TimelineAxis videoDurationMs={videoDurationMs} currentTimeMs={currentTimeMs} />
-      <PlaybackCursor
-        currentTimeMs={currentTimeMs}
-        videoDurationMs={videoDurationMs}
-        onSeek={onSeek}
-        timelineRef={localTimelineRef}
-        keyframes={keyframes}
-      />
+	return (
+		<div
+			ref={setRefs}
+			style={style}
+			className="select-none bg-[#09090b] min-h-[140px] relative cursor-pointer group"
+			onClick={handleTimelineClick}
+		>
+			<div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px)] bg-[length:20px_100%] pointer-events-none" />
+			<TimelineAxis videoDurationMs={videoDurationMs} currentTimeMs={currentTimeMs} />
+			<PlaybackCursor
+				currentTimeMs={currentTimeMs}
+				videoDurationMs={videoDurationMs}
+				onSeek={onSeek}
+				timelineRef={localTimelineRef}
+				keyframes={keyframes}
+			/>
 
-      <Row id={ZOOM_ROW_ID} isEmpty={zoomItems.length === 0} hint="Press Z to add zoom">
-        {zoomItems.map((item) => (
-          <Item
-            id={item.id}
-            key={item.id}
-            rowId={item.rowId}
-            span={item.span}
-            isSelected={item.id === selectedZoomId}
-            onSelect={() => onSelectZoom?.(item.id)}
-            zoomDepth={item.zoomDepth}
-            variant="zoom"
-          >
-            {item.label}
-          </Item>
-        ))}
-      </Row>
+			<Row id={ZOOM_ROW_ID} isEmpty={zoomItems.length === 0} hint="Press Z to add zoom">
+				{zoomItems.map((item) => (
+					<Item
+						id={item.id}
+						key={item.id}
+						rowId={item.rowId}
+						span={item.span}
+						isSelected={item.id === selectedZoomId}
+						onSelect={() => onSelectZoom?.(item.id)}
+						zoomDepth={item.zoomDepth}
+						variant="zoom"
+					>
+						{item.label}
+					</Item>
+				))}
+			</Row>
 
-      <Row id={TRIM_ROW_ID} isEmpty={trimItems.length === 0} hint="Press T to add trim">
-        {trimItems.map((item) => (
-          <Item
-            id={item.id}
-            key={item.id}
-            rowId={item.rowId}
-            span={item.span}
-            isSelected={item.id === selectedTrimId}
-            onSelect={() => onSelectTrim?.(item.id)}
-            variant="trim"
-          >
-            {item.label}
-          </Item>
-        ))}
-      </Row>
+			<Row id={TRIM_ROW_ID} isEmpty={trimItems.length === 0} hint="Press T to add trim">
+				{trimItems.map((item) => (
+					<Item
+						id={item.id}
+						key={item.id}
+						rowId={item.rowId}
+						span={item.span}
+						isSelected={item.id === selectedTrimId}
+						onSelect={() => onSelectTrim?.(item.id)}
+						variant="trim"
+					>
+						{item.label}
+					</Item>
+				))}
+			</Row>
 
-      <Row id={ANNOTATION_ROW_ID} isEmpty={annotationItems.length === 0} hint="Press A to add annotation">
-        {annotationItems.map((item) => (
-          <Item
-            id={item.id}
-            key={item.id}
-            rowId={item.rowId}
-            span={item.span}
-            isSelected={item.id === selectedAnnotationId}
-            onSelect={() => onSelectAnnotation?.(item.id)}
-            variant="annotation"
-          >
-            {item.label}
-          </Item>
-        ))}
-      </Row>
+			<Row
+				id={ANNOTATION_ROW_ID}
+				isEmpty={annotationItems.length === 0}
+				hint="Press A to add annotation"
+			>
+				{annotationItems.map((item) => (
+					<Item
+						id={item.id}
+						key={item.id}
+						rowId={item.rowId}
+						span={item.span}
+						isSelected={item.id === selectedAnnotationId}
+						onSelect={() => onSelectAnnotation?.(item.id)}
+						variant="annotation"
+					>
+						{item.label}
+					</Item>
+				))}
+			</Row>
 
-      <Row id={SPEED_ROW_ID} isEmpty={speedItems.length === 0} hint="Press S to add speed">
-        {speedItems.map((item) => (
-          <Item
-            id={item.id}
-            key={item.id}
-            rowId={item.rowId}
-            span={item.span}
-            isSelected={item.id === selectedSpeedId}
-            onSelect={() => onSelectSpeed?.(item.id)}
-            variant="speed"
-            speedValue={item.speedValue}
-          >
-            {item.label}
-          </Item>
-        ))}
-      </Row>
-    </div>
-  );
+			<Row id={SPEED_ROW_ID} isEmpty={speedItems.length === 0} hint="Press S to add speed">
+				{speedItems.map((item) => (
+					<Item
+						id={item.id}
+						key={item.id}
+						rowId={item.rowId}
+						span={item.span}
+						isSelected={item.id === selectedSpeedId}
+						onSelect={() => onSelectSpeed?.(item.id)}
+						variant="speed"
+						speedValue={item.speedValue}
+					>
+						{item.label}
+					</Item>
+				))}
+			</Row>
+		</div>
+	);
 }
 
 export default function TimelineEditor({
-  videoDuration,
-  currentTime,
-  onSeek,
-  cursorTelemetry = [],
-  zoomRegions,
-  onZoomAdded,
-  onZoomSuggested,
-  onZoomSpanChange,
-  onZoomDelete,
-  selectedZoomId,
-  onSelectZoom,
-  trimRegions = [],
-  onTrimAdded,
-  onTrimSpanChange,
-  onTrimDelete,
-  selectedTrimId,
-  onSelectTrim,
-  annotationRegions = [],
-  onAnnotationAdded,
-  onAnnotationSpanChange,
-  onAnnotationDelete,
-  selectedAnnotationId,
-  onSelectAnnotation,
-  speedRegions = [],
-  onSpeedAdded,
-  onSpeedSpanChange,
-  onSpeedDelete,
-  selectedSpeedId,
-  onSelectSpeed,
-  aspectRatio,
-  onAspectRatioChange,
+	videoDuration,
+	currentTime,
+	onSeek,
+	cursorTelemetry = [],
+	zoomRegions,
+	onZoomAdded,
+	onZoomSuggested,
+	onZoomSpanChange,
+	onZoomDelete,
+	selectedZoomId,
+	onSelectZoom,
+	trimRegions = [],
+	onTrimAdded,
+	onTrimSpanChange,
+	onTrimDelete,
+	selectedTrimId,
+	onSelectTrim,
+	annotationRegions = [],
+	onAnnotationAdded,
+	onAnnotationSpanChange,
+	onAnnotationDelete,
+	selectedAnnotationId,
+	onSelectAnnotation,
+	speedRegions = [],
+	onSpeedAdded,
+	onSpeedSpanChange,
+	onSpeedDelete,
+	selectedSpeedId,
+	onSelectSpeed,
+	aspectRatio,
+	onAspectRatioChange,
 }: TimelineEditorProps) {
+  const t = useScopedT("timeline");
   const totalMs = useMemo(() => Math.max(0, Math.round(videoDuration * 1000)), [videoDuration]);
   const currentTimeMs = useMemo(() => Math.round(currentTime * 1000), [currentTime]);
   const timelineScale = useMemo(() => calculateTimelineScale(videoDuration), [videoDuration]);
@@ -1372,4 +1420,3 @@ export default function TimelineEditor({
     </div>
   );
 }
-

@@ -1,1 +1,36 @@
-{}
+{
+	"recording": {
+		"disableSystemAudio": "Desactivar audio del sistema",
+		"enableSystemAudio": "Activar audio del sistema",
+		"disableMicrophone": "Desactivar micrófono",
+		"enableMicrophone": "Activar micrófono",
+		"record": "Grabar",
+		"recordingFolder": "Carpeta de grabaciones: {{path}}",
+		"chooseRecordingsFolder": "Elegir carpeta de grabaciones",
+		"folderPath": "Ruta: /{{name}}/",
+		"openVideoFile": "Abrir archivo de video",
+		"openProject": "Abrir proyecto",
+		"hideHud": "Ocultar HUD",
+		"closeApp": "Cerrar aplicación"
+	},
+	"sourceSelector": {
+		"loadingSources": "Cargando fuentes...",
+		"screens": "Pantallas",
+		"windows": "Ventanas",
+		"windowsNote": "Solo se pueden grabar las ventanas visibles (no minimizadas).",
+		"windowPlaceholder": "Ventana",
+		"cancel": "Cancelar",
+		"share": "Compartir"
+	},
+	"permissions": {
+		"screenRecordingNeeded": "Recordly necesita permiso de grabación de pantalla antes de comenzar. Se ha abierto Configuración del sistema. Después de habilitarlo, cierra y vuelve a abrir Recordly.",
+		"screenRecordingMissing": "El permiso de grabación de pantalla aún falta. Se ha abierto Configuración del sistema nuevamente. Habilítalo, luego cierra y vuelve a abrir Recordly antes de grabar.",
+		"accessibilityNeeded": "Recordly también necesita permiso de accesibilidad para el seguimiento del cursor. Se ha abierto Configuración del sistema. Después de habilitarlo, cierra y vuelve a abrir Recordly.",
+		"accessibilityMissing": "El permiso de accesibilidad aún falta. Se ha abierto Configuración del sistema nuevamente. Habilítalo, luego cierra y vuelve a abrir Recordly antes de grabar.",
+		"selectSource": "Por favor selecciona una fuente para grabar",
+		"systemAudioUnavailable": "El audio del sistema no está disponible para esta fuente. La grabación continuará sin audio del sistema.",
+		"microphoneDenied": "Se denegó el acceso al micrófono. La grabación continuará sin audio del micrófono.",
+		"failedToStart": "Error al iniciar la grabación: {{error}}",
+		"failedToStartGeneric": "Error al iniciar la grabación"
+	}
+}
