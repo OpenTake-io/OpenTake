@@ -1,10 +1,9 @@
 import type { Span } from "dnd-timeline";
 import { useItem } from "dnd-timeline";
-import { Gauge, MessageSquare, Scissors, ZoomIn } from "lucide-react";
+import { Gauge, MessageSquare, Music, Scissors, ZoomIn } from "lucide-react";
 import { useMemo } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
-import { ZoomIn, Scissors, MessageSquare, Gauge, Music } from "lucide-react";
 import glassStyles from "./ItemGlass.module.css";
 
 interface ItemProps {
