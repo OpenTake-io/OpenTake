@@ -1112,6 +1112,13 @@ async function startNativeCursorMonitor() {
     let helperPath: string
     if (process.platform === 'win32') {
       helperPath = getCursorMonitorExePath()
+      try {
+        await fs.access(helperPath, fsConstants.X_OK)
+      } catch {
+        console.warn('Windows cursor monitor helper missing or not executable:', helperPath)
+        currentCursorVisualType = 'arrow'
+        return
+      }
     } else {
       helperPath = await ensureNativeCursorMonitorBinary()
     }
@@ -1120,6 +1127,13 @@ async function startNativeCursorMonitor() {
     currentCursorVisualType = 'arrow'
     nativeCursorMonitorProcess = spawn(helperPath, [], {
       stdio: ['pipe', 'pipe', 'pipe'],
+    })
+
+    nativeCursorMonitorProcess.once('error', (error) => {
+      console.warn('Native cursor monitor process error:', error)
+      nativeCursorMonitorProcess = null
+      nativeCursorMonitorOutputBuffer = ''
+      currentCursorVisualType = 'arrow'
     })
 
     nativeCursorMonitorProcess.stdout.on('data', handleCursorMonitorStdout)
