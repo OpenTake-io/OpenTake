@@ -1,54 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent } from "react";
 import { useTimelineContext } from "dnd-timeline";
 import { Button } from "@/components/ui/button";
-import { Plus, Scissors, ZoomIn, MessageSquare, ChevronDown, Check, Gauge, WandSparkles, Music } from "lucide-react";
-import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import TimelineWrapper from "./TimelineWrapper";
-import Row from "./Row";
-import Item from "./Item";
-import KeyframeMarkers from "./KeyframeMarkers";
-import type { Range, Span } from "dnd-timeline";
-import type { ZoomRegion, TrimRegion, AnnotationRegion, SpeedRegion, AudioRegion, CursorTelemetryPoint, ZoomFocus } from "../types";
-import { v4 as uuidv4 } from 'uuid';
-import {
-	Check,
-	ChevronDown,
-	Gauge,
-	MessageSquare,
-	Plus,
-	Scissors,
-	WandSparkles,
-	ZoomIn,
-} from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent } from "react";
-import { toast } from "sonner";
-import { v4 as uuidv4 } from "uuid";
-import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Plus, Scissors, ZoomIn, MessageSquare, ChevronDown, Check, Gauge, WandSparkles, Music } from "lucide-react";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { v4 as uuidv4 } from 'uuid';
+import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
-import { cn } from "@/lib/utils";
 import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
 import { formatShortcut } from "@/utils/platformUtils";
 import { TutorialHelp } from "../TutorialHelp";
-import type {
-	AnnotationRegion,
-	CursorTelemetryPoint,
-	SpeedRegion,
-	TrimRegion,
-	ZoomFocus,
-	ZoomRegion,
-} from "../types";
+import TimelineWrapper from "./TimelineWrapper";
+import Row from "./Row";
 import Item from "./Item";
 import KeyframeMarkers from "./KeyframeMarkers";
-import Row from "./Row";
-import TimelineWrapper from "./TimelineWrapper";
+import type { Range, Span } from "dnd-timeline";
+import type { ZoomRegion, TrimRegion, AnnotationRegion, SpeedRegion, AudioRegion, CursorTelemetryPoint, ZoomFocus } from "../types";
 import { detectInteractionCandidates, normalizeCursorTelemetry } from "./zoomSuggestionUtils";
 
 const ZOOM_ROW_ID = "row-zoom";
