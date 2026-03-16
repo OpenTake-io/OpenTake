@@ -1,13 +1,40 @@
-import { Application, Container, Sprite, Graphics, BlurFilter, Texture } from 'pixi.js';
-import { MotionBlurFilter } from 'pixi-filters/motion-blur';
-import type { ZoomRegion, CropRegion, AnnotationRegion, SpeedRegion, CursorTelemetryPoint } from '@/components/video-editor/types';
-import { ZOOM_DEPTH_SCALES } from '@/components/video-editor/types';
-import { getAssetPath, getRenderableAssetUrl } from '@/lib/assetPath';
-import { findDominantRegion } from '@/components/video-editor/videoPlayback/zoomRegionUtils';
-import { applyZoomTransform, computeFocusFromTransform, computeZoomTransform, createMotionBlurState, type MotionBlurState } from '@/components/video-editor/videoPlayback/zoomTransform';
-import { DEFAULT_FOCUS, ZOOM_SCALE_DEADZONE, ZOOM_TRANSLATION_DEADZONE_PX } from '@/components/video-editor/videoPlayback/constants';
-import { renderAnnotations } from './annotationRenderer';
-import { PixiCursorOverlay, DEFAULT_CURSOR_CONFIG, preloadCursorAssets } from '@/components/video-editor/videoPlayback/cursorRenderer';
+import {
+  Application,
+  Container,
+  Sprite,
+  Graphics,
+  BlurFilter,
+  Texture,
+} from "pixi.js";
+import { MotionBlurFilter } from "pixi-filters/motion-blur";
+import type {
+  ZoomRegion,
+  CropRegion,
+  AnnotationRegion,
+  SpeedRegion,
+  CursorTelemetryPoint,
+} from "@/components/video-editor/types";
+import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
+import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
+import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
+import {
+  applyZoomTransform,
+  computeFocusFromTransform,
+  computeZoomTransform,
+  createMotionBlurState,
+  type MotionBlurState,
+} from "@/components/video-editor/videoPlayback/zoomTransform";
+import {
+  DEFAULT_FOCUS,
+  ZOOM_SCALE_DEADZONE,
+  ZOOM_TRANSLATION_DEADZONE_PX,
+} from "@/components/video-editor/videoPlayback/constants";
+import { renderAnnotations } from "./annotationRenderer";
+import {
+  PixiCursorOverlay,
+  DEFAULT_CURSOR_CONFIG,
+  preloadCursorAssets,
+} from "@/components/video-editor/videoPlayback/cursorRenderer";
 
 interface FrameRenderConfig {
   width: number;
@@ -34,6 +61,7 @@ interface FrameRenderConfig {
   cursorSmoothing?: number;
   cursorMotionBlur?: number;
   cursorClickBounce?: number;
+  cursorSway?: number;
 }
 
 interface AnimationState {
@@ -94,23 +122,29 @@ export class FrameRenderer {
       await preloadCursorAssets();
     } catch (error) {
       cursorOverlayEnabled = false;
-      console.warn('[FrameRenderer] Native cursor assets are unavailable; continuing export without cursor overlay.', error);
+      console.warn(
+        "[FrameRenderer] Native cursor assets are unavailable; continuing export without cursor overlay.",
+        error,
+      );
     }
 
     // Create canvas for rendering
-    const canvas = document.createElement('canvas');
+    const canvas = document.createElement("canvas");
     canvas.width = this.config.width;
     canvas.height = this.config.height;
-    
+
     // Try to set colorSpace if supported (may not be available on all platforms)
     try {
-      if (canvas && 'colorSpace' in canvas) {
+      if (canvas && "colorSpace" in canvas) {
         // @ts-ignore
-        canvas.colorSpace = 'srgb';
+        canvas.colorSpace = "srgb";
       }
     } catch (error) {
       // Silently ignore colorSpace errors on platforms that don't support it
-      console.warn('[FrameRenderer] colorSpace not supported on this platform:', error);
+      console.warn(
+        "[FrameRenderer] colorSpace not supported on this platform:",
+        error,
+      );
     }
 
     // Initialize PixiJS with optimized settings for export performance
@@ -135,10 +169,14 @@ export class FrameRenderer {
 
     if (cursorOverlayEnabled) {
       this.cursorOverlay = new PixiCursorOverlay({
-        dotRadius: DEFAULT_CURSOR_CONFIG.dotRadius * (this.config.cursorSize ?? 1.4),
-        smoothingFactor: this.config.cursorSmoothing ?? DEFAULT_CURSOR_CONFIG.smoothingFactor,
+        dotRadius:
+          DEFAULT_CURSOR_CONFIG.dotRadius * (this.config.cursorSize ?? 1.4),
+        smoothingFactor:
+          this.config.cursorSmoothing ?? DEFAULT_CURSOR_CONFIG.smoothingFactor,
         motionBlur: this.config.cursorMotionBlur ?? 0,
-        clickBounce: this.config.cursorClickBounce ?? DEFAULT_CURSOR_CONFIG.clickBounce,
+        clickBounce:
+          this.config.cursorClickBounce ?? DEFAULT_CURSOR_CONFIG.clickBounce,
+        sway: this.config.cursorSway ?? DEFAULT_CURSOR_CONFIG.sway,
       });
     }
 
@@ -154,24 +192,28 @@ export class FrameRenderer {
     this.videoContainer.filters = [this.blurFilter, this.motionBlurFilter];
 
     // Setup composite canvas for final output with shadows
-    this.compositeCanvas = document.createElement('canvas');
+    this.compositeCanvas = document.createElement("canvas");
     this.compositeCanvas.width = this.config.width;
     this.compositeCanvas.height = this.config.height;
-    this.compositeCtx = this.compositeCanvas.getContext('2d', { willReadFrequently: false });
-    
+    this.compositeCtx = this.compositeCanvas.getContext("2d", {
+      willReadFrequently: false,
+    });
+
     if (!this.compositeCtx) {
-      throw new Error('Failed to get 2D context for composite canvas');
+      throw new Error("Failed to get 2D context for composite canvas");
     }
 
     // Setup shadow canvas if needed
     if (this.config.showShadow) {
-      this.shadowCanvas = document.createElement('canvas');
+      this.shadowCanvas = document.createElement("canvas");
       this.shadowCanvas.width = this.config.width;
       this.shadowCanvas.height = this.config.height;
-      this.shadowCtx = this.shadowCanvas.getContext('2d', { willReadFrequently: false });
-      
+      this.shadowCtx = this.shadowCanvas.getContext("2d", {
+        willReadFrequently: false,
+      });
+
       if (!this.shadowCtx) {
-        throw new Error('Failed to get 2D context for shadow canvas');
+        throw new Error("Failed to get 2D context for shadow canvas");
       }
     }
 
@@ -185,44 +227,55 @@ export class FrameRenderer {
   }
 
   private async setupBackground(): Promise<void> {
-    const wallpaper = await this.resolveWallpaperForExport(this.config.wallpaper);
+    const wallpaper = await this.resolveWallpaperForExport(
+      this.config.wallpaper,
+    );
 
     // Create background canvas for separate rendering (not affected by zoom)
-    const bgCanvas = document.createElement('canvas');
+    const bgCanvas = document.createElement("canvas");
     bgCanvas.width = this.config.width;
     bgCanvas.height = this.config.height;
-    const bgCtx = bgCanvas.getContext('2d')!;
+    const bgCtx = bgCanvas.getContext("2d")!;
 
     try {
       // Render background based on type
-      if (wallpaper.startsWith('file://') || wallpaper.startsWith('data:') || wallpaper.startsWith('/') || wallpaper.startsWith('http')) {
+      if (
+        wallpaper.startsWith("file://") ||
+        wallpaper.startsWith("data:") ||
+        wallpaper.startsWith("/") ||
+        wallpaper.startsWith("http")
+      ) {
         // Image background
         const img = new Image();
         const imageUrl = await this.resolveWallpaperImageUrl(wallpaper);
         // Don't set crossOrigin for same-origin images to avoid CORS taint.
         if (
-          imageUrl.startsWith('http')
-          && window.location.origin
-          && !imageUrl.startsWith(window.location.origin)
+          imageUrl.startsWith("http") &&
+          window.location.origin &&
+          !imageUrl.startsWith(window.location.origin)
         ) {
-          img.crossOrigin = 'anonymous';
+          img.crossOrigin = "anonymous";
         }
-        
+
         await new Promise<void>((resolve, reject) => {
           img.onload = () => resolve();
           img.onerror = (err) => {
-            console.error('[FrameRenderer] Failed to load background image:', imageUrl, err);
+            console.error(
+              "[FrameRenderer] Failed to load background image:",
+              imageUrl,
+              err,
+            );
             reject(new Error(`Failed to load background image: ${imageUrl}`));
           };
           img.src = imageUrl;
         });
-        
+
         // Draw the image using cover and center positioning
         const imgAspect = img.width / img.height;
         const canvasAspect = this.config.width / this.config.height;
-        
+
         let drawWidth, drawHeight, drawX, drawY;
-        
+
         if (imgAspect > canvasAspect) {
           drawHeight = this.config.height;
           drawWidth = drawHeight * imgAspect;
@@ -234,26 +287,32 @@ export class FrameRenderer {
           drawX = 0;
           drawY = (this.config.height - drawHeight) / 2;
         }
-        
+
         bgCtx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
-      } else if (wallpaper.startsWith('#')) {
+      } else if (wallpaper.startsWith("#")) {
         bgCtx.fillStyle = wallpaper;
         bgCtx.fillRect(0, 0, this.config.width, this.config.height);
-      } else if (wallpaper.startsWith('linear-gradient') || wallpaper.startsWith('radial-gradient')) {
-        
-        const gradientMatch = wallpaper.match(/(linear|radial)-gradient\((.+)\)/);
+      } else if (
+        wallpaper.startsWith("linear-gradient") ||
+        wallpaper.startsWith("radial-gradient")
+      ) {
+        const gradientMatch = wallpaper.match(
+          /(linear|radial)-gradient\((.+)\)/,
+        );
         if (gradientMatch) {
           const [, type, params] = gradientMatch;
-          const parts = params.split(',').map(s => s.trim());
-          
+          const parts = params.split(",").map((s) => s.trim());
+
           let gradient: CanvasGradient;
-          
-          if (type === 'linear') {
+
+          if (type === "linear") {
             gradient = bgCtx.createLinearGradient(0, 0, 0, this.config.height);
             parts.forEach((part, index) => {
-              if (part.startsWith('to ') || part.includes('deg')) return;
-              
-              const colorMatch = part.match(/^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-z]+)/);
+              if (part.startsWith("to ") || part.includes("deg")) return;
+
+              const colorMatch = part.match(
+                /^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-z]+)/,
+              );
               if (colorMatch) {
                 const color = colorMatch[1];
                 const position = index / (parts.length - 1);
@@ -265,9 +324,11 @@ export class FrameRenderer {
             const cy = this.config.height / 2;
             const radius = Math.max(this.config.width, this.config.height) / 2;
             gradient = bgCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-            
+
             parts.forEach((part, index) => {
-              const colorMatch = part.match(/^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-z]+)/);
+              const colorMatch = part.match(
+                /^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-z]+)/,
+              );
               if (colorMatch) {
                 const color = colorMatch[1];
                 const position = index / (parts.length - 1);
@@ -275,12 +336,14 @@ export class FrameRenderer {
               }
             });
           }
-          
+
           bgCtx.fillStyle = gradient;
           bgCtx.fillRect(0, 0, this.config.width, this.config.height);
         } else {
-          console.warn('[FrameRenderer] Could not parse gradient, using black fallback');
-          bgCtx.fillStyle = '#000000';
+          console.warn(
+            "[FrameRenderer] Could not parse gradient, using black fallback",
+          );
+          bgCtx.fillStyle = "#000000";
           bgCtx.fillRect(0, 0, this.config.width, this.config.height);
         }
       } else {
@@ -288,8 +351,11 @@ export class FrameRenderer {
         bgCtx.fillRect(0, 0, this.config.width, this.config.height);
       }
     } catch (error) {
-      console.error('[FrameRenderer] Error setting up background, using fallback:', error);
-      bgCtx.fillStyle = '#000000';
+      console.error(
+        "[FrameRenderer] Error setting up background, using fallback:",
+        error,
+      );
+      bgCtx.fillStyle = "#000000";
       bgCtx.fillRect(0, 0, this.config.width, this.config.height);
     }
 
@@ -299,15 +365,18 @@ export class FrameRenderer {
 
   private async resolveWallpaperImageUrl(wallpaper: string): Promise<string> {
     if (
-      wallpaper.startsWith('file://')
-      || wallpaper.startsWith('data:')
-      || wallpaper.startsWith('http')
+      wallpaper.startsWith("file://") ||
+      wallpaper.startsWith("data:") ||
+      wallpaper.startsWith("http")
     ) {
       return wallpaper;
     }
 
-    const resolved = await getAssetPath(wallpaper.replace(/^\/+/, ''));
-    if (resolved.startsWith('/') && window.location.protocol.startsWith('http')) {
+    const resolved = await getAssetPath(wallpaper.replace(/^\/+/, ""));
+    if (
+      resolved.startsWith("/") &&
+      window.location.protocol.startsWith("http")
+    ) {
       return `${window.location.origin}${resolved}`;
     }
 
@@ -319,14 +388,19 @@ export class FrameRenderer {
       return wallpaper;
     }
 
-    if (wallpaper.startsWith('#') || wallpaper.startsWith('linear-gradient') || wallpaper.startsWith('radial-gradient')) {
+    if (
+      wallpaper.startsWith("#") ||
+      wallpaper.startsWith("linear-gradient") ||
+      wallpaper.startsWith("radial-gradient")
+    ) {
       return wallpaper;
     }
 
-    const looksLikeAbsoluteFilePath = wallpaper.startsWith('/')
-      && !wallpaper.startsWith('//')
-      && !wallpaper.startsWith('/wallpapers/')
-      && !wallpaper.startsWith('/app-icons/');
+    const looksLikeAbsoluteFilePath =
+      wallpaper.startsWith("/") &&
+      !wallpaper.startsWith("//") &&
+      !wallpaper.startsWith("/wallpapers/") &&
+      !wallpaper.startsWith("/app-icons/");
 
     const wallpaperAsset = looksLikeAbsoluteFilePath
       ? `file://${encodeURI(wallpaper)}`
@@ -337,7 +411,7 @@ export class FrameRenderer {
 
   async renderFrame(videoFrame: VideoFrame, timestamp: number): Promise<void> {
     if (!this.app || !this.videoContainer || !this.cameraContainer) {
-      throw new Error('Renderer not initialized');
+      throw new Error("Renderer not initialized");
     }
 
     this.currentVideoTime = timestamp / 1000000;
@@ -377,13 +451,13 @@ export class FrameRenderer {
     }
 
     const TICKS_PER_FRAME = 1;
-    
+
     let maxMotionIntensity = 0;
     for (let i = 0; i < TICKS_PER_FRAME; i++) {
       const motionIntensity = this.updateAnimationState(timeMs);
       maxMotionIntensity = Math.max(maxMotionIntensity, motionIntensity);
     }
-    
+
     // Apply transform once with maximum motion intensity from all ticks
     applyZoomTransform({
       cameraContainer: this.cameraContainer,
@@ -415,7 +489,11 @@ export class FrameRenderer {
     this.compositeWithShadows();
 
     // Render annotations on top if present
-    if (this.config.annotationRegions && this.config.annotationRegions.length > 0 && this.compositeCtx) {
+    if (
+      this.config.annotationRegions &&
+      this.config.annotationRegions.length > 0 &&
+      this.compositeCtx
+    ) {
       // Calculate scale factor based on export vs preview dimensions
       const previewWidth = this.config.previewWidth || 1920;
       const previewHeight = this.config.previewHeight || 1080;
@@ -429,14 +507,19 @@ export class FrameRenderer {
         this.config.width,
         this.config.height,
         timeMs,
-        scaleFactor
+        scaleFactor,
       );
     }
-
   }
 
   private updateLayout(): void {
-    if (!this.app || !this.videoSprite || !this.maskGraphics || !this.videoContainer) return;
+    if (
+      !this.app ||
+      !this.videoSprite ||
+      !this.maskGraphics ||
+      !this.videoContainer
+    )
+      return;
 
     const { width, height } = this.config;
     const { cropRegion, borderRadius = 0, padding = 0 } = this.config;
@@ -451,13 +534,16 @@ export class FrameRenderer {
 
     const croppedVideoWidth = videoWidth * (cropEndX - cropStartX);
     const croppedVideoHeight = videoHeight * (cropEndY - cropStartY);
-    
+
     // Calculate scale to fit in viewport
     // Padding is a percentage (0-100), where 50% ~ 0.8 scale
     const paddingScale = 1.0 - (padding / 100) * 0.4;
     const viewportWidth = width * paddingScale;
     const viewportHeight = height * paddingScale;
-    const scale = Math.min(viewportWidth / croppedVideoWidth, viewportHeight / croppedVideoHeight);
+    const scale = Math.min(
+      viewportWidth / croppedVideoWidth,
+      viewportHeight / croppedVideoHeight,
+    );
 
     this.videoSprite.scale.set(scale);
 
@@ -468,8 +554,8 @@ export class FrameRenderer {
     const centerOffsetX = (width - croppedDisplayWidth) / 2;
     const centerOffsetY = (height - croppedDisplayHeight) / 2;
 
-    const spriteX = centerOffsetX - (cropRegion.x * fullVideoDisplayWidth);
-    const spriteY = centerOffsetY - (cropRegion.y * fullVideoDisplayHeight);
+    const spriteX = centerOffsetX - cropRegion.x * fullVideoDisplayWidth;
+    const spriteY = centerOffsetY - cropRegion.y * fullVideoDisplayHeight;
     this.videoSprite.position.set(spriteX, spriteY);
 
     this.videoContainer.position.set(0, 0);
@@ -477,11 +563,20 @@ export class FrameRenderer {
     // scale border radius by export/preview canvas ratio
     const previewWidth = this.config.previewWidth || 1920;
     const previewHeight = this.config.previewHeight || 1080;
-    const canvasScaleFactor = Math.min(width / previewWidth, height / previewHeight);
+    const canvasScaleFactor = Math.min(
+      width / previewWidth,
+      height / previewHeight,
+    );
     const scaledBorderRadius = borderRadius * canvasScaleFactor;
-    
+
     this.maskGraphics.clear();
-    this.maskGraphics.roundRect(centerOffsetX, centerOffsetY, croppedDisplayWidth, croppedDisplayHeight, scaledBorderRadius);
+    this.maskGraphics.roundRect(
+      centerOffsetX,
+      centerOffsetY,
+      croppedDisplayWidth,
+      croppedDisplayHeight,
+      scaledBorderRadius,
+    );
     this.maskGraphics.fill({ color: 0xffffff });
 
     // Cache layout info
@@ -490,17 +585,26 @@ export class FrameRenderer {
       videoSize: { width: croppedVideoWidth, height: croppedVideoHeight },
       baseScale: scale,
       baseOffset: { x: spriteX, y: spriteY },
-      maskRect: { x: centerOffsetX, y: centerOffsetY, width: croppedDisplayWidth, height: croppedDisplayHeight },
+      maskRect: {
+        x: centerOffsetX,
+        y: centerOffsetY,
+        width: croppedDisplayWidth,
+        height: croppedDisplayHeight,
+      },
     };
   }
 
   private updateAnimationState(timeMs: number): number {
     if (!this.cameraContainer || !this.layoutCache) return 0;
 
-    const { region, strength, blendedScale, transition } = findDominantRegion(this.config.zoomRegions, timeMs, {
-      connectZooms: this.config.connectZooms,
-    });
-    
+    const { region, strength, blendedScale, transition } = findDominantRegion(
+      this.config.zoomRegions,
+      timeMs,
+      {
+        connectZooms: this.config.connectZooms,
+      },
+    );
+
     const defaultFocus = DEFAULT_FOCUS;
     let targetScaleFactor = 1;
     let targetFocus = { ...defaultFocus };
@@ -509,7 +613,7 @@ export class FrameRenderer {
     if (region && strength > 0) {
       const zoomScale = blendedScale ?? ZOOM_DEPTH_SCALES[region.depth];
       const regionFocus = region.focus;
-      
+
       targetScaleFactor = zoomScale;
       targetFocus = regionFocus;
       targetProgress = strength;
@@ -533,9 +637,15 @@ export class FrameRenderer {
         });
 
         const interpolatedTransform = {
-          scale: startTransform.scale + (endTransform.scale - startTransform.scale) * transition.progress,
-          x: startTransform.x + (endTransform.x - startTransform.x) * transition.progress,
-          y: startTransform.y + (endTransform.y - startTransform.y) * transition.progress,
+          scale:
+            startTransform.scale +
+            (endTransform.scale - startTransform.scale) * transition.progress,
+          x:
+            startTransform.x +
+            (endTransform.x - startTransform.x) * transition.progress,
+          y:
+            startTransform.y +
+            (endTransform.y - startTransform.y) * transition.progress,
         };
 
         targetScaleFactor = interpolatedTransform.scale;
@@ -570,15 +680,18 @@ export class FrameRenderer {
       focusY: state.focusY,
     });
 
-    state.appliedScale = Math.abs(projectedTransform.scale - prevScale) < ZOOM_SCALE_DEADZONE
-      ? projectedTransform.scale
-      : projectedTransform.scale;
-    state.x = Math.abs(projectedTransform.x - prevX) < ZOOM_TRANSLATION_DEADZONE_PX
-      ? projectedTransform.x
-      : projectedTransform.x;
-    state.y = Math.abs(projectedTransform.y - prevY) < ZOOM_TRANSLATION_DEADZONE_PX
-      ? projectedTransform.y
-      : projectedTransform.y;
+    state.appliedScale =
+      Math.abs(projectedTransform.scale - prevScale) < ZOOM_SCALE_DEADZONE
+        ? projectedTransform.scale
+        : projectedTransform.scale;
+    state.x =
+      Math.abs(projectedTransform.x - prevX) < ZOOM_TRANSLATION_DEADZONE_PX
+        ? projectedTransform.x
+        : projectedTransform.x;
+    state.y =
+      Math.abs(projectedTransform.y - prevY) < ZOOM_TRANSLATION_DEADZONE_PX
+        ? projectedTransform.y
+        : projectedTransform.y;
 
     this.lastMotionVector = {
       x: state.x - prevX,
@@ -588,7 +701,8 @@ export class FrameRenderer {
     return Math.max(
       Math.abs(state.appliedScale - prevScale),
       Math.abs(state.x - prevX) / Math.max(1, this.layoutCache.stageSize.width),
-      Math.abs(state.y - prevY) / Math.max(1, this.layoutCache.stageSize.height)
+      Math.abs(state.y - prevY) /
+        Math.max(1, this.layoutCache.stageSize.height),
     );
   }
 
@@ -606,7 +720,7 @@ export class FrameRenderer {
     // Step 1: Draw background layer (with optional blur, not affected by zoom)
     if (this.backgroundSprite) {
       const bgCanvas = this.backgroundSprite as any as HTMLCanvasElement;
-      
+
       if (this.config.backgroundBlur > 0) {
         ctx.save();
         ctx.filter = `blur(${this.config.backgroundBlur * 3}px)`;
@@ -616,15 +730,22 @@ export class FrameRenderer {
         ctx.drawImage(bgCanvas, 0, 0, w, h);
       }
     } else {
-      console.warn('[FrameRenderer] No background sprite found during compositing!');
+      console.warn(
+        "[FrameRenderer] No background sprite found during compositing!",
+      );
     }
 
     // Draw video layer with shadows on top of background
-    if (this.config.showShadow && this.config.shadowIntensity > 0 && this.shadowCanvas && this.shadowCtx) {
+    if (
+      this.config.showShadow &&
+      this.config.shadowIntensity > 0 &&
+      this.shadowCanvas &&
+      this.shadowCtx
+    ) {
       const shadowCtx = this.shadowCtx;
       shadowCtx.clearRect(0, 0, w, h);
       shadowCtx.save();
-      
+
       // Calculate shadow parameters based on intensity (0-1)
       const intensity = this.config.shadowIntensity;
       const baseBlur1 = 48 * intensity;
@@ -634,8 +755,8 @@ export class FrameRenderer {
       const baseAlpha2 = 0.5 * intensity;
       const baseAlpha3 = 0.3 * intensity;
       const baseOffset = 12 * intensity;
-      
-      shadowCtx.filter = `drop-shadow(0 ${baseOffset}px ${baseBlur1}px rgba(0,0,0,${baseAlpha1})) drop-shadow(0 ${baseOffset/3}px ${baseBlur2}px rgba(0,0,0,${baseAlpha2})) drop-shadow(0 ${baseOffset/6}px ${baseBlur3}px rgba(0,0,0,${baseAlpha3}))`;
+
+      shadowCtx.filter = `drop-shadow(0 ${baseOffset}px ${baseBlur1}px rgba(0,0,0,${baseAlpha1})) drop-shadow(0 ${baseOffset / 3}px ${baseBlur2}px rgba(0,0,0,${baseAlpha2})) drop-shadow(0 ${baseOffset / 6}px ${baseBlur3}px rgba(0,0,0,${baseAlpha3}))`;
       shadowCtx.drawImage(videoCanvas, 0, 0, w, h);
       shadowCtx.restore();
       ctx.drawImage(this.shadowCanvas, 0, 0, w, h);
@@ -646,11 +767,10 @@ export class FrameRenderer {
 
   getCanvas(): HTMLCanvasElement {
     if (!this.compositeCanvas) {
-      throw new Error('Renderer not initialized');
+      throw new Error("Renderer not initialized");
     }
     return this.compositeCanvas;
   }
-
 
   destroy(): void {
     if (this.videoSprite) {
@@ -661,7 +781,11 @@ export class FrameRenderer {
     }
     this.backgroundSprite = null;
     if (this.app) {
-      this.app.destroy(true, { children: true, texture: false, textureSource: false });
+      this.app.destroy(true, {
+        children: true,
+        texture: false,
+        textureSource: false,
+      });
       this.app = null;
     }
     this.cameraContainer = null;
@@ -679,4 +803,3 @@ export class FrameRenderer {
     this.compositeCtx = null;
   }
 }
-

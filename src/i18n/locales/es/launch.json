@@ -12,6 +12,8 @@
 		"folderPath": "Ruta: /{{name}}/",
 		"openVideoFile": "Abrir archivo de video",
 		"openProject": "Abrir proyecto",
+		"hideHudFromVideo": "Ocultar HUD en la grabación",
+		"showHudInVideo": "Mostrar HUD en la grabación",
 		"hideHud": "Ocultar HUD",
 		"closeApp": "Cerrar aplicación"
 	},

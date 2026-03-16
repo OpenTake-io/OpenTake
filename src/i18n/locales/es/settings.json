@@ -24,6 +24,7 @@
 		"off": "Desactivado",
 		"cursorMotionBlur": "Desenfoque de movimiento del cursor",
 		"cursorClickBounce": "Rebote de clic del cursor",
+		"cursorSway": "Balanceo del cursor",
 		"shadow": "Sombra",
 		"roundness": "Redondez",
 		"padding": "Relleno"
@@ -47,8 +48,8 @@
 		"quality": {
 			"low": "Baja",
 			"medium": "Media",
-			    "high": "Alta",
-			    "original": "Original"
+			"high": "Alta",
+			"original": "Original"
 		},
 		"loop": "Bucle",
 		"outputDimensions": "Salida: {{dimensions}}px",
