@@ -31,6 +31,7 @@ export function LaunchWindow() {
   const LOCALE_LABELS: Record<string, string> = { en: "EN", es: "ES", "zh-CN": "中文" };
   const {
     recording,
+    countdownActive,
     toggleRecording,
     microphoneEnabled,
     setMicrophoneEnabled,
@@ -283,7 +284,7 @@ export function LaunchWindow() {
             variant="link"
             size="sm"
             onClick={hasSelectedSource ? toggleRecording : openSourceSelector}
-            disabled={!hasSelectedSource && !recording}
+            disabled={countdownActive || (!hasSelectedSource && !recording)}
             className={`gap-1 text-white bg-transparent hover:bg-transparent px-0 text-xs ${styles.electronNoDrag}`}
           >
             {recording ? (

@@ -28,6 +28,7 @@ const MIC_GAIN_BOOST = 1.4;
 
 type UseScreenRecorderReturn = {
   recording: boolean;
+  countdownActive: boolean;
   toggleRecording: () => void;
   preparePermissions: (options?: { startup?: boolean }) => Promise<boolean>;
   isMacOS: boolean;
@@ -44,6 +45,7 @@ type UseScreenRecorderReturn = {
 export function useScreenRecorder(): UseScreenRecorderReturn {
   const [recording, setRecording] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [countdownActive, setCountdownActive] = useState(false);
   const [isMacOS, setIsMacOS] = useState(false);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(undefined);
@@ -570,7 +572,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   };
 
   const toggleRecording = async () => {
-    if (starting) {
+    if (starting || countdownActive) {
       return;
     }
 
@@ -581,9 +583,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
     // Start recording with optional countdown
     if (countdownDelay > 0) {
-      const result = await window.electronAPI.startCountdown(countdownDelay);
-      if (!result.success || result.cancelled) {
-        return;
+      setCountdownActive(true);
+      try {
+        const result = await window.electronAPI.startCountdown(countdownDelay);
+        if (!result.success || result.cancelled) {
+          return;
+        }
+      } finally {
+        setCountdownActive(false);
       }
     }
 
@@ -592,6 +599,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
   return {
     recording,
+    countdownActive,
     toggleRecording,
     preparePermissions,
     isMacOS,
