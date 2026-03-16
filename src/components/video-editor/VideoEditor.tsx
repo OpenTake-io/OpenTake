@@ -5,9 +5,9 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { useI18n } from "@/contexts/I18nContext";
-import { SUPPORTED_LOCALES } from "@/i18n/config";
-import type { AppLocale } from "@/i18n/config";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
+import type { AppLocale } from "@/i18n/config";
+import { SUPPORTED_LOCALES } from "@/i18n/config";
 import { getAssetPath } from "@/lib/assetPath";
 import {
   calculateOutputDimensions,
@@ -22,14 +22,8 @@ import {
   VideoExporter,
 } from "@/lib/exporter";
 import { matchesShortcut } from "@/lib/shortcuts";
-import {
-  DEFAULT_WALLPAPER_RELATIVE_PATH,
-  WALLPAPER_PATHS,
-} from "@/lib/wallpapers";
-import {
-  type AspectRatio,
-  getAspectRatioValue,
-} from "@/utils/aspectRatioUtils";
+import { DEFAULT_WALLPAPER_RELATIVE_PATH } from "@/lib/wallpapers";
+import { type AspectRatio, getAspectRatioValue } from "@/utils/aspectRatioUtils";
 import { ExportDialog } from "./ExportDialog";
 import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
 import PlaybackControls from "./PlaybackControls";
@@ -55,16 +49,9 @@ import {
   DEFAULT_ANNOTATION_POSITION,
   DEFAULT_ANNOTATION_SIZE,
   DEFAULT_ANNOTATION_STYLE,
-  DEFAULT_CROP_REGION,
-  DEFAULT_CURSOR_CLICK_BOUNCE,
-  DEFAULT_CURSOR_MOTION_BLUR,
-  DEFAULT_CURSOR_SIZE,
-  DEFAULT_CURSOR_SMOOTHING,
-  DEFAULT_CURSOR_SWAY,
   DEFAULT_FIGURE_DATA,
   DEFAULT_PLAYBACK_SPEED,
   DEFAULT_ZOOM_DEPTH,
-  DEFAULT_ZOOM_MOTION_BLUR,
   type FigureData,
   type PlaybackSpeed,
   type SpeedRegion,
@@ -100,12 +87,8 @@ type PendingExportSave = {
 
 function LanguageSwitcher() {
   const { locale, setLocale, t } = useI18n();
-  const idx = SUPPORTED_LOCALES.indexOf(
-    locale as (typeof SUPPORTED_LOCALES)[number],
-  );
-  const next = SUPPORTED_LOCALES[
-    (idx + 1) % SUPPORTED_LOCALES.length
-  ] as AppLocale;
+  const idx = SUPPORTED_LOCALES.indexOf(locale as (typeof SUPPORTED_LOCALES)[number]);
+  const next = SUPPORTED_LOCALES[(idx + 1) % SUPPORTED_LOCALES.length] as AppLocale;
   const labels: Record<string, string> = {
     en: "EN",
     es: "ES",
@@ -120,9 +103,7 @@ function LanguageSwitcher() {
       aria-label={t("common.app.language", "Language")}
     >
       <Languages className="h-4 w-4" />
-      <span className="text-xs font-normal">
-        {labels[locale] ?? locale.toUpperCase()}
-      </span>
+      <span className="text-xs font-normal">{labels[locale] ?? locale.toUpperCase()}</span>
     </button>
   );
 }
@@ -132,73 +113,61 @@ export default function VideoEditor() {
   const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const [videoSourcePath, setVideoSourcePath] = useState<string | null>(null);
-  const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(
-    null,
-  );
+  const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [wallpaper, setWallpaper] = useState<string>(WALLPAPER_PATHS[0]);
-  const [shadowIntensity, setShadowIntensity] = useState(0.67);
-  const [backgroundBlur, setBackgroundBlur] = useState(0);
-  const [zoomMotionBlur, setZoomMotionBlur] = useState(
-    DEFAULT_ZOOM_MOTION_BLUR,
-  );
-  const [connectZooms, setConnectZooms] = useState(true);
-  const [showCursor, setShowCursor] = useState(true);
-  const [loopCursor, setLoopCursor] = useState(false);
-  const [cursorSize, setCursorSize] = useState(DEFAULT_CURSOR_SIZE);
-  const [cursorSmoothing, setCursorSmoothing] = useState(
-    DEFAULT_CURSOR_SMOOTHING,
-  );
+  const [wallpaper, setWallpaper] = useState<string>(initialEditorPreferences.wallpaper);
+  const [shadowIntensity, setShadowIntensity] = useState(initialEditorPreferences.shadowIntensity);
+  const [backgroundBlur, setBackgroundBlur] = useState(initialEditorPreferences.backgroundBlur);
+  const [zoomMotionBlur, setZoomMotionBlur] = useState(initialEditorPreferences.zoomMotionBlur);
+  const [connectZooms, setConnectZooms] = useState(initialEditorPreferences.connectZooms);
+  const [showCursor, setShowCursor] = useState(initialEditorPreferences.showCursor);
+  const [loopCursor, setLoopCursor] = useState(initialEditorPreferences.loopCursor);
+  const [cursorSize, setCursorSize] = useState(initialEditorPreferences.cursorSize);
+  const [cursorSmoothing, setCursorSmoothing] = useState(initialEditorPreferences.cursorSmoothing);
   const [cursorMotionBlur, setCursorMotionBlur] = useState(
-    DEFAULT_CURSOR_MOTION_BLUR,
+    initialEditorPreferences.cursorMotionBlur,
   );
   const [cursorClickBounce, setCursorClickBounce] = useState(
-    DEFAULT_CURSOR_CLICK_BOUNCE,
+    initialEditorPreferences.cursorClickBounce,
   );
-  const [cursorSway, setCursorSway] = useState(DEFAULT_CURSOR_SWAY);
-  const [borderRadius, setBorderRadius] = useState(12.5);
-  const [padding, setPadding] = useState(50);
-  const [cropRegion, setCropRegion] = useState<CropRegion>(DEFAULT_CROP_REGION);
+  const [cursorSway, setCursorSway] = useState(initialEditorPreferences.cursorSway);
+  const [borderRadius, setBorderRadius] = useState(initialEditorPreferences.borderRadius);
+  const [padding, setPadding] = useState(initialEditorPreferences.padding);
+  const [cropRegion, setCropRegion] = useState<CropRegion>(initialEditorPreferences.cropRegion);
   const [zoomRegions, setZoomRegions] = useState<ZoomRegion[]>([]);
-  const [cursorTelemetry, setCursorTelemetry] = useState<
-    CursorTelemetryPoint[]
-  >([]);
+  const [cursorTelemetry, setCursorTelemetry] = useState<CursorTelemetryPoint[]>([]);
   const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
   const [trimRegions, setTrimRegions] = useState<TrimRegion[]>([]);
   const [selectedTrimId, setSelectedTrimId] = useState<string | null>(null);
   const [speedRegions, setSpeedRegions] = useState<SpeedRegion[]>([]);
   const [selectedSpeedId, setSelectedSpeedId] = useState<string | null>(null);
-  const [annotationRegions, setAnnotationRegions] = useState<
-    AnnotationRegion[]
-  >([]);
-  const [selectedAnnotationId, setSelectedAnnotationId] = useState<
-    string | null
-  >(null);
+  const [annotationRegions, setAnnotationRegions] = useState<AnnotationRegion[]>([]);
+  const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
-  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(
-    null,
-  );
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>(
-    initialEditorPreferences.aspectRatio,
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>(initialEditorPreferences.aspectRatio);
+  const [exportQuality, setExportQuality] = useState<ExportQuality>(
+    initialEditorPreferences.exportQuality,
   );
-  const [exportQuality, setExportQuality] = useState<ExportQuality>("good");
-  const [exportFormat, setExportFormat] = useState<ExportFormat>("mp4");
-  const [gifFrameRate, setGifFrameRate] = useState<GifFrameRate>(15);
-  const [gifLoop, setGifLoop] = useState(true);
-  const [gifSizePreset, setGifSizePreset] = useState<GifSizePreset>("medium");
-  const [exportedFilePath, setExportedFilePath] = useState<string | undefined>(
-    undefined,
+  const [exportFormat, setExportFormat] = useState<ExportFormat>(
+    initialEditorPreferences.exportFormat,
   );
+  const [gifFrameRate, setGifFrameRate] = useState<GifFrameRate>(
+    initialEditorPreferences.gifFrameRate,
+  );
+  const [gifLoop, setGifLoop] = useState(initialEditorPreferences.gifLoop);
+  const [gifSizePreset, setGifSizePreset] = useState<GifSizePreset>(
+    initialEditorPreferences.gifSizePreset,
+  );
+  const [exportedFilePath, setExportedFilePath] = useState<string | undefined>(undefined);
   const [hasPendingExportSave, setHasPendingExportSave] = useState(false);
-  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string | null>(
-    null,
-  );
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string | null>(null);
 
   const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
   const nextZoomIdRef = useRef(1);
@@ -216,23 +185,18 @@ export default function VideoEditor() {
   const applyingHistoryRef = useRef(false);
   const pendingExportSaveRef = useRef<PendingExportSave | null>(null);
 
-  const cloneSnapshot = useCallback(
-    (snapshot: EditorHistorySnapshot): EditorHistorySnapshot => {
-      return {
-        zoomRegions: JSON.parse(JSON.stringify(snapshot.zoomRegions)),
-        trimRegions: JSON.parse(JSON.stringify(snapshot.trimRegions)),
-        speedRegions: JSON.parse(JSON.stringify(snapshot.speedRegions)),
-        annotationRegions: JSON.parse(
-          JSON.stringify(snapshot.annotationRegions),
-        ),
-        selectedZoomId: snapshot.selectedZoomId,
-        selectedTrimId: snapshot.selectedTrimId,
-        selectedSpeedId: snapshot.selectedSpeedId,
-        selectedAnnotationId: snapshot.selectedAnnotationId,
-      };
-    },
-    [],
-  );
+  const cloneSnapshot = useCallback((snapshot: EditorHistorySnapshot): EditorHistorySnapshot => {
+    return {
+      zoomRegions: JSON.parse(JSON.stringify(snapshot.zoomRegions)),
+      trimRegions: JSON.parse(JSON.stringify(snapshot.trimRegions)),
+      speedRegions: JSON.parse(JSON.stringify(snapshot.speedRegions)),
+      annotationRegions: JSON.parse(JSON.stringify(snapshot.annotationRegions)),
+      selectedZoomId: snapshot.selectedZoomId,
+      selectedTrimId: snapshot.selectedTrimId,
+      selectedSpeedId: snapshot.selectedSpeedId,
+      selectedAnnotationId: snapshot.selectedAnnotationId,
+    };
+  }, []);
 
   const buildHistorySnapshot = useCallback((): EditorHistorySnapshot => {
     return {
@@ -286,10 +250,7 @@ export default function VideoEditor() {
         cloned.annotationRegions.map((region) => region.id),
       );
       nextAnnotationZIndexRef.current =
-        cloned.annotationRegions.reduce(
-          (max, region) => Math.max(max, region.zIndex),
-          0,
-        ) + 1;
+        cloned.annotationRegions.reduce((max, region) => Math.max(max, region.zIndex), 0) + 1;
     },
     [cloneSnapshot],
   );
@@ -297,8 +258,7 @@ export default function VideoEditor() {
   const handleUndo = useCallback(() => {
     if (historyPastRef.current.length === 0) return;
 
-    const current =
-      historyCurrentRef.current ?? cloneSnapshot(buildHistorySnapshot());
+    const current = historyCurrentRef.current ?? cloneSnapshot(buildHistorySnapshot());
     const previous = historyPastRef.current.pop();
     if (!previous) return;
 
@@ -310,8 +270,7 @@ export default function VideoEditor() {
   const handleRedo = useCallback(() => {
     if (historyFutureRef.current.length === 0) return;
 
-    const current =
-      historyCurrentRef.current ?? cloneSnapshot(buildHistorySnapshot());
+    const current = historyCurrentRef.current ?? cloneSnapshot(buildHistorySnapshot());
     const next = historyFutureRef.current.pop();
     if (!next) return;
 
@@ -320,94 +279,86 @@ export default function VideoEditor() {
     applyHistorySnapshot(next);
   }, [applyHistorySnapshot, buildHistorySnapshot, cloneSnapshot]);
 
-  const applyLoadedProject = useCallback(
-    async (candidate: unknown, path?: string | null) => {
-      if (!validateProjectData(candidate)) {
-        return false;
-      }
+  const applyLoadedProject = useCallback(async (candidate: unknown, path?: string | null) => {
+    if (!validateProjectData(candidate)) {
+      return false;
+    }
 
-      const project = candidate;
-      const sourcePath = fromFileUrl(project.videoPath);
-      const normalizedEditor = normalizeProjectEditor(project.editor);
+    const project = candidate;
+    const sourcePath = fromFileUrl(project.videoPath);
+    const normalizedEditor = normalizeProjectEditor(project.editor);
 
-      try {
-        videoPlaybackRef.current?.pause();
-      } catch {
-        // no-op
-      }
-      setIsPlaying(false);
-      setCurrentTime(0);
-      setDuration(0);
+    try {
+      videoPlaybackRef.current?.pause();
+    } catch {
+      // no-op
+    }
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
 
-      setError(null);
-      setVideoSourcePath(sourcePath);
-      setVideoPath(toFileUrl(sourcePath));
-      setCurrentProjectPath(path ?? null);
+    setError(null);
+    setVideoSourcePath(sourcePath);
+    setVideoPath(toFileUrl(sourcePath));
+    setCurrentProjectPath(path ?? null);
 
-      setWallpaper(normalizedEditor.wallpaper);
-      setShadowIntensity(normalizedEditor.shadowIntensity);
-      setBackgroundBlur(normalizedEditor.backgroundBlur);
-      setZoomMotionBlur(normalizedEditor.zoomMotionBlur);
-      setConnectZooms(normalizedEditor.connectZooms);
-      setShowCursor(normalizedEditor.showCursor);
-      setLoopCursor(normalizedEditor.loopCursor);
-      setCursorSize(normalizedEditor.cursorSize);
-      setCursorSmoothing(normalizedEditor.cursorSmoothing);
-      setCursorMotionBlur(normalizedEditor.cursorMotionBlur);
-      setCursorClickBounce(normalizedEditor.cursorClickBounce);
-      setCursorSway(normalizedEditor.cursorSway);
-      setBorderRadius(normalizedEditor.borderRadius);
-      setPadding(normalizedEditor.padding);
-      setCropRegion(normalizedEditor.cropRegion);
-      setZoomRegions(normalizedEditor.zoomRegions);
-      setTrimRegions(normalizedEditor.trimRegions);
-      setSpeedRegions(normalizedEditor.speedRegions);
-      setAnnotationRegions(normalizedEditor.annotationRegions);
-      setAspectRatio(normalizedEditor.aspectRatio);
-      setExportQuality(normalizedEditor.exportQuality);
-      setExportFormat(normalizedEditor.exportFormat);
-      setGifFrameRate(normalizedEditor.gifFrameRate);
-      setGifLoop(normalizedEditor.gifLoop);
-      setGifSizePreset(normalizedEditor.gifSizePreset);
+    setWallpaper(normalizedEditor.wallpaper);
+    setShadowIntensity(normalizedEditor.shadowIntensity);
+    setBackgroundBlur(normalizedEditor.backgroundBlur);
+    setZoomMotionBlur(normalizedEditor.zoomMotionBlur);
+    setConnectZooms(normalizedEditor.connectZooms);
+    setShowCursor(normalizedEditor.showCursor);
+    setLoopCursor(normalizedEditor.loopCursor);
+    setCursorSize(normalizedEditor.cursorSize);
+    setCursorSmoothing(normalizedEditor.cursorSmoothing);
+    setCursorMotionBlur(normalizedEditor.cursorMotionBlur);
+    setCursorClickBounce(normalizedEditor.cursorClickBounce);
+    setCursorSway(normalizedEditor.cursorSway);
+    setBorderRadius(normalizedEditor.borderRadius);
+    setPadding(normalizedEditor.padding);
+    setCropRegion(normalizedEditor.cropRegion);
+    setZoomRegions(normalizedEditor.zoomRegions);
+    setTrimRegions(normalizedEditor.trimRegions);
+    setSpeedRegions(normalizedEditor.speedRegions);
+    setAnnotationRegions(normalizedEditor.annotationRegions);
+    setAspectRatio(normalizedEditor.aspectRatio);
+    setExportQuality(normalizedEditor.exportQuality);
+    setExportFormat(normalizedEditor.exportFormat);
+    setGifFrameRate(normalizedEditor.gifFrameRate);
+    setGifLoop(normalizedEditor.gifLoop);
+    setGifSizePreset(normalizedEditor.gifSizePreset);
 
-      setSelectedZoomId(null);
-      setSelectedTrimId(null);
-      setSelectedSpeedId(null);
-      setSelectedAnnotationId(null);
+    setSelectedZoomId(null);
+    setSelectedTrimId(null);
+    setSelectedSpeedId(null);
+    setSelectedAnnotationId(null);
 
-      nextZoomIdRef.current = deriveNextId(
-        "zoom",
-        normalizedEditor.zoomRegions.map((region) => region.id),
-      );
-      nextTrimIdRef.current = deriveNextId(
-        "trim",
-        normalizedEditor.trimRegions.map((region) => region.id),
-      );
-      nextSpeedIdRef.current = deriveNextId(
-        "speed",
-        normalizedEditor.speedRegions.map((region) => region.id),
-      );
-      nextAnnotationIdRef.current = deriveNextId(
-        "annotation",
-        normalizedEditor.annotationRegions.map((region) => region.id),
-      );
-      nextAnnotationZIndexRef.current =
-        normalizedEditor.annotationRegions.reduce(
-          (max, region) => Math.max(max, region.zIndex),
-          0,
-        ) + 1;
+    nextZoomIdRef.current = deriveNextId(
+      "zoom",
+      normalizedEditor.zoomRegions.map((region) => region.id),
+    );
+    nextTrimIdRef.current = deriveNextId(
+      "trim",
+      normalizedEditor.trimRegions.map((region) => region.id),
+    );
+    nextSpeedIdRef.current = deriveNextId(
+      "speed",
+      normalizedEditor.speedRegions.map((region) => region.id),
+    );
+    nextAnnotationIdRef.current = deriveNextId(
+      "annotation",
+      normalizedEditor.annotationRegions.map((region) => region.id),
+    );
+    nextAnnotationZIndexRef.current =
+      normalizedEditor.annotationRegions.reduce((max, region) => Math.max(max, region.zIndex), 0) +
+      1;
 
-      setLastSavedSnapshot(
-        JSON.stringify(createProjectData(sourcePath, normalizedEditor)),
-      );
-      return true;
-    },
-    [],
-  );
+    setLastSavedSnapshot(JSON.stringify(createProjectData(sourcePath, normalizedEditor)));
+    return true;
+  }, []);
 
   const currentProjectSnapshot = useMemo(() => {
-    const sourcePath =
-      videoSourcePath ?? (videoPath ? fromFileUrl(videoPath) : null);
+    const sourcePath = videoSourcePath ?? (videoPath ? fromFileUrl(videoPath) : null);
     if (!sourcePath) {
       return null;
     }
@@ -500,16 +451,15 @@ export default function VideoEditor() {
 
   const hasUnsavedChanges = Boolean(
     currentProjectPath &&
-    currentProjectSnapshot &&
-    lastSavedSnapshot &&
-    currentProjectSnapshot !== lastSavedSnapshot,
+      currentProjectSnapshot &&
+      lastSavedSnapshot &&
+      currentProjectSnapshot !== lastSavedSnapshot,
   );
 
   useEffect(() => {
     async function loadInitialData() {
       try {
-        const currentProjectResult =
-          await window.electronAPI.loadCurrentProjectFile();
+        const currentProjectResult = await window.electronAPI.loadCurrentProjectFile();
         if (currentProjectResult.success && currentProjectResult.project) {
           const restored = await applyLoadedProject(
             currentProjectResult.project,
@@ -541,8 +491,52 @@ export default function VideoEditor() {
   }, [applyLoadedProject]);
 
   useEffect(() => {
-    saveEditorPreferences({ aspectRatio });
-  }, [aspectRatio]);
+    saveEditorPreferences({
+      wallpaper,
+      shadowIntensity,
+      backgroundBlur,
+      zoomMotionBlur,
+      connectZooms,
+      showCursor,
+      loopCursor,
+      cursorSize,
+      cursorSmoothing,
+      cursorMotionBlur,
+      cursorClickBounce,
+      cursorSway,
+      borderRadius,
+      padding,
+      cropRegion,
+      aspectRatio,
+      exportQuality,
+      exportFormat,
+      gifFrameRate,
+      gifLoop,
+      gifSizePreset,
+    });
+  }, [
+    wallpaper,
+    shadowIntensity,
+    backgroundBlur,
+    zoomMotionBlur,
+    connectZooms,
+    showCursor,
+    loopCursor,
+    cursorSize,
+    cursorSmoothing,
+    cursorMotionBlur,
+    cursorClickBounce,
+    cursorSway,
+    borderRadius,
+    padding,
+    cropRegion,
+    aspectRatio,
+    exportQuality,
+    exportFormat,
+    gifFrameRate,
+    gifLoop,
+    gifSizePreset,
+  ]);
 
   const saveProject = useCallback(
     async (forceSaveAs: boolean) => {
@@ -692,10 +686,7 @@ export default function VideoEditor() {
       return;
     }
 
-    const restored = await applyLoadedProject(
-      result.project,
-      result.path ?? null,
-    );
+    const restored = await applyLoadedProject(result.project, result.path ?? null);
     if (!restored) {
       toast.error("Invalid project file format");
       return;
@@ -705,12 +696,9 @@ export default function VideoEditor() {
   }, [applyLoadedProject]);
 
   useEffect(() => {
-    const removeLoadListener =
-      window.electronAPI.onMenuLoadProject(handleLoadProject);
-    const removeSaveListener =
-      window.electronAPI.onMenuSaveProject(handleSaveProject);
-    const removeSaveAsListener =
-      window.electronAPI.onMenuSaveProjectAs(handleSaveProjectAs);
+    const removeLoadListener = window.electronAPI.onMenuLoadProject(handleLoadProject);
+    const removeSaveListener = window.electronAPI.onMenuSaveProject(handleSaveProject);
+    const removeSaveAsListener = window.electronAPI.onMenuSaveProjectAs(handleSaveProjectAs);
 
     return () => {
       removeLoadListener?.();
@@ -731,9 +719,7 @@ export default function VideoEditor() {
       }
 
       try {
-        const result = await window.electronAPI.getCursorTelemetry(
-          fromFileUrl(videoPath),
-        );
+        const result = await window.electronAPI.getCursorTelemetry(fromFileUrl(videoPath));
         if (mounted) {
           setCursorTelemetry(result.success ? result.samples : []);
         }
@@ -797,11 +783,9 @@ export default function VideoEditor() {
       return zoomRegions;
     }
 
-    const dominantAtStart = findDominantRegion(
-      zoomRegions,
-      displayedTimelineWindow.startMs,
-      { connectZooms },
-    ).region;
+    const dominantAtStart = findDominantRegion(zoomRegions, displayedTimelineWindow.startMs, {
+      connectZooms,
+    }).region;
     if (!dominantAtStart) {
       return zoomRegions;
     }
@@ -821,10 +805,7 @@ export default function VideoEditor() {
       },
     };
 
-    return [
-      ...zoomRegions.filter((region) => region.id !== loopEndRegion.id),
-      loopEndRegion,
-    ];
+    return [...zoomRegions.filter((region) => region.id !== loopEndRegion.id), loopEndRegion];
   }, [loopCursor, zoomRegions, displayedTimelineWindow, connectZooms]);
 
   useEffect(() => {
@@ -854,9 +835,7 @@ export default function VideoEditor() {
 
     const DEFAULT_DURATION_MS = 1100;
     const MIN_SPACING_MS = 1800;
-    const sortedCandidates = [...candidates].sort(
-      (a, b) => b.strength - a.strength,
-    );
+    const sortedCandidates = [...candidates].sort((a, b) => b.strength - a.strength);
     const acceptedCenters: number[] = [];
 
     setZoomRegions((prev) => {
@@ -870,25 +849,17 @@ export default function VideoEditor() {
 
       sortedCandidates.forEach((candidate) => {
         const tooCloseToAccepted = acceptedCenters.some(
-          (center) =>
-            Math.abs(center - candidate.centerTimeMs) < MIN_SPACING_MS,
+          (center) => Math.abs(center - candidate.centerTimeMs) < MIN_SPACING_MS,
         );
         if (tooCloseToAccepted) {
           return;
         }
 
-        const centeredStart = Math.round(
-          candidate.centerTimeMs - DEFAULT_DURATION_MS / 2,
-        );
-        const startMs = Math.max(
-          0,
-          Math.min(centeredStart, totalMs - DEFAULT_DURATION_MS),
-        );
+        const centeredStart = Math.round(candidate.centerTimeMs - DEFAULT_DURATION_MS / 2);
+        const startMs = Math.max(0, Math.min(centeredStart, totalMs - DEFAULT_DURATION_MS));
         const endMs = Math.min(totalMs, startMs + DEFAULT_DURATION_MS);
 
-        const hasOverlap = reservedSpans.some(
-          (span) => endMs > span.start && startMs < span.end,
-        );
+        const hasOverlap = reservedSpans.some((span) => endMs > span.start && startMs < span.end);
         if (hasOverlap) {
           return;
         }
@@ -920,9 +891,7 @@ export default function VideoEditor() {
     let mounted = true;
     (async () => {
       try {
-        const resolvedPath = await getAssetPath(
-          DEFAULT_WALLPAPER_RELATIVE_PATH,
-        );
+        const resolvedPath = await getAssetPath(DEFAULT_WALLPAPER_RELATIVE_PATH);
         if (mounted) {
           setWallpaper(resolvedPath);
         }
@@ -1149,9 +1118,7 @@ export default function VideoEditor() {
     (speed: PlaybackSpeed) => {
       if (!selectedSpeedId) return;
       setSpeedRegions((prev) =>
-        prev.map((region) =>
-          region.id === selectedSpeedId ? { ...region, speed } : region,
-        ),
+        prev.map((region) => (region.id === selectedSpeedId ? { ...region, speed } : region)),
       );
     },
     [selectedSpeedId],
@@ -1201,85 +1168,70 @@ export default function VideoEditor() {
     [selectedAnnotationId],
   );
 
-  const handleAnnotationContentChange = useCallback(
-    (id: string, content: string) => {
-      setAnnotationRegions((prev) => {
-        const updated = prev.map((region) => {
-          if (region.id !== id) return region;
+  const handleAnnotationContentChange = useCallback((id: string, content: string) => {
+    setAnnotationRegions((prev) => {
+      const updated = prev.map((region) => {
+        if (region.id !== id) return region;
 
-          // Store content in type-specific fields
-          if (region.type === "text") {
-            return { ...region, content, textContent: content };
-          } else if (region.type === "image") {
-            return { ...region, content, imageContent: content };
-          } else {
-            return { ...region, content };
-          }
-        });
-        return updated;
+        // Store content in type-specific fields
+        if (region.type === "text") {
+          return { ...region, content, textContent: content };
+        } else if (region.type === "image") {
+          return { ...region, content, imageContent: content };
+        } else {
+          return { ...region, content };
+        }
       });
-    },
-    [],
-  );
+      return updated;
+    });
+  }, []);
 
-  const handleAnnotationTypeChange = useCallback(
-    (id: string, type: AnnotationRegion["type"]) => {
-      setAnnotationRegions((prev) => {
-        const updated = prev.map((region) => {
-          if (region.id !== id) return region;
+  const handleAnnotationTypeChange = useCallback((id: string, type: AnnotationRegion["type"]) => {
+    setAnnotationRegions((prev) => {
+      const updated = prev.map((region) => {
+        if (region.id !== id) return region;
 
-          const updatedRegion = { ...region, type };
+        const updatedRegion = { ...region, type };
 
-          // Restore content from type-specific storage
-          if (type === "text") {
-            updatedRegion.content = region.textContent || "Enter text...";
-          } else if (type === "image") {
-            updatedRegion.content = region.imageContent || "";
-          } else if (type === "figure") {
-            updatedRegion.content = "";
-            if (!region.figureData) {
-              updatedRegion.figureData = { ...DEFAULT_FIGURE_DATA };
-            }
+        // Restore content from type-specific storage
+        if (type === "text") {
+          updatedRegion.content = region.textContent || "Enter text...";
+        } else if (type === "image") {
+          updatedRegion.content = region.imageContent || "";
+        } else if (type === "figure") {
+          updatedRegion.content = "";
+          if (!region.figureData) {
+            updatedRegion.figureData = { ...DEFAULT_FIGURE_DATA };
           }
+        }
 
-          return updatedRegion;
-        });
-        return updated;
+        return updatedRegion;
       });
-    },
-    [],
-  );
+      return updated;
+    });
+  }, []);
 
   const handleAnnotationStyleChange = useCallback(
     (id: string, style: Partial<AnnotationRegion["style"]>) => {
       setAnnotationRegions((prev) =>
         prev.map((region) =>
-          region.id === id
-            ? { ...region, style: { ...region.style, ...style } }
-            : region,
+          region.id === id ? { ...region, style: { ...region.style, ...style } } : region,
         ),
       );
     },
     [],
   );
 
-  const handleAnnotationFigureDataChange = useCallback(
-    (id: string, figureData: FigureData) => {
-      setAnnotationRegions((prev) =>
-        prev.map((region) =>
-          region.id === id ? { ...region, figureData } : region,
-        ),
-      );
-    },
-    [],
-  );
+  const handleAnnotationFigureDataChange = useCallback((id: string, figureData: FigureData) => {
+    setAnnotationRegions((prev) =>
+      prev.map((region) => (region.id === id ? { ...region, figureData } : region)),
+    );
+  }, []);
 
   const handleAnnotationPositionChange = useCallback(
     (id: string, position: { x: number; y: number }) => {
       setAnnotationRegions((prev) =>
-        prev.map((region) =>
-          region.id === id ? { ...region, position } : region,
-        ),
+        prev.map((region) => (region.id === id ? { ...region, position } : region)),
       );
     },
     [],
@@ -1353,24 +1305,17 @@ export default function VideoEditor() {
     };
 
     window.addEventListener("keydown", handleKeyDown, { capture: true });
-    return () =>
-      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
   }, [shortcuts, isMac, handleUndo, handleRedo]);
 
   useEffect(() => {
-    if (
-      selectedZoomId &&
-      !zoomRegions.some((region) => region.id === selectedZoomId)
-    ) {
+    if (selectedZoomId && !zoomRegions.some((region) => region.id === selectedZoomId)) {
       setSelectedZoomId(null);
     }
   }, [selectedZoomId, zoomRegions]);
 
   useEffect(() => {
-    if (
-      selectedTrimId &&
-      !trimRegions.some((region) => region.id === selectedTrimId)
-    ) {
+    if (selectedTrimId && !trimRegions.some((region) => region.id === selectedTrimId)) {
       setSelectedTrimId(null);
     }
   }, [selectedTrimId, trimRegions]);
@@ -1385,10 +1330,7 @@ export default function VideoEditor() {
   }, [selectedAnnotationId, annotationRegions]);
 
   useEffect(() => {
-    if (
-      selectedSpeedId &&
-      !speedRegions.some((region) => region.id === selectedSpeedId)
-    ) {
+    if (selectedSpeedId && !speedRegions.some((region) => region.id === selectedSpeedId)) {
       setSelectedSpeedId(null);
     }
   }, [selectedSpeedId, speedRegions]);
@@ -1402,9 +1344,7 @@ export default function VideoEditor() {
             const result = await window.electronAPI.revealInFolder(filePath);
             if (!result.success) {
               const errorMessage =
-                result.error ||
-                result.message ||
-                "Failed to reveal item in folder.";
+                result.error || result.message || "Failed to reveal item in folder.";
               toast.error(errorMessage);
             }
           } catch (err) {
@@ -1445,12 +1385,8 @@ export default function VideoEditor() {
 
         const sourceWidth = video.videoWidth || 1920;
         const sourceHeight = video.videoHeight || 1080;
-        const sourceAspectRatio =
-          sourceHeight > 0 ? sourceWidth / sourceHeight : 16 / 9;
-        const aspectRatioValue = getAspectRatioValue(
-          aspectRatio,
-          sourceAspectRatio,
-        );
+        const sourceAspectRatio = sourceHeight > 0 ? sourceWidth / sourceHeight : 16 / 9;
+        const aspectRatioValue = getAspectRatioValue(aspectRatio, sourceAspectRatio);
 
         // Get preview CONTAINER dimensions for scaling
         const playbackRef = videoPlaybackRef.current;
@@ -1503,10 +1439,7 @@ export default function VideoEditor() {
             const timestamp = Date.now();
             const fileName = `export-${timestamp}.gif`;
 
-            const saveResult = await window.electronAPI.saveExportedVideo(
-              arrayBuffer,
-              fileName,
-            );
+            const saveResult = await window.electronAPI.saveExportedVideo(arrayBuffer, fileName);
 
             if (saveResult.canceled) {
               pendingExportSaveRef.current = { arrayBuffer, fileName };
@@ -1514,9 +1447,7 @@ export default function VideoEditor() {
               setExportError(
                 "Save dialog canceled. Click Save Again to save without re-rendering.",
               );
-              toast.info(
-                "Save canceled. You can save again without re-exporting.",
-              );
+              toast.info("Save canceled. You can save again without re-exporting.");
               keepExportDialogOpen = true;
             } else if (saveResult.success && saveResult.path) {
               showExportSuccessToast(saveResult.path);
@@ -1546,8 +1477,7 @@ export default function VideoEditor() {
               exportHeight = Math.floor(sourceHeight / 2) * 2;
             } else if (aspectRatioValue === 1) {
               // Square (1:1): use smaller dimension to avoid codec limits
-              const baseDimension =
-                Math.floor(Math.min(sourceWidth, sourceHeight) / 2) * 2;
+              const baseDimension = Math.floor(Math.min(sourceWidth, sourceHeight) / 2) * 2;
               exportWidth = baseDimension;
               exportHeight = baseDimension;
             } else if (aspectRatioValue > 1) {
@@ -1556,10 +1486,7 @@ export default function VideoEditor() {
               let found = false;
               for (let w = baseWidth; w >= 100 && !found; w -= 2) {
                 const h = Math.round(w / aspectRatioValue);
-                if (
-                  h % 2 === 0 &&
-                  Math.abs(w / h - aspectRatioValue) < 0.0001
-                ) {
+                if (h % 2 === 0 && Math.abs(w / h - aspectRatioValue) < 0.0001) {
                   exportWidth = w;
                   exportHeight = h;
                   found = true;
@@ -1575,10 +1502,7 @@ export default function VideoEditor() {
               let found = false;
               for (let h = baseHeight; h >= 100 && !found; h -= 2) {
                 const w = Math.round(h * aspectRatioValue);
-                if (
-                  w % 2 === 0 &&
-                  Math.abs(w / h - aspectRatioValue) < 0.0001
-                ) {
+                if (w % 2 === 0 && Math.abs(w / h - aspectRatioValue) < 0.0001) {
                   exportWidth = w;
                   exportHeight = h;
                   found = true;
@@ -1586,8 +1510,7 @@ export default function VideoEditor() {
               }
               if (!found) {
                 exportHeight = baseHeight;
-                exportWidth =
-                  Math.floor((baseHeight * aspectRatioValue) / 2) * 2;
+                exportWidth = Math.floor((baseHeight * aspectRatioValue) / 2) * 2;
               }
             }
 
@@ -1660,10 +1583,7 @@ export default function VideoEditor() {
             const timestamp = Date.now();
             const fileName = `export-${timestamp}.mp4`;
 
-            const saveResult = await window.electronAPI.saveExportedVideo(
-              arrayBuffer,
-              fileName,
-            );
+            const saveResult = await window.electronAPI.saveExportedVideo(arrayBuffer, fileName);
 
             if (saveResult.canceled) {
               pendingExportSaveRef.current = { arrayBuffer, fileName };
@@ -1671,9 +1591,7 @@ export default function VideoEditor() {
               setExportError(
                 "Save dialog canceled. Click Save Again to save without re-rendering.",
               );
-              toast.info(
-                "Save canceled. You can save again without re-exporting.",
-              );
+              toast.info("Save canceled. You can save again without re-exporting.");
               keepExportDialogOpen = true;
             } else if (saveResult.success && saveResult.path) {
               showExportSuccessToast(saveResult.path);
@@ -1696,8 +1614,7 @@ export default function VideoEditor() {
         }
       } catch (error) {
         console.error("Export error:", error);
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
         setExportError(errorMessage);
         toast.error(`Export failed: ${errorMessage}`);
       } finally {
@@ -1746,9 +1663,7 @@ export default function VideoEditor() {
 
     if (hasPendingExportSave) {
       setShowExportDialog(true);
-      setExportError(
-        "Save dialog canceled. Click Save Again to save without re-rendering.",
-      );
+      setExportError("Save dialog canceled. Click Save Again to save without re-rendering.");
       return;
     }
 
@@ -1828,9 +1743,7 @@ export default function VideoEditor() {
     );
 
     if (saveResult.canceled) {
-      setExportError(
-        "Save dialog canceled. Click Save Again to save without re-rendering.",
-      );
+      setExportError("Save dialog canceled. Click Save Again to save without re-rendering.");
       toast.info("Save canceled. You can try again.");
       return;
     }
@@ -1854,9 +1767,7 @@ export default function VideoEditor() {
     try {
       const result = await window.electronAPI.openRecordingsFolder();
       if (!result.success) {
-        toast.error(
-          result.message || result.error || "Failed to open recordings folder.",
-        );
+        toast.error(result.message || result.error || "Failed to open recordings folder.");
       }
     } catch (error) {
       toast.error(`Failed to open recordings folder: ${String(error)}`);
@@ -1893,9 +1804,7 @@ export default function VideoEditor() {
         className="relative h-10 flex-shrink-0 bg-[#09090b]/80 backdrop-blur-md border-b border-white/5 flex items-center justify-center px-6 z-50"
         style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
       >
-        <span className="text-sm font-semibold tracking-tight text-white/90">
-          Recordly
-        </span>
+        <span className="text-sm font-semibold tracking-tight text-white/90">Recordly</span>
         <div
           className="absolute right-4 flex items-center gap-1"
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
@@ -1906,10 +1815,7 @@ export default function VideoEditor() {
             onClick={() => void openRecordingsFolder()}
             className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-white/90 transition hover:bg-white/8 hover:text-white cursor-pointer"
             title={t("common.app.manageRecordings", "Open recordings folder")}
-            aria-label={t(
-              "common.app.manageRecordings",
-              "Open recordings folder",
-            )}
+            aria-label={t("common.app.manageRecordings", "Open recordings folder")}
           >
             <FolderOpen className="h-4 w-4" />
             <span className="text-xs font-normal">
@@ -1941,9 +1847,7 @@ export default function VideoEditor() {
                         (() => {
                           const previewVideo = videoPlaybackRef.current?.video;
                           if (previewVideo && previewVideo.videoHeight > 0) {
-                            return (
-                              previewVideo.videoWidth / previewVideo.videoHeight
-                            );
+                            return previewVideo.videoWidth / previewVideo.videoHeight;
                           }
                           return 16 / 9;
                         })(),
@@ -1982,9 +1886,7 @@ export default function VideoEditor() {
                       annotationRegions={annotationRegions}
                       selectedAnnotationId={selectedAnnotationId}
                       onSelectAnnotation={handleSelectAnnotation}
-                      onAnnotationPositionChange={
-                        handleAnnotationPositionChange
-                      }
+                      onAnnotationPositionChange={handleAnnotationPositionChange}
                       onAnnotationSizeChange={handleAnnotationSizeChange}
                       cursorTelemetry={effectiveCursorTelemetry}
                       showCursor={showCursor}
@@ -2069,13 +1971,9 @@ export default function VideoEditor() {
           selected={wallpaper}
           onWallpaperChange={setWallpaper}
           selectedZoomDepth={
-            selectedZoomId
-              ? zoomRegions.find((z) => z.id === selectedZoomId)?.depth
-              : null
+            selectedZoomId ? zoomRegions.find((z) => z.id === selectedZoomId)?.depth : null
           }
-          onZoomDepthChange={(depth) =>
-            selectedZoomId && handleZoomDepthChange(depth)
-          }
+          onZoomDepthChange={(depth) => selectedZoomId && handleZoomDepthChange(depth)}
           selectedZoomId={selectedZoomId}
           onZoomDelete={handleZoomDelete}
           selectedTrimId={selectedTrimId}
@@ -2139,8 +2037,7 @@ export default function VideoEditor() {
           selectedSpeedId={selectedSpeedId}
           selectedSpeedValue={
             selectedSpeedId
-              ? (speedRegions.find((r) => r.id === selectedSpeedId)?.speed ??
-                null)
+              ? (speedRegions.find((r) => r.id === selectedSpeedId)?.speed ?? null)
               : null
           }
           onSpeedChange={handleSpeedChange}
