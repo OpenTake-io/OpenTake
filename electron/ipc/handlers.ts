@@ -1634,7 +1634,6 @@ export function registerIpcHandlers(
     if (process.platform !== 'darwin' || !includeWindows) {
       const windowSources = electronSources
         .filter((source) => source.id.startsWith('window:'))
-        .filter((source) => hasUsableSourceThumbnail(source.thumbnail))
         .filter((source) => {
           const normalizedName = normalizeDesktopSourceName(source.name)
           if (!normalizedName) {
@@ -1658,7 +1657,7 @@ export function registerIpcHandlers(
           id: source.id,
           name: source.name,
           display_id: source.display_id,
-          thumbnail: source.thumbnail ? source.thumbnail.toDataURL() : null,
+          thumbnail: hasUsableSourceThumbnail(source.thumbnail) ? source.thumbnail!.toDataURL() : null,
           appIcon: source.appIcon ? source.appIcon.toDataURL() : null,
         }))
 
@@ -1705,13 +1704,14 @@ export function registerIpcHandlers(
             id: source.id,
             name: source.name,
             display_id: source.display_id ?? electronWindowSource?.display_id ?? '',
-            thumbnail: electronWindowSource?.thumbnail ? electronWindowSource.thumbnail.toDataURL() : null,
+            thumbnail: hasUsableSourceThumbnail(electronWindowSource?.thumbnail)
+              ? electronWindowSource!.thumbnail.toDataURL()
+              : null,
             appIcon: source.appIcon ?? (electronWindowSource?.appIcon ? electronWindowSource.appIcon.toDataURL() : null),
             appName: source.appName,
             windowTitle: source.windowTitle,
           }
         })
-        .filter((source) => Boolean(source.thumbnail))
 
       return [...screenSources, ...mergedWindowSources]
     } catch (error) {
@@ -1719,7 +1719,6 @@ export function registerIpcHandlers(
 
       const windowSources = electronSources
         .filter((source) => source.id.startsWith('window:'))
-        .filter((source) => hasUsableSourceThumbnail(source.thumbnail))
         .filter((source) => {
           const normalizedName = normalizeDesktopSourceName(source.name)
           if (!normalizedName) {
@@ -1743,7 +1742,7 @@ export function registerIpcHandlers(
           id: source.id,
           name: source.name,
           display_id: source.display_id,
-          thumbnail: source.thumbnail ? source.thumbnail.toDataURL() : null,
+          thumbnail: hasUsableSourceThumbnail(source.thumbnail) ? source.thumbnail!.toDataURL() : null,
           appIcon: source.appIcon ? source.appIcon.toDataURL() : null,
         }))
 
