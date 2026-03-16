@@ -14,8 +14,7 @@ Language: EN | [简中](README.zh-CN.md)
 ### Create polished, pro-grade screen recordings.
 [Recordly](https://www.recordly.dev) is an **open-source screen recorder and editor** for creating **polished walkthroughs, demos, tutorials, and product videos**. Contribution encouraged.
 
-**FAQ**: What are the changes between this and **Openscreen**? A: Recordly adds a full cursor animation/rendering pipeline, native screen capture for Mac and Windows, zoom animations faithful to Screen Studio, cursor loops, audio tracks, and more major tweaks.
-> This fork exists because the original maintainer does not wish implementing the architectural changes that make some of these features possible i.e. different recording pipeline.
+**FAQ**: What are the changes between this and the **upstream project?** A: Recordly adds a full cursor animation/rendering pipeline, native macOS and Windows screen recording system, zoom animations faithful to Screen Studio, cursor loops, audio tracks, and more major tweaks.
 
 <p align="center">
   <img src="./recordlydemo.gif" width="750" alt="Recordly demo video">
@@ -311,7 +310,7 @@ Recordly is licensed under the **MIT License**.
 
 ## Acknowledgements
 
-Built on top of the excellent [OpenScreen](https://github.com/siddharthvaddem/openscreen) project, you should go check it out!
+Originally built on top of the excellent [OpenScreen](https://github.com/siddharthvaddem/openscreen) project.
 
 Created by  
 [@webadderall](https://x.com/webadderall)
