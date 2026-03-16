@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { useEffect, useRef } from "react";
 import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
-import { BUILT_IN_WALLPAPERS, NO_BACKGROUND, WALLPAPER_PATHS, WALLPAPER_RELATIVE_PATHS } from "@/lib/wallpapers";
+import { BUILT_IN_WALLPAPERS, WALLPAPER_PATHS, WALLPAPER_RELATIVE_PATHS } from "@/lib/wallpapers";
 import { SliderControl } from "./SliderControl";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -631,32 +631,14 @@ export function SettingsPanel({
                       accept=".jpg,.jpeg,image/jpeg"
                       className="hidden"
                     />
-                    <div className="flex gap-1.5">
-                      <div
-                        className={cn(
-                          "aspect-square w-9 h-9 rounded-md border-2 overflow-hidden cursor-pointer transition-all duration-200 shadow-sm flex items-center justify-center",
-                          selected === NO_BACKGROUND
-                            ? "border-[#2563EB] ring-1 ring-[#2563EB]/30"
-                            : "border-white/10 hover:border-[#2563EB]/40 opacity-80 hover:opacity-100"
-                        )}
-                        style={{
-                          backgroundImage: 'repeating-conic-gradient(#555 0% 25%, #333 0% 50%)',
-                          backgroundSize: '8px 8px',
-                        }}
-                        aria-label={tSettings('background.none')}
-                        title={tSettings('background.none')}
-                        onClick={() => onWallpaperChange(NO_BACKGROUND)}
-                        role="button"
-                      />
-                      <Button
-                        onClick={() => fileInputRef.current?.click()}
-                        variant="outline"
-                        className="flex-1 gap-2 bg-white/5 text-slate-200 border-white/10 hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] transition-all h-7 text-[10px]"
-                      >
-                        <Upload className="w-3 h-3" />
-                        {tSettings('background.uploadCustom')}
-                      </Button>
-                    </div>
+                    <Button
+                      onClick={() => fileInputRef.current?.click()}
+                      variant="outline"
+                      className="w-full gap-2 bg-white/5 text-slate-200 border-white/10 hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] transition-all h-7 text-[10px]"
+                    >
+                      <Upload className="w-3 h-3" />
+                      {tSettings('background.uploadCustom')}
+                    </Button>
 
                     <div className="grid grid-cols-7 gap-1.5">
                       {customImages.map((imageUrl, idx) => {

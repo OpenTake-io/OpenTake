@@ -34,7 +34,6 @@
 	},
 	"background": {
 		"title": "Fondo",
-		"none": "Ninguno",
 		"image": "Imagen",
 		"color": "Color",
 		"gradient": "Degradado",
