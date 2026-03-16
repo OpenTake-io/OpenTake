@@ -1,11 +1,21 @@
-import { ASPECT_RATIOS, type AspectRatio, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
-import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
+import {
+  ASPECT_RATIOS,
+  type AspectRatio,
+  isCustomAspectRatio,
+} from "@/utils/aspectRatioUtils";
+import type {
+  ExportFormat,
+  ExportQuality,
+  GifFrameRate,
+  GifSizePreset,
+} from "@/lib/exporter";
 import { WALLPAPER_PATHS } from "@/lib/wallpapers";
 import {
   DEFAULT_CURSOR_CLICK_BOUNCE,
   DEFAULT_CURSOR_MOTION_BLUR,
   DEFAULT_CURSOR_SIZE,
   DEFAULT_CURSOR_SMOOTHING,
+  DEFAULT_CURSOR_SWAY,
   DEFAULT_ANNOTATION_POSITION,
   DEFAULT_ANNOTATION_SIZE,
   DEFAULT_ANNOTATION_STYLE,
@@ -35,6 +45,7 @@ export interface ProjectEditorState {
   cursorSmoothing: number;
   cursorMotionBlur: number;
   cursorClickBounce: number;
+  cursorSway: number;
   borderRadius: number;
   padding: number;
   cropRegion: CropRegion;
@@ -68,7 +79,10 @@ function isFileUrl(value: string): boolean {
   return /^file:\/\//i.test(value);
 }
 
-function encodePathSegments(pathname: string, keepWindowsDrive = false): string {
+function encodePathSegments(
+  pathname: string,
+  keepWindowsDrive = false,
+): string {
   return pathname
     .split("/")
     .map((segment, index) => {
@@ -92,11 +106,15 @@ export function toFileUrl(filePath: string): string {
   // UNC path: //server/share/...
   if (normalized.startsWith("//")) {
     const [host, ...pathParts] = normalized.replace(/^\/+/, "").split("/");
-    const encodedPath = pathParts.map((part) => encodeURIComponent(part)).join("/");
+    const encodedPath = pathParts
+      .map((part) => encodeURIComponent(part))
+      .join("/");
     return encodedPath ? `file://${host}/${encodedPath}` : `file://${host}/`;
   }
 
-  const absolutePath = normalized.startsWith("/") ? normalized : `/${normalized}`;
+  const absolutePath = normalized.startsWith("/")
+    ? normalized
+    : `/${normalized}`;
   return `file://${encodePathSegments(absolutePath)}`;
 }
 
@@ -142,7 +160,9 @@ export function deriveNextId(prefix: string, ids: string[]): number {
   return max + 1;
 }
 
-export function validateProjectData(candidate: unknown): candidate is EditorProjectData {
+export function validateProjectData(
+  candidate: unknown,
+): candidate is EditorProjectData {
   if (!candidate || typeof candidate !== "object") return false;
   const project = candidate as Partial<EditorProjectData>;
   if (typeof project.version !== "number") return false;
@@ -151,27 +171,49 @@ export function validateProjectData(candidate: unknown): candidate is EditorProj
   return true;
 }
 
-export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): ProjectEditorState {
+export function normalizeProjectEditor(
+  editor: Partial<ProjectEditorState>,
+): ProjectEditorState {
   const validAspectRatios = new Set<AspectRatio>(ASPECT_RATIOS);
-  const legacyMotionBlurEnabled = (editor as Partial<{ motionBlurEnabled: boolean }>).motionBlurEnabled;
+  const legacyMotionBlurEnabled = (
+    editor as Partial<{ motionBlurEnabled: boolean }>
+  ).motionBlurEnabled;
   const legacyShowBlur = (editor as Partial<{ showBlur: boolean }>).showBlur;
-  const normalizedZoomMotionBlur = isFiniteNumber((editor as Partial<ProjectEditorState>).zoomMotionBlur)
-    ? clamp((editor as Partial<ProjectEditorState>).zoomMotionBlur as number, 0, 2)
+  const normalizedZoomMotionBlur = isFiniteNumber(
+    (editor as Partial<ProjectEditorState>).zoomMotionBlur,
+  )
+    ? clamp(
+        (editor as Partial<ProjectEditorState>).zoomMotionBlur as number,
+        0,
+        2,
+      )
     : legacyMotionBlurEnabled
       ? 0.35
       : DEFAULT_ZOOM_MOTION_BLUR;
-  const normalizedBackgroundBlur = isFiniteNumber((editor as Partial<ProjectEditorState>).backgroundBlur)
-    ? clamp((editor as Partial<ProjectEditorState>).backgroundBlur as number, 0, 8)
+  const normalizedBackgroundBlur = isFiniteNumber(
+    (editor as Partial<ProjectEditorState>).backgroundBlur,
+  )
+    ? clamp(
+        (editor as Partial<ProjectEditorState>).backgroundBlur as number,
+        0,
+        8,
+      )
     : legacyShowBlur
       ? 2
       : 0;
 
   const normalizedZoomRegions: ZoomRegion[] = Array.isArray(editor.zoomRegions)
     ? editor.zoomRegions
-        .filter((region): region is ZoomRegion => Boolean(region && typeof region.id === "string"))
+        .filter((region): region is ZoomRegion =>
+          Boolean(region && typeof region.id === "string"),
+        )
         .map((region) => {
-          const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
-          const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
+          const rawStart = isFiniteNumber(region.startMs)
+            ? Math.round(region.startMs)
+            : 0;
+          const rawEnd = isFiniteNumber(region.endMs)
+            ? Math.round(region.endMs)
+            : rawStart + 1000;
           const startMs = Math.max(0, Math.min(rawStart, rawEnd));
           const endMs = Math.max(startMs + 1, rawEnd);
 
@@ -179,10 +221,20 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
             id: region.id,
             startMs,
             endMs,
-            depth: [1, 2, 3, 4, 5, 6].includes(region.depth) ? region.depth : DEFAULT_ZOOM_DEPTH,
+            depth: [1, 2, 3, 4, 5, 6].includes(region.depth)
+              ? region.depth
+              : DEFAULT_ZOOM_DEPTH,
             focus: {
-              cx: clamp(isFiniteNumber(region.focus?.cx) ? region.focus.cx : 0.5, 0, 1),
-              cy: clamp(isFiniteNumber(region.focus?.cy) ? region.focus.cy : 0.5, 0, 1),
+              cx: clamp(
+                isFiniteNumber(region.focus?.cx) ? region.focus.cx : 0.5,
+                0,
+                1,
+              ),
+              cy: clamp(
+                isFiniteNumber(region.focus?.cy) ? region.focus.cy : 0.5,
+                0,
+                1,
+              ),
             },
           };
         })
@@ -190,10 +242,16 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 
   const normalizedTrimRegions: TrimRegion[] = Array.isArray(editor.trimRegions)
     ? editor.trimRegions
-        .filter((region): region is TrimRegion => Boolean(region && typeof region.id === "string"))
+        .filter((region): region is TrimRegion =>
+          Boolean(region && typeof region.id === "string"),
+        )
         .map((region) => {
-          const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
-          const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
+          const rawStart = isFiniteNumber(region.startMs)
+            ? Math.round(region.startMs)
+            : 0;
+          const rawEnd = isFiniteNumber(region.endMs)
+            ? Math.round(region.endMs)
+            : rawStart + 1000;
           const startMs = Math.max(0, Math.min(rawStart, rawEnd));
           const endMs = Math.max(startMs + 1, rawEnd);
           return {
@@ -204,12 +262,20 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
         })
     : [];
 
-  const normalizedSpeedRegions: SpeedRegion[] = Array.isArray(editor.speedRegions)
+  const normalizedSpeedRegions: SpeedRegion[] = Array.isArray(
+    editor.speedRegions,
+  )
     ? editor.speedRegions
-        .filter((region): region is SpeedRegion => Boolean(region && typeof region.id === "string"))
+        .filter((region): region is SpeedRegion =>
+          Boolean(region && typeof region.id === "string"),
+        )
         .map((region) => {
-          const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
-          const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
+          const rawStart = isFiniteNumber(region.startMs)
+            ? Math.round(region.startMs)
+            : 0;
+          const rawEnd = isFiniteNumber(region.endMs)
+            ? Math.round(region.endMs)
+            : rawStart + 1000;
           const startMs = Math.max(0, Math.min(rawStart, rawEnd));
           const endMs = Math.max(startMs + 1, rawEnd);
 
@@ -233,12 +299,20 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
         })
     : [];
 
-  const normalizedAnnotationRegions: AnnotationRegion[] = Array.isArray(editor.annotationRegions)
+  const normalizedAnnotationRegions: AnnotationRegion[] = Array.isArray(
+    editor.annotationRegions,
+  )
     ? editor.annotationRegions
-        .filter((region): region is AnnotationRegion => Boolean(region && typeof region.id === "string"))
+        .filter((region): region is AnnotationRegion =>
+          Boolean(region && typeof region.id === "string"),
+        )
         .map((region, index) => {
-          const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
-          const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
+          const rawStart = isFiniteNumber(region.startMs)
+            ? Math.round(region.startMs)
+            : 0;
+          const rawEnd = isFiniteNumber(region.endMs)
+            ? Math.round(region.endMs)
+            : rawStart + 1000;
           const startMs = Math.max(0, Math.min(rawStart, rawEnd));
           const endMs = Math.max(startMs + 1, rawEnd);
 
@@ -246,37 +320,56 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
             id: region.id,
             startMs,
             endMs,
-            type: region.type === "image" || region.type === "figure" ? region.type : "text",
+            type:
+              region.type === "image" || region.type === "figure"
+                ? region.type
+                : "text",
             content: typeof region.content === "string" ? region.content : "",
-            textContent: typeof region.textContent === "string" ? region.textContent : undefined,
-            imageContent: typeof region.imageContent === "string" ? region.imageContent : undefined,
+            textContent:
+              typeof region.textContent === "string"
+                ? region.textContent
+                : undefined,
+            imageContent:
+              typeof region.imageContent === "string"
+                ? region.imageContent
+                : undefined,
             position: {
               x: clamp(
-                isFiniteNumber(region.position?.x) ? region.position.x : DEFAULT_ANNOTATION_POSITION.x,
+                isFiniteNumber(region.position?.x)
+                  ? region.position.x
+                  : DEFAULT_ANNOTATION_POSITION.x,
                 0,
                 100,
               ),
               y: clamp(
-                isFiniteNumber(region.position?.y) ? region.position.y : DEFAULT_ANNOTATION_POSITION.y,
+                isFiniteNumber(region.position?.y)
+                  ? region.position.y
+                  : DEFAULT_ANNOTATION_POSITION.y,
                 0,
                 100,
               ),
             },
             size: {
               width: clamp(
-                isFiniteNumber(region.size?.width) ? region.size.width : DEFAULT_ANNOTATION_SIZE.width,
+                isFiniteNumber(region.size?.width)
+                  ? region.size.width
+                  : DEFAULT_ANNOTATION_SIZE.width,
                 1,
                 200,
               ),
               height: clamp(
-                isFiniteNumber(region.size?.height) ? region.size.height : DEFAULT_ANNOTATION_SIZE.height,
+                isFiniteNumber(region.size?.height)
+                  ? region.size.height
+                  : DEFAULT_ANNOTATION_SIZE.height,
                 1,
                 200,
               ),
             },
             style: {
               ...DEFAULT_ANNOTATION_STYLE,
-              ...(region.style && typeof region.style === "object" ? region.style : {}),
+              ...(region.style && typeof region.style === "object"
+                ? region.style
+                : {}),
             },
             zIndex: isFiniteNumber(region.zIndex) ? region.zIndex : index + 1,
             figureData: region.figureData
@@ -289,9 +382,15 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
         })
     : [];
 
-  const rawCropX = isFiniteNumber(editor.cropRegion?.x) ? editor.cropRegion.x : DEFAULT_CROP_REGION.x;
-  const rawCropY = isFiniteNumber(editor.cropRegion?.y) ? editor.cropRegion.y : DEFAULT_CROP_REGION.y;
-  const rawCropWidth = isFiniteNumber(editor.cropRegion?.width) ? editor.cropRegion.width : DEFAULT_CROP_REGION.width;
+  const rawCropX = isFiniteNumber(editor.cropRegion?.x)
+    ? editor.cropRegion.x
+    : DEFAULT_CROP_REGION.x;
+  const rawCropY = isFiniteNumber(editor.cropRegion?.y)
+    ? editor.cropRegion.y
+    : DEFAULT_CROP_REGION.y;
+  const rawCropWidth = isFiniteNumber(editor.cropRegion?.width)
+    ? editor.cropRegion.width
+    : DEFAULT_CROP_REGION.width;
   const rawCropHeight = isFiniteNumber(editor.cropRegion?.height)
     ? editor.cropRegion.height
     : DEFAULT_CROP_REGION.height;
@@ -302,25 +401,60 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
   const cropHeight = clamp(rawCropHeight, 0.01, 1 - cropY);
 
   return {
-    wallpaper: typeof editor.wallpaper === "string" ? editor.wallpaper : WALLPAPER_PATHS[0],
-    shadowIntensity: typeof editor.shadowIntensity === "number" ? editor.shadowIntensity : 0.67,
+    wallpaper:
+      typeof editor.wallpaper === "string"
+        ? editor.wallpaper
+        : WALLPAPER_PATHS[0],
+    shadowIntensity:
+      typeof editor.shadowIntensity === "number"
+        ? editor.shadowIntensity
+        : 0.67,
     backgroundBlur: normalizedBackgroundBlur,
     zoomMotionBlur: normalizedZoomMotionBlur,
-    connectZooms: typeof editor.connectZooms === "boolean" ? editor.connectZooms : true,
-    showCursor: typeof editor.showCursor === "boolean" ? editor.showCursor : true,
-    loopCursor: typeof editor.loopCursor === "boolean" ? editor.loopCursor : false,
-    cursorSize: isFiniteNumber(editor.cursorSize) ? clamp(editor.cursorSize, 0.5, 10) : DEFAULT_CURSOR_SIZE,
+    connectZooms:
+      typeof editor.connectZooms === "boolean" ? editor.connectZooms : true,
+    showCursor:
+      typeof editor.showCursor === "boolean" ? editor.showCursor : true,
+    loopCursor:
+      typeof editor.loopCursor === "boolean" ? editor.loopCursor : false,
+    cursorSize: isFiniteNumber(editor.cursorSize)
+      ? clamp(editor.cursorSize, 0.5, 10)
+      : DEFAULT_CURSOR_SIZE,
     cursorSmoothing: isFiniteNumber(editor.cursorSmoothing)
       ? clamp(editor.cursorSmoothing, 0, 2)
       : DEFAULT_CURSOR_SMOOTHING,
-    cursorMotionBlur: isFiniteNumber((editor as Partial<ProjectEditorState>).cursorMotionBlur)
-      ? clamp((editor as Partial<ProjectEditorState>).cursorMotionBlur as number, 0, 2)
+    cursorMotionBlur: isFiniteNumber(
+      (editor as Partial<ProjectEditorState>).cursorMotionBlur,
+    )
+      ? clamp(
+          (editor as Partial<ProjectEditorState>).cursorMotionBlur as number,
+          0,
+          2,
+        )
       : DEFAULT_CURSOR_MOTION_BLUR,
-    cursorClickBounce: isFiniteNumber((editor as Partial<ProjectEditorState>).cursorClickBounce)
-      ? clamp((editor as Partial<ProjectEditorState>).cursorClickBounce as number, 0, 5)
+    cursorClickBounce: isFiniteNumber(
+      (editor as Partial<ProjectEditorState>).cursorClickBounce,
+    )
+      ? clamp(
+          (editor as Partial<ProjectEditorState>).cursorClickBounce as number,
+          0,
+          5,
+        )
       : DEFAULT_CURSOR_CLICK_BOUNCE,
-    borderRadius: typeof editor.borderRadius === "number" ? editor.borderRadius : 12.5,
-    padding: isFiniteNumber(editor.padding) ? clamp(editor.padding, 0, 100) : 50,
+    cursorSway: isFiniteNumber(
+      (editor as Partial<ProjectEditorState>).cursorSway,
+    )
+      ? clamp(
+          (editor as Partial<ProjectEditorState>).cursorSway as number,
+          0,
+          2,
+        )
+      : DEFAULT_CURSOR_SWAY,
+    borderRadius:
+      typeof editor.borderRadius === "number" ? editor.borderRadius : 12.5,
+    padding: isFiniteNumber(editor.padding)
+      ? clamp(editor.padding, 0, 100)
+      : 50,
     cropRegion: {
       x: cropX,
       y: cropY,
@@ -333,10 +467,14 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
     annotationRegions: normalizedAnnotationRegions,
     aspectRatio:
       typeof editor.aspectRatio === "string" &&
-      (validAspectRatios.has(editor.aspectRatio as AspectRatio) || isCustomAspectRatio(editor.aspectRatio))
+      (validAspectRatios.has(editor.aspectRatio as AspectRatio) ||
+        isCustomAspectRatio(editor.aspectRatio))
         ? (editor.aspectRatio as AspectRatio)
         : "16:9",
-    exportQuality: editor.exportQuality === "medium" || editor.exportQuality === "source" ? editor.exportQuality : "good",
+    exportQuality:
+      editor.exportQuality === "medium" || editor.exportQuality === "source"
+        ? editor.exportQuality
+        : "good",
     exportFormat: editor.exportFormat === "gif" ? "gif" : "mp4",
     gifFrameRate:
       editor.gifFrameRate === 15 ||
@@ -347,17 +485,21 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
         : 15,
     gifLoop: typeof editor.gifLoop === "boolean" ? editor.gifLoop : true,
     gifSizePreset:
-      editor.gifSizePreset === "medium" || editor.gifSizePreset === "large" || editor.gifSizePreset === "original"
+      editor.gifSizePreset === "medium" ||
+      editor.gifSizePreset === "large" ||
+      editor.gifSizePreset === "original"
         ? editor.gifSizePreset
         : "medium",
   };
 }
 
-export function createProjectData(videoPath: string, editor: ProjectEditorState): EditorProjectData {
+export function createProjectData(
+  videoPath: string,
+  editor: ProjectEditorState,
+): EditorProjectData {
   return {
     version: PROJECT_VERSION,
     videoPath,
     editor,
   };
 }
-
