@@ -1002,7 +1002,7 @@ export function SettingsPanel({
 				</div>
 
 				{exportFormat === "mp4" && (
-					<div className="mb-3 bg-white/5 border border-white/5 p-0.5 w-full grid grid-cols-3 h-7 rounded-lg">
+					<div className="mb-3 grid h-7 w-full grid-cols-4 rounded-lg border border-white/5 bg-white/5 p-0.5">
 						<button
 							onClick={() => onExportQualityChange?.("medium")}
 							className={cn(
@@ -1026,6 +1026,17 @@ export function SettingsPanel({
 							{tSettings("export.quality.medium")}
 						</button>
 						<button
+							onClick={() => onExportQualityChange?.("high")}
+							className={cn(
+								"rounded-md transition-all text-[10px] font-medium",
+								exportQuality === "high"
+									? "bg-white text-black"
+									: "text-slate-400 hover:text-slate-200",
+							)}
+						>
+							{tSettings("export.quality.high")}
+						</button>
+						<button
 							onClick={() => onExportQualityChange?.("source")}
 							className={cn(
 								"rounded-md transition-all text-[10px] font-medium",
@@ -1034,7 +1045,7 @@ export function SettingsPanel({
 									: "text-slate-400 hover:text-slate-200",
 							)}
 						>
-							{tSettings("export.quality.high")}
+							{tSettings("export.quality.original")}
 						</button>
 					</div>
 				)}

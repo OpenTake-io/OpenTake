@@ -4,6 +4,8 @@
 		"enableSystemAudio": "Activar audio del sistema",
 		"disableMicrophone": "Desactivar micrófono",
 		"enableMicrophone": "Activar micrófono",
+		"countdownDelay": "Retraso de cuenta regresiva",
+		"noDelay": "Sin retraso",
 		"record": "Grabar",
 		"recordingFolder": "Carpeta de grabaciones: {{path}}",
 		"chooseRecordingsFolder": "Elegir carpeta de grabaciones",
