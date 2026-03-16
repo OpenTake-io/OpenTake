@@ -4,7 +4,7 @@ Thank you for considering contributing to this project! By contributing, you hel
 
 Areas where help is especially valuable:
 
-- Native capture pipeline for Linux
+- Native screen recording for Linux
 - **Webcam overlay bubble**
 - **UI/UX design improvements (very helpful)**
 - German localisation
