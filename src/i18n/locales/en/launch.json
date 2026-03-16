@@ -4,6 +4,8 @@
 		"enableSystemAudio": "Enable system audio",
 		"disableMicrophone": "Disable microphone",
 		"enableMicrophone": "Enable microphone",
+		"countdownDelay": "Countdown delay",
+		"noDelay": "No delay",
 		"record": "Record",
 		"recordingFolder": "Recording folder: {{path}}",
 		"chooseRecordingsFolder": "Choose recordings folder",

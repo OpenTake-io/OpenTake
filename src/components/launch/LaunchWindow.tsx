@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Languages } from "lucide-react";
+import { Eye, EyeOff, Languages, Timer } from "lucide-react";
 import { useEffect, useState } from "react";
 import { BsRecordCircle } from "react-icons/bs";
 import { FaRegStopCircle } from "react-icons/fa";
@@ -31,6 +31,7 @@ export function LaunchWindow() {
 	const LOCALE_LABELS: Record<string, string> = { en: "EN", es: "ES", "zh-CN": "中文" };
 	const {
 		recording,
+		countdownActive,
 		toggleRecording,
 		microphoneEnabled,
 		setMicrophoneEnabled,
@@ -38,6 +39,8 @@ export function LaunchWindow() {
 		setMicrophoneDeviceId,
 		systemAudioEnabled,
 		setSystemAudioEnabled,
+		countdownDelay,
+		setCountdownDelay,
 	} = useScreenRecorder();
 	const [recordingStart, setRecordingStart] = useState<number | null>(null);
 	const [elapsed, setElapsed] = useState(0);
@@ -348,11 +351,43 @@ export function LaunchWindow() {
 
 					<div className={dividerClass} />
 
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<Button
+								variant="link"
+								size="sm"
+								disabled={recording || countdownActive}
+								title={t("recording.countdownDelay")}
+								className={`gap-1 px-1 text-xs text-white/70 hover:bg-transparent ${styles.electronNoDrag}`}
+							>
+								<Timer size={14} />
+								<span>{countdownDelay > 0 ? `${countdownDelay}s` : t("recording.noDelay")}</span>
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent
+							side="top"
+							align="center"
+							className="min-w-[80px] max-h-none overflow-visible border-white/15 bg-[rgba(28,28,36,0.97)] text-white/90 backdrop-blur-xl"
+						>
+							{[0, 3, 5, 10].map((delay) => (
+								<DropdownMenuItem
+									key={delay}
+									onSelect={() => setCountdownDelay(delay)}
+									className={`cursor-pointer text-xs ${
+										countdownDelay === delay ? "font-medium text-white" : "text-white/60"
+									}`}
+								>
+									{delay === 0 ? t("recording.noDelay") : `${delay}s`}
+								</DropdownMenuItem>
+							))}
+						</DropdownMenuContent>
+					</DropdownMenu>
+
 					<Button
 						variant="link"
 						size="sm"
 						onClick={hasSelectedSource ? toggleRecording : openSourceSelector}
-						disabled={!hasSelectedSource && !recording}
+						disabled={countdownActive || (!hasSelectedSource && !recording)}
 						className={`gap-1 text-white bg-transparent hover:bg-transparent px-0 text-xs ${styles.electronNoDrag}`}
 					>
 						{recording ? (

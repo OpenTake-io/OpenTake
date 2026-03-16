@@ -19,6 +19,7 @@ const WINDOW_ICON_PATH = path.join(
 let hudOverlayWindow: BrowserWindow | null = null;
 let hudOverlayHiddenFromCapture = true;
 let hudOverlayCaptureProtectionLoaded = false;
+let countdownWindow: BrowserWindow | null = null;
 
 const HUD_OVERLAY_SETTINGS_FILE = path.join(app.getPath("userData"), "hud-overlay-settings.json");
 
@@ -127,6 +128,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 		alwaysOnTop: true,
 		skipTaskbar: true,
 		hasShadow: false,
+		show: false,
 		webPreferences: {
 			preload: path.join(__dirname, "preload.mjs"),
 			nodeIntegration: false,
@@ -141,6 +143,11 @@ export function createHudOverlayWindow(): BrowserWindow {
 
 	win.webContents.on("did-finish-load", () => {
 		win?.webContents.send("main-process-message", new Date().toLocaleString());
+		setTimeout(() => {
+			if (!win.isDestroyed()) {
+				win.show();
+			}
+		}, 100);
 	});
 
 	hudOverlayWindow = win;
@@ -182,6 +189,7 @@ export function createEditorWindow(): BrowserWindow {
 		alwaysOnTop: false,
 		skipTaskbar: false,
 		title: "Recordly",
+		show: false,
 		backgroundColor: "#000000",
 		webPreferences: {
 			preload: path.join(__dirname, "preload.mjs"),
@@ -192,8 +200,10 @@ export function createEditorWindow(): BrowserWindow {
 		},
 	});
 
-	// Maximize the window by default
-	win.maximize();
+	win.once("ready-to-show", () => {
+		win.show();
+		win.maximize();
+	});
 
 	win.webContents.on("did-finish-load", () => {
 		win?.webContents.send("main-process-message", new Date().toLocaleString());
@@ -224,6 +234,7 @@ export function createSourceSelectorWindow(): BrowserWindow {
 		resizable: false,
 		alwaysOnTop: true,
 		transparent: true,
+		show: false,
 		...(process.platform !== "darwin" && {
 			icon: WINDOW_ICON_PATH,
 		}),
@@ -235,6 +246,14 @@ export function createSourceSelectorWindow(): BrowserWindow {
 		},
 	});
 
+	win.webContents.on("did-finish-load", () => {
+		setTimeout(() => {
+			if (!win.isDestroyed()) {
+				win.show();
+			}
+		}, 100);
+	});
+
 	if (VITE_DEV_SERVER_URL) {
 		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=source-selector");
 	} else {
@@ -244,4 +263,70 @@ export function createSourceSelectorWindow(): BrowserWindow {
 	}
 
 	return win;
+}
+
+export function createCountdownWindow(): BrowserWindow {
+	const primaryDisplay = getScreen().getPrimaryDisplay();
+	const { width, height } = primaryDisplay.workAreaSize;
+
+	const windowSize = 200;
+	const x = Math.floor((width - windowSize) / 2);
+	const y = Math.floor((height - windowSize) / 2);
+
+	const win = new BrowserWindow({
+		width: windowSize,
+		height: windowSize,
+		x: x,
+		y: y,
+		frame: false,
+		transparent: true,
+		resizable: false,
+		alwaysOnTop: true,
+		skipTaskbar: true,
+		hasShadow: false,
+		focusable: true,
+		show: false,
+		webPreferences: {
+			preload: path.join(__dirname, "preload.mjs"),
+			nodeIntegration: false,
+			contextIsolation: true,
+		},
+	});
+
+	countdownWindow = win;
+
+	win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+	win.webContents.on("did-finish-load", () => {
+		if (!win.isDestroyed()) {
+			win.show();
+		}
+	});
+
+	win.on("closed", () => {
+		if (countdownWindow === win) {
+			countdownWindow = null;
+		}
+	});
+
+	if (VITE_DEV_SERVER_URL) {
+		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=countdown");
+	} else {
+		win.loadFile(path.join(RENDERER_DIST, "index.html"), {
+			query: { windowType: "countdown" },
+		});
+	}
+
+	return win;
+}
+
+export function getCountdownWindow(): BrowserWindow | null {
+	return countdownWindow;
+}
+
+export function closeCountdownWindow(): void {
+	if (countdownWindow && !countdownWindow.isDestroyed()) {
+		countdownWindow.close();
+		countdownWindow = null;
+	}
 }

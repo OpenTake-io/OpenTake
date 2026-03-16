@@ -14,7 +14,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		return ipcRenderer.invoke("set-hud-overlay-capture-protection", enabled);
 	},
 	getAssetBasePath: async () => {
-		// ask main process for the correct base path (production vs dev)
 		return await ipcRenderer.invoke("get-asset-base-path");
 	},
 	readLocalFile: (filePath: string) => {
@@ -55,11 +54,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	stopFfmpegRecording: () => {
 		return ipcRenderer.invoke("stop-ffmpeg-recording");
 	},
-
 	storeRecordedVideo: (videoData: ArrayBuffer, fileName: string) => {
 		return ipcRenderer.invoke("store-recorded-video", videoData, fileName);
 	},
-
 	getRecordedVideoPath: () => {
 		return ipcRenderer.invoke("get-recorded-video-path");
 	},
@@ -132,6 +129,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	openVideoFilePicker: () => {
 		return ipcRenderer.invoke("open-video-file-picker");
 	},
+	openAudioFilePicker: () => {
+		return ipcRenderer.invoke("open-audio-file-picker");
+	},
 	setCurrentVideoPath: (path: string) => {
 		return ipcRenderer.invoke("set-current-video-path", path);
 	},
@@ -199,6 +199,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	isWgcAvailable: () => ipcRenderer.invoke("is-wgc-available"),
 	muxWgcRecording: () => ipcRenderer.invoke("mux-wgc-recording"),
-	// Cursor visibility control for cursor-free browser capture fallback
 	hideOsCursor: () => ipcRenderer.invoke("hide-cursor"),
+	getCountdownDelay: () => ipcRenderer.invoke("get-countdown-delay"),
+	setCountdownDelay: (delay: number) => ipcRenderer.invoke("set-countdown-delay", delay),
+	startCountdown: (seconds: number) => ipcRenderer.invoke("start-countdown", seconds),
+	cancelCountdown: () => ipcRenderer.invoke("cancel-countdown"),
+	onCountdownTick: (callback: (seconds: number) => void) => {
+		const listener = (_event: Electron.IpcRendererEvent, seconds: number) => callback(seconds);
+		ipcRenderer.on("countdown-tick", listener);
+		return () => ipcRenderer.removeListener("countdown-tick", listener);
+	},
 });

@@ -108,6 +108,7 @@ interface Window {
 			fileName: string,
 		) => Promise<{ success: boolean; path?: string; message?: string; canceled?: boolean }>;
 		openVideoFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
+		openAudioFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
 		setCurrentVideoPath: (path: string) => Promise<{ success: boolean }>;
 		getCurrentVideoPath: () => Promise<{ success: boolean; path?: string }>;
 		clearCurrentVideoPath: () => Promise<{ success: boolean }>;
@@ -179,6 +180,12 @@ interface Window {
 		}>;
 		/** Hide the OS cursor before browser capture starts. */
 		hideOsCursor: () => Promise<{ success: boolean }>;
+		/** Countdown timer before recording */
+		getCountdownDelay: () => Promise<{ success: boolean; delay: number }>;
+		setCountdownDelay: (delay: number) => Promise<{ success: boolean; error?: string }>;
+		startCountdown: (seconds: number) => Promise<{ success: boolean; cancelled?: boolean }>;
+		cancelCountdown: () => Promise<{ success: boolean }>;
+		onCountdownTick: (callback: (seconds: number) => void) => () => void;
 	};
 }
 

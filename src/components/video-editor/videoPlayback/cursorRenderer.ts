@@ -195,6 +195,7 @@ function getAvailableCursorKeys(): CursorAssetKey[] {
 export async function preloadCursorAssets() {
   if (!cursorAssetsPromise) {
     cursorAssetsPromise = (async () => {
+      const isLinux = typeof navigator !== 'undefined' && /linux/i.test(navigator.platform);
       let systemCursors: Record<string, SystemCursorAsset> = {};
 
       try {
@@ -213,7 +214,9 @@ export async function preloadCursorAssets() {
         SUPPORTED_CURSOR_KEYS.map(async (key) => {
           const systemAsset = systemCursors[key];
           const uploadedAsset = uploadedCursorAssets[key];
-          const assetUrl = uploadedAsset?.url ?? systemAsset?.dataUrl;
+          const assetUrl = isLinux
+            ? uploadedAsset?.url
+            : uploadedAsset?.url ?? systemAsset?.dataUrl;
 
           if (!assetUrl) {
             console.warn(`[CursorRenderer] No cursor image for: ${key}`);
