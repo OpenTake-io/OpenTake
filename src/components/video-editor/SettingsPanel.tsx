@@ -559,7 +559,7 @@ export function SettingsPanel({
                   <SliderControl
                     label={tSettings('effects.shadow')}
                     value={shadowIntensity}
-                    defaultValue={0}
+                    defaultValue={0.67}
                     min={0}
                     max={1}
                     step={0.01}
