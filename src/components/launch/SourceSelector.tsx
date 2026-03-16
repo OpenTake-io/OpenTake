@@ -153,18 +153,11 @@ export function SourceSelector() {
                   >
                     <div className="p-1">
                       <div className="relative mb-1">
-                        {source.thumbnail ? (
-                          <img
-                            src={source.thumbnail}
-                            alt={source.name}
-                            className="w-full aspect-video object-cover rounded border border-zinc-800"
-                          />
-                        ) : (
-                          <div className="w-full aspect-video rounded border border-zinc-800 bg-zinc-900/80 flex flex-col items-center justify-center text-zinc-400 gap-2">
-                            <div className="w-8 h-8 rounded-md bg-zinc-800 border border-zinc-700" />
-                            <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">{t('sourceSelector.screens')}</div>
-                          </div>
-                        )}
+                        <img
+                          src={source.thumbnail || ''}
+                          alt={source.name}
+                          className="w-full aspect-video object-cover rounded border border-zinc-800"
+                        />
                         {selectedSource?.id === source.id && (
                           <div className="absolute -top-1 -right-1">
                             <div className="w-4 h-4 bg-[#2563EB] rounded-full flex items-center justify-center shadow-md">
