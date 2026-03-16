@@ -9,6 +9,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import { RECORDINGS_DIR } from '../main'
+import { createCountdownWindow, getCountdownWindow, closeCountdownWindow } from '../windows'
 
 const execFileAsync = promisify(execFile)
 const nodeRequire = createRequire(import.meta.url)
@@ -17,6 +18,7 @@ const PROJECT_FILE_EXTENSION = 'recordly'
 const LEGACY_PROJECT_FILE_EXTENSIONS = ['openscreen']
 const SHORTCUTS_FILE = path.join(app.getPath('userData'), 'shortcuts.json')
 const RECORDINGS_SETTINGS_FILE = path.join(app.getPath('userData'), 'recordings-settings.json')
+const COUNTDOWN_SETTINGS_FILE = path.join(app.getPath('userData'), 'countdown-settings.json')
 const AUTO_RECORDING_PREFIX = 'recording-'
 const AUTO_RECORDING_RETENTION_COUNT = 20
 const AUTO_RECORDING_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000
@@ -77,6 +79,9 @@ let customRecordingsDir: string | null = null
 let recordingsDirLoaded = false
 let cachedSystemCursorAssets: Record<string, SystemCursorAsset> | null = null
 let cachedSystemCursorAssetsSourceMtimeMs: number | null = null
+let countdownTimer: ReturnType<typeof setInterval> | null = null
+let countdownCancelled = false
+let countdownInProgress = false
 
 type SystemCursorAsset = {
   dataUrl: string
@@ -1219,6 +1224,7 @@ let isCursorCaptureActive = false
 let interactionCaptureCleanup: (() => void) | null = null
 let hasLoggedInteractionHookFailure = false
 let lastLeftClick: { timeMs: number; cx: number; cy: number } | null = null
+let linuxCursorScreenPoint: { x: number; y: number; updatedAt: number } | null = null
 let selectedWindowBounds: WindowBounds | null = null
 let windowBoundsCaptureInterval: NodeJS.Timeout | null = null
 
@@ -1313,21 +1319,26 @@ async function resolveMacWindowBounds(source: SelectedSource): Promise<WindowBou
 }
 
 async function refreshSelectedWindowBounds() {
-  if (process.platform !== 'darwin' || !selectedSource?.id?.startsWith('window:')) {
+  if (!selectedSource?.id?.startsWith('window:')) {
     selectedWindowBounds = null
     return
   }
 
-  const bounds = await resolveMacWindowBounds(selectedSource)
-  if (bounds) {
-    selectedWindowBounds = bounds
+  let bounds: WindowBounds | null = null
+
+  if (process.platform === 'darwin') {
+    bounds = await resolveMacWindowBounds(selectedSource)
+  } else if (process.platform === 'linux') {
+    bounds = await resolveLinuxWindowBounds(selectedSource)
   }
+
+  selectedWindowBounds = bounds
 }
 
 function startWindowBoundsCapture() {
   stopWindowBoundsCapture()
 
-  if (process.platform !== 'darwin' || !selectedSource?.id?.startsWith('window:')) {
+  if (!['darwin', 'linux'].includes(process.platform) || !selectedSource?.id?.startsWith('window:')) {
     return
   }
 
@@ -1338,7 +1349,15 @@ function startWindowBoundsCapture() {
 }
 
 function getNormalizedCursorPoint() {
-  const cursor = getScreen().getCursorScreenPoint()
+  const fallbackCursor = getScreen().getCursorScreenPoint()
+  const linuxCursorCache = process.platform === 'linux' ? linuxCursorScreenPoint : null
+  const isLinuxCacheFresh = !!linuxCursorCache
+    && Date.now() - linuxCursorCache.updatedAt <= 1000
+
+  const cursor = isLinuxCacheFresh
+    ? { x: linuxCursorCache.x, y: linuxCursorCache.y }
+    : fallbackCursor
+
   const windowBounds = selectedSource?.id?.startsWith('window:') ? selectedWindowBounds : null
   if (windowBounds) {
     const width = Math.max(1, windowBounds.width)
@@ -1362,6 +1381,17 @@ function getNormalizedCursorPoint() {
   const cx = clamp((cursor.x - bounds.x) / width, 0, 1)
   const cy = clamp((cursor.y - bounds.y) / height, 0, 1)
   return { cx, cy }
+}
+
+function getHookCursorScreenPoint(event: any): { x: number; y: number } | null {
+  const rawX = event?.x ?? event?.data?.x ?? event?.screenX ?? event?.data?.screenX
+  const rawY = event?.y ?? event?.data?.y ?? event?.screenY ?? event?.data?.screenY
+
+  if (typeof rawX !== 'number' || !Number.isFinite(rawX) || typeof rawY !== 'number' || !Number.isFinite(rawY)) {
+    return null
+  }
+
+  return { x: rawX, y: rawY }
 }
 
 function pushCursorSample(
@@ -1443,7 +1473,7 @@ async function startInteractionCapture() {
     return
   }
 
-  if (!['darwin', 'win32'].includes(process.platform)) {
+  if (!['darwin', 'win32', 'linux'].includes(process.platform)) {
     return
   }
 
@@ -1507,8 +1537,22 @@ async function startInteractionCapture() {
       pushCursorSample(point.cx, point.cy, timeMs, 'mouseup')
     }
 
+    const onMouseMove = (event: any) => {
+      if (process.platform !== 'linux' || !isCursorCaptureActive) {
+        return
+      }
+
+      const point = getHookCursorScreenPoint(event)
+      if (!point) {
+        return
+      }
+
+      linuxCursorScreenPoint = { x: point.x, y: point.y, updatedAt: Date.now() }
+    }
+
     hook.on('mousedown', onMouseDown)
     hook.on('mouseup', onMouseUp)
+    hook.on('mousemove', onMouseMove)
 
     hook.start()
 
@@ -1517,9 +1561,11 @@ async function startInteractionCapture() {
         if (typeof hook.off === 'function') {
           hook.off('mousedown', onMouseDown)
           hook.off('mouseup', onMouseUp)
+          hook.off('mousemove', onMouseMove)
         } else if (typeof hook.removeListener === 'function') {
           hook.removeListener('mousedown', onMouseDown)
           hook.removeListener('mouseup', onMouseUp)
+          hook.removeListener('mousemove', onMouseMove)
         }
       } catch {
         // ignore listener cleanup errors
@@ -2224,6 +2270,7 @@ export function registerIpcHandlers(
       activeCursorSamples = []
       pendingCursorSamples = []
       cursorCaptureStartTimeMs = Date.now()
+      linuxCursorScreenPoint = null
       lastLeftClick = null
       sampleCursorPoint()
       cursorCaptureInterval = setInterval(sampleCursorPoint, CURSOR_SAMPLE_INTERVAL_MS)
@@ -2234,6 +2281,7 @@ export function registerIpcHandlers(
       stopInteractionCapture()
       stopWindowBoundsCapture()
       stopNativeCursorMonitor()
+      linuxCursorScreenPoint = null
       snapshotCursorTelemetryForPersistence()
       activeCursorSamples = []
     }
@@ -2485,6 +2533,35 @@ export function registerIpcHandlers(
     }
   });
 
+  ipcMain.handle('open-audio-file-picker', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: 'Select Audio File',
+        filters: [
+          { name: 'Audio Files', extensions: ['mp3', 'wav', 'aac', 'm4a', 'flac', 'ogg'] },
+          { name: 'All Files', extensions: ['*'] }
+        ],
+        properties: ['openFile']
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true };
+      }
+
+      return {
+        success: true,
+        path: result.filePaths[0]
+      };
+    } catch (error) {
+      console.error('Failed to open audio file picker:', error);
+      return {
+        success: false,
+        message: 'Failed to open audio file picker',
+        error: String(error)
+      };
+    }
+  });
+
   ipcMain.handle('reveal-in-folder', async (_, filePath: string) => {
     try {
       // shell.showItemInFolder doesn't return a value, it throws on error
@@ -2714,9 +2791,11 @@ export function registerIpcHandlers(
   // The IPC promise resolves only after the cursor hide attempt completes.
   // ---------------------------------------------------------------------------
   ipcMain.handle('hide-cursor', () => {
-    // No-op: macOS uses native ScreenCaptureKit (cursor excluded at capture
-    // level), and Win/Linux use Electron desktopCapturer where cursor hiding
-    // is not reliably supported.
+    // No-op: macOS excludes the cursor at the ScreenCaptureKit capture level.
+    // Windows excludes the cursor via IsCursorCaptureEnabled(false) in wgc_session.cpp.
+    // Linux uses Electron desktopCapturer which does not support cursor hiding;
+    // if WGC is unavailable on Windows the call also falls back to browser capture
+    // where cursor hiding is unsupported — those users may see the real cursor.
     return { success: true }
   })
 
@@ -2738,5 +2817,92 @@ export function registerIpcHandlers(
       return { success: false, error: String(error) };
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // Countdown timer before recording
+  // ---------------------------------------------------------------------------
+  ipcMain.handle('get-countdown-delay', async () => {
+    try {
+      const content = await fs.readFile(COUNTDOWN_SETTINGS_FILE, 'utf-8')
+      const parsed = JSON.parse(content) as { delay?: number }
+      return { success: true, delay: parsed.delay ?? 3 }
+    } catch {
+      return { success: true, delay: 3 }
+    }
+  })
+
+  ipcMain.handle('set-countdown-delay', async (_, delay: number) => {
+    try {
+      await fs.writeFile(COUNTDOWN_SETTINGS_FILE, JSON.stringify({ delay }, null, 2), 'utf-8')
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to save countdown delay:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  ipcMain.handle('start-countdown', async (_, seconds: number) => {
+    if (countdownInProgress) {
+      return { success: false, error: 'Countdown already in progress' }
+    }
+
+    countdownInProgress = true
+    countdownCancelled = false
+
+    const countdownWin = createCountdownWindow()
+
+    await new Promise<void>((resolve) => {
+      countdownWin.webContents.once('did-finish-load', () => {
+        resolve()
+      })
+    })
+
+    return new Promise<{ success: boolean; cancelled?: boolean }>((resolve) => {
+      let remaining = seconds
+
+      countdownWin.webContents.send('countdown-tick', remaining)
+
+      countdownTimer = setInterval(() => {
+        if (countdownCancelled) {
+          if (countdownTimer) {
+            clearInterval(countdownTimer)
+            countdownTimer = null
+          }
+          closeCountdownWindow()
+          countdownInProgress = false
+          resolve({ success: false, cancelled: true })
+          return
+        }
+
+        remaining--
+
+        if (remaining <= 0) {
+          if (countdownTimer) {
+            clearInterval(countdownTimer)
+            countdownTimer = null
+          }
+          closeCountdownWindow()
+          countdownInProgress = false
+          resolve({ success: true })
+        } else {
+          const win = getCountdownWindow()
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('countdown-tick', remaining)
+          }
+        }
+      }, 1000)
+    })
+  })
+
+  ipcMain.handle('cancel-countdown', () => {
+    countdownCancelled = true
+    countdownInProgress = false
+    if (countdownTimer) {
+      clearInterval(countdownTimer)
+      countdownTimer = null
+    }
+    closeCountdownWindow()
+    return { success: true }
+  })
 }
 

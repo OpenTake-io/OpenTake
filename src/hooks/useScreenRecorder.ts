@@ -28,6 +28,7 @@ const MIC_GAIN_BOOST = 1.4;
 
 type UseScreenRecorderReturn = {
   recording: boolean;
+  countdownActive: boolean;
   toggleRecording: () => void;
   preparePermissions: (options?: { startup?: boolean }) => Promise<boolean>;
   isMacOS: boolean;
@@ -37,15 +38,19 @@ type UseScreenRecorderReturn = {
   setMicrophoneDeviceId: (deviceId: string | undefined) => void;
   systemAudioEnabled: boolean;
   setSystemAudioEnabled: (enabled: boolean) => void;
+  countdownDelay: number;
+  setCountdownDelay: (delay: number) => void;
 };
 
 export function useScreenRecorder(): UseScreenRecorderReturn {
   const [recording, setRecording] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [countdownActive, setCountdownActive] = useState(false);
   const [isMacOS, setIsMacOS] = useState(false);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(undefined);
   const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
+  const [countdownDelay, setCountdownDelayState] = useState(3);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const screenStream = useRef<MediaStream | null>(null);
@@ -57,6 +62,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const wgcRecording = useRef(false);
   const startInFlight = useRef(false);
   const hasPromptedForReselect = useRef(false);
+  const countdownDelayLoaded = useRef(false);
 
   const preparePermissions = useCallback(async (options: { startup?: boolean } = {}) => {
     const platform = await window.electronAPI.getPlatform();
@@ -192,6 +198,23 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       const platform = await window.electronAPI.getPlatform();
       setIsMacOS(platform === "darwin");
     })();
+  }, []);
+
+  useEffect(() => {
+    if (countdownDelayLoaded.current) return;
+    countdownDelayLoaded.current = true;
+
+    void (async () => {
+      const result = await window.electronAPI.getCountdownDelay();
+      if (result.success && typeof result.delay === "number") {
+        setCountdownDelayState(result.delay);
+      }
+    })();
+  }, []);
+
+  const setCountdownDelay = useCallback((delay: number) => {
+    setCountdownDelayState(delay);
+    void window.electronAPI.setCountdownDelay(delay);
   }, []);
 
   useEffect(() => {
@@ -548,16 +571,35 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     }
   };
 
-  const toggleRecording = () => {
-    if (starting) {
+  const toggleRecording = async () => {
+    if (starting || countdownActive) {
       return;
     }
 
-    recording ? stopRecording.current() : startRecording();
+    if (recording) {
+      stopRecording.current();
+      return;
+    }
+
+    // Start recording with optional countdown
+    if (countdownDelay > 0) {
+      setCountdownActive(true);
+      try {
+        const result = await window.electronAPI.startCountdown(countdownDelay);
+        if (!result.success || result.cancelled) {
+          return;
+        }
+      } finally {
+        setCountdownActive(false);
+      }
+    }
+
+    startRecording();
   };
 
   return {
     recording,
+    countdownActive,
     toggleRecording,
     preparePermissions,
     isMacOS,
@@ -567,6 +609,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     setMicrophoneDeviceId,
     systemAudioEnabled,
     setSystemAudioEnabled,
+    countdownDelay,
+    setCountdownDelay,
   };
 }
 
