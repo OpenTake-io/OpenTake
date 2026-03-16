@@ -123,7 +123,9 @@ function getInitialLocale(): AppLocale {
     return storedLocale
   }
 
-  return normalizeLocale(window.navigator.language)
+  // Product default must be English on first launch unless user explicitly
+  // selected another locale and we persisted it in localStorage.
+  return DEFAULT_LOCALE
 }
 
 function getMessageValue(source: unknown, key: string): string | undefined {
