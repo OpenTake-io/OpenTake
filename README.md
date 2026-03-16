@@ -36,7 +36,7 @@ Recordly runs on:
 - **Windows** 10 Build 19041+
 - **Linux** (modern distros)
 
-On Windows, builds older than 19041 fall back to Electron capture and the cursor cannot be hidden. On Linux, cursor hiding is not supported.
+On Windows, builds older than 19041 fall back to Electron capture and the cursor cannot be hidden. On Linux, cursor hiding is not supported (contribute).
 
 
 
