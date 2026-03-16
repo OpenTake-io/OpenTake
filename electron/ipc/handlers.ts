@@ -2748,9 +2748,11 @@ export function registerIpcHandlers(
   // The IPC promise resolves only after the cursor hide attempt completes.
   // ---------------------------------------------------------------------------
   ipcMain.handle('hide-cursor', () => {
-    // No-op: macOS uses native ScreenCaptureKit (cursor excluded at capture
-    // level), and Win/Linux use Electron desktopCapturer where cursor hiding
-    // is not reliably supported.
+    // No-op: macOS excludes the cursor at the ScreenCaptureKit capture level.
+    // Windows excludes the cursor via IsCursorCaptureEnabled(false) in wgc_session.cpp.
+    // Linux uses Electron desktopCapturer which does not support cursor hiding;
+    // if WGC is unavailable on Windows the call also falls back to browser capture
+    // where cursor hiding is unsupported — those users may see the real cursor.
     return { success: true }
   })
 
