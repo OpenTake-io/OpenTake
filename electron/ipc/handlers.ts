@@ -1224,6 +1224,7 @@ let isCursorCaptureActive = false
 let interactionCaptureCleanup: (() => void) | null = null
 let hasLoggedInteractionHookFailure = false
 let lastLeftClick: { timeMs: number; cx: number; cy: number } | null = null
+let linuxCursorScreenPoint: { x: number; y: number; updatedAt: number } | null = null
 let selectedWindowBounds: WindowBounds | null = null
 let windowBoundsCaptureInterval: NodeJS.Timeout | null = null
 
@@ -1318,21 +1319,26 @@ async function resolveMacWindowBounds(source: SelectedSource): Promise<WindowBou
 }
 
 async function refreshSelectedWindowBounds() {
-  if (process.platform !== 'darwin' || !selectedSource?.id?.startsWith('window:')) {
+  if (!selectedSource?.id?.startsWith('window:')) {
     selectedWindowBounds = null
     return
   }
 
-  const bounds = await resolveMacWindowBounds(selectedSource)
-  if (bounds) {
-    selectedWindowBounds = bounds
+  let bounds: WindowBounds | null = null
+
+  if (process.platform === 'darwin') {
+    bounds = await resolveMacWindowBounds(selectedSource)
+  } else if (process.platform === 'linux') {
+    bounds = await resolveLinuxWindowBounds(selectedSource)
   }
+
+  selectedWindowBounds = bounds
 }
 
 function startWindowBoundsCapture() {
   stopWindowBoundsCapture()
 
-  if (process.platform !== 'darwin' || !selectedSource?.id?.startsWith('window:')) {
+  if (!['darwin', 'linux'].includes(process.platform) || !selectedSource?.id?.startsWith('window:')) {
     return
   }
 
@@ -1343,7 +1349,15 @@ function startWindowBoundsCapture() {
 }
 
 function getNormalizedCursorPoint() {
-  const cursor = getScreen().getCursorScreenPoint()
+  const fallbackCursor = getScreen().getCursorScreenPoint()
+  const linuxCursorCache = process.platform === 'linux' ? linuxCursorScreenPoint : null
+  const isLinuxCacheFresh = !!linuxCursorCache
+    && Date.now() - linuxCursorCache.updatedAt <= 1000
+
+  const cursor = isLinuxCacheFresh
+    ? { x: linuxCursorCache.x, y: linuxCursorCache.y }
+    : fallbackCursor
+
   const windowBounds = selectedSource?.id?.startsWith('window:') ? selectedWindowBounds : null
   if (windowBounds) {
     const width = Math.max(1, windowBounds.width)
@@ -1367,6 +1381,17 @@ function getNormalizedCursorPoint() {
   const cx = clamp((cursor.x - bounds.x) / width, 0, 1)
   const cy = clamp((cursor.y - bounds.y) / height, 0, 1)
   return { cx, cy }
+}
+
+function getHookCursorScreenPoint(event: any): { x: number; y: number } | null {
+  const rawX = event?.x ?? event?.data?.x ?? event?.screenX ?? event?.data?.screenX
+  const rawY = event?.y ?? event?.data?.y ?? event?.screenY ?? event?.data?.screenY
+
+  if (typeof rawX !== 'number' || !Number.isFinite(rawX) || typeof rawY !== 'number' || !Number.isFinite(rawY)) {
+    return null
+  }
+
+  return { x: rawX, y: rawY }
 }
 
 function pushCursorSample(
@@ -1448,7 +1473,7 @@ async function startInteractionCapture() {
     return
   }
 
-  if (!['darwin', 'win32'].includes(process.platform)) {
+  if (!['darwin', 'win32', 'linux'].includes(process.platform)) {
     return
   }
 
@@ -1512,8 +1537,22 @@ async function startInteractionCapture() {
       pushCursorSample(point.cx, point.cy, timeMs, 'mouseup')
     }
 
+    const onMouseMove = (event: any) => {
+      if (process.platform !== 'linux' || !isCursorCaptureActive) {
+        return
+      }
+
+      const point = getHookCursorScreenPoint(event)
+      if (!point) {
+        return
+      }
+
+      linuxCursorScreenPoint = { x: point.x, y: point.y, updatedAt: Date.now() }
+    }
+
     hook.on('mousedown', onMouseDown)
     hook.on('mouseup', onMouseUp)
+    hook.on('mousemove', onMouseMove)
 
     hook.start()
 
@@ -1522,9 +1561,11 @@ async function startInteractionCapture() {
         if (typeof hook.off === 'function') {
           hook.off('mousedown', onMouseDown)
           hook.off('mouseup', onMouseUp)
+          hook.off('mousemove', onMouseMove)
         } else if (typeof hook.removeListener === 'function') {
           hook.removeListener('mousedown', onMouseDown)
           hook.removeListener('mouseup', onMouseUp)
+          hook.removeListener('mousemove', onMouseMove)
         }
       } catch {
         // ignore listener cleanup errors
@@ -2229,6 +2270,7 @@ export function registerIpcHandlers(
       activeCursorSamples = []
       pendingCursorSamples = []
       cursorCaptureStartTimeMs = Date.now()
+      linuxCursorScreenPoint = null
       lastLeftClick = null
       sampleCursorPoint()
       cursorCaptureInterval = setInterval(sampleCursorPoint, CURSOR_SAMPLE_INTERVAL_MS)
@@ -2239,6 +2281,7 @@ export function registerIpcHandlers(
       stopInteractionCapture()
       stopWindowBoundsCapture()
       stopNativeCursorMonitor()
+      linuxCursorScreenPoint = null
       snapshotCursorTelemetryForPersistence()
       activeCursorSamples = []
     }
