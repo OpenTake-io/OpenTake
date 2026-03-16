@@ -1,7 +1,7 @@
 import type React from "react";
 import { useEffect, useRef, useImperativeHandle, forwardRef, useState, useMemo, useCallback } from "react";
 import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
-import { DEFAULT_WALLPAPER_PATH, DEFAULT_WALLPAPER_RELATIVE_PATH } from "@/lib/wallpapers";
+import { DEFAULT_WALLPAPER_PATH, DEFAULT_WALLPAPER_RELATIVE_PATH, NO_BACKGROUND } from "@/lib/wallpapers";
 import { Application, Container, Sprite, Graphics, BlurFilter, Texture, VideoSource } from 'pixi.js';
 import { MotionBlurFilter } from 'pixi-filters/motion-blur';
 import { ZOOM_DEPTH_SCALES, type ZoomRegion, type ZoomFocus, type ZoomDepth, type TrimRegion, type SpeedRegion, type AnnotationRegion, type CursorTelemetryPoint } from "./types";
@@ -1024,10 +1024,13 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
     };
   }, [])
 
+  const isNoBackground = wallpaper === NO_BACKGROUND;
   const isImageUrl = Boolean(resolvedWallpaper && (resolvedWallpaper.startsWith('file://') || resolvedWallpaper.startsWith('http') || resolvedWallpaper.startsWith('/') || resolvedWallpaper.startsWith('data:')))
-  const backgroundStyle = isImageUrl
-    ? { backgroundImage: `url(${resolvedWallpaper || ''})` }
-    : { background: resolvedWallpaper || '' };
+  const backgroundStyle = isNoBackground
+    ? {}
+    : isImageUrl
+      ? { backgroundImage: `url(${resolvedWallpaper || ''})` }
+      : { background: resolvedWallpaper || '' };
 
   const nativeAspectRatio = (() => {
     const locked = lockedVideoDimensionsRef.current;
@@ -1046,7 +1049,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(({
       {/* Background layer */}
       <div
         className="absolute inset-0 bg-cover bg-center"
-        style={{
+        style={isNoBackground ? {
+          backgroundImage: 'repeating-conic-gradient(#3a3a3a 0% 25%, #222 0% 50%)',
+          backgroundSize: '16px 16px',
+        } : {
           ...backgroundStyle,
           filter: backgroundBlur > 0 ? `blur(${backgroundBlur}px)` : 'none',
         }}
