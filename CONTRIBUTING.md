@@ -7,7 +7,7 @@ Areas where help is especially valuable:
 - Native capture pipeline for Linux
 - **Webcam overlay bubble**
 - **UI/UX design improvements**
-- Export speed improvements
+- Code optimisation/refactoring
 
 ## How to Contribute
 
