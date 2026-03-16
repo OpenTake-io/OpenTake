@@ -34,6 +34,7 @@
 	},
 	"background": {
 		"title": "背景",
+		"none": "无",
 		"image": "图片",
 		"color": "颜色",
 		"gradient": "渐变",

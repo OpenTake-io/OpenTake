@@ -8,6 +8,7 @@ import { applyZoomTransform, computeFocusFromTransform, computeZoomTransform, cr
 import { DEFAULT_FOCUS, ZOOM_SCALE_DEADZONE, ZOOM_TRANSLATION_DEADZONE_PX } from '@/components/video-editor/videoPlayback/constants';
 import { renderAnnotations } from './annotationRenderer';
 import { PixiCursorOverlay, DEFAULT_CURSOR_CONFIG, preloadCursorAssets } from '@/components/video-editor/videoPlayback/cursorRenderer';
+import { NO_BACKGROUND } from '@/lib/wallpapers';
 
 interface FrameRenderConfig {
   width: number;
@@ -186,6 +187,11 @@ export class FrameRenderer {
 
   private async setupBackground(): Promise<void> {
     const wallpaper = await this.resolveWallpaperForExport(this.config.wallpaper);
+
+    // No background requested — leave the composite canvas transparent
+    if (this.config.wallpaper === NO_BACKGROUND) {
+      return;
+    }
 
     // Create background canvas for separate rendering (not affected by zoom)
     const bgCanvas = document.createElement('canvas');
@@ -615,7 +621,7 @@ export class FrameRenderer {
       } else {
         ctx.drawImage(bgCanvas, 0, 0, w, h);
       }
-    } else {
+    } else if (this.config.wallpaper !== NO_BACKGROUND) {
       console.warn('[FrameRenderer] No background sprite found during compositing!');
     }
 
