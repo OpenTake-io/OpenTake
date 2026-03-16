@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
-import { useI18n, useScopedT } from "@/contexts/I18nContext";
+import { useI18n } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { SUPPORTED_LOCALES } from "@/i18n/config";
 import type { AppLocale } from "@/i18n/config";

@@ -11,7 +11,6 @@ import { Plus, Scissors, ZoomIn, MessageSquare, ChevronDown, Check, Gauge, WandS
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { v4 as uuidv4 } from 'uuid';
-import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
