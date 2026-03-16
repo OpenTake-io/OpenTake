@@ -139,6 +139,7 @@ interface SettingsPanelProps {
 	cropRegion?: CropRegion;
 	onCropChange?: (region: CropRegion) => void;
 	aspectRatio: AspectRatio;
+	onAspectRatioChange?: (ratio: AspectRatio) => void;
 	videoElement?: HTMLVideoElement | null;
 	exportQuality?: ExportQuality;
 	onExportQualityChange?: (quality: ExportQuality) => void;
@@ -217,6 +218,7 @@ export function SettingsPanel({
 	cropRegion,
 	onCropChange,
 	aspectRatio,
+	onAspectRatioChange,
 	videoElement,
 	exportQuality = "good",
 	onExportQualityChange,
@@ -742,6 +744,19 @@ export function SettingsPanel({
 										onChange={(v) => onPaddingChange?.(v)}
 										formatValue={(v) => `${v}%`}
 										parseInput={(t) => parseFloat(t.replace(/%$/, ""))}
+									/>
+								</div>
+								<div className="col-span-2 flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5">
+									<div className="text-[10px] font-medium text-slate-300">{tSettings("effects.removeBackground")}</div>
+									<Switch
+										checked={aspectRatio === 'native' && padding === 0}
+										onCheckedChange={(checked) => {
+											if (checked) {
+												onAspectRatioChange?.('native');
+												onPaddingChange?.(0);
+											}
+										}}
+										className="data-[state=checked]:bg-[#2563EB] scale-90"
 									/>
 								</div>
 							</div>

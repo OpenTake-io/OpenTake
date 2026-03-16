@@ -27,7 +27,8 @@
 		"cursorSway": "Cursor Sway",
 		"shadow": "Shadow",
 		"roundness": "Roundness",
-		"padding": "Padding"
+		"padding": "Padding",
+		"removeBackground": "Remove background"
 	},
 	"crop": {
 		"title": "Crop Video",

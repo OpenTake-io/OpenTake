@@ -2172,6 +2172,7 @@ export default function VideoEditor() {
 					cropRegion={cropRegion}
 					onCropChange={setCropRegion}
 					aspectRatio={aspectRatio}
+					onAspectRatioChange={setAspectRatio}
 					videoElement={videoPlaybackRef.current?.video || null}
 					exportQuality={exportQuality}
 					onExportQualityChange={setExportQuality}
