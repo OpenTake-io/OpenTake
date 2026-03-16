@@ -81,6 +81,7 @@ let cachedSystemCursorAssets: Record<string, SystemCursorAsset> | null = null
 let cachedSystemCursorAssetsSourceMtimeMs: number | null = null
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 let countdownCancelled = false
+let countdownInProgress = false
 
 type SystemCursorAsset = {
   dataUrl: string
@@ -2767,6 +2768,11 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('start-countdown', async (_, seconds: number) => {
+    if (countdownInProgress) {
+      return { success: false, error: 'Countdown already in progress' }
+    }
+
+    countdownInProgress = true
     countdownCancelled = false
 
     const countdownWin = createCountdownWindow()
@@ -2789,6 +2795,7 @@ export function registerIpcHandlers(
             countdownTimer = null
           }
           closeCountdownWindow()
+          countdownInProgress = false
           resolve({ success: false, cancelled: true })
           return
         }
@@ -2801,6 +2808,7 @@ export function registerIpcHandlers(
             countdownTimer = null
           }
           closeCountdownWindow()
+          countdownInProgress = false
           resolve({ success: true })
         } else {
           const win = getCountdownWindow()
@@ -2814,6 +2822,7 @@ export function registerIpcHandlers(
 
   ipcMain.handle('cancel-countdown', () => {
     countdownCancelled = true
+    countdownInProgress = false
     if (countdownTimer) {
       clearInterval(countdownTimer)
       countdownTimer = null
