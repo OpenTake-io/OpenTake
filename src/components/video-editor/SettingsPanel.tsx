@@ -14,7 +14,7 @@ import {
 	Upload,
 	X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
 	Accordion,
@@ -34,12 +34,14 @@ import { type AspectRatio } from "@/utils/aspectRatioUtils";
 import { useI18n, useScopedT } from "../../contexts/I18nContext";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import { CropControl } from "./CropControl";
+import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
 import { KeyboardShortcutsHelp } from "./KeyboardShortcutsHelp";
 import { SliderControl } from "./SliderControl";
 import type {
 	AnnotationRegion,
 	AnnotationType,
 	CropRegion,
+	FigureData,
 	PlaybackSpeed,
 	ZoomDepth,
 } from "./types";
@@ -80,6 +82,24 @@ const GRADIENTS = [
 	"linear-gradient(to top, #48c6ef 0%, #6f86d6 100%)",
 	"linear-gradient(to right, #0acffe 0%, #495aff 100%)",
 ];
+
+type BackgroundTab = "image" | "color" | "gradient";
+
+function isHexWallpaper(value: string): boolean {
+	return /^#(?:[0-9a-f]{3}){1,2}$/i.test(value);
+}
+
+function getBackgroundTabForWallpaper(value: string): BackgroundTab {
+	if (GRADIENTS.includes(value)) {
+		return "gradient";
+	}
+
+	if (isHexWallpaper(value)) {
+		return "color";
+	}
+
+	return "image";
+}
 
 interface SettingsPanelProps {
 	selected: string;
@@ -140,7 +160,7 @@ interface SettingsPanelProps {
 	onAnnotationContentChange?: (id: string, content: string) => void;
 	onAnnotationTypeChange?: (id: string, type: AnnotationType) => void;
 	onAnnotationStyleChange?: (id: string, style: Partial<AnnotationRegion["style"]>) => void;
-	onAnnotationFigureDataChange?: (id: string, figureData: any) => void;
+	onAnnotationFigureDataChange?: (id: string, figureData: FigureData) => void;
 	onAnnotationDelete?: (id: string) => void;
 	selectedSpeedId?: string | null;
 	selectedSpeedValue?: PlaybackSpeed | null;
@@ -226,8 +246,11 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
 	const tSettings = useScopedT("settings");
 	const { t } = useI18n();
+	const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
 	const [wallpaperPreviewPaths, setWallpaperPreviewPaths] = useState<string[]>([]);
-	const [customImages, setCustomImages] = useState<string[]>([]);
+	const [customImages, setCustomImages] = useState<string[]>(
+		initialEditorPreferences.customWallpapers,
+	);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
@@ -240,7 +263,7 @@ export function SettingsPanel({
 					),
 				);
 				if (mounted) setWallpaperPreviewPaths(resolved);
-			} catch (err) {
+			} catch {
 				if (mounted) setWallpaperPreviewPaths(WALLPAPER_PATHS);
 			}
 		})();
@@ -267,10 +290,37 @@ export function SettingsPanel({
 		"#795548",
 	];
 
-	const [selectedColor, setSelectedColor] = useState("#ADADAD");
-	const [gradient, setGradient] = useState<string>(GRADIENTS[0]);
+	const [selectedColor, setSelectedColor] = useState(
+		isHexWallpaper(selected) ? selected : "#ADADAD",
+	);
+	const [gradient, setGradient] = useState<string>(
+		GRADIENTS.includes(selected) ? selected : GRADIENTS[0],
+	);
+	const [backgroundTab, setBackgroundTab] = useState<BackgroundTab>(() =>
+		getBackgroundTabForWallpaper(selected),
+	);
 	const [showCropModal, setShowCropModal] = useState(false);
 	const cropSnapshotRef = useRef<CropRegion | null>(null);
+
+	useEffect(() => {
+		setBackgroundTab(getBackgroundTabForWallpaper(selected));
+
+		if (isHexWallpaper(selected)) {
+			setSelectedColor(selected);
+		}
+
+		if (GRADIENTS.includes(selected)) {
+			setGradient(selected);
+		}
+
+		if (selected.startsWith("data:image") && !customImages.includes(selected)) {
+			setCustomImages((prev) => [selected, ...prev]);
+		}
+	}, [customImages, selected]);
+
+	useEffect(() => {
+		saveEditorPreferences({ customWallpapers: customImages });
+	}, [customImages]);
 
 	const zoomEnabled = Boolean(selectedZoomDepth);
 	const trimEnabled = Boolean(selectedTrimId);
@@ -718,7 +768,11 @@ export function SettingsPanel({
 							</div>
 						</AccordionTrigger>
 						<AccordionContent className="pb-3">
-							<Tabs defaultValue="image" className="w-full">
+							<Tabs
+								value={backgroundTab}
+								onValueChange={(value) => setBackgroundTab(value as BackgroundTab)}
+								className="w-full"
+							>
 								<TabsList className="mb-2 bg-white/5 border border-white/5 p-0.5 w-full grid grid-cols-3 h-7 rounded-lg">
 									<TabsTrigger
 										value="image"
@@ -804,7 +858,9 @@ export function SettingsPanel({
 														if (clean(wallpaperValue).endsWith(clean(selected))) return true;
 														if (clean(selected).endsWith(clean(previewPath))) return true;
 														if (clean(previewPath).endsWith(clean(selected))) return true;
-													} catch {}
+													} catch {
+														return false;
+													}
 													return false;
 												})();
 												return (

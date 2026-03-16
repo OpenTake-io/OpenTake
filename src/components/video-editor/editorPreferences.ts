@@ -1,25 +1,68 @@
-import { ASPECT_RATIOS, type AspectRatio, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
+import { normalizeProjectEditor, type ProjectEditorState } from "./projectPersistence";
 
-export interface EditorPreferences {
-	aspectRatio: AspectRatio;
+type PersistedEditorControls = Pick<
+	ProjectEditorState,
+	| "wallpaper"
+	| "shadowIntensity"
+	| "backgroundBlur"
+	| "zoomMotionBlur"
+	| "connectZooms"
+	| "showCursor"
+	| "loopCursor"
+	| "cursorSize"
+	| "cursorSmoothing"
+	| "cursorMotionBlur"
+	| "cursorClickBounce"
+	| "cursorSway"
+	| "borderRadius"
+	| "padding"
+	| "cropRegion"
+	| "aspectRatio"
+	| "exportQuality"
+	| "exportFormat"
+	| "gifFrameRate"
+	| "gifLoop"
+	| "gifSizePreset"
+>;
+
+type PartialEditorControls = Partial<PersistedEditorControls>;
+
+export interface EditorPreferences extends PersistedEditorControls {
 	customAspectWidth: string;
 	customAspectHeight: string;
+	customWallpapers: string[];
 }
 
 export const EDITOR_PREFERENCES_STORAGE_KEY = "recordly.editor.preferences";
 
+const DEFAULT_EDITOR_CONTROLS = normalizeProjectEditor({});
+
 export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
-	aspectRatio: "16:9",
+	wallpaper: DEFAULT_EDITOR_CONTROLS.wallpaper,
+	shadowIntensity: DEFAULT_EDITOR_CONTROLS.shadowIntensity,
+	backgroundBlur: DEFAULT_EDITOR_CONTROLS.backgroundBlur,
+	zoomMotionBlur: DEFAULT_EDITOR_CONTROLS.zoomMotionBlur,
+	connectZooms: DEFAULT_EDITOR_CONTROLS.connectZooms,
+	showCursor: DEFAULT_EDITOR_CONTROLS.showCursor,
+	loopCursor: DEFAULT_EDITOR_CONTROLS.loopCursor,
+	cursorSize: DEFAULT_EDITOR_CONTROLS.cursorSize,
+	cursorSmoothing: DEFAULT_EDITOR_CONTROLS.cursorSmoothing,
+	cursorMotionBlur: DEFAULT_EDITOR_CONTROLS.cursorMotionBlur,
+	cursorClickBounce: DEFAULT_EDITOR_CONTROLS.cursorClickBounce,
+	cursorSway: DEFAULT_EDITOR_CONTROLS.cursorSway,
+	borderRadius: DEFAULT_EDITOR_CONTROLS.borderRadius,
+	padding: DEFAULT_EDITOR_CONTROLS.padding,
+	cropRegion: DEFAULT_EDITOR_CONTROLS.cropRegion,
+	aspectRatio: DEFAULT_EDITOR_CONTROLS.aspectRatio,
+	exportQuality: DEFAULT_EDITOR_CONTROLS.exportQuality,
+	exportFormat: DEFAULT_EDITOR_CONTROLS.exportFormat,
+	gifFrameRate: DEFAULT_EDITOR_CONTROLS.gifFrameRate,
+	gifLoop: DEFAULT_EDITOR_CONTROLS.gifLoop,
+	gifSizePreset: DEFAULT_EDITOR_CONTROLS.gifSizePreset,
 	customAspectWidth: "16",
 	customAspectHeight: "9",
+	customWallpapers: [],
 };
-
-function isStoredAspectRatio(value: unknown): value is AspectRatio {
-	return (
-		typeof value === "string" &&
-		((ASPECT_RATIOS as readonly string[]).includes(value) || isCustomAspectRatio(value))
-	);
-}
 
 function normalizePositiveIntegerString(value: unknown, fallback: string): string {
 	if (typeof value !== "string" || value.trim().length === 0) {
@@ -34,6 +77,106 @@ function normalizePositiveIntegerString(value: unknown, fallback: string): strin
 	return String(parsed);
 }
 
+function isFiniteNumber(value: unknown): value is number {
+	return typeof value === "number" && Number.isFinite(value);
+}
+
+function clamp(value: number, min: number, max: number): number {
+	return Math.min(max, Math.max(min, value));
+}
+
+function normalizeCropRegion(
+	value: unknown,
+	fallback: EditorPreferences["cropRegion"],
+): EditorPreferences["cropRegion"] {
+	if (!value || typeof value !== "object") {
+		return fallback;
+	}
+
+	const raw = value as Partial<EditorPreferences["cropRegion"]>;
+	const x = isFiniteNumber(raw.x) && raw.x >= 0 && raw.x < 1 ? raw.x : fallback.x;
+	const y = isFiniteNumber(raw.y) && raw.y >= 0 && raw.y < 1 ? raw.y : fallback.y;
+	const maxWidth = 1 - x;
+	const maxHeight = 1 - y;
+	const fallbackWidth = clamp(fallback.width, 0.01, maxWidth);
+	const fallbackHeight = clamp(fallback.height, 0.01, maxHeight);
+	const width =
+		isFiniteNumber(raw.width) && raw.width >= 0.01 && raw.width <= maxWidth
+			? raw.width
+			: fallbackWidth;
+	const height =
+		isFiniteNumber(raw.height) && raw.height >= 0.01 && raw.height <= maxHeight
+			? raw.height
+			: fallbackHeight;
+
+	return { x, y, width, height };
+}
+
+function normalizeCustomWallpapers(value: unknown, fallback: string[]): string[] {
+	if (!Array.isArray(value)) {
+		return fallback;
+	}
+
+	return Array.from(
+		new Set(value.filter((item): item is string => typeof item === "string" && item.length > 0)),
+	);
+}
+
+function normalizeEditorControls(
+	raw: Partial<EditorPreferences>,
+	fallback: EditorPreferences,
+): PersistedEditorControls {
+	const candidate: PartialEditorControls = {
+		wallpaper: raw.wallpaper ?? fallback.wallpaper,
+		shadowIntensity: raw.shadowIntensity ?? fallback.shadowIntensity,
+		backgroundBlur: raw.backgroundBlur ?? fallback.backgroundBlur,
+		zoomMotionBlur: raw.zoomMotionBlur ?? fallback.zoomMotionBlur,
+		connectZooms: raw.connectZooms ?? fallback.connectZooms,
+		showCursor: raw.showCursor ?? fallback.showCursor,
+		loopCursor: raw.loopCursor ?? fallback.loopCursor,
+		cursorSize: raw.cursorSize ?? fallback.cursorSize,
+		cursorSmoothing: raw.cursorSmoothing ?? fallback.cursorSmoothing,
+		cursorMotionBlur: raw.cursorMotionBlur ?? fallback.cursorMotionBlur,
+		cursorClickBounce: raw.cursorClickBounce ?? fallback.cursorClickBounce,
+		cursorSway: raw.cursorSway ?? fallback.cursorSway,
+		borderRadius: raw.borderRadius ?? fallback.borderRadius,
+		padding: raw.padding ?? fallback.padding,
+		cropRegion: normalizeCropRegion(raw.cropRegion, fallback.cropRegion),
+		aspectRatio: raw.aspectRatio ?? fallback.aspectRatio,
+		exportQuality: raw.exportQuality ?? fallback.exportQuality,
+		exportFormat: raw.exportFormat ?? fallback.exportFormat,
+		gifFrameRate: raw.gifFrameRate ?? fallback.gifFrameRate,
+		gifLoop: raw.gifLoop ?? fallback.gifLoop,
+		gifSizePreset: raw.gifSizePreset ?? fallback.gifSizePreset,
+	};
+
+	const normalized = normalizeProjectEditor(candidate);
+
+	return {
+		wallpaper: normalized.wallpaper,
+		shadowIntensity: normalized.shadowIntensity,
+		backgroundBlur: normalized.backgroundBlur,
+		zoomMotionBlur: normalized.zoomMotionBlur,
+		connectZooms: normalized.connectZooms,
+		showCursor: normalized.showCursor,
+		loopCursor: normalized.loopCursor,
+		cursorSize: normalized.cursorSize,
+		cursorSmoothing: normalized.cursorSmoothing,
+		cursorMotionBlur: normalized.cursorMotionBlur,
+		cursorClickBounce: normalized.cursorClickBounce,
+		cursorSway: normalized.cursorSway,
+		borderRadius: normalized.borderRadius,
+		padding: normalized.padding,
+		cropRegion: normalized.cropRegion,
+		aspectRatio: normalized.aspectRatio,
+		exportQuality: normalized.exportQuality,
+		exportFormat: normalized.exportFormat,
+		gifFrameRate: normalized.gifFrameRate,
+		gifLoop: normalized.gifLoop,
+		gifSizePreset: normalized.gifSizePreset,
+	};
+}
+
 export function normalizeEditorPreferences(
 	candidate: unknown,
 	fallback: EditorPreferences = DEFAULT_EDITOR_PREFERENCES,
@@ -42,7 +185,7 @@ export function normalizeEditorPreferences(
 		candidate && typeof candidate === "object" ? (candidate as Partial<EditorPreferences>) : {};
 
 	return {
-		aspectRatio: isStoredAspectRatio(raw.aspectRatio) ? raw.aspectRatio : fallback.aspectRatio,
+		...normalizeEditorControls(raw, fallback),
 		customAspectWidth: normalizePositiveIntegerString(
 			raw.customAspectWidth,
 			fallback.customAspectWidth,
@@ -51,6 +194,7 @@ export function normalizeEditorPreferences(
 			raw.customAspectHeight,
 			fallback.customAspectHeight,
 		),
+		customWallpapers: normalizeCustomWallpapers(raw.customWallpapers, fallback.customWallpapers),
 	};
 }
 
