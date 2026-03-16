@@ -12,46 +12,50 @@ permissions:
 jobs:
   anti-slop:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: peakoss/anti-slop@v0.2.1
+      - uses: peakoss/anti-slop@85daca1880e9e1af197fc06ea03349daf08f4202
         with:
-          # sensitivity
           max-failures: 4
 
-          # PR quality
           require-description: true
           max-description-length: 2000
           max-emoji-count: 2
           max-code-references: 5
 
-          # commits
           max-commit-message-length: 300
           require-commit-author-match: true
 
-          # contributor signals
           min-account-age: 30
           min-profile-completeness: 4
           min-global-merge-ratio: 30
 
-          # spam behaviour
           max-daily-forks: 7
           detect-spam-usernames: true
 
-          # repo protection
           blocked-source-branches: |
             main
             master
 
-          # label results
+          blocked-terms: |
+            ignore previous instructions
+            you are a helpful AI
+            as an AI language model
+
+          exempt-draft-prs: true
+          exempt-bots: |
+            dependabot[bot]
+            renovate[bot]
+            github-actions[bot]
+          exempt-author-association: OWNER,MEMBER,COLLABORATOR
+
           success-add-pr-labels: checked
           failure-add-pr-labels: slop
 
-          # message when PR is closed
           failure-pr-message: |
-            ⚠️ This pull request was automatically closed by **Anti-Slop**.
-
+            ⚠️ This pull request has been flagged by **Anti-Slop**.
             Our automated checks detected patterns commonly associated with
-            low-quality or automated PR submissions.
+            low-quality or automated/AI submissions (failure count reached).
+            No automatic closure — a maintainer will review it.
+            If this is legitimate work, please add more context, link issues, or ping us.
 
-            If this was a mistake, a maintainer can reopen the PR.
+          close-pr: false
