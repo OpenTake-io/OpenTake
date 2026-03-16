@@ -106,11 +106,11 @@ Linux currently use Electron's capture path, which means the OS cursor cannot al
 # Screenshots
 
 <p align="center">
-  <img src="https://i.postimg.cc/d0t09ypT/Screenshot-2026-03-09-at-8-10-08-pm.png" width="700" alt="Recordly editor screenshot">
+  <img src="https://i.postimg.cc/B6bX9gcy/Screenshot-2026-03-16-at-1-33-51-pm.png" width="700" alt="Recordly editor screenshot">
 </p>
 
 <p align="center">
-  <img src="https://i.postimg.cc/YSgdbvFj/Screenshot-2026-03-09-at-8-49-14-pm.png" width="700" alt="Recordly recording interface screenshot">
+  <img src="https://i.postimg.cc/nhnmSqgV/Screenshot-2026-03-16-at-1-36-14-pm.png" width="700" alt="Recordly recording interface screenshot">
 </p>
 
 ---
