@@ -12,6 +12,7 @@ const RENDERER_DIST = path.join(APP_ROOT, 'dist')
 const WINDOW_ICON_PATH = path.join(process.env.VITE_PUBLIC || RENDERER_DIST, 'app-icons', 'recordly-512.png')
 
 let hudOverlayWindow: BrowserWindow | null = null;
+let countdownWindow: BrowserWindow | null = null;
 
 function getScreen() {
   return nodeRequire('electron').screen as typeof import('electron').screen
@@ -28,8 +29,8 @@ export function createHudOverlayWindow(): BrowserWindow {
   const { workArea } = primaryDisplay;
 
 
-  const windowWidth = 600;
-  const windowHeight = 155;
+  const windowWidth = 660;
+  const windowHeight = 170;
 
   const x = Math.floor(workArea.x + (workArea.width - windowWidth) / 2);
   const y = Math.floor(workArea.y + workArea.height - windowHeight - 5);
@@ -37,10 +38,10 @@ export function createHudOverlayWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: windowWidth,
     height: windowHeight,
-    minWidth: 600,
-    maxWidth: 600,
-    minHeight: 155,
-    maxHeight: 155,
+    minWidth: 660,
+    maxWidth: 660,
+    minHeight: 170,
+    maxHeight: 170,
     x: x,
     y: y,
     frame: false,
@@ -176,11 +177,71 @@ export function createSourceSelectorWindow(): BrowserWindow {
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL + '?windowType=source-selector')
   } else {
-    win.loadFile(path.join(RENDERER_DIST, 'index.html'), { 
-      query: { windowType: 'source-selector' } 
+    win.loadFile(path.join(RENDERER_DIST, 'index.html'), {
+      query: { windowType: 'source-selector' }
     })
   }
 
   return win
+}
+
+export function createCountdownWindow(): BrowserWindow {
+  const primaryDisplay = getScreen().getPrimaryDisplay();
+  const { width, height } = primaryDisplay.workAreaSize;
+
+  const windowSize = 200;
+  const x = Math.floor((width - windowSize) / 2);
+  const y = Math.floor((height - windowSize) / 2);
+
+  const win = new BrowserWindow({
+    width: windowSize,
+    height: windowSize,
+    x: x,
+    y: y,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    focusable: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.mjs'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  })
+
+  countdownWindow = win;
+
+  // Show on all workspaces/spaces so it follows the user
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+  win.on('closed', () => {
+    if (countdownWindow === win) {
+      countdownWindow = null;
+    }
+  });
+
+  if (VITE_DEV_SERVER_URL) {
+    win.loadURL(VITE_DEV_SERVER_URL + '?windowType=countdown')
+  } else {
+    win.loadFile(path.join(RENDERER_DIST, 'index.html'), {
+      query: { windowType: 'countdown' }
+    })
+  }
+
+  return win
+}
+
+export function getCountdownWindow(): BrowserWindow | null {
+  return countdownWindow;
+}
+
+export function closeCountdownWindow(): void {
+  if (countdownWindow && !countdownWindow.isDestroyed()) {
+    countdownWindow.close();
+    countdownWindow = null;
+  }
 }
 

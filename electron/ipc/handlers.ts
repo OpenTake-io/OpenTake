@@ -9,6 +9,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import { RECORDINGS_DIR } from '../main'
+import { createCountdownWindow, getCountdownWindow, closeCountdownWindow } from '../windows'
 
 const execFileAsync = promisify(execFile)
 const nodeRequire = createRequire(import.meta.url)
@@ -17,6 +18,7 @@ const PROJECT_FILE_EXTENSION = 'recordly'
 const LEGACY_PROJECT_FILE_EXTENSIONS = ['openscreen']
 const SHORTCUTS_FILE = path.join(app.getPath('userData'), 'shortcuts.json')
 const RECORDINGS_SETTINGS_FILE = path.join(app.getPath('userData'), 'recordings-settings.json')
+const COUNTDOWN_SETTINGS_FILE = path.join(app.getPath('userData'), 'countdown-settings.json')
 const AUTO_RECORDING_PREFIX = 'recording-'
 const AUTO_RECORDING_RETENTION_COUNT = 20
 const AUTO_RECORDING_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000
@@ -77,6 +79,9 @@ let customRecordingsDir: string | null = null
 let recordingsDirLoaded = false
 let cachedSystemCursorAssets: Record<string, SystemCursorAsset> | null = null
 let cachedSystemCursorAssetsSourceMtimeMs: number | null = null
+let countdownTimer: ReturnType<typeof setInterval> | null = null
+let countdownCancelled = false
+let countdownInProgress = false
 
 type SystemCursorAsset = {
   dataUrl: string
@@ -2767,5 +2772,92 @@ export function registerIpcHandlers(
       return { success: false, error: String(error) };
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // Countdown timer before recording
+  // ---------------------------------------------------------------------------
+  ipcMain.handle('get-countdown-delay', async () => {
+    try {
+      const content = await fs.readFile(COUNTDOWN_SETTINGS_FILE, 'utf-8')
+      const parsed = JSON.parse(content) as { delay?: number }
+      return { success: true, delay: parsed.delay ?? 3 }
+    } catch {
+      return { success: true, delay: 3 }
+    }
+  })
+
+  ipcMain.handle('set-countdown-delay', async (_, delay: number) => {
+    try {
+      await fs.writeFile(COUNTDOWN_SETTINGS_FILE, JSON.stringify({ delay }, null, 2), 'utf-8')
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to save countdown delay:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  ipcMain.handle('start-countdown', async (_, seconds: number) => {
+    if (countdownInProgress) {
+      return { success: false, error: 'Countdown already in progress' }
+    }
+
+    countdownInProgress = true
+    countdownCancelled = false
+
+    const countdownWin = createCountdownWindow()
+
+    await new Promise<void>((resolve) => {
+      countdownWin.webContents.once('did-finish-load', () => {
+        resolve()
+      })
+    })
+
+    return new Promise<{ success: boolean; cancelled?: boolean }>((resolve) => {
+      let remaining = seconds
+
+      countdownWin.webContents.send('countdown-tick', remaining)
+
+      countdownTimer = setInterval(() => {
+        if (countdownCancelled) {
+          if (countdownTimer) {
+            clearInterval(countdownTimer)
+            countdownTimer = null
+          }
+          closeCountdownWindow()
+          countdownInProgress = false
+          resolve({ success: false, cancelled: true })
+          return
+        }
+
+        remaining--
+
+        if (remaining <= 0) {
+          if (countdownTimer) {
+            clearInterval(countdownTimer)
+            countdownTimer = null
+          }
+          closeCountdownWindow()
+          countdownInProgress = false
+          resolve({ success: true })
+        } else {
+          const win = getCountdownWindow()
+          if (win && !win.isDestroyed()) {
+            win.webContents.send('countdown-tick', remaining)
+          }
+        }
+      }, 1000)
+    })
+  })
+
+  ipcMain.handle('cancel-countdown', () => {
+    countdownCancelled = true
+    countdownInProgress = false
+    if (countdownTimer) {
+      clearInterval(countdownTimer)
+      countdownTimer = null
+    }
+    closeCountdownWindow()
+    return { success: true }
+  })
 }
 

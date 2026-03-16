@@ -185,5 +185,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   muxWgcRecording: () => ipcRenderer.invoke('mux-wgc-recording'),
   // Cursor visibility control for cursor-free browser capture fallback
   hideOsCursor: () => ipcRenderer.invoke('hide-cursor'),
+  // Countdown timer before recording
+  getCountdownDelay: () => ipcRenderer.invoke('get-countdown-delay'),
+  setCountdownDelay: (delay: number) => ipcRenderer.invoke('set-countdown-delay', delay),
+  startCountdown: (seconds: number) => ipcRenderer.invoke('start-countdown', seconds),
+  cancelCountdown: () => ipcRenderer.invoke('cancel-countdown'),
+  onCountdownTick: (callback: (seconds: number) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, seconds: number) => callback(seconds)
+    ipcRenderer.on('countdown-tick', listener)
+    return () => ipcRenderer.removeListener('countdown-tick', listener)
+  },
 })
 
