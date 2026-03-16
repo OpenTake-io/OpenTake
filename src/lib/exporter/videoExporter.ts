@@ -3,7 +3,7 @@ import { AudioProcessor } from './audioEncoder';
 import { StreamingVideoDecoder } from './streamingDecoder';
 import { FrameRenderer } from './frameRenderer';
 import { VideoMuxer } from './muxer';
-import type { ZoomRegion, CropRegion, TrimRegion, AnnotationRegion, SpeedRegion, CursorTelemetryPoint } from '@/components/video-editor/types';
+import type { ZoomRegion, CropRegion, TrimRegion, AnnotationRegion, SpeedRegion, AudioRegion, CursorTelemetryPoint } from '@/components/video-editor/types';
 
 interface VideoExporterConfig extends ExportConfig {
   videoUrl: string;
@@ -27,6 +27,7 @@ interface VideoExporterConfig extends ExportConfig {
   cursorSmoothing?: number;
   cursorMotionBlur?: number;
   cursorClickBounce?: number;
+  audioRegions?: AudioRegion[];
   previewWidth?: number;
   previewHeight?: number;
   onProgress?: (progress: ExportProgress) => void;
@@ -94,7 +95,8 @@ export class VideoExporter {
       // Initialize video encoder
       await this.initializeEncoder();
 
-      const hasAudio = videoInfo.hasAudio;
+      const hasAudioRegions = (this.config.audioRegions ?? []).length > 0;
+      const hasAudio = videoInfo.hasAudio || hasAudioRegions;
 
       // Initialize muxer
       this.muxer = new VideoMuxer(this.config, hasAudio);
@@ -148,15 +150,17 @@ export class VideoExporter {
 
       if (hasAudio && !this.cancelled) {
         const demuxer = this.streamingDecoder.getDemuxer();
-        if (demuxer) {
+        if (demuxer || hasAudioRegions) {
           this.audioProcessor = new AudioProcessor();
           await this.awaitWithWindowsTimeout(
             this.audioProcessor.process(
-              demuxer,
+              demuxer!,
               this.muxer!,
               this.config.videoUrl,
               this.config.trimRegions,
               this.config.speedRegions,
+              undefined,
+              this.config.audioRegions,
             ),
             'audio processing',
           );
@@ -254,6 +258,14 @@ export class VideoExporter {
     this.chunkCount = 0;
     let videoDescription: Uint8Array | undefined;
 
+    // Ordered from most capable to most compatible. avc1.PPCCLL where PP=profile, CC=constraints, LL=level.
+    // High 5.1 → Main 5.1 → Baseline 5.1 → Main 3.1 → Baseline 3.1
+    const CODEC_FALLBACK_LIST = this.config.codec
+      ? [this.config.codec]
+      : ['avc1.640033', 'avc1.4d4033', 'avc1.420033', 'avc1.4d401f', 'avc1.42001f'];
+
+    let resolvedCodec: string | null = null;
+
     this.encoder = new VideoEncoder({
       output: (chunk, meta) => {
         // Capture decoder config metadata from encoder output
@@ -284,7 +296,7 @@ export class VideoExporter {
 
               const metadata: EncodedVideoChunkMetadata = {
                 decoderConfig: {
-                  codec: this.config.codec || 'avc1.640033',
+                  codec: resolvedCodec ?? (this.config.codec || 'avc1.640033'),
                   codedWidth: this.config.width,
                   codedHeight: this.config.height,
                   description: this.videoDescription,
@@ -303,44 +315,52 @@ export class VideoExporter {
         this.encodeQueue--;
       },
       error: (error) => {
-        console.error('[VideoExporter] Encoder error:', error);
-        // Stop export encoding failed
+        console.error(
+          `[VideoExporter] Encoder error (codec: ${resolvedCodec}, ${this.config.width}x${this.config.height}):`,
+          error,
+        );
+        // Stop export — encoding failed
         this.cancelled = true;
       },
     });
 
-    const codec = this.config.codec || 'avc1.640033';
-
-    const encoderConfig: VideoEncoderConfig = {
-      codec,
+    const baseConfig: Omit<VideoEncoderConfig, 'codec' | 'hardwareAcceleration'> = {
       width: this.config.width,
       height: this.config.height,
       bitrate: this.config.bitrate,
       framerate: this.config.frameRate,
-      latencyMode: 'quality', // Changed from 'realtime' to 'quality' for better throughput
+      latencyMode: 'quality',
       bitrateMode: 'variable',
-      hardwareAcceleration: 'prefer-hardware',
     };
 
-    // Check hardware support first
-    const hardwareSupport = await VideoEncoder.isConfigSupported(encoderConfig);
-
-    if (hardwareSupport.supported) {
-      // Use hardware encoding
-      console.log('[VideoExporter] Using hardware acceleration');
-      this.encoder.configure(encoderConfig);
-    } else {
-      // Fall back to software encoding
-      console.log('[VideoExporter] Hardware not supported, using software encoding');
-      encoderConfig.hardwareAcceleration = 'prefer-software';
-
-      const softwareSupport = await VideoEncoder.isConfigSupported(encoderConfig);
-      if (!softwareSupport.supported) {
-        throw new Error('Video encoding not supported on this system');
+    for (const candidateCodec of CODEC_FALLBACK_LIST) {
+      const hwConfig: VideoEncoderConfig = { ...baseConfig, codec: candidateCodec, hardwareAcceleration: 'prefer-hardware' };
+      const hwSupport = await VideoEncoder.isConfigSupported(hwConfig);
+      if (hwSupport.supported) {
+        resolvedCodec = candidateCodec;
+        console.log(`[VideoExporter] Using hardware acceleration with codec ${candidateCodec}`);
+        this.encoder.configure(hwConfig);
+        return;
       }
 
-      this.encoder.configure(encoderConfig);
+      const swConfig: VideoEncoderConfig = { ...baseConfig, codec: candidateCodec, hardwareAcceleration: 'prefer-software' };
+      const swSupport = await VideoEncoder.isConfigSupported(swConfig);
+      if (swSupport.supported) {
+        resolvedCodec = candidateCodec;
+        console.log(`[VideoExporter] Using software encoding with codec ${candidateCodec}`);
+        this.encoder.configure(swConfig);
+        return;
+      }
+
+      console.warn(`[VideoExporter] Codec ${candidateCodec} not supported (${this.config.width}x${this.config.height}), trying next…`);
     }
+
+    throw new Error(
+      `Video encoding not supported on this system. ` +
+      `Tried codecs: ${CODEC_FALLBACK_LIST.join(', ')} at ${this.config.width}x${this.config.height}. ` +
+      `Your browser or hardware may not support H.264 encoding at this resolution. ` +
+      `Try exporting at a lower quality setting.`,
+    );
   }
 
   cancel(): void {

@@ -48,7 +48,8 @@
 		"quality": {
 			"low": "Baja",
 			"medium": "Media",
-			"high": "Alta"
+			    "high": "Alta",
+			    "original": "Original"
 		},
 		"loop": "Bucle",
 		"outputDimensions": "Salida: {{dimensions}}px",

@@ -48,7 +48,8 @@
 		"quality": {
 			"low": "Low",
 			"medium": "Medium",
-			"high": "High"
+			    "high": "High",
+			    "original": "Original"
 		},
 		"loop": "Loop",
 		"outputDimensions": "Output: {{dimensions}}px",
