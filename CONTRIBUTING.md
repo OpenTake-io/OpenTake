@@ -10,6 +10,7 @@ Areas where help is especially valuable:
 - German localisation
 - Code optimisation/refactoring
 - Auto-zoom suggestion logic improvements
+- Regular updating of Chinese Readme
 
 ## How to Contribute
 
