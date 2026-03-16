@@ -35,3 +35,6 @@ export const WALLPAPER_PATHS = BUILT_IN_WALLPAPERS.map((wallpaper) => wallpaper.
 export const WALLPAPER_RELATIVE_PATHS = BUILT_IN_WALLPAPERS.map((wallpaper) => wallpaper.relativePath);
 export const DEFAULT_WALLPAPER_PATH = WALLPAPER_PATHS[0];
 export const DEFAULT_WALLPAPER_RELATIVE_PATH = WALLPAPER_RELATIVE_PATHS[0];
+
+/** Sentinel value indicating no background should be rendered. */
+export const NO_BACKGROUND = 'none';
