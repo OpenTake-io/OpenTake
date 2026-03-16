@@ -32,11 +32,11 @@ Recordly lets you record your screen and automatically transform it into a polis
 
 Recordly runs on:
 
-- **macOS**
-- **Windows**
-- **Linux**
+- **macOS** 12.3+
+- **Windows** 10 Build 19041+
+- **Linux** (modern distros)
 
-Linux currently use Electron's capture path, which means the OS cursor cannot always be hidden during recording.
+On Windows, builds older than 19041 fall back to Electron capture and the cursor cannot be hidden. On Linux, cursor hiding is not supported.
 
 
 
@@ -158,6 +158,19 @@ xattr -rd com.apple.quarantine /Applications/Recordly.app
 
 ---
 
+# System Requirements
+
+| Platform | Minimum version | Notes |
+|---|---|---|
+| **macOS** | macOS 12.3 (Monterey) | Required for ScreenCaptureKit. Recording and cursor hiding will not work on older versions. |
+| **Windows** | Windows 10 20H1 (Build 19041, May 2020) | Required for Windows Graphics Capture (`IsCursorCaptureEnabled`). Older builds fall back to Electron browser capture — cursor will be visible in recordings. |
+| **Linux** | Any modern distro | Recording works via Electron capture. Cursor is always visible in recordings. System audio requires PipeWire (Ubuntu 22.04+, Fedora 34+). |
+
+> [!IMPORTANT]
+> On Windows, if your build is older than 19041, recording will still work but **the cursor cannot be hidden** from the captured video.
+
+---
+
 # Usage
 
 ## Record
@@ -203,11 +216,13 @@ Adjust:
 
 # Limitations
 
-### Linux Cursor Capture
+### Cursor Capture
 
-Electron’s desktop capture API does not allow hiding the system cursor during recording.
+**macOS**: Cursor is excluded from the recording at the ScreenCaptureKit level — always clean.
 
-If you enable the animated cursor layer, recordings may contain **two cursors**.
+**Windows**: Cursor is excluded via Windows Graphics Capture (`IsCursorCaptureEnabled(false)`) — requires **Windows 10 Build 19041+**. On older builds the app falls back to Electron’s browser capture and the real cursor will be visible in the recording.
+
+**Linux**: Electron’s desktop capture API does not support cursor hiding. The real OS cursor will always be visible in recordings. If you also enable the animated cursor overlay in the editor, you may see **two cursors** in the output.
 
 Improving cross-platform cursor capture is an area where contributions are welcome.
 
@@ -218,7 +233,8 @@ Improving cross-platform cursor capture is an area where contributions are welco
 System audio capture depends on platform support.
 
 **Windows**
-- Works out of the box
+- Works out of the box via native WASAPI
+- Requires Windows 10 Build 19041+
 
 **Linux**
 - Requires PipeWire (Ubuntu 22.04+, Fedora 34+)
