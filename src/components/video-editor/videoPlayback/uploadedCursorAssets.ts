@@ -32,6 +32,13 @@ export const uploadedCursorAssets: Partial<Record<CursorAssetKey, UploadedCursor
     trim: { x: 480, y: 435, width: 333, height: 553 },
     fallbackAnchor: { x: 0.18, y: 0.1 },
   },
+  'not-allowed': {
+    // Keep style consistent with bundled mac-like cursors instead of falling
+    // back to platform-specific system icons.
+    url: arrowUrl,
+    trim: { x: 480, y: 435, width: 333, height: 553 },
+    fallbackAnchor: { x: 0.18, y: 0.1 },
+  },
   text: {
     url: textUrl,
     trim: { x: 404, y: 192, width: 247, height: 596 },
