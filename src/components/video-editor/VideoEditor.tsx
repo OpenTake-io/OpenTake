@@ -31,6 +31,7 @@ import {
   getAspectRatioValue,
 } from "@/utils/aspectRatioUtils";
 import { ExportDialog } from "./ExportDialog";
+import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
 import PlaybackControls from "./PlaybackControls";
 import {
   createProjectData,
@@ -128,6 +129,7 @@ function LanguageSwitcher() {
 
 export default function VideoEditor() {
   const { t } = useI18n();
+  const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
   const [videoPath, setVideoPath] = useState<string | null>(null);
   const [videoSourcePath, setVideoSourcePath] = useState<string | null>(null);
   const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(
@@ -182,7 +184,9 @@ export default function VideoEditor() {
   );
   const [exportError, setExportError] = useState<string | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
-  const [aspectRatio, setAspectRatio] = useState<AspectRatio>("16:9");
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>(
+    initialEditorPreferences.aspectRatio,
+  );
   const [exportQuality, setExportQuality] = useState<ExportQuality>("good");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("mp4");
   const [gifFrameRate, setGifFrameRate] = useState<GifFrameRate>(15);
@@ -535,6 +539,10 @@ export default function VideoEditor() {
 
     loadInitialData();
   }, [applyLoadedProject]);
+
+  useEffect(() => {
+    saveEditorPreferences({ aspectRatio });
+  }, [aspectRatio]);
 
   const saveProject = useCallback(
     async (forceSaveAs: boolean) => {
@@ -1705,7 +1713,6 @@ export default function VideoEditor() {
     [
       videoPath,
       wallpaper,
-      zoomRegions,
       trimRegions,
       speedRegions,
       shadowIntensity,
@@ -1726,6 +1733,7 @@ export default function VideoEditor() {
       isPlaying,
       aspectRatio,
       exportQuality,
+      effectiveZoomRegions,
       showExportSuccessToast,
     ],
   );
