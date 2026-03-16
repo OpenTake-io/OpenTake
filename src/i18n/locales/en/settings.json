@@ -24,6 +24,7 @@
 		"off": "Off",
 		"cursorMotionBlur": "Cursor Motion Blur",
 		"cursorClickBounce": "Cursor Click Bounce",
+		"cursorSway": "Cursor Sway",
 		"shadow": "Shadow",
 		"roundness": "Roundness",
 		"padding": "Padding"
@@ -47,8 +48,8 @@
 		"quality": {
 			"low": "Low",
 			"medium": "Medium",
-			    "high": "High",
-			    "original": "Original"
+			"high": "High",
+			"original": "Original"
 		},
 		"loop": "Loop",
 		"outputDimensions": "Output: {{dimensions}}px",

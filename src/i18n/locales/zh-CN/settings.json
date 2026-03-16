@@ -24,6 +24,7 @@
 		"off": "关",
 		"cursorMotionBlur": "光标运动模糊",
 		"cursorClickBounce": "光标点击弹跳",
+		"cursorSway": "光标摆动",
 		"shadow": "阴影",
 		"roundness": "圆角",
 		"padding": "内边距"

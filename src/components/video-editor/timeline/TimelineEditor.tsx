@@ -15,6 +15,7 @@ import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
 import { formatShortcut } from "@/utils/platformUtils";
+import { loadEditorPreferences, saveEditorPreferences } from "../editorPreferences";
 import { TutorialHelp } from "../TutorialHelp";
 import TimelineWrapper from "./TimelineWrapper";
 import Row from "./Row";
@@ -653,6 +654,7 @@ export default function TimelineEditor({
   aspectRatio,
   onAspectRatioChange,
 }: TimelineEditorProps) {
+  const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
   const totalMs = useMemo(() => Math.max(0, Math.round(videoDuration * 1000)), [videoDuration]);
   const currentTimeMs = useMemo(() => Math.round(currentTime * 1000), [currentTime]);
   const timelineScale = useMemo(() => calculateTimelineScale(videoDuration), [videoDuration]);
@@ -664,8 +666,8 @@ export default function TimelineEditor({
   const [range, setRange] = useState<Range>(() => createInitialRange(totalMs));
   const [keyframes, setKeyframes] = useState<{ id: string; time: number }[]>([]);
   const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null);
-  const [customAspectWidth, setCustomAspectWidth] = useState('16');
-  const [customAspectHeight, setCustomAspectHeight] = useState('9');
+  const [customAspectWidth, setCustomAspectWidth] = useState(initialEditorPreferences.customAspectWidth);
+  const [customAspectHeight, setCustomAspectHeight] = useState(initialEditorPreferences.customAspectHeight);
   const [scrollLabels, setScrollLabels] = useState({
     pan: 'Shift + Ctrl + Scroll',
     zoom: 'Ctrl + Scroll'
@@ -683,6 +685,13 @@ export default function TimelineEditor({
       setCustomAspectHeight(height);
     }
   }, [aspectRatio]);
+
+  useEffect(() => {
+    saveEditorPreferences({
+      customAspectWidth,
+      customAspectHeight,
+    });
+  }, [customAspectHeight, customAspectWidth]);
 
   const applyCustomAspectRatio = useCallback(() => {
     const width = Number.parseInt(customAspectWidth, 10);
