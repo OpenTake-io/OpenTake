@@ -358,7 +358,13 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
       (validAspectRatios.has(editor.aspectRatio as AspectRatio) || isCustomAspectRatio(editor.aspectRatio))
         ? (editor.aspectRatio as AspectRatio)
         : "16:9",
-    exportQuality: editor.exportQuality === "medium" || editor.exportQuality === "source" ? editor.exportQuality : "good",
+    exportQuality:
+      editor.exportQuality === "medium" ||
+      editor.exportQuality === "good" ||
+      editor.exportQuality === "high" ||
+      editor.exportQuality === "source"
+        ? editor.exportQuality
+        : "good",
     exportFormat: editor.exportFormat === "gif" ? "gif" : "mp4",
     gifFrameRate:
       editor.gifFrameRate === 15 ||

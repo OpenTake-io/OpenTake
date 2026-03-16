@@ -1525,12 +1525,21 @@ export default function VideoEditor() {
             bitrate = 80_000_000;
           }
         } else {
-          // Use quality-based target resolution
-          const targetHeight = quality === 'medium' ? 720 : 1080;
+          // Use source-relative quality scaling.
+          // "source" is handled above; this branch maps the remaining tiers.
+          const qualityScale =
+            quality === 'medium' ? 0.6 : quality === 'good' ? 0.75 : 0.9;
+          const maxWidth = Math.max(2, Math.floor((sourceWidth * qualityScale) / 2) * 2);
+          const maxHeight = Math.max(2, Math.floor((sourceHeight * qualityScale) / 2) * 2);
+          const maxAspect = maxWidth / maxHeight;
 
-          // Calculate dimensions maintaining aspect ratio
-          exportHeight = Math.floor(targetHeight / 2) * 2;
-          exportWidth = Math.floor((exportHeight * aspectRatioValue) / 2) * 2;
+          if (aspectRatioValue >= maxAspect) {
+            exportWidth = maxWidth;
+            exportHeight = Math.max(2, Math.floor((exportWidth / aspectRatioValue) / 2) * 2);
+          } else {
+            exportHeight = maxHeight;
+            exportWidth = Math.max(2, Math.floor((exportHeight * aspectRatioValue) / 2) * 2);
+          }
 
           // Adjust bitrate for lower resolutions
           const totalPixels = exportWidth * exportHeight;
