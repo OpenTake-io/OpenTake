@@ -185,13 +185,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       return;
     }
 
-    const recorderState = mediaRecorder.current?.state;
-    if (recorderState === "recording" || recorderState === "paused") {
+    const recorder = mediaRecorder.current;
+    const recorderState = recorder?.state;
+    if (recorder && (recorderState === "recording" || recorderState === "paused")) {
       if (recorderState === "paused") {
-        mediaRecorder.current.resume();
+        recorder.resume();
       }
       cleanupCapturedMedia();
-      mediaRecorder.current.stop();
+      recorder.stop();
       setRecording(false);
       window.electronAPI?.setRecordingState(false);
     }
