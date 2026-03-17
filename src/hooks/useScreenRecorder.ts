@@ -28,7 +28,11 @@ const MIC_GAIN_BOOST = 1.4;
 
 type UseScreenRecorderReturn = {
   recording: boolean;
+  paused: boolean;
   toggleRecording: () => void;
+  pauseRecording: () => void;
+  resumeRecording: () => void;
+  cancelRecording: () => void;
   preparePermissions: (options?: { startup?: boolean }) => Promise<boolean>;
   isMacOS: boolean;
   microphoneEnabled: boolean;
@@ -41,6 +45,7 @@ type UseScreenRecorderReturn = {
 
 export function useScreenRecorder(): UseScreenRecorderReturn {
   const [recording, setRecording] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [starting, setStarting] = useState(false);
   const [isMacOS, setIsMacOS] = useState(false);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
@@ -150,6 +155,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   }, []);
 
   const stopRecording = useRef(() => {
+    setPaused(false);
     if (nativeScreenRecording.current) {
       nativeScreenRecording.current = false;
       setRecording(false);
@@ -303,13 +309,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
           microphoneLabel: micLabel,
         });
         if (!nativeResult.success) {
-          if (useWgcCapture) {
-            console.warn("WGC capture failed, falling back to browser capture:", nativeResult.error ?? nativeResult.message);
-          } else {
-            throw new Error(
-              nativeResult.error ?? nativeResult.message ?? "Failed to start native screen recording",
-            );
-          }
+          console.warn("Native capture failed, falling back to browser capture:", nativeResult.error ?? nativeResult.message);
         }
 
         if (nativeResult.success) {
@@ -548,6 +548,46 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     }
   };
 
+  const pauseRecording = useCallback(() => {
+    if (!recording || paused) return;
+    if (mediaRecorder.current?.state === "recording") {
+      mediaRecorder.current.pause();
+      setPaused(true);
+    }
+  }, [recording, paused]);
+
+  const resumeRecording = useCallback(() => {
+    if (!recording || !paused) return;
+    if (mediaRecorder.current?.state === "paused") {
+      mediaRecorder.current.resume();
+      setPaused(false);
+    }
+  }, [recording, paused]);
+
+  const cancelRecording = useCallback(() => {
+    if (!recording) return;
+    setPaused(false);
+
+    if (nativeScreenRecording.current) {
+      nativeScreenRecording.current = false;
+      wgcRecording.current = false;
+      setRecording(false);
+      window.electronAPI?.setRecordingState(false);
+      void window.electronAPI.stopNativeScreenRecording();
+      return;
+    }
+
+    if (mediaRecorder.current) {
+      chunks.current = [];
+      cleanupCapturedMedia();
+      if (mediaRecorder.current.state !== "inactive") {
+        mediaRecorder.current.stop();
+      }
+      setRecording(false);
+      window.electronAPI?.setRecordingState(false);
+    }
+  }, [recording, cleanupCapturedMedia]);
+
   const toggleRecording = () => {
     if (starting) {
       return;
@@ -558,7 +598,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
   return {
     recording,
+    paused,
     toggleRecording,
+    pauseRecording,
+    resumeRecording,
+    cancelRecording,
     preparePermissions,
     isMacOS,
     microphoneEnabled,

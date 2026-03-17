@@ -28,6 +28,7 @@ interface Window {
     switchToEditor: () => Promise<void>
     openSourceSelector: () => Promise<void>
     selectSource: (source: any) => Promise<any>
+    showSourceHighlight: (source: any) => Promise<{ success: boolean }>
     getSelectedSource: () => Promise<any>
     startNativeScreenRecording: (
       source: any,
