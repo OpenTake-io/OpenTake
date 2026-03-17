@@ -9,11 +9,11 @@
 .bar {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 8px;
 	background: rgba(18, 18, 24, 0.97);
 	border: 1px solid rgba(255, 255, 255, 0.07);
-	border-radius: 16px;
-	padding: 7px 10px;
+	border-radius: 18px;
+	padding: 10px 14px;
 	box-shadow:
 		0 8px 40px rgba(0, 0, 0, 0.45),
 		inset 0 1px 0 rgba(255, 255, 255, 0.04);
@@ -23,7 +23,7 @@
 
 .sep {
 	width: 1px;
-	height: 22px;
+	height: 26px;
 	background: #2a2a34;
 	margin: 0 4px;
 	flex-shrink: 0;
@@ -31,9 +31,9 @@
 
 .ib {
 	position: relative;
-	width: 36px;
-	height: 36px;
-	border-radius: 10px;
+	width: 40px;
+	height: 40px;
+	border-radius: 11px;
 	border: none;
 	background: transparent;
 	color: #6b6b78;
@@ -79,9 +79,9 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 7px;
-	height: 36px;
-	padding: 0 12px 0 10px;
-	border-radius: 10px;
+	height: 40px;
+	padding: 0 14px 0 12px;
+	border-radius: 11px;
 	border: 1px solid #2a2a34;
 	background: #1a1a22;
 	color: #eeeef2;
@@ -97,23 +97,35 @@
 	background: #20202a;
 }
 
-.dropdown {
-	width: 260px;
-	max-height: 320px;
+.menuArea {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	pointer-events: none;
+	overflow: hidden;
+	min-height: 0;
+}
+
+.menuCard {
+	width: 300px;
+	max-height: 400px;
 	overflow-y: auto;
 	background: rgba(22, 22, 30, 0.96);
 	border: 1px solid rgba(255, 255, 255, 0.07);
-	border-radius: 12px;
-	padding: 6px;
+	border-radius: 14px;
+	padding: 8px;
+	margin-top: auto;
 	margin-bottom: 8px;
 	box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
-	animation: dropdownIn 0.15s ease;
+	pointer-events: auto;
+	animation: menuCardIn 0.18s ease;
 }
 
-@keyframes dropdownIn {
+@keyframes menuCardIn {
 	from {
 		opacity: 0;
-		transform: translateY(8px);
+		transform: translateY(12px);
 	}
 	to {
 		opacity: 1;
@@ -121,15 +133,15 @@
 	}
 }
 
-.dropdown::-webkit-scrollbar {
+.menuCard::-webkit-scrollbar {
 	width: 4px;
 }
 
-.dropdown::-webkit-scrollbar-track {
+.menuCard::-webkit-scrollbar-track {
 	background: transparent;
 }
 
-.dropdown::-webkit-scrollbar-thumb {
+.menuCard::-webkit-scrollbar-thumb {
 	background: #2a2a34;
 	border-radius: 2px;
 }
@@ -170,8 +182,8 @@
 
 .recBtn {
 	position: relative;
-	width: 42px;
-	height: 42px;
+	width: 46px;
+	height: 46px;
 	border-radius: 50%;
 	border: none;
 	background: #f43f5e;

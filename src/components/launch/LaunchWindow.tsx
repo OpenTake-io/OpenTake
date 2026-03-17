@@ -100,6 +100,33 @@ function Separator() {
 	return <div className={styles.sep} />;
 }
 
+function MicDeviceRow({
+	device,
+	selected,
+	onSelect,
+}: {
+	device: { deviceId: string; label: string };
+	selected: boolean;
+	onSelect: () => void;
+}) {
+	const { level } = useAudioLevelMeter({
+		enabled: true,
+		deviceId: device.deviceId,
+	});
+
+	return (
+		<button
+			type="button"
+			className={`${styles.ddItem} ${selected ? styles.ddItemSelected : ""}`}
+			onClick={onSelect}
+		>
+			<span className="shrink-0">{selected ? <Mic size={16} /> : <MicOff size={16} />}</span>
+			<span className="truncate flex-1">{device.label}</span>
+			<AudioLevelMeter level={level} className="w-16 shrink-0" />
+		</button>
+	);
+}
+
 export function LaunchWindow() {
 	const { locale, setLocale } = useI18n();
 	const t = useScopedT("launch");
@@ -126,18 +153,14 @@ export function LaunchWindow() {
 	const [selectedSource, setSelectedSource] = useState("Screen");
 	const [hasSelectedSource, setHasSelectedSource] = useState(false);
 	const [recordingsDirectory, setRecordingsDirectory] = useState<string | null>(null);
-	const [activeDropdown, setActiveDropdown] = useState<"none" | "sources" | "more">("none");
+	const [activeDropdown, setActiveDropdown] = useState<"none" | "sources" | "more" | "mic">("none");
 	const [sources, setSources] = useState<DesktopSource[]>([]);
 	const [sourcesLoading, setSourcesLoading] = useState(false);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 
-	const showMicControls = microphoneEnabled && !recording;
+	const micDropdownOpen = activeDropdown === "mic";
 	const { devices, selectedDeviceId, setSelectedDeviceId } =
-		useMicrophoneDevices(microphoneEnabled);
-	const { level } = useAudioLevelMeter({
-		enabled: showMicControls,
-		deviceId: microphoneDeviceId,
-	});
+		useMicrophoneDevices(microphoneEnabled || micDropdownOpen);
 
 	useEffect(() => {
 		if (selectedDeviceId && selectedDeviceId !== "default") {
@@ -260,7 +283,7 @@ export function LaunchWindow() {
 		}
 	}, []);
 
-	const toggleDropdown = (which: "sources" | "more") => {
+	const toggleDropdown = (which: "sources" | "more" | "mic") => {
 		setActiveDropdown(activeDropdown === which ? "none" : which);
 		if (activeDropdown !== which && which === "sources") fetchSources();
 	};
@@ -302,7 +325,8 @@ export function LaunchWindow() {
 	};
 
 	const toggleMicrophone = () => {
-		if (!recording) setMicrophoneEnabled(!microphoneEnabled);
+		if (recording) return;
+		toggleDropdown("mic");
 	};
 
 	const screenSources = sources.filter((s) => s.sourceType === "screen");
@@ -310,113 +334,140 @@ export function LaunchWindow() {
 
 	return (
 		<div
-			className="w-full h-full flex flex-col justify-end items-center bg-transparent"
+			className="w-full flex flex-col bg-transparent"
+			style={{ height: "100vh" }}
 			ref={dropdownRef}
 		>
-			{activeDropdown !== "none" && (
-				<div className={`${styles.dropdown} ${styles.electronNoDrag}`}>
-					{activeDropdown === "sources" && (
-						<>
-							{sourcesLoading ? (
-								<div className="flex items-center justify-center py-6">
-									<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#6b6b78]" />
-								</div>
-							) : (
-								<>
-									{screenSources.length > 0 && (
-										<>
-											<div className={styles.ddLabel}>Screens</div>
-											{screenSources.map((source) => (
-												<DropdownItem
-													key={source.id}
-													icon={<Monitor size={16} />}
-													selected={selectedSource === source.name}
-													onClick={() => handleSourceSelect(source)}
-												>
-													{source.name}
-												</DropdownItem>
-											))}
-										</>
-									)}
-									{windowSources.length > 0 && (
-										<>
-											<div className={styles.ddLabel} style={screenSources.length > 0 ? { marginTop: 4 } : undefined}>
-												Windows
+			{/* Top area — flex:1 reserves space, menu card sits at bottom of this area */}
+			<div className={styles.menuArea}>
+				{activeDropdown !== "none" && (
+					<div className={`${styles.menuCard} ${styles.electronNoDrag}`}>
+						{activeDropdown === "sources" && (
+							<>
+								{sourcesLoading ? (
+									<div className="flex items-center justify-center py-6">
+										<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#6b6b78]" />
+									</div>
+								) : (
+									<>
+										{screenSources.length > 0 && (
+											<>
+												<div className={styles.ddLabel}>Screens</div>
+												{screenSources.map((source) => (
+													<DropdownItem
+														key={source.id}
+														icon={<Monitor size={16} />}
+														selected={selectedSource === source.name}
+														onClick={() => handleSourceSelect(source)}
+													>
+														{source.name}
+													</DropdownItem>
+												))}
+											</>
+										)}
+										{windowSources.length > 0 && (
+											<>
+												<div className={styles.ddLabel} style={screenSources.length > 0 ? { marginTop: 4 } : undefined}>
+													Windows
+												</div>
+												{windowSources.map((source) => (
+													<DropdownItem
+														key={source.id}
+														icon={<AppWindow size={16} />}
+														selected={selectedSource === source.name}
+														onClick={() => handleSourceSelect(source)}
+													>
+														{source.appName && source.appName !== source.name
+															? `${source.appName} — ${source.name}`
+															: source.name}
+													</DropdownItem>
+												))}
+											</>
+										)}
+										{screenSources.length === 0 && windowSources.length === 0 && (
+											<div className="text-center text-xs text-[#6b6b78] py-4">
+												No sources found
 											</div>
-											{windowSources.map((source) => (
-												<DropdownItem
-													key={source.id}
-													icon={<AppWindow size={16} />}
-													selected={selectedSource === source.name}
-													onClick={() => handleSourceSelect(source)}
-												>
-													{source.appName && source.appName !== source.name
-														? `${source.appName} — ${source.name}`
-														: source.name}
-												</DropdownItem>
-											))}
-										</>
-									)}
-									{screenSources.length === 0 && windowSources.length === 0 && (
-										<div className="text-center text-xs text-[#6b6b78] py-4">
-											No sources found
-										</div>
-									)}
-								</>
-							)}
-						</>
-					)}
+										)}
+									</>
+								)}
+							</>
+						)}
 
-					{activeDropdown === "more" && (
-						<>
-							<DropdownItem
-								icon={systemAudioEnabled ? <Volume2 size={16} className="text-[#6360f5]" /> : <VolumeX size={16} />}
-								onClick={() => setSystemAudioEnabled(!systemAudioEnabled)}
-								trailing={systemAudioEnabled ? <span className="ml-auto text-[#6360f5] text-xs">&#10003;</span> : undefined}
-							>
-								System Audio
-							</DropdownItem>
-							<DropdownItem icon={<FolderOpen size={16} />} onClick={chooseRecordingsDirectory}>
-								Recordings Folder
-							</DropdownItem>
-							<DropdownItem icon={<VideoIcon size={16} />} onClick={openVideoFile}>
-								{t("recording.openVideoFile")}
-							</DropdownItem>
-							<DropdownItem icon={<FolderOpen size={16} />} onClick={openProjectFile}>
-								{t("recording.openProject")}
-							</DropdownItem>
-							<div className={styles.ddLabel} style={{ marginTop: 4 }}>Language</div>
-							{SUPPORTED_LOCALES.map((code) => (
+						{activeDropdown === "mic" && (
+							<>
+								<div className={styles.ddLabel}>Microphone</div>
+								{microphoneEnabled && (
+									<DropdownItem
+										icon={<MicOff size={16} />}
+										onClick={() => { setMicrophoneEnabled(false); setActiveDropdown("none"); }}
+									>
+										Turn Off Microphone
+									</DropdownItem>
+								)}
+								{!microphoneEnabled && (
+									<div className="px-3 py-2 text-xs text-[#6b6b78]">
+										Select a microphone to enable
+									</div>
+								)}
+								{devices.map((device) => (
+									<MicDeviceRow
+										key={device.deviceId}
+										device={device}
+										selected={microphoneEnabled && (microphoneDeviceId === device.deviceId || selectedDeviceId === device.deviceId)}
+										onSelect={() => {
+											setMicrophoneEnabled(true);
+											setSelectedDeviceId(device.deviceId);
+											setMicrophoneDeviceId(device.deviceId);
+										}}
+									/>
+								))}
+								{devices.length === 0 && (
+									<div className="text-center text-xs text-[#6b6b78] py-4">
+										No microphones found
+									</div>
+								)}
+							</>
+						)}
+
+						{activeDropdown === "more" && (
+							<>
 								<DropdownItem
-									key={code}
-									icon={<Languages size={16} />}
-									selected={locale === code}
-									onClick={() => { setLocale(code as AppLocale); setActiveDropdown("none"); }}
+									icon={systemAudioEnabled ? <Volume2 size={16} className="text-[#6360f5]" /> : <VolumeX size={16} />}
+									onClick={() => setSystemAudioEnabled(!systemAudioEnabled)}
+									trailing={systemAudioEnabled ? <span className="ml-auto text-[#6360f5] text-xs">&#10003;</span> : undefined}
 								>
-									{LOCALE_LABELS[code] ?? code}
+									System Audio
 								</DropdownItem>
-							))}
-						</>
-					)}
-				</div>
-			)}
+								<DropdownItem icon={<FolderOpen size={16} />} onClick={chooseRecordingsDirectory}>
+									Recordings Folder
+								</DropdownItem>
+								<DropdownItem icon={<VideoIcon size={16} />} onClick={openVideoFile}>
+									{t("recording.openVideoFile")}
+								</DropdownItem>
+								<DropdownItem icon={<FolderOpen size={16} />} onClick={openProjectFile}>
+									{t("recording.openProject")}
+								</DropdownItem>
+								<div className={styles.ddLabel} style={{ marginTop: 4 }}>Language</div>
+								{SUPPORTED_LOCALES.map((code) => (
+									<DropdownItem
+										key={code}
+										icon={<Languages size={16} />}
+										selected={locale === code}
+										onClick={() => { setLocale(code as AppLocale); setActiveDropdown("none"); }}
+									>
+										{LOCALE_LABELS[code] ?? code}
+									</DropdownItem>
+								))}
+							</>
+						)}
+					</div>
+				)}
+			</div>
 
-			{showMicControls && (
-				<div className={`flex items-center gap-2 mb-2 rounded-xl border border-white/[0.07] bg-[rgba(18,18,24,0.97)] px-3 py-2 shadow-xl ${styles.electronNoDrag}`}>
-					<select
-						value={microphoneDeviceId || selectedDeviceId}
-						onChange={(e) => { setSelectedDeviceId(e.target.value); setMicrophoneDeviceId(e.target.value); }}
-						className={`max-w-[230px] rounded-lg border border-[#2a2a34] bg-[#1a1a22] px-3 py-1 text-xs text-[#eeeef2] outline-none ${styles.micSelect}`}
-					>
-						{devices.map((device) => (
-							<option key={device.deviceId} value={device.deviceId}>{device.label}</option>
-						))}
-					</select>
-					<AudioLevelMeter level={level} className="w-24" />
-				</div>
-			)}
-
-			<div className={`${styles.bar} ${styles.electronDrag} mb-2`}>
+			{/* Bottom section — fixed height, bar always stays here */}
+			<div className="flex flex-col items-center">
+				<div className={`${styles.bar} ${styles.electronDrag} mb-2`}>
 				<div className={`flex items-center px-0.5 ${styles.electronDrag}`}>
 					<RxDragHandleDots2 size={14} className="text-[#6b6b78]" />
 				</div>
@@ -503,6 +554,7 @@ export function LaunchWindow() {
 						</IconButton>
 					</>
 				)}
+				</div>
 			</div>
 		</div>
 	);
