@@ -22,7 +22,7 @@ Recordly includes a full cursor animation/rendering pipeline, native macOS and W
 
 > [!NOTE]
 > Huge thank you to **tadees** for supporting! This donation directly helps cover the Apple Developer fees to get Recordly signed and notarised for macOS. Still waiting for Apple approval.
-[**Support the project**](https://ko-fi.com)
+[**Support the project**](https://ko-fi.com/webadderall/goal?g=0)
 
 
 ---
