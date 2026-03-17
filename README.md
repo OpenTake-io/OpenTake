@@ -21,7 +21,7 @@ Language: EN | [简中](README.zh-CN.md)
 </p>
 
 > [!NOTE]
-> Huge thank you to **tadees** for supporting the project! This donation directly helps cover the Apple Developer fees to get Recordly signed and notarised for macOS. Still waiting for Apple approval.
+> Huge thank you to **tadees** for supporting! This donation directly helps cover the Apple Developer fees to get Recordly signed and notarised for macOS. Still waiting for Apple approval.
 [**Support the project**](https://ko-fi.com)
 
 
@@ -312,7 +312,10 @@ Pull requests are welcome.
 
 [Donations](https://ko-fi.com/webadderall/goal?g=0)
 
-• Tadees
+Greatful for all supporters, you are helping Recordly stay open-source and supporting development.
+
+• Tadees ($100)
+• Anonymous supporter ($5)
 
 Email youngchen3442@gmail.com for other inquiries or DM me via [@webadderall](https://x.com/webadderall)
 
