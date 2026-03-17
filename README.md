@@ -21,7 +21,7 @@ Language: EN | [简中](README.zh-CN.md)
 </p>
 
 > [!NOTE]
-> Huge thank you to **tadees** for supporting the project! This donation directly helps cover the Apple Developer fees to get Recordly signed and notarised for macOS.
+> Huge thank you to **tadees** for supporting the project! This donation directly helps cover the Apple Developer fees to get Recordly signed and notarised for macOS. Still waiting for Apple approval.
 [**Support the project**](https://ko-fi.com)
 
 
