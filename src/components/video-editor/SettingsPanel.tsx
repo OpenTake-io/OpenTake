@@ -253,6 +253,10 @@ export function SettingsPanel({
 	const [customImages, setCustomImages] = useState<string[]>(
 		initialEditorPreferences.customWallpapers,
 	);
+	const removeBackgroundStateRef = useRef<{
+		aspectRatio: AspectRatio;
+		padding: number;
+	} | null>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
@@ -752,6 +756,10 @@ export function SettingsPanel({
 										checked={aspectRatio === 'native' && padding === 0}
 										onCheckedChange={(checked) => {
 											if (checked) {
+												removeBackgroundStateRef.current = {
+													aspectRatio,
+													padding,
+												};
 												onAspectRatioChange?.('native');
 												onPaddingChange?.(0);
 											}
