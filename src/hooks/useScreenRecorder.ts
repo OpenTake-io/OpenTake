@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { fixWebmDuration } from "@fix-webm-duration/fix";
+import { toast } from "sonner";
 
 const TARGET_FRAME_RATE = 60;
 const TARGET_WIDTH = 3840;
@@ -62,6 +63,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const wgcRecording = useRef(false);
   const startInFlight = useRef(false);
   const hasPromptedForReselect = useRef(false);
+  const hasShownWgcFallbackToast = useRef(false);
   const countdownDelayLoaded = useRef(false);
 
   const preparePermissions = useCallback(async (options: { startup?: boolean } = {}) => {
@@ -299,8 +301,20 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         try {
           const wgcResult = await window.electronAPI.isWgcAvailable();
           useWgcCapture = wgcResult.available;
+          if (!useWgcCapture && !hasShownWgcFallbackToast.current) {
+            hasShownWgcFallbackToast.current = true;
+            toast.info(
+              "Native Windows capture (WGC) is unavailable. Falling back to browser capture.",
+            );
+          }
         } catch {
           useWgcCapture = false;
+          if (!hasShownWgcFallbackToast.current) {
+            hasShownWgcFallbackToast.current = true;
+            toast.info(
+              "Unable to check native Windows capture (WGC). Falling back to browser capture.",
+            );
+          }
         }
       }
 
@@ -328,6 +342,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         if (!nativeResult.success) {
           if (useWgcCapture) {
             console.warn("WGC capture failed, falling back to browser capture:", nativeResult.error ?? nativeResult.message);
+            if (!hasShownWgcFallbackToast.current) {
+              hasShownWgcFallbackToast.current = true;
+              toast.warning(
+                "Native Windows capture failed to start. Falling back to browser capture.",
+              );
+            }
           } else {
             throw new Error(
               nativeResult.error ?? nativeResult.message ?? "Failed to start native screen recording",
