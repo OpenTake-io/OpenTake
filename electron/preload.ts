@@ -26,6 +26,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectSource: (source: any) => {
     return ipcRenderer.invoke('select-source', source)
   },
+  showSourceHighlight: (source: any) => {
+    return ipcRenderer.invoke('show-source-highlight', source)
+  },
   getSelectedSource: () => {
     return ipcRenderer.invoke('get-selected-source')
   },
