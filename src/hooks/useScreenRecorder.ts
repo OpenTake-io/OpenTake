@@ -185,7 +185,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       return;
     }
 
-    if (mediaRecorder.current?.state === "recording") {
+    const recorderState = mediaRecorder.current?.state;
+    if (recorderState === "recording" || recorderState === "paused") {
+      if (recorderState === "paused") {
+        mediaRecorder.current.resume();
+      }
       cleanupCapturedMedia();
       mediaRecorder.current.stop();
       setRecording(false);
@@ -550,6 +554,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
   const pauseRecording = useCallback(() => {
     if (!recording || paused) return;
+    // Native recordings (macOS SCK / Windows WGC) don't support pause yet
+    if (nativeScreenRecording.current) return;
     if (mediaRecorder.current?.state === "recording") {
       mediaRecorder.current.pause();
       setPaused(true);
