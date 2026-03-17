@@ -305,6 +305,7 @@ Greatful for all supporters, you are helping Recordly stay open-source and suppo
 
 • Tadees ($100)
 • Anonymous supporter ($5)
+• Anonymous supporter ($1)
 
 Email youngchen3442@gmail.com for other inquiries or DM me via [@webadderall](https://x.com/webadderall)
 
