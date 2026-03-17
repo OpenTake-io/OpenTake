@@ -220,7 +220,7 @@ Adjust:
 
 # Limitations
 
-### Cursor Capture
+### Cursor Capture (We overlay a second animated cursor over the original hidden one)
 
 **macOS**: Cursor is excluded from the recording at the ScreenCaptureKit level — always clean.
 
