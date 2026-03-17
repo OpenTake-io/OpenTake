@@ -126,17 +126,6 @@ Prebuilt releases are available here:
 
 https://github.com/webadderall/Recordly/releases
 
-## Homebrew (Cask)
-
-Recordly is distributed as a GUI app, so Homebrew support is done via cask.
-
-For users:
-
-```bash
-brew tap webadderall/tap
-brew install --cask recordly
-```
-
 ---
 
 ## Build from source
