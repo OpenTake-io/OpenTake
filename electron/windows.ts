@@ -22,6 +22,11 @@ let hudOverlayCaptureProtectionLoaded = false;
 let countdownWindow: BrowserWindow | null = null;
 
 const HUD_OVERLAY_SETTINGS_FILE = path.join(app.getPath("userData"), "hud-overlay-settings.json");
+const HUD_BOTTOM_CLEARANCE_CM = 7;
+const DIP_PER_INCH = 96;
+const CM_PER_INCH = 2.54;
+const HUD_EDGE_MARGIN_DIP = 16;
+const HUD_SHADOW_BLEED_DIP = 20;
 
 function isHudOverlayCaptureProtectionSupported(): boolean {
 	return process.platform !== "linux";
@@ -105,21 +110,30 @@ export function createHudOverlayWindow(): BrowserWindow {
 	loadHudOverlayCaptureProtectionSetting();
 
 	const primaryDisplay = getScreen().getPrimaryDisplay();
-	const { workArea } = primaryDisplay;
+	const { bounds, workArea } = primaryDisplay;
 
 	const windowWidth = 720;
-	const windowHeight = 520;
+	const windowHeight = 520 + HUD_SHADOW_BLEED_DIP;
+	const bottomClearanceDip = Math.round((HUD_BOTTOM_CLEARANCE_CM / CM_PER_INCH) * DIP_PER_INCH);
+	const screenBottom = bounds.y + bounds.height;
+	const workAreaBottom = workArea.y + workArea.height;
+	const preferredBottom = screenBottom - bottomClearanceDip;
+	const maximumSafeBottom = workAreaBottom - HUD_EDGE_MARGIN_DIP;
+	const windowBottom = Math.min(preferredBottom, maximumSafeBottom);
 
 	const x = Math.floor(workArea.x + (workArea.width - windowWidth) / 2);
-	const y = Math.floor(workArea.y + workArea.height - windowHeight - 5);
+	const y = Math.max(
+		workArea.y + HUD_EDGE_MARGIN_DIP,
+		Math.floor(windowBottom - windowHeight),
+	);
 
 	const win = new BrowserWindow({
 		width: windowWidth,
 		height: windowHeight,
 		minWidth: 720,
 		maxWidth: 720,
-		minHeight: 520,
-		maxHeight: 520,
+		minHeight: windowHeight,
+		maxHeight: windowHeight,
 		x: x,
 		y: y,
 		frame: false,
