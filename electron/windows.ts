@@ -22,7 +22,7 @@ let hudOverlayCaptureProtectionLoaded = false;
 let countdownWindow: BrowserWindow | null = null;
 
 const HUD_OVERLAY_SETTINGS_FILE = path.join(app.getPath("userData"), "hud-overlay-settings.json");
-const HUD_BOTTOM_CLEARANCE_CM = 7;
+const HUD_BOTTOM_CLEARANCE_CM = 3.5;
 const DIP_PER_INCH = 96;
 const CM_PER_INCH = 2.54;
 const HUD_EDGE_MARGIN_DIP = 16;

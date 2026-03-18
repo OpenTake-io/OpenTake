@@ -82,7 +82,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		streamConfig.queueDepth = 6
 		streamConfig.pixelFormat = kCVPixelFormatType_32BGRA
 		streamConfig.showsCursor = false
-		streamConfig.capturesAudio = capturesSystemAudio
+		streamConfig.capturesAudio = capturesSystemAudio || capturesMicrophone
 		streamConfig.sampleRate = 48000
 		streamConfig.channelCount = 2
 		streamConfig.excludesCurrentProcessAudio = true

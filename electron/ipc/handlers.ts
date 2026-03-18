@@ -1113,25 +1113,63 @@ function waitForNativeCaptureStop(process: ChildProcessWithoutNullStreams) {
   })
 }
 
+async function fileHasAudioStream(filePath: string) {
+  const ffmpegPath = getFfmpegBinaryPath()
+
+  try {
+    await execFileAsync(
+      ffmpegPath,
+      ['-i', filePath],
+      { timeout: 30000, maxBuffer: 10 * 1024 * 1024 },
+    )
+  } catch (error) {
+    const stderr = typeof error === 'object' && error !== null && 'stderr' in error
+      ? String((error as { stderr?: unknown }).stderr ?? '')
+      : ''
+
+    if (stderr) {
+      return /Audio:/i.test(stderr)
+    }
+  }
+
+  return false
+}
+
 async function mixNativeMacAudioTracks(videoPath: string, microphonePath: string) {
   const ffmpegPath = getFfmpegBinaryPath()
   const mixedOutputPath = `${videoPath}.mixed.mp4`
+  const videoHasAudio = await fileHasAudioStream(videoPath)
+
+  const args = videoHasAudio
+    ? [
+        '-y',
+        '-i', videoPath,
+        '-i', microphonePath,
+        '-filter_complex', '[0:a][1:a]amix=inputs=2:duration=longest:normalize=0[aout]',
+        '-map', '0:v:0',
+        '-map', '[aout]',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-shortest',
+        mixedOutputPath,
+      ]
+    : [
+        '-y',
+        '-i', videoPath,
+        '-i', microphonePath,
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-shortest',
+        mixedOutputPath,
+      ]
 
   await execFileAsync(
     ffmpegPath,
-    [
-      '-y',
-      '-i', videoPath,
-      '-i', microphonePath,
-      '-filter_complex', '[0:a][1:a]amix=inputs=2:duration=longest:normalize=0[aout]',
-      '-map', '0:v:0',
-      '-map', '[aout]',
-      '-c:v', 'copy',
-      '-c:a', 'aac',
-      '-b:a', '192k',
-      '-shortest',
-      mixedOutputPath,
-    ],
+    args,
     { timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
   )
 
