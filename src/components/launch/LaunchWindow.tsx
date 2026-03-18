@@ -471,7 +471,7 @@ export function LaunchWindow() {
 
 	return (
 		<div
-			className="w-full flex flex-col bg-transparent overflow-hidden"
+			className="w-full flex flex-col bg-transparent overflow-visible pb-5"
 			style={{ height: "100vh" }}
 			ref={dropdownRef}
 		>
@@ -534,6 +534,16 @@ export function LaunchWindow() {
 						{activeDropdown === "mic" && (
 							<>
 								<div className={styles.ddLabel}>{t("recording.microphone")}</div>
+								<DropdownItem
+									icon={systemAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+									selected={systemAudioEnabled}
+									onClick={() => {
+										setSystemAudioEnabled(!systemAudioEnabled);
+									}}
+								>
+									{systemAudioEnabled ? t("recording.disableSystemAudio") : t("recording.enableSystemAudio")}
+								</DropdownItem>
+								<Separator />
 								{microphoneEnabled && (
 									<DropdownItem
 										icon={<MicOff size={16} />}
@@ -636,6 +646,18 @@ export function LaunchWindow() {
 
 						{activeDropdown === "more" && (
 							<>
+								{supportsHudCaptureProtection && (
+									<DropdownItem
+										icon={hideHudFromCapture ? <EyeOff size={16} /> : <Eye size={16} />}
+										selected={hideHudFromCapture}
+										onClick={() => {
+											void toggleHudCaptureProtection();
+										}}
+									>
+										{hideHudFromCapture ? t("recording.hideHudFromVideo") : t("recording.showHudInVideo")}
+									</DropdownItem>
+								)}
+								{supportsHudCaptureProtection && <Separator />}
 								<DropdownItem icon={<FolderOpen size={16} />} onClick={chooseRecordingsDirectory}>
 									{t("recording.recordingsFolder")}
 								</DropdownItem>
@@ -726,29 +748,12 @@ export function LaunchWindow() {
 						</IconButton>
 
 						<IconButton
-							onClick={() => setSystemAudioEnabled(!systemAudioEnabled)}
-							title={systemAudioEnabled ? t("recording.disableSystemAudio") : t("recording.enableSystemAudio")}
-							className={systemAudioEnabled ? styles.ibActive : ""}
-						>
-							{systemAudioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-						</IconButton>
-
-						<IconButton
 							onClick={toggleWebcam}
 							title={webcamEnabled ? t("recording.disableWebcam") : t("recording.enableWebcam")}
 							className={webcamEnabled ? styles.ibActive : ""}
 						>
 							{webcamEnabled ? <Video size={18} /> : <VideoOff size={18} />}
 						</IconButton>
-
-						{supportsHudCaptureProtection && (
-							<IconButton
-								onClick={() => void toggleHudCaptureProtection()}
-								title={hideHudFromCapture ? t("recording.showHudInVideo") : t("recording.hideHudFromVideo")}
-							>
-								{hideHudFromCapture ? <EyeOff size={18} className="text-[#6b6b78]" /> : <Eye size={18} className="text-[#6360f5]" />}
-							</IconButton>
-						)}
 
 						<IconButton
 							onClick={() => toggleDropdown("countdown")}
