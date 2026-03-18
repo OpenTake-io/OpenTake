@@ -1,4 +1,5 @@
 import { ipcMain, desktopCapturer, BrowserWindow, shell, app, dialog, systemPreferences } from 'electron'
+import type { SaveDialogOptions } from 'electron'
 import { execFile, spawn, spawnSync } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 
@@ -2592,20 +2593,24 @@ export function registerIpcHandlers(
     }
   })
 
-  ipcMain.handle('save-exported-video', async (_, videoData: ArrayBuffer, fileName: string) => {
+  ipcMain.handle('save-exported-video', async (event, videoData: ArrayBuffer, fileName: string) => {
     try {
       // Determine file type from extension
       const isGif = fileName.toLowerCase().endsWith('.gif');
       const filters = isGif 
         ? [{ name: 'GIF Image', extensions: ['gif'] }]
         : [{ name: 'MP4 Video', extensions: ['mp4'] }];
-
-      const result = await dialog.showSaveDialog({
+      const parentWindow = BrowserWindow.fromWebContents(event.sender)
+      const saveDialogOptions: SaveDialogOptions = {
         title: isGif ? 'Save Exported GIF' : 'Save Exported Video',
         defaultPath: path.join(app.getPath('downloads'), fileName),
         filters,
-        properties: ['createDirectory', 'showOverwriteConfirmation']
-      });
+        properties: ['createDirectory', 'showOverwriteConfirmation'],
+      }
+
+      const result = parentWindow
+        ? await dialog.showSaveDialog(parentWindow, saveDialogOptions)
+        : await dialog.showSaveDialog(saveDialogOptions)
 
       if (result.canceled || !result.filePath) {
         return {
