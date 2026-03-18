@@ -39,8 +39,7 @@
 		"webcamShadow": "Webcam Shadow",
 		"shadow": "Shadow",
 		"roundness": "Roundness",
-		"padding": "Padding",
-		"removeBackground": "Remove background"
+		"padding": "Padding"
 	},
 	"crop": {
 		"title": "Crop Video",
