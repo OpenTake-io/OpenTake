@@ -39,7 +39,8 @@
 		"webcamShadow": "Sombra de cámara",
 		"shadow": "Sombra",
 		"roundness": "Redondez",
-		"padding": "Relleno"
+		"padding": "Relleno",
+		"removeBackground": "Quitar fondo"
 	},
 	"crop": {
 		"title": "Recortar video",
