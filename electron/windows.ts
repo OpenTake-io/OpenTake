@@ -107,8 +107,8 @@ export function createHudOverlayWindow(): BrowserWindow {
 	const primaryDisplay = getScreen().getPrimaryDisplay();
 	const { workArea } = primaryDisplay;
 
-	const windowWidth = 660;
-	const windowHeight = 170;
+	const windowWidth = 720;
+	const windowHeight = 520;
 
 	const x = Math.floor(workArea.x + (workArea.width - windowWidth) / 2);
 	const y = Math.floor(workArea.y + workArea.height - windowHeight - 5);
@@ -116,10 +116,10 @@ export function createHudOverlayWindow(): BrowserWindow {
 	const win = new BrowserWindow({
 		width: windowWidth,
 		height: windowHeight,
-		minWidth: windowWidth,
-		maxWidth: windowWidth,
-		minHeight: windowHeight,
-		maxHeight: windowHeight,
+		minWidth: 720,
+		maxWidth: 720,
+		minHeight: 520,
+		maxHeight: 520,
 		x: x,
 		y: y,
 		frame: false,

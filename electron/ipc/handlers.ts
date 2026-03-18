@@ -1893,6 +1893,169 @@ export function registerIpcHandlers(
     return selectedSource
   })
 
+  ipcMain.handle('show-source-highlight', async (_, source: SelectedSource) => {
+    try {
+      const isWindow = source.id?.startsWith('window:')
+      const windowId = isWindow ? parseWindowId(source.id) : null
+
+      // ── 1. Bring window to front & get its bounds via AppleScript ──
+      let asBounds: { x: number; y: number; width: number; height: number } | null = null
+
+      if (isWindow && process.platform === 'darwin') {
+        const appName = source.appName || source.name?.split(' — ')[0]?.trim()
+        if (appName) {
+          // Single AppleScript: activate AND return window bounds
+          try {
+            const { stdout } = await execFileAsync('osascript', ['-e',
+              `tell application "${appName}"\n` +
+              `  activate\n` +
+              `end tell\n` +
+              `delay 0.3\n` +
+              `tell application "System Events"\n` +
+              `  tell process "${appName}"\n` +
+              `    set frontWindow to front window\n` +
+              `    set {x1, y1} to position of frontWindow\n` +
+              `    set {w1, h1} to size of frontWindow\n` +
+              `    return (x1 as text) & "," & (y1 as text) & "," & (w1 as text) & "," & (h1 as text)\n` +
+              `  end tell\n` +
+              `end tell`
+            ], { timeout: 4000 })
+            const parts = stdout.trim().split(',').map(Number)
+            if (parts.length === 4 && parts.every(n => Number.isFinite(n))) {
+              asBounds = { x: parts[0], y: parts[1], width: parts[2], height: parts[3] }
+            }
+          } catch {
+            // Fallback: just activate without bounds
+            try {
+              await execFileAsync('osascript', ['-e',
+                `tell application "${appName}" to activate`
+              ], { timeout: 2000 })
+              await new Promise((resolve) => setTimeout(resolve, 350))
+            } catch { /* ignore */ }
+          }
+        }
+      } else if (windowId && process.platform === 'linux') {
+        try {
+          await execFileAsync('wmctrl', ['-i', '-a', `0x${windowId.toString(16)}`], { timeout: 1500 })
+        } catch {
+          try {
+            await execFileAsync('xdotool', ['windowactivate', String(windowId)], { timeout: 1500 })
+          } catch { /* not available */ }
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250))
+      }
+
+      // ── 2. Resolve bounds ──
+      let bounds = asBounds
+
+      if (!bounds) {
+        if (source.id?.startsWith('screen:')) {
+          bounds = getDisplayBoundsForSource(source)
+        } else if (isWindow) {
+          if (process.platform === 'darwin') {
+            bounds = await resolveMacWindowBounds(source)
+          } else if (process.platform === 'linux') {
+            bounds = await resolveLinuxWindowBounds(source)
+          }
+        }
+      }
+
+      if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
+        bounds = getDisplayBoundsForSource(source)
+      }
+
+      // ── 3. Show traveling wave highlight ──
+      const pad = 6
+      const highlightWin = new BrowserWindow({
+        x: bounds.x - pad,
+        y: bounds.y - pad,
+        width: bounds.width + pad * 2,
+        height: bounds.height + pad * 2,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        hasShadow: false,
+        resizable: false,
+        focusable: false,
+        webPreferences: { nodeIntegration: false, contextIsolation: true },
+      })
+
+      highlightWin.setIgnoreMouseEvents(true)
+
+      const html = `<!DOCTYPE html>
+<html><head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:transparent;overflow:hidden;width:100vw;height:100vh}
+
+.border-wrap{
+  position:fixed;inset:0;border-radius:10px;padding:3px;
+  background:conic-gradient(from var(--angle,0deg),
+    transparent 0%,
+    transparent 60%,
+    rgba(99,96,245,.15) 70%,
+    rgba(99,96,245,.9) 80%,
+    rgba(123,120,255,1) 85%,
+    rgba(99,96,245,.9) 90%,
+    rgba(99,96,245,.15) 95%,
+    transparent 100%
+  );
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor;
+  mask-composite:exclude;
+  animation:spin 1.2s linear forwards, fadeAll 1.6s ease-out forwards;
+}
+
+.glow-wrap{
+  position:fixed;inset:-4px;border-radius:14px;padding:6px;
+  background:conic-gradient(from var(--angle,0deg),
+    transparent 0%,
+    transparent 65%,
+    rgba(99,96,245,.3) 78%,
+    rgba(123,120,255,.5) 85%,
+    rgba(99,96,245,.3) 92%,
+    transparent 100%
+  );
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+  -webkit-mask-composite:xor;
+  mask-composite:exclude;
+  filter:blur(8px);
+  animation:spin 1.2s linear forwards, fadeAll 1.6s ease-out forwards;
+}
+
+@property --angle{
+  syntax:'<angle>';
+  initial-value:0deg;
+  inherits:false;
+}
+
+@keyframes spin{
+  0%{--angle:0deg}
+  100%{--angle:360deg}
+}
+
+@keyframes fadeAll{
+  0%,60%{opacity:1}
+  100%{opacity:0}
+}
+</style></head><body>
+<div class="glow-wrap"></div>
+<div class="border-wrap"></div>
+</body></html>`
+
+      await highlightWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+
+      setTimeout(() => {
+        if (!highlightWin.isDestroyed()) highlightWin.close()
+      }, 1700)
+
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to show source highlight:', error)
+      return { success: false }
+    }
+  })
+
   ipcMain.handle('get-selected-source', () => {
     return selectedSource
   })
@@ -2974,6 +3137,25 @@ export function registerIpcHandlers(
     currentVideoPath = null;
     currentRecordingSession = null;
     return { success: true };
+  });
+
+  ipcMain.handle('delete-recording-file', async (_, filePath: string) => {
+    try {
+      if (!filePath || !isAutoRecordingPath(filePath)) {
+        return { success: false, error: 'Only auto-generated recordings can be deleted' };
+      }
+      await fs.unlink(filePath);
+      // Also delete the cursor telemetry sidecar if it exists
+      const telemetryPath = getTelemetryPathForVideo(filePath);
+      await fs.unlink(telemetryPath).catch(() => {});
+      if (currentVideoPath === filePath) {
+        currentVideoPath = null;
+        currentRecordingSession = null;
+      }
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
   });
 
   ipcMain.handle('get-platform', () => {

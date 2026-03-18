@@ -34,8 +34,12 @@ const WEBCAM_SUFFIX = "-webcam";
 
 type UseScreenRecorderReturn = {
   recording: boolean;
+  paused: boolean;
   countdownActive: boolean;
   toggleRecording: () => void;
+  pauseRecording: () => void;
+  resumeRecording: () => void;
+  cancelRecording: () => void;
   preparePermissions: (options?: { startup?: boolean }) => Promise<boolean>;
   isMacOS: boolean;
   microphoneEnabled: boolean;
@@ -54,6 +58,7 @@ type UseScreenRecorderReturn = {
 
 export function useScreenRecorder(): UseScreenRecorderReturn {
   const [recording, setRecording] = useState(false);
+  const [paused, setPaused] = useState(false);
   const [starting, setStarting] = useState(false);
   const [countdownActive, setCountdownActive] = useState(false);
   const [isMacOS, setIsMacOS] = useState(false);
@@ -299,6 +304,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   }, [webcamDeviceId, webcamEnabled]);
 
   const stopRecording = useRef(() => {
+    setPaused(false);
     if (nativeScreenRecording.current) {
       nativeScreenRecording.current = false;
       setRecording(false);
@@ -328,10 +334,15 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       return;
     }
 
-    if (mediaRecorder.current?.state === "recording") {
+    const recorder = mediaRecorder.current;
+    const recorderState = recorder?.state;
+    if (recorder && (recorderState === "recording" || recorderState === "paused")) {
+      if (recorderState === "paused") {
+        recorder.resume();
+      }
       pendingWebcamPathPromise.current = stopWebcamRecorder();
       cleanupCapturedMedia();
-      mediaRecorder.current.stop();
+      recorder.stop();
       setRecording(false);
       window.electronAPI?.setRecordingState(false);
     }
@@ -737,6 +748,86 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     }
   };
 
+  const pauseRecording = useCallback(() => {
+    if (!recording || paused) return;
+    if (nativeScreenRecording.current) {
+      // Native captures cannot truly pause, but we pause the timer/UI and webcam
+      if (webcamRecorder.current?.state === "recording") {
+        webcamRecorder.current.pause();
+      }
+      setPaused(true);
+      return;
+    }
+    if (mediaRecorder.current?.state === "recording") {
+      mediaRecorder.current.pause();
+      if (webcamRecorder.current?.state === "recording") {
+        webcamRecorder.current.pause();
+      }
+      setPaused(true);
+    }
+  }, [recording, paused]);
+
+  const resumeRecording = useCallback(() => {
+    if (!recording || !paused) return;
+    if (nativeScreenRecording.current) {
+      if (webcamRecorder.current?.state === "paused") {
+        webcamRecorder.current.resume();
+      }
+      setPaused(false);
+      return;
+    }
+    if (mediaRecorder.current?.state === "paused") {
+      mediaRecorder.current.resume();
+      if (webcamRecorder.current?.state === "paused") {
+        webcamRecorder.current.resume();
+      }
+      setPaused(false);
+    }
+  }, [recording, paused]);
+
+  const cancelRecording = useCallback(() => {
+    if (!recording) return;
+    setPaused(false);
+
+    // Discard webcam recording regardless of recording mode
+    webcamChunks.current = [];
+    if (webcamRecorder.current && webcamRecorder.current.state !== "inactive") {
+      webcamRecorder.current.stop();
+    }
+    webcamRecorder.current = null;
+    webcamStream.current?.getTracks().forEach((t) => t.stop());
+    webcamStream.current = null;
+    pendingWebcamPathPromise.current = null;
+
+    if (nativeScreenRecording.current) {
+      nativeScreenRecording.current = false;
+      wgcRecording.current = false;
+      setRecording(false);
+      window.electronAPI?.setRecordingState(false);
+      void (async () => {
+        try {
+          const result = await window.electronAPI.stopNativeScreenRecording();
+          if (result?.path) {
+            await window.electronAPI.deleteRecordingFile(result.path);
+          }
+        } catch {
+          // Best-effort cleanup
+        }
+      })();
+      return;
+    }
+
+    if (mediaRecorder.current) {
+      chunks.current = [];
+      cleanupCapturedMedia();
+      if (mediaRecorder.current.state !== "inactive") {
+        mediaRecorder.current.stop();
+      }
+      setRecording(false);
+      window.electronAPI?.setRecordingState(false);
+    }
+  }, [recording, cleanupCapturedMedia]);
+
   const toggleRecording = async () => {
     if (starting || countdownActive) {
       return;
@@ -765,8 +856,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
   return {
     recording,
+    paused,
     countdownActive,
     toggleRecording,
+    pauseRecording,
+    resumeRecording,
+    cancelRecording,
     preparePermissions,
     isMacOS,
     microphoneEnabled,
@@ -783,4 +878,3 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     setCountdownDelay,
   };
 }
-
