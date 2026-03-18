@@ -24,9 +24,11 @@
 		"off": "Off",
 		"cursorMotionBlur": "Cursor Motion Blur",
 		"cursorClickBounce": "Cursor Click Bounce",
+		"cursorSway": "Cursor Sway",
 		"shadow": "Shadow",
 		"roundness": "Roundness",
-		"padding": "Padding"
+		"padding": "Padding",
+		"removeBackground": "Remove background"
 	},
 	"crop": {
 		"title": "Crop Video",
@@ -47,7 +49,8 @@
 		"quality": {
 			"low": "Low",
 			"medium": "Medium",
-			"high": "High"
+			"high": "High",
+			"original": "Original"
 		},
 		"loop": "Loop",
 		"outputDimensions": "Output: {{dimensions}}px",

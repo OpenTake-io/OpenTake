@@ -24,9 +24,11 @@
 		"off": "Desactivado",
 		"cursorMotionBlur": "Desenfoque de movimiento del cursor",
 		"cursorClickBounce": "Rebote de clic del cursor",
+		"cursorSway": "Balanceo del cursor",
 		"shadow": "Sombra",
 		"roundness": "Redondez",
-		"padding": "Relleno"
+		"padding": "Relleno",
+		"removeBackground": "Quitar fondo"
 	},
 	"crop": {
 		"title": "Recortar video",
@@ -47,7 +49,8 @@
 		"quality": {
 			"low": "Baja",
 			"medium": "Media",
-			"high": "Alta"
+			"high": "Alta",
+			"original": "Original"
 		},
 		"loop": "Bucle",
 		"outputDimensions": "Salida: {{dimensions}}px",
