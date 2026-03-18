@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	selectSource: (source: any) => {
 		return ipcRenderer.invoke("select-source", source);
 	},
+	showSourceHighlight: (source: any) => {
+		return ipcRenderer.invoke("show-source-highlight", source);
+	},
 	getSelectedSource: () => {
 		return ipcRenderer.invoke("get-selected-source");
 	},
@@ -146,6 +149,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	clearCurrentVideoPath: () => {
 		return ipcRenderer.invoke("clear-current-video-path");
+	},
+	deleteRecordingFile: (filePath: string) => {
+		return ipcRenderer.invoke("delete-recording-file", filePath);
 	},
 	saveProjectFile: (projectData: unknown, suggestedName?: string, existingProjectPath?: string) => {
 		return ipcRenderer.invoke("save-project-file", projectData, suggestedName, existingProjectPath);

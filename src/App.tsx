@@ -23,6 +23,12 @@ export default function App() {
 			document.getElementById("root")?.style.setProperty("background", "transparent");
 		}
 
+		if (type === "hud-overlay") {
+			document.documentElement.style.overflow = "visible";
+			document.body.style.overflow = "visible";
+			document.getElementById("root")?.style.setProperty("overflow", "visible");
+		}
+
 		loadAllCustomFonts().catch((error) => {
 			console.error("Failed to load custom fonts:", error);
 		});
