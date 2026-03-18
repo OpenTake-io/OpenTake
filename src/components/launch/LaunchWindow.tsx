@@ -432,13 +432,6 @@ export function LaunchWindow() {
 
 						{activeDropdown === "more" && (
 							<>
-								<DropdownItem
-									icon={systemAudioEnabled ? <Volume2 size={16} className="text-[#6360f5]" /> : <VolumeX size={16} />}
-									onClick={() => setSystemAudioEnabled(!systemAudioEnabled)}
-									trailing={systemAudioEnabled ? <span className="ml-auto text-[#6360f5] text-xs">&#10003;</span> : undefined}
-								>
-									System Audio
-								</DropdownItem>
 								<DropdownItem icon={<FolderOpen size={16} />} onClick={chooseRecordingsDirectory}>
 									Recordings Folder
 								</DropdownItem>
@@ -526,6 +519,14 @@ export function LaunchWindow() {
 							className={microphoneEnabled ? styles.ibActive : ""}
 						>
 							{microphoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
+						</IconButton>
+
+						<IconButton
+							onClick={() => setSystemAudioEnabled(!systemAudioEnabled)}
+							title={systemAudioEnabled ? "Disable System Audio" : "Enable System Audio"}
+							className={systemAudioEnabled ? styles.ibActive : ""}
+						>
+							{systemAudioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
 						</IconButton>
 
 						<Separator />
