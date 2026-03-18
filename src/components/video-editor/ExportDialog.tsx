@@ -184,9 +184,20 @@ export function ExportDialog({
                 onClick={onRetrySave}
                 className="w-full mt-3 bg-[#2563EB] text-white hover:bg-[#1D4ED8]"
               >
-                Save Again
+                {t('export.reopenSaveDialog')}
               </Button>
             )}
+          </div>
+        )}
+
+        {!isExporting && !error && canRetrySave && onRetrySave && (
+          <div className="mb-6 animate-in slide-in-from-top-2">
+            <Button
+              onClick={onRetrySave}
+              className="w-full bg-[#2563EB] text-white hover:bg-[#1D4ED8]"
+            >
+              {t('export.reopenSaveDialog')}
+            </Button>
           </div>
         )}
 

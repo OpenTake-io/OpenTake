@@ -231,7 +231,6 @@ export function SettingsPanel({
 	cropRegion,
 	onCropChange,
 	aspectRatio,
-	onAspectRatioChange,
 	videoElement,
 	exportQuality = "good",
 	onExportQualityChange,
