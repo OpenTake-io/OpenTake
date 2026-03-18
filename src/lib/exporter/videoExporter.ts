@@ -5,6 +5,7 @@ import type {
 	CursorTelemetryPoint,
 	SpeedRegion,
 	TrimRegion,
+	WebcamOverlaySettings,
 	ZoomRegion,
 } from "@/components/video-editor/types";
 import { AudioProcessor } from "./audioEncoder";
@@ -28,6 +29,8 @@ interface VideoExporterConfig extends ExportConfig {
 	padding?: number;
 	videoPadding?: number;
 	cropRegion: CropRegion;
+	webcam?: WebcamOverlaySettings;
+	webcamUrl?: string | null;
 	annotationRegions?: AnnotationRegion[];
 	cursorTelemetry?: CursorTelemetryPoint[];
 	showCursor?: boolean;
@@ -86,6 +89,8 @@ export class VideoExporter {
 				borderRadius: this.config.borderRadius,
 				padding: this.config.padding,
 				cropRegion: this.config.cropRegion,
+				webcam: this.config.webcam,
+				webcamUrl: this.config.webcamUrl,
 				videoWidth: videoInfo.width,
 				videoHeight: videoInfo.height,
 				annotationRegions: this.config.annotationRegions,
