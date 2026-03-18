@@ -20,12 +20,15 @@ import {
 	Eye,
 	EyeOff,
 	Timer,
+	Video,
+	VideoOff,
 } from "lucide-react";
 import { RxDragHandleDots2 } from "react-icons/rx";
 import { useAudioLevelMeter } from "../../hooks/useAudioLevelMeter";
 import { useMicrophoneDevices } from "../../hooks/useMicrophoneDevices";
 import { useScreenRecorder } from "../../hooks/useScreenRecorder";
 import { useScopedT } from "../../contexts/I18nContext";
+import { useVideoDevices } from "../../hooks/useVideoDevices";
 import { AudioLevelMeter } from "../ui/audio-level-meter";
 import { ContentClamp } from "../ui/content-clamp";
 import { useI18n } from "@/contexts/I18nContext";
@@ -150,6 +153,10 @@ export function LaunchWindow() {
 		setMicrophoneDeviceId,
 		systemAudioEnabled,
 		setSystemAudioEnabled,
+		webcamEnabled,
+		setWebcamEnabled,
+		webcamDeviceId,
+		setWebcamDeviceId,
 		countdownDelay,
 		setCountdownDelay,
 	} = useScreenRecorder();
@@ -161,16 +168,24 @@ export function LaunchWindow() {
 	const [selectedSource, setSelectedSource] = useState("Screen");
 	const [hasSelectedSource, setHasSelectedSource] = useState(false);
 	const [recordingsDirectory, setRecordingsDirectory] = useState<string | null>(null);
-	const [activeDropdown, setActiveDropdown] = useState<"none" | "sources" | "more" | "mic" | "countdown">("none");
+	const [activeDropdown, setActiveDropdown] = useState<"none" | "sources" | "more" | "mic" | "countdown" | "webcam">("none");
 	const [sources, setSources] = useState<DesktopSource[]>([]);
 	const [sourcesLoading, setSourcesLoading] = useState(false);
 	const [hideHudFromCapture, setHideHudFromCapture] = useState(true);
 	const [platform, setPlatform] = useState<string | null>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
+	const webcamPreviewRef = useRef<HTMLVideoElement | null>(null);
 
 	const micDropdownOpen = activeDropdown === "mic";
+	const webcamDropdownOpen = activeDropdown === "webcam";
+	const showWebcamControls = webcamEnabled && !recording;
 	const { devices, selectedDeviceId, setSelectedDeviceId } =
 		useMicrophoneDevices(microphoneEnabled || micDropdownOpen);
+	const {
+		devices: videoDevices,
+		selectedDeviceId: selectedVideoDeviceId,
+		setSelectedDeviceId: setSelectedVideoDeviceId,
+	} = useVideoDevices(webcamEnabled || webcamDropdownOpen);
 
 	const supportsHudCaptureProtection = platform !== "linux";
 
@@ -179,6 +194,65 @@ export function LaunchWindow() {
 			setMicrophoneDeviceId(selectedDeviceId);
 		}
 	}, [selectedDeviceId, setMicrophoneDeviceId]);
+
+	useEffect(() => {
+		if (selectedVideoDeviceId && selectedVideoDeviceId !== "default") {
+			setWebcamDeviceId(selectedVideoDeviceId);
+		}
+	}, [selectedVideoDeviceId, setWebcamDeviceId]);
+
+	useEffect(() => {
+		let mounted = true;
+		let previewStream: MediaStream | null = null;
+
+		const startPreview = async () => {
+			if (!showWebcamControls || !webcamPreviewRef.current) {
+				return;
+			}
+
+			try {
+				previewStream = await navigator.mediaDevices.getUserMedia({
+					video: webcamDeviceId
+						? {
+								deviceId: { exact: webcamDeviceId },
+								width: { ideal: 320 },
+								height: { ideal: 320 },
+								frameRate: { ideal: 24, max: 30 },
+							}
+						: {
+								width: { ideal: 320 },
+								height: { ideal: 320 },
+								frameRate: { ideal: 24, max: 30 },
+							},
+					audio: false,
+				});
+
+				if (!mounted || !webcamPreviewRef.current) {
+					previewStream.getTracks().forEach((track) => track.stop());
+					return;
+				}
+
+				webcamPreviewRef.current.srcObject = previewStream;
+				const playPromise = webcamPreviewRef.current.play();
+				if (playPromise) {
+					playPromise.catch(() => {});
+				}
+			} catch (error) {
+				console.warn("Failed to start live webcam preview:", error);
+			}
+		};
+
+		void startPreview();
+
+		return () => {
+			mounted = false;
+			if (webcamPreviewRef.current) {
+				webcamPreviewRef.current.pause();
+				webcamPreviewRef.current.srcObject = null;
+			}
+			previewStream?.getTracks().forEach((track) => track.stop());
+		};
+	}, [showWebcamControls, webcamDeviceId]);
 
 	useEffect(() => {
 		let timer: NodeJS.Timeout | null = null;
@@ -325,7 +399,7 @@ export function LaunchWindow() {
 		}
 	}, []);
 
-	const toggleDropdown = (which: "sources" | "more" | "mic" | "countdown") => {
+	const toggleDropdown = (which: "sources" | "more" | "mic" | "countdown" | "webcam") => {
 		setActiveDropdown(activeDropdown === which ? "none" : which);
 		if (activeDropdown !== which && which === "sources") fetchSources();
 	};
@@ -390,9 +464,14 @@ export function LaunchWindow() {
 	const screenSources = sources.filter((s) => s.sourceType === "screen");
 	const windowSources = sources.filter((s) => s.sourceType === "window");
 
+	const toggleWebcam = () => {
+		if (recording) return;
+		toggleDropdown("webcam");
+	};
+
 	return (
 		<div
-			className="w-full flex flex-col bg-transparent"
+			className="w-full flex flex-col bg-transparent overflow-hidden"
 			style={{ height: "100vh" }}
 			ref={dropdownRef}
 		>
@@ -483,6 +562,57 @@ export function LaunchWindow() {
 								{devices.length === 0 && (
 									<div className="text-center text-xs text-[#6b6b78] py-4">
 										No microphones found
+									</div>
+								)}
+							</>
+						)}
+
+						{activeDropdown === "webcam" && (
+							<>
+								<div className={styles.ddLabel}>Webcam</div>
+								{webcamEnabled && (
+									<DropdownItem
+										icon={<VideoOff size={16} />}
+										onClick={() => { setWebcamEnabled(false); setActiveDropdown("none"); }}
+									>
+										Turn Off Webcam
+									</DropdownItem>
+								)}
+								{!webcamEnabled && (
+									<div className="px-3 py-2 text-xs text-[#6b6b78]">
+										Select a webcam to enable
+									</div>
+								)}
+								{showWebcamControls && (
+									<div className="flex justify-center px-3 py-2">
+										<div className="h-24 w-24 overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/10">
+											<video
+												ref={webcamPreviewRef}
+												className="h-full w-full object-cover"
+												muted
+												playsInline
+												style={{ transform: "scaleX(-1)" }}
+											/>
+										</div>
+									</div>
+								)}
+								{videoDevices.map((device) => (
+									<DropdownItem
+										key={device.deviceId}
+										icon={webcamEnabled && (webcamDeviceId === device.deviceId || selectedVideoDeviceId === device.deviceId) ? <Video size={16} /> : <VideoOff size={16} />}
+										selected={webcamEnabled && (webcamDeviceId === device.deviceId || selectedVideoDeviceId === device.deviceId)}
+										onClick={() => {
+											setWebcamEnabled(true);
+											setSelectedVideoDeviceId(device.deviceId);
+											setWebcamDeviceId(device.deviceId);
+										}}
+									>
+										{device.label}
+									</DropdownItem>
+								))}
+								{videoDevices.length === 0 && (
+									<div className="text-center text-xs text-[#6b6b78] py-4">
+										No webcams found
 									</div>
 								)}
 							</>
@@ -601,6 +731,14 @@ export function LaunchWindow() {
 							className={systemAudioEnabled ? styles.ibActive : ""}
 						>
 							{systemAudioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+						</IconButton>
+
+						<IconButton
+							onClick={toggleWebcam}
+							title={webcamEnabled ? t("recording.disableWebcam") : t("recording.enableWebcam")}
+							className={webcamEnabled ? styles.ibActive : ""}
+						>
+							{webcamEnabled ? <Video size={18} /> : <VideoOff size={18} />}
 						</IconButton>
 
 						{supportsHudCaptureProtection && (

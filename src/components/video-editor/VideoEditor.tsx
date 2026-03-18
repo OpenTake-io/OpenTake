@@ -52,11 +52,13 @@ import {
 	DEFAULT_ANNOTATION_STYLE,
 	DEFAULT_FIGURE_DATA,
 	DEFAULT_PLAYBACK_SPEED,
+	DEFAULT_WEBCAM_OVERLAY,
 	DEFAULT_ZOOM_DEPTH,
 	type FigureData,
 	type PlaybackSpeed,
 	type SpeedRegion,
 	type TrimRegion,
+	type WebcamOverlaySettings,
 	type ZoomDepth,
 	type ZoomFocus,
 	type ZoomRegion,
@@ -141,6 +143,9 @@ export default function VideoEditor() {
 	const [borderRadius, setBorderRadius] = useState(initialEditorPreferences.borderRadius);
 	const [padding, setPadding] = useState(initialEditorPreferences.padding);
 	const [cropRegion, setCropRegion] = useState<CropRegion>(initialEditorPreferences.cropRegion);
+	const [webcam, setWebcam] = useState<WebcamOverlaySettings>(
+		initialEditorPreferences.webcam ?? DEFAULT_WEBCAM_OVERLAY,
+	);
 	const [zoomRegions, setZoomRegions] = useState<ZoomRegion[]>([]);
 	const [cursorTelemetry, setCursorTelemetry] = useState<CursorTelemetryPoint[]>([]);
 	const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
@@ -335,6 +340,7 @@ export default function VideoEditor() {
 		setBorderRadius(normalizedEditor.borderRadius);
 		setPadding(normalizedEditor.padding);
 		setCropRegion(normalizedEditor.cropRegion);
+		setWebcam(normalizedEditor.webcam);
 		setZoomRegions(normalizedEditor.zoomRegions);
 		setTrimRegions(normalizedEditor.trimRegions);
 		setSpeedRegions(normalizedEditor.speedRegions);
@@ -403,6 +409,7 @@ export default function VideoEditor() {
 				borderRadius,
 				padding,
 				cropRegion,
+				webcam,
 				zoomRegions,
 				trimRegions,
 				speedRegions,
@@ -434,6 +441,7 @@ export default function VideoEditor() {
 		borderRadius,
 		padding,
 		cropRegion,
+		webcam,
 		zoomRegions,
 		trimRegions,
 		speedRegions,
@@ -446,6 +454,48 @@ export default function VideoEditor() {
 		gifLoop,
 		gifSizePreset,
 	]);
+
+	const syncRecordingSessionWebcam = useCallback(
+		async (webcamPath: string | null) => {
+			const sourcePath = videoSourcePath ?? (videoPath ? fromFileUrl(videoPath) : null);
+			if (!sourcePath || !window.electronAPI.setCurrentRecordingSession) {
+				return;
+			}
+
+			await window.electronAPI.setCurrentRecordingSession({
+				videoPath: sourcePath,
+				webcamPath,
+			});
+		},
+		[videoPath, videoSourcePath],
+	);
+
+	const handleUploadWebcam = useCallback(async () => {
+		const result = await window.electronAPI.openVideoFilePicker();
+		if (!result.success || !result.path) {
+			return;
+		}
+
+		setWebcam((prev) => ({
+			...prev,
+			enabled: true,
+			sourcePath: result.path ?? null,
+		}));
+
+		await syncRecordingSessionWebcam(result.path);
+		toast.success(t("settings.effects.webcamFootageAdded"));
+	}, [syncRecordingSessionWebcam, t]);
+
+	const handleClearWebcam = useCallback(async () => {
+		setWebcam((prev) => ({
+			...prev,
+			enabled: false,
+			sourcePath: null,
+		}));
+
+		await syncRecordingSessionWebcam(null);
+		toast.success(t("settings.effects.webcamFootageRemoved"));
+	}, [syncRecordingSessionWebcam, t]);
 
 	useEffect(() => {
 		const snapshot = cloneSnapshot(buildHistorySnapshot());
@@ -496,6 +546,21 @@ export default function VideoEditor() {
 					}
 				}
 
+				const sessionResult = await window.electronAPI.getCurrentRecordingSession?.();
+				if (sessionResult?.success && sessionResult.session?.videoPath) {
+					const sourcePath = fromFileUrl(sessionResult.session.videoPath);
+					setVideoSourcePath(sourcePath);
+					setVideoPath(toFileUrl(sourcePath));
+					setCurrentProjectPath(null);
+					setLastSavedSnapshot(null);
+					setWebcam((prev) => ({
+						...prev,
+						enabled: Boolean(sessionResult.session?.webcamPath),
+						sourcePath: sessionResult.session?.webcamPath ?? null,
+					}));
+					return;
+				}
+
 				const result = await window.electronAPI.getCurrentVideoPath();
 				if (result.success && result.path) {
 					const sourcePath = fromFileUrl(result.path);
@@ -503,6 +568,11 @@ export default function VideoEditor() {
 					setVideoPath(toFileUrl(sourcePath));
 					setCurrentProjectPath(null);
 					setLastSavedSnapshot(null);
+					setWebcam((prev) => ({
+						...prev,
+						enabled: false,
+						sourcePath: null,
+					}));
 				} else {
 					setError("No video to load. Please record or select a video.");
 				}
@@ -533,6 +603,7 @@ export default function VideoEditor() {
 			borderRadius,
 			padding,
 			cropRegion,
+			webcam,
 			aspectRatio,
 			exportQuality,
 			exportFormat,
@@ -556,6 +627,7 @@ export default function VideoEditor() {
 		borderRadius,
 		padding,
 		cropRegion,
+		webcam,
 		aspectRatio,
 		exportQuality,
 		exportFormat,
@@ -593,6 +665,7 @@ export default function VideoEditor() {
 				borderRadius,
 				padding,
 				cropRegion,
+				webcam,
 				zoomRegions,
 				trimRegions,
 				speedRegions,
@@ -654,6 +727,7 @@ export default function VideoEditor() {
 			borderRadius,
 			padding,
 			cropRegion,
+			webcam,
 			zoomRegions,
 			trimRegions,
 			speedRegions,
@@ -1572,6 +1646,8 @@ export default function VideoEditor() {
 						padding,
 						videoPadding: padding,
 						cropRegion,
+						webcam,
+						webcamUrl: webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null,
 						annotationRegions,
 						zoomRegions: effectiveZoomRegions,
 						cursorTelemetry: effectiveCursorTelemetry,
@@ -1716,6 +1792,8 @@ export default function VideoEditor() {
 						borderRadius,
 						padding,
 						cropRegion,
+						webcam,
+						webcamUrl: webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null,
 						annotationRegions,
 						zoomRegions: effectiveZoomRegions,
 						cursorTelemetry: effectiveCursorTelemetry,
@@ -1805,6 +1883,7 @@ export default function VideoEditor() {
 			borderRadius,
 			padding,
 			cropRegion,
+			webcam,
 			annotationRegions,
 			isPlaying,
 			aspectRatio,
@@ -2040,6 +2119,8 @@ export default function VideoEditor() {
 											borderRadius={borderRadius}
 											padding={padding}
 											cropRegion={cropRegion}
+											webcam={webcam}
+											webcamVideoPath={webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null}
 											trimRegions={trimRegions}
 											speedRegions={speedRegions}
 											annotationRegions={annotationRegions}
@@ -2167,6 +2248,10 @@ export default function VideoEditor() {
 					onCursorSwayChange={setCursorSway}
 					borderRadius={borderRadius}
 					onBorderRadiusChange={setBorderRadius}
+					webcam={webcam}
+					onWebcamChange={setWebcam}
+					onUploadWebcam={handleUploadWebcam}
+					onClearWebcam={handleClearWebcam}
 					padding={padding}
 					onPaddingChange={setPadding}
 					cropRegion={cropRegion}

@@ -32,6 +32,7 @@ import {
   type SpeedRegion,
   type AnnotationRegion,
   type CursorTelemetryPoint,
+  type WebcamOverlaySettings,
 } from "./types";
 import {
   DEFAULT_FOCUS,
@@ -68,6 +69,7 @@ import {
   DEFAULT_CURSOR_SMOOTHING,
   DEFAULT_CURSOR_SWAY,
 } from "./types";
+import { getWebcamOverlaySizePx } from "./webcamOverlay";
 
 type PlaybackAnimationState = {
   scale: number;
@@ -112,6 +114,8 @@ interface VideoPlaybackProps {
   borderRadius?: number;
   padding?: number;
   cropRegion?: import("./types").CropRegion;
+  webcam?: WebcamOverlaySettings;
+  webcamVideoPath?: string | null;
   trimRegions?: TrimRegion[];
   speedRegions?: SpeedRegion[];
   aspectRatio: AspectRatio;
@@ -169,6 +173,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       borderRadius = 0,
       padding = 50,
       cropRegion,
+      webcam,
+      webcamVideoPath,
       trimRegions = [],
       speedRegions = [],
       aspectRatio,
@@ -199,6 +205,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const [videoReady, setVideoReady] = useState(false);
     const overlayRef = useRef<HTMLDivElement | null>(null);
     const focusIndicatorRef = useRef<HTMLDivElement | null>(null);
+    const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
+    const webcamBubbleRef = useRef<HTMLDivElement | null>(null);
     const currentTimeRef = useRef(0);
     const zoomRegionsRef = useRef<ZoomRegion[]>([]);
     const selectedZoomIdRef = useRef<string | null>(null);
@@ -237,6 +245,43 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const cursorClickBounceRef = useRef(cursorClickBounce);
     const cursorSwayRef = useRef(cursorSway);
     const motionBlurStateRef = useRef<MotionBlurState>(createMotionBlurState());
+
+    const applyWebcamBubbleLayout = useCallback((zoomScale: number) => {
+      const bubble = webcamBubbleRef.current;
+      const overlay = overlayRef.current;
+      if (!bubble || !overlay || !webcam?.enabled || !webcamVideoPath) {
+        if (bubble) {
+          bubble.style.display = "none";
+        }
+        return;
+      }
+
+      const margin = webcam.margin ?? 24;
+      const scaledSize = getWebcamOverlaySizePx({
+    		containerWidth: overlay.clientWidth,
+    		containerHeight: overlay.clientHeight,
+    		sizePercent: webcam.size ?? 50,
+    		margin,
+    		zoomScale,
+    		reactToZoom: webcam.reactToZoom ?? true,
+    	});
+      const x = webcam.corner.endsWith("right")
+        ? overlay.clientWidth - scaledSize - margin
+        : margin;
+      const y = webcam.corner.startsWith("bottom")
+        ? overlay.clientHeight - scaledSize - margin
+        : margin;
+
+      bubble.style.display = "block";
+      bubble.style.left = `${x}px`;
+      bubble.style.top = `${y}px`;
+      bubble.style.width = `${scaledSize}px`;
+      bubble.style.height = `${scaledSize}px`;
+      bubble.style.borderRadius = `${webcam.cornerRadius ?? 18}px`;
+      bubble.style.boxShadow = `0 ${Math.round(scaledSize * 0.06)}px ${Math.round(
+        scaledSize * 0.22,
+      )}px rgba(0, 0, 0, ${webcam.shadow ?? 0.35})`;
+    }, [webcam, webcamVideoPath]);
 
     const clampFocusToStage = useCallback(
       (focus: ZoomFocus, depth: ZoomDepth) => {
@@ -336,8 +381,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
           : null;
 
         updateOverlayForRegion(activeRegion);
+        applyWebcamBubbleLayout(animationStateRef.current.appliedScale || 1);
       }
-    }, [updateOverlayForRegion, cropRegion, borderRadius, padding]);
+    }, [updateOverlayForRegion, cropRegion, borderRadius, padding, applyWebcamBubbleLayout]);
 
     useEffect(() => {
       layoutVideoContentRef.current = layoutVideoContent;
@@ -648,6 +694,36 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       if (!pixiReady || !videoReady) return;
       updateOverlayForRegion(selectedZoom);
     }, [selectedZoom, pixiReady, videoReady, updateOverlayForRegion]);
+
+    useEffect(() => {
+      if (!pixiReady || !videoReady) return;
+      applyWebcamBubbleLayout(animationStateRef.current.appliedScale || 1);
+    }, [applyWebcamBubbleLayout, pixiReady, videoReady, webcam, webcamVideoPath]);
+
+    useEffect(() => {
+      const webcamVideo = webcamVideoRef.current;
+      if (!webcamVideo || !webcam?.enabled || !webcamVideoPath) {
+        return;
+      }
+
+      const targetTime = Math.max(0, currentTime);
+      if (Math.abs(webcamVideo.currentTime - targetTime) > (isPlaying ? 0.1 : 0.01)) {
+        try {
+          webcamVideo.currentTime = targetTime;
+        } catch {
+          // no-op
+        }
+      }
+
+      if (isPlaying) {
+        const playPromise = webcamVideo.play();
+        if (playPromise) {
+          playPromise.catch(() => {});
+        }
+      } else {
+        webcamVideo.pause();
+      }
+    }, [currentTime, isPlaying, webcam, webcamVideoPath]);
 
     useEffect(() => {
       const overlayEl = overlayRef.current;
@@ -1043,6 +1119,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
           motionIntensity,
           motionVector,
         );
+        applyWebcamBubbleLayout(animationStateRef.current.appliedScale || 1);
 
         // Update cursor overlay
         const cursorOverlay = cursorOverlayRef.current;
@@ -1064,7 +1141,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
           app.ticker.remove(ticker);
         }
       };
-    }, [pixiReady, videoReady, clampFocusToStage]);
+    }, [pixiReady, videoReady, clampFocusToStage, applyWebcamBubbleLayout]);
 
     useEffect(() => {
       const overlay = cursorOverlayRef.current;
@@ -1243,6 +1320,26 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
               className="absolute rounded-md border border-[#2563EB]/80 bg-[#2563EB]/20 shadow-[0_0_0_1px_rgba(37,99,235,0.35)]"
               style={{ display: "none", pointerEvents: "none" }}
             />
+            {webcam && webcamVideoPath ? (
+              <div
+                ref={webcamBubbleRef}
+                className="absolute overflow-hidden bg-black/80"
+                style={{
+                  display: webcam.enabled ? "block" : "none",
+                  pointerEvents: "none",
+                }}
+              >
+                <video
+                  ref={webcamVideoRef}
+                  src={webcamVideoPath}
+                  className="h-full w-full object-cover"
+                  muted
+                  playsInline
+                  preload="auto"
+                  style={{ transform: webcam.mirror ? "scaleX(-1)" : undefined }}
+                />
+              </div>
+            ) : null}
             {(() => {
               const filtered = (annotationRegions || []).filter(
                 (annotation) => {

@@ -43,9 +43,14 @@ import type {
 	CropRegion,
 	FigureData,
 	PlaybackSpeed,
+	WebcamOverlaySettings,
 	ZoomDepth,
 } from "./types";
 import {
+	DEFAULT_WEBCAM_CORNER_RADIUS,
+	DEFAULT_WEBCAM_REACT_TO_ZOOM,
+	DEFAULT_WEBCAM_SHADOW,
+	DEFAULT_WEBCAM_SIZE,
 	DEFAULT_CURSOR_CLICK_BOUNCE,
 	DEFAULT_CURSOR_MOTION_BLUR,
 	DEFAULT_CURSOR_SIZE,
@@ -134,6 +139,10 @@ interface SettingsPanelProps {
 	onCursorSwayChange?: (amount: number) => void;
 	borderRadius?: number;
 	onBorderRadiusChange?: (radius: number) => void;
+	webcam?: WebcamOverlaySettings;
+	onWebcamChange?: (webcam: WebcamOverlaySettings) => void;
+	onUploadWebcam?: () => void;
+	onClearWebcam?: () => void;
 	padding?: number;
 	onPaddingChange?: (padding: number) => void;
 	cropRegion?: CropRegion;
@@ -213,6 +222,10 @@ export function SettingsPanel({
 	onCursorSwayChange,
 	borderRadius = 12.5,
 	onBorderRadiusChange,
+	webcam,
+	onWebcamChange,
+	onUploadWebcam,
+	onClearWebcam,
 	padding = 50,
 	onPaddingChange,
 	cropRegion,
@@ -302,6 +315,7 @@ export function SettingsPanel({
 	const [gradient, setGradient] = useState<string>(
 		GRADIENTS.includes(selected) ? selected : GRADIENTS[0],
 	);
+	const removeBackgroundEnabled = aspectRatio === "native" && padding === 0;
 	const [backgroundTab, setBackgroundTab] = useState<BackgroundTab>(() =>
 		getBackgroundTabForWallpaper(selected),
 	);
@@ -327,6 +341,26 @@ export function SettingsPanel({
 	useEffect(() => {
 		saveEditorPreferences({ customWallpapers: customImages });
 	}, [customImages]);
+
+	const handleRemoveBackgroundToggle = (checked: boolean) => {
+		if (checked) {
+			removeBackgroundStateRef.current = {
+				aspectRatio,
+				padding,
+			};
+			onAspectRatioChange?.("native");
+			onPaddingChange?.(0);
+			return;
+		}
+
+		if (removeBackgroundStateRef.current) {
+			onAspectRatioChange?.(removeBackgroundStateRef.current.aspectRatio);
+			onPaddingChange?.(removeBackgroundStateRef.current.padding);
+			removeBackgroundStateRef.current = null;
+		}
+	};
+
+	const webcamFileName = webcam?.sourcePath?.split(/[\\/]/).pop() ?? null;
 
 	const zoomEnabled = Boolean(selectedZoomDepth);
 	const trimEnabled = Boolean(selectedTrimId);
@@ -355,6 +389,11 @@ export function SettingsPanel({
 			onCropChange(cropSnapshotRef.current);
 		}
 		setShowCropModal(false);
+	};
+
+	const updateWebcam = (patch: Partial<WebcamOverlaySettings>) => {
+		if (!webcam || !onWebcamChange) return;
+		onWebcamChange({ ...webcam, ...patch });
 	};
 
 	const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -726,6 +765,101 @@ export function SettingsPanel({
 								</div>
 								<div className="p-2 rounded-lg bg-white/5 border border-white/5">
 									<SliderControl
+										label={tSettings("effects.webcamSize")}
+										value={webcam?.size ?? DEFAULT_WEBCAM_SIZE}
+										defaultValue={DEFAULT_WEBCAM_SIZE}
+										min={10}
+										max={100}
+										step={1}
+										onChange={(v) => updateWebcam({ size: v })}
+										formatValue={(v) => `${Math.round(v)}%`}
+										parseInput={(t) => parseFloat(t.replace(/%$/, ""))}
+									/>
+								</div>
+								<div className="p-2 rounded-lg bg-white/5 border border-white/5">
+									<SliderControl
+										label={tSettings("effects.webcamRoundness")}
+										value={webcam?.cornerRadius ?? DEFAULT_WEBCAM_CORNER_RADIUS}
+										defaultValue={DEFAULT_WEBCAM_CORNER_RADIUS}
+										min={0}
+										max={80}
+										step={1}
+										onChange={(v) => updateWebcam({ cornerRadius: v })}
+										formatValue={(v) => `${Math.round(v)}px`}
+										parseInput={(t) => parseFloat(t.replace(/px$/, ""))}
+									/>
+								</div>
+								<div className="p-2 rounded-lg bg-white/5 border border-white/5">
+									<SliderControl
+										label={tSettings("effects.webcamShadow")}
+										value={webcam?.shadow ?? DEFAULT_WEBCAM_SHADOW}
+										defaultValue={DEFAULT_WEBCAM_SHADOW}
+										min={0}
+										max={1}
+										step={0.01}
+										onChange={(v) => updateWebcam({ shadow: v })}
+										formatValue={(v) => `${Math.round(v * 100)}%`}
+										parseInput={(t) => parseFloat(t.replace(/%$/, "")) / 100}
+									/>
+								</div>
+								<div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5">
+									<div className="text-[10px] font-medium text-slate-300">
+										{tSettings("effects.webcamReactToZoom")}
+									</div>
+									<Switch
+										checked={webcam?.reactToZoom ?? DEFAULT_WEBCAM_REACT_TO_ZOOM}
+										onCheckedChange={(reactToZoom) => updateWebcam({ reactToZoom })}
+										className="data-[state=checked]:bg-[#2563EB] scale-90"
+									/>
+								</div>
+								<div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5">
+									<div className="text-[10px] font-medium text-slate-300">
+										{tSettings("effects.webcam")}
+									</div>
+									<Switch
+										checked={webcam?.enabled ?? false}
+										onCheckedChange={(enabled) => updateWebcam({ enabled })}
+										className="data-[state=checked]:bg-[#2563EB] scale-90"
+									/>
+								</div>
+								<div className="col-span-2 rounded-lg border border-white/5 bg-white/5 p-2">
+									<div className="flex items-center justify-between gap-2">
+										<div>
+											<div className="text-[10px] font-medium text-slate-300">
+												{tSettings("effects.webcamFootage")}
+											</div>
+											<div className="mt-0.5 text-[10px] text-slate-500">
+												{webcamFileName ?? tSettings("effects.webcamFootageDescription")}
+											</div>
+										</div>
+										<div className="flex items-center gap-1.5">
+											<Button
+												type="button"
+												variant="outline"
+												onClick={onUploadWebcam}
+												className="h-7 gap-1.5 border-white/10 bg-white/5 px-2 text-[10px] text-slate-200 hover:bg-white/10 hover:text-white"
+											>
+												<Upload className="h-3 w-3" />
+												{webcam?.sourcePath
+													? tSettings("effects.replaceWebcamFootage")
+													: tSettings("effects.uploadWebcamFootage")}
+											</Button>
+											{webcam?.sourcePath ? (
+												<Button
+													type="button"
+													variant="outline"
+													onClick={onClearWebcam}
+													className="h-7 gap-1.5 border-white/10 bg-white/5 px-2 text-[10px] text-slate-200 hover:bg-white/10 hover:text-white"
+												>
+													<Trash2 className="h-3 w-3" />
+													{tSettings("effects.removeWebcamFootage")}
+												</Button>
+											) : null}
+										</div>
+									</div>
+								</div>
+								<div className="p-2 rounded-lg bg-white/5 border border-white/5">
+									<SliderControl
 										label={tSettings("effects.roundness")}
 										value={borderRadius}
 										defaultValue={12.5}
@@ -753,17 +887,8 @@ export function SettingsPanel({
 								<div className="col-span-2 flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5">
 									<div className="text-[10px] font-medium text-slate-300">{tSettings("effects.removeBackground")}</div>
 									<Switch
-										checked={aspectRatio === 'native' && padding === 0}
-										onCheckedChange={(checked) => {
-											if (checked) {
-												removeBackgroundStateRef.current = {
-													aspectRatio,
-													padding,
-												};
-												onAspectRatioChange?.('native');
-												onPaddingChange?.(0);
-											}
-										}}
+										checked={removeBackgroundEnabled}
+										onCheckedChange={handleRemoveBackgroundToggle}
 										className="data-[state=checked]:bg-[#2563EB] scale-90"
 									/>
 								</div>
