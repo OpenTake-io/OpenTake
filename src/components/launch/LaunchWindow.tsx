@@ -17,6 +17,9 @@ import {
 	Volume2,
 	VolumeX,
 	AppWindow,
+	Eye,
+	EyeOff,
+	Timer,
 } from "lucide-react";
 import { RxDragHandleDots2 } from "react-icons/rx";
 import { useAudioLevelMeter } from "../../hooks/useAudioLevelMeter";
@@ -46,6 +49,8 @@ const LOCALE_LABELS: Record<string, string> = {
 	es: "ES",
 	"zh-CN": "中文",
 };
+
+const COUNTDOWN_OPTIONS = [0, 3, 5, 10];
 
 function IconButton({
 	onClick,
@@ -134,6 +139,7 @@ export function LaunchWindow() {
 	const {
 		recording,
 		paused,
+		countdownActive,
 		toggleRecording,
 		pauseRecording,
 		resumeRecording,
@@ -144,6 +150,8 @@ export function LaunchWindow() {
 		setMicrophoneDeviceId,
 		systemAudioEnabled,
 		setSystemAudioEnabled,
+		countdownDelay,
+		setCountdownDelay,
 	} = useScreenRecorder();
 
 	const [recordingStart, setRecordingStart] = useState<number | null>(null);
@@ -153,14 +161,18 @@ export function LaunchWindow() {
 	const [selectedSource, setSelectedSource] = useState("Screen");
 	const [hasSelectedSource, setHasSelectedSource] = useState(false);
 	const [recordingsDirectory, setRecordingsDirectory] = useState<string | null>(null);
-	const [activeDropdown, setActiveDropdown] = useState<"none" | "sources" | "more" | "mic">("none");
+	const [activeDropdown, setActiveDropdown] = useState<"none" | "sources" | "more" | "mic" | "countdown">("none");
 	const [sources, setSources] = useState<DesktopSource[]>([]);
 	const [sourcesLoading, setSourcesLoading] = useState(false);
+	const [hideHudFromCapture, setHideHudFromCapture] = useState(true);
+	const [platform, setPlatform] = useState<string | null>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 
 	const micDropdownOpen = activeDropdown === "mic";
 	const { devices, selectedDeviceId, setSelectedDeviceId } =
 		useMicrophoneDevices(microphoneEnabled || micDropdownOpen);
+
+	const supportsHudCaptureProtection = platform !== "linux";
 
 	useEffect(() => {
 		if (selectedDeviceId && selectedDeviceId !== "default") {
@@ -233,6 +245,36 @@ export function LaunchWindow() {
 	}, []);
 
 	useEffect(() => {
+		let cancelled = false;
+		const loadPlatform = async () => {
+			try {
+				const nextPlatform = await window.electronAPI.getPlatform();
+				if (!cancelled) setPlatform(nextPlatform);
+			} catch (error) {
+				console.error("Failed to load platform:", error);
+			}
+		};
+		void loadPlatform();
+		return () => { cancelled = true; };
+	}, []);
+
+	useEffect(() => {
+		let cancelled = false;
+		const loadHudCaptureProtection = async () => {
+			try {
+				const result = await window.electronAPI.getHudOverlayCaptureProtection();
+				if (!cancelled && result.success) {
+					setHideHudFromCapture(result.enabled);
+				}
+			} catch (error) {
+				console.error("Failed to load HUD capture protection state:", error);
+			}
+		};
+		void loadHudCaptureProtection();
+		return () => { cancelled = true; };
+	}, []);
+
+	useEffect(() => {
 		const handleClick = (e: MouseEvent) => {
 			if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
 				setActiveDropdown("none");
@@ -283,7 +325,7 @@ export function LaunchWindow() {
 		}
 	}, []);
 
-	const toggleDropdown = (which: "sources" | "more" | "mic") => {
+	const toggleDropdown = (which: "sources" | "more" | "mic" | "countdown") => {
 		setActiveDropdown(activeDropdown === which ? "none" : which);
 		if (activeDropdown !== which && which === "sources") fetchSources();
 	};
@@ -327,6 +369,22 @@ export function LaunchWindow() {
 	const toggleMicrophone = () => {
 		if (recording) return;
 		toggleDropdown("mic");
+	};
+
+	const toggleHudCaptureProtection = async () => {
+		const nextValue = !hideHudFromCapture;
+		setHideHudFromCapture(nextValue);
+		try {
+			const result = await window.electronAPI.setHudOverlayCaptureProtection(nextValue);
+			if (!result.success) {
+				setHideHudFromCapture(!nextValue);
+				return;
+			}
+			setHideHudFromCapture(result.enabled);
+		} catch (error) {
+			console.error("Failed to update HUD capture protection:", error);
+			setHideHudFromCapture(!nextValue);
+		}
 	};
 
 	const screenSources = sources.filter((s) => s.sourceType === "screen");
@@ -430,6 +488,22 @@ export function LaunchWindow() {
 							</>
 						)}
 
+						{activeDropdown === "countdown" && (
+							<>
+								<div className={styles.ddLabel}>{t("recording.countdownDelay")}</div>
+								{COUNTDOWN_OPTIONS.map((delay) => (
+									<DropdownItem
+										key={delay}
+										icon={<Timer size={16} />}
+										selected={countdownDelay === delay}
+										onClick={() => { setCountdownDelay(delay); setActiveDropdown("none"); }}
+									>
+										{delay === 0 ? t("recording.noDelay") : `${delay}s`}
+									</DropdownItem>
+								))}
+							</>
+						)}
+
 						{activeDropdown === "more" && (
 							<>
 								<DropdownItem icon={<FolderOpen size={16} />} onClick={chooseRecordingsDirectory}>
@@ -523,10 +597,27 @@ export function LaunchWindow() {
 
 						<IconButton
 							onClick={() => setSystemAudioEnabled(!systemAudioEnabled)}
-							title={systemAudioEnabled ? "Disable System Audio" : "Enable System Audio"}
+							title={systemAudioEnabled ? t("recording.disableSystemAudio") : t("recording.enableSystemAudio")}
 							className={systemAudioEnabled ? styles.ibActive : ""}
 						>
 							{systemAudioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+						</IconButton>
+
+						{supportsHudCaptureProtection && (
+							<IconButton
+								onClick={() => void toggleHudCaptureProtection()}
+								title={hideHudFromCapture ? t("recording.showHudInVideo") : t("recording.hideHudFromVideo")}
+							>
+								{hideHudFromCapture ? <EyeOff size={18} className="text-[#6b6b78]" /> : <Eye size={18} className="text-[#6360f5]" />}
+							</IconButton>
+						)}
+
+						<IconButton
+							onClick={() => toggleDropdown("countdown")}
+							title={t("recording.countdownDelay")}
+							className={countdownDelay > 0 ? styles.ibActive : ""}
+						>
+							<Timer size={18} />
 						</IconButton>
 
 						<Separator />
@@ -535,6 +626,7 @@ export function LaunchWindow() {
 							type="button"
 							className={`${styles.recBtn} ${styles.electronNoDrag}`}
 							onClick={hasSelectedSource ? toggleRecording : () => toggleDropdown("sources")}
+							disabled={countdownActive}
 							title={t("recording.record")}
 						>
 							<div className={styles.recDot} />

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { fixWebmDuration } from "@fix-webm-duration/fix";
+import { toast } from "sonner";
 
 const TARGET_FRAME_RATE = 60;
 const TARGET_WIDTH = 3840;
@@ -29,6 +30,7 @@ const MIC_GAIN_BOOST = 1.4;
 type UseScreenRecorderReturn = {
   recording: boolean;
   paused: boolean;
+  countdownActive: boolean;
   toggleRecording: () => void;
   pauseRecording: () => void;
   resumeRecording: () => void;
@@ -41,16 +43,20 @@ type UseScreenRecorderReturn = {
   setMicrophoneDeviceId: (deviceId: string | undefined) => void;
   systemAudioEnabled: boolean;
   setSystemAudioEnabled: (enabled: boolean) => void;
+  countdownDelay: number;
+  setCountdownDelay: (delay: number) => void;
 };
 
 export function useScreenRecorder(): UseScreenRecorderReturn {
   const [recording, setRecording] = useState(false);
   const [paused, setPaused] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [countdownActive, setCountdownActive] = useState(false);
   const [isMacOS, setIsMacOS] = useState(false);
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(undefined);
   const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
+  const [countdownDelay, setCountdownDelayState] = useState(3);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const screenStream = useRef<MediaStream | null>(null);
@@ -62,6 +68,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const wgcRecording = useRef(false);
   const startInFlight = useRef(false);
   const hasPromptedForReselect = useRef(false);
+  const hasShownWgcFallbackToast = useRef(false);
+  const countdownDelayLoaded = useRef(false);
 
   const preparePermissions = useCallback(async (options: { startup?: boolean } = {}) => {
     const platform = await window.electronAPI.getPlatform();
@@ -206,6 +214,23 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   }, []);
 
   useEffect(() => {
+    if (countdownDelayLoaded.current) return;
+    countdownDelayLoaded.current = true;
+
+    void (async () => {
+      const result = await window.electronAPI.getCountdownDelay();
+      if (result.success && typeof result.delay === "number") {
+        setCountdownDelayState(result.delay);
+      }
+    })();
+  }, []);
+
+  const setCountdownDelay = useCallback((delay: number) => {
+    setCountdownDelayState(delay);
+    void window.electronAPI.setCountdownDelay(delay);
+  }, []);
+
+  useEffect(() => {
     let cleanup: (() => void) | undefined;
 
     if (window.electronAPI?.onStopRecordingFromTray) {
@@ -287,8 +312,20 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         try {
           const wgcResult = await window.electronAPI.isWgcAvailable();
           useWgcCapture = wgcResult.available;
+          if (!useWgcCapture && !hasShownWgcFallbackToast.current) {
+            hasShownWgcFallbackToast.current = true;
+            toast.info(
+              "Native Windows capture (WGC) is unavailable. Falling back to browser capture.",
+            );
+          }
         } catch {
           useWgcCapture = false;
+          if (!hasShownWgcFallbackToast.current) {
+            hasShownWgcFallbackToast.current = true;
+            toast.info(
+              "Unable to check native Windows capture (WGC). Falling back to browser capture.",
+            );
+          }
         }
       }
 
@@ -314,7 +351,19 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
           microphoneLabel: micLabel,
         });
         if (!nativeResult.success) {
-          console.warn("Native capture failed, falling back to browser capture:", nativeResult.error ?? nativeResult.message);
+          if (useWgcCapture) {
+            console.warn("WGC capture failed, falling back to browser capture:", nativeResult.error ?? nativeResult.message);
+            if (!hasShownWgcFallbackToast.current) {
+              hasShownWgcFallbackToast.current = true;
+              toast.warning(
+                "Native Windows capture failed to start. Falling back to browser capture.",
+              );
+            }
+          } else {
+            throw new Error(
+              nativeResult.error ?? nativeResult.message ?? "Failed to start native screen recording",
+            );
+          }
         }
 
         if (nativeResult.success) {
@@ -595,17 +644,36 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     }
   }, [recording, cleanupCapturedMedia]);
 
-  const toggleRecording = () => {
-    if (starting) {
+  const toggleRecording = async () => {
+    if (starting || countdownActive) {
       return;
     }
 
-    recording ? stopRecording.current() : startRecording();
+    if (recording) {
+      stopRecording.current();
+      return;
+    }
+
+    // Start recording with optional countdown
+    if (countdownDelay > 0) {
+      setCountdownActive(true);
+      try {
+        const result = await window.electronAPI.startCountdown(countdownDelay);
+        if (!result.success || result.cancelled) {
+          return;
+        }
+      } finally {
+        setCountdownActive(false);
+      }
+    }
+
+    startRecording();
   };
 
   return {
     recording,
     paused,
+    countdownActive,
     toggleRecording,
     pauseRecording,
     resumeRecording,
@@ -618,6 +686,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     setMicrophoneDeviceId,
     systemAudioEnabled,
     setSystemAudioEnabled,
+    countdownDelay,
+    setCountdownDelay,
   };
 }
-

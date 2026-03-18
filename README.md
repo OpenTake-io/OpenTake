@@ -2,7 +2,6 @@
 
 Language: EN | [简中](README.zh-CN.md)
 
-[Live on Product Hunt - go check it out!](https://www.producthunt.com/products/recordly-make-stunning-product-demos?launch=recordly-2)
 <p align="center">
   <img src="https://i.postimg.cc/tRnL8gHp/Frame-5.png" width="220" alt="Recordly logo">
 </p>
@@ -15,15 +14,14 @@ Language: EN | [简中](README.zh-CN.md)
 ### Create polished, pro-grade screen recordings.
 [Recordly](https://www.recordly.dev) is an **open-source screen recorder and editor** for creating **polished walkthroughs, demos, tutorials, and product videos**. Contribution encouraged.
 
-**FAQ**: What are the changes between this and **Openscreen**? A: Recordly adds a full cursor animation/rendering pipeline, native screen capture for Mac and Windows, zoom animations faithful to Screen Studio, cursor loops, smoother panning behaviour, and more major tweaks.
-> This fork exists because the original maintainer does not wish implementing the architectural changes that make some of these features possible i.e. different recording pipeline.
+**FAQ**: What are the changes between this and the **upstream project?** A: Recordly adds a full cursor animation/rendering pipeline, native macOS and Windows screen recording system, zoom animations faithful to Screen Studio, cursor loops, audio tracks, and more major tweaks.
 
 <p align="center">
   <img src="./recordlydemo.gif" width="750" alt="Recordly demo video">
 </p>
 
 > [!NOTE]
-> Huge thank you to **tadees** for supporting the project! This donation directly helps cover the Apple Developer fees to get Recordly signed and notarised for macOS.
+> Huge thank you to **tadees** for supporting! This donation directly helps cover the Apple Developer fees to get Recordly signed and notarised for macOS. Still waiting for Apple approval.
 [**Support the project**](https://ko-fi.com)
 
 
@@ -34,17 +32,29 @@ Recordly lets you record your screen and automatically transform it into a polis
 
 Recordly runs on:
 
-- **macOS**
-- **Windows**
-- **Linux**
+- **macOS** 12.3+
+- **Windows** 10 Build 19041+
+- **Linux** (modern distros)
 
-Linux currently use Electron's capture path, which means the OS cursor cannot always be hidden during recording.
+On Windows, builds older than 19041 fall back to Electron capture and the cursor cannot be hidden. On Linux, cursor hiding is not supported (contribute).
 
 
 
 ---
 
 # Features
+
+### Cursor Animations
+<p>
+  <img src="./CursorSwayDemo.gif" width="450" alt="Recordly sway demo video">
+</p>
+
+- Adjustable cursor size
+- Cursor smoothing
+- Motion blur
+- Click bounce animation
+- macOS-style cursor assets
+- Cursor sway effects
 
 ### Recording
 
@@ -62,20 +72,12 @@ Linux currently use Electron's capture path, which means the OS cursor cannot al
 - Manual zoom regions
 - Smooth pan transitions between zoom regions
 
-### Cursor Controls
-
-- Adjustable cursor size
-- Cursor smoothing
-- Motion blur
-- Click bounce animation
-- macOS-style cursor assets
-
-### Cursor Loops
+### Infinite Loops
 <p>
-  <img src="./CursorLoop.gif" width="450" alt="Recordly demo video">
+  <img src="./CursorLoop.gif" width="450" alt="Recordly gif loop demo video">
 </p>
 
-- Cursor returns to original position in a freeze-frame at end of video/GIF (off by default)
+- Toggle to make cursor return to original position at end of video/GIF for clean loops
 
 ### Editing Tools
 
@@ -107,11 +109,11 @@ Linux currently use Electron's capture path, which means the OS cursor cannot al
 # Screenshots
 
 <p align="center">
-  <img src="https://i.postimg.cc/d0t09ypT/Screenshot-2026-03-09-at-8-10-08-pm.png" width="700" alt="Recordly editor screenshot">
+  <img src="https://i.postimg.cc/B6bX9gcy/Screenshot-2026-03-16-at-1-33-51-pm.png" width="700" alt="Recordly editor screenshot">
 </p>
 
 <p align="center">
-  <img src="https://i.postimg.cc/YSgdbvFj/Screenshot-2026-03-09-at-8-49-14-pm.png" width="700" alt="Recordly recording interface screenshot">
+  <img src="https://i.postimg.cc/nhnmSqgV/Screenshot-2026-03-16-at-1-36-14-pm.png" width="700" alt="Recordly recording interface screenshot">
 </p>
 
 ---
@@ -123,17 +125,6 @@ Linux currently use Electron's capture path, which means the OS cursor cannot al
 Prebuilt releases are available here:
 
 https://github.com/webadderall/Recordly/releases
-
-## Homebrew (Cask)
-
-Recordly is distributed as a GUI app, so Homebrew support is done via cask.
-
-For users:
-
-```bash
-brew tap webadderall/tap
-brew install --cask recordly
-```
 
 ---
 
@@ -157,6 +148,19 @@ Remove the quarantine flag with:
 ```bash
 xattr -rd com.apple.quarantine /Applications/Recordly.app
 ```
+
+---
+
+# System Requirements
+
+| Platform | Minimum version | Notes |
+|---|---|---|
+| **macOS** | macOS 12.3 (Monterey) | Required for ScreenCaptureKit. Recording and cursor hiding will not work on older versions. |
+| **Windows** | Windows 10 20H1 (Build 19041, May 2020) | Required for Windows Graphics Capture (`IsCursorCaptureEnabled`). Older builds fall back to Electron browser capture — cursor will be visible in recordings. |
+| **Linux** | Any modern distro | Recording works via Electron capture. Cursor is always visible in recordings. System audio requires PipeWire (Ubuntu 22.04+, Fedora 34+). |
+
+> [!IMPORTANT]
+> On Windows, if your build is older than 19041, recording will still work but **the cursor cannot be hidden** from the captured video.
 
 ---
 
@@ -205,11 +209,13 @@ Adjust:
 
 # Limitations
 
-### Linux Cursor Capture
+### Cursor Capture (We overlay a second animated cursor over the original hidden one)
 
-Electron’s desktop capture API does not allow hiding the system cursor during recording.
+**macOS**: Cursor is excluded from the recording at the ScreenCaptureKit level — always clean.
 
-If you enable the animated cursor layer, recordings may contain **two cursors**.
+**Windows**: Cursor is excluded via Windows Graphics Capture (`IsCursorCaptureEnabled(false)`) — requires **Windows 10 Build 19041+**. On older builds the app falls back to Electron’s browser capture and the real cursor will be visible in the recording.
+
+**Linux**: Electron’s desktop capture API does not support cursor hiding. The real OS cursor will always be visible in recordings. If you also enable the animated cursor overlay in the editor, you may see **two cursors** in the output.
 
 Improving cross-platform cursor capture is an area where contributions are welcome.
 
@@ -220,7 +226,8 @@ Improving cross-platform cursor capture is an area where contributions are welco
 System audio capture depends on platform support.
 
 **Windows**
-- Works out of the box
+- Works out of the box via native WASAPI
+- Requires Windows 10 Build 19041+
 
 **Linux**
 - Requires PipeWire (Ubuntu 22.04+, Fedora 34+)
@@ -294,7 +301,10 @@ Pull requests are welcome.
 
 [Donations](https://ko-fi.com/webadderall/goal?g=0)
 
-• Tadees
+Greatful for all supporters, you are helping Recordly stay open-source and supporting development.
+
+• Tadees ($100)
+• Anonymous supporter ($5)
 
 Email youngchen3442@gmail.com for other inquiries or DM me via [@webadderall](https://x.com/webadderall)
 
@@ -312,7 +322,7 @@ Recordly is licensed under the **MIT License**.
 
 ## Acknowledgements
 
-Built on top of the excellent [OpenScreen](https://github.com/siddharthvaddem/openscreen) project, you should go check it out!
+Originally built on top of the excellent [OpenScreen](https://github.com/siddharthvaddem/openscreen) project.
 
 Created by  
 [@webadderall](https://x.com/webadderall)
