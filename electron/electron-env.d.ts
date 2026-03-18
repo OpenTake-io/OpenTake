@@ -121,6 +121,9 @@ interface Window {
 		}>;
 		getCurrentVideoPath: () => Promise<{ success: boolean; path?: string }>;
 		clearCurrentVideoPath: () => Promise<{ success: boolean }>;
+		deleteRecordingFile: (
+			filePath: string,
+		) => Promise<{ success: boolean; error?: string }>;
 		saveProjectFile: (
 			projectData: unknown,
 			suggestedName?: string,

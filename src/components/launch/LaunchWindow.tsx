@@ -489,7 +489,7 @@ export function LaunchWindow() {
 									<>
 										{screenSources.length > 0 && (
 											<>
-												<div className={styles.ddLabel}>Screens</div>
+												<div className={styles.ddLabel}>{t("recording.screens")}</div>
 												{screenSources.map((source) => (
 													<DropdownItem
 														key={source.id}
@@ -505,7 +505,7 @@ export function LaunchWindow() {
 										{windowSources.length > 0 && (
 											<>
 												<div className={styles.ddLabel} style={screenSources.length > 0 ? { marginTop: 4 } : undefined}>
-													Windows
+													{t("recording.windows")}
 												</div>
 												{windowSources.map((source) => (
 													<DropdownItem
@@ -523,7 +523,7 @@ export function LaunchWindow() {
 										)}
 										{screenSources.length === 0 && windowSources.length === 0 && (
 											<div className="text-center text-xs text-[#6b6b78] py-4">
-												No sources found
+												{t("recording.noSourcesFound")}
 											</div>
 										)}
 									</>
@@ -533,18 +533,18 @@ export function LaunchWindow() {
 
 						{activeDropdown === "mic" && (
 							<>
-								<div className={styles.ddLabel}>Microphone</div>
+								<div className={styles.ddLabel}>{t("recording.microphone")}</div>
 								{microphoneEnabled && (
 									<DropdownItem
 										icon={<MicOff size={16} />}
 										onClick={() => { setMicrophoneEnabled(false); setActiveDropdown("none"); }}
 									>
-										Turn Off Microphone
+										{t("recording.turnOffMicrophone")}
 									</DropdownItem>
 								)}
 								{!microphoneEnabled && (
 									<div className="px-3 py-2 text-xs text-[#6b6b78]">
-										Select a microphone to enable
+										{t("recording.selectMicToEnable")}
 									</div>
 								)}
 								{devices.map((device) => (
@@ -561,7 +561,7 @@ export function LaunchWindow() {
 								))}
 								{devices.length === 0 && (
 									<div className="text-center text-xs text-[#6b6b78] py-4">
-										No microphones found
+										{t("recording.noMicrophonesFound")}
 									</div>
 								)}
 							</>
@@ -569,18 +569,18 @@ export function LaunchWindow() {
 
 						{activeDropdown === "webcam" && (
 							<>
-								<div className={styles.ddLabel}>Webcam</div>
+								<div className={styles.ddLabel}>{t("recording.webcam")}</div>
 								{webcamEnabled && (
 									<DropdownItem
 										icon={<VideoOff size={16} />}
 										onClick={() => { setWebcamEnabled(false); setActiveDropdown("none"); }}
 									>
-										Turn Off Webcam
+										{t("recording.turnOffWebcam")}
 									</DropdownItem>
 								)}
 								{!webcamEnabled && (
 									<div className="px-3 py-2 text-xs text-[#6b6b78]">
-										Select a webcam to enable
+										{t("recording.selectWebcamToEnable")}
 									</div>
 								)}
 								{showWebcamControls && (
@@ -612,7 +612,7 @@ export function LaunchWindow() {
 								))}
 								{videoDevices.length === 0 && (
 									<div className="text-center text-xs text-[#6b6b78] py-4">
-										No webcams found
+										{t("recording.noWebcamsFound")}
 									</div>
 								)}
 							</>
@@ -637,7 +637,7 @@ export function LaunchWindow() {
 						{activeDropdown === "more" && (
 							<>
 								<DropdownItem icon={<FolderOpen size={16} />} onClick={chooseRecordingsDirectory}>
-									Recordings Folder
+									{t("recording.recordingsFolder")}
 								</DropdownItem>
 								<DropdownItem icon={<VideoIcon size={16} />} onClick={openVideoFile}>
 									{t("recording.openVideoFile")}
@@ -645,7 +645,7 @@ export function LaunchWindow() {
 								<DropdownItem icon={<FolderOpen size={16} />} onClick={openProjectFile}>
 									{t("recording.openProject")}
 								</DropdownItem>
-								<div className={styles.ddLabel} style={{ marginTop: 4 }}>Language</div>
+								<div className={styles.ddLabel} style={{ marginTop: 4 }}>{t("recording.language")}</div>
 								{SUPPORTED_LOCALES.map((code) => (
 									<DropdownItem
 										key={code}
@@ -674,7 +674,7 @@ export function LaunchWindow() {
 						<div className="flex items-center gap-[5px]">
 							<div className={`w-[7px] h-[7px] rounded-full ${paused ? "bg-[#fbbf24]" : `bg-[#f43f5e] ${styles.recDotBlink}`}`} />
 							<span className={`text-[10px] font-bold tracking-[0.06em] ${paused ? "text-[#fbbf24]" : "text-[#f43f5e]"}`}>
-								{paused ? "PAUSED" : "REC"}
+								{paused ? t("recording.paused") : t("recording.rec")}
 							</span>
 						</div>
 
@@ -690,15 +690,15 @@ export function LaunchWindow() {
 
 						<Separator />
 
-						<IconButton onClick={paused ? resumeRecording : pauseRecording} title={paused ? "Resume" : "Pause"} className={paused ? styles.ibGreen : ""}>
+						<IconButton onClick={paused ? resumeRecording : pauseRecording} title={paused ? t("recording.resume") : t("recording.pause")} className={paused ? styles.ibGreen : ""}>
 							{paused ? <Play size={18} fill="currentColor" strokeWidth={0} /> : <Pause size={18} />}
 						</IconButton>
 
-						<IconButton onClick={toggleRecording} title="Stop" className={styles.ibRed}>
+						<IconButton onClick={toggleRecording} title={t("recording.stop")} className={styles.ibRed}>
 							<Square size={16} fill="currentColor" strokeWidth={0} />
 						</IconButton>
 
-						<IconButton onClick={cancelRecording} title="Cancel">
+						<IconButton onClick={cancelRecording} title={t("recording.cancel")}>
 							<X size={18} />
 						</IconButton>
 					</>
@@ -772,7 +772,7 @@ export function LaunchWindow() {
 
 						<Separator />
 
-						<IconButton onClick={() => toggleDropdown("more")} title="More">
+						<IconButton onClick={() => toggleDropdown("more")} title={t("recording.more")}>
 							<MoreVertical size={18} />
 						</IconButton>
 

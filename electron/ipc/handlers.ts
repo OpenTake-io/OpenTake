@@ -3139,6 +3139,25 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     return { success: true };
   });
 
+  ipcMain.handle('delete-recording-file', async (_, filePath: string) => {
+    try {
+      if (!filePath || !isAutoRecordingPath(filePath)) {
+        return { success: false, error: 'Only auto-generated recordings can be deleted' };
+      }
+      await fs.unlink(filePath);
+      // Also delete the cursor telemetry sidecar if it exists
+      const telemetryPath = getTelemetryPathForVideo(filePath);
+      await fs.unlink(telemetryPath).catch(() => {});
+      if (currentVideoPath === filePath) {
+        currentVideoPath = null;
+        currentRecordingSession = null;
+      }
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
   ipcMain.handle('get-platform', () => {
     return process.platform;
   });
