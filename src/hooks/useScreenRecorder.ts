@@ -751,11 +751,18 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const pauseRecording = useCallback(() => {
     if (!recording || paused) return;
     if (nativeScreenRecording.current) {
-      // Native captures cannot truly pause, but we pause the timer/UI and webcam
-      if (webcamRecorder.current?.state === "recording") {
-        webcamRecorder.current.pause();
-      }
-      setPaused(true);
+      void (async () => {
+        const result = await window.electronAPI.pauseNativeScreenRecording();
+        if (!result.success) {
+          console.error("Failed to pause native screen recording:", result.error ?? result.message);
+          return;
+        }
+
+        if (webcamRecorder.current?.state === "recording") {
+          webcamRecorder.current.pause();
+        }
+        setPaused(true);
+      })();
       return;
     }
     if (mediaRecorder.current?.state === "recording") {
@@ -770,10 +777,18 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const resumeRecording = useCallback(() => {
     if (!recording || !paused) return;
     if (nativeScreenRecording.current) {
-      if (webcamRecorder.current?.state === "paused") {
-        webcamRecorder.current.resume();
-      }
-      setPaused(false);
+      void (async () => {
+        const result = await window.electronAPI.resumeNativeScreenRecording();
+        if (!result.success) {
+          console.error("Failed to resume native screen recording:", result.error ?? result.message);
+          return;
+        }
+
+        if (webcamRecorder.current?.state === "paused") {
+          webcamRecorder.current.resume();
+        }
+        setPaused(false);
+      })();
       return;
     }
     if (mediaRecorder.current?.state === "paused") {

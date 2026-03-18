@@ -97,6 +97,36 @@ function resumeRecording(
 	return false;
 }
 
+async function pauseNativeRecording(
+	webcamRecorder?: ReturnType<typeof createMockMediaRecorder> | null,
+	result: { success: boolean } = { success: true },
+): Promise<boolean> {
+	if (!result.success) {
+		return false;
+	}
+
+	if (webcamRecorder?.state === "recording") {
+		webcamRecorder.pause();
+	}
+
+	return true;
+}
+
+async function resumeNativeRecording(
+	webcamRecorder?: ReturnType<typeof createMockMediaRecorder> | null,
+	result: { success: boolean } = { success: true },
+): Promise<boolean> {
+	if (!result.success) {
+		return false;
+	}
+
+	if (webcamRecorder?.state === "paused") {
+		webcamRecorder.resume();
+	}
+
+	return true;
+}
+
 function cancelRecording(
 	recorder: ReturnType<typeof createMockMediaRecorder>,
 	isNativeRecording: boolean,
@@ -413,16 +443,28 @@ describe("useScreenRecorder state machine", () => {
 			expect(webcam.state).toBe("inactive");
 		});
 
-		it("native recording: webcam pauses/resumes while screen keeps capturing", () => {
+		it("native recording pauses webcam only after native pause succeeds", async () => {
 			const webcam = createMockMediaRecorder("recording");
 
-			pauseRecording(recorder, true, false, true, webcam);
+			const pausedResult = await pauseNativeRecording(webcam);
+			expect(pausedResult).toBe(true);
 			expect(webcam.state).toBe("paused");
 			expect(recorder.pause).not.toHaveBeenCalled();
 
-			resumeRecording(recorder, true, true, true, webcam);
+			const resumedResult = await resumeNativeRecording(webcam);
+			expect(resumedResult).toBe(true);
 			expect(webcam.state).toBe("recording");
 			expect(recorder.resume).not.toHaveBeenCalled();
+		});
+
+		it("native recording leaves webcam state alone when native pause fails", async () => {
+			const webcam = createMockMediaRecorder("recording");
+
+			const pausedResult = await pauseNativeRecording(webcam, { success: false });
+
+			expect(pausedResult).toBe(false);
+			expect(webcam.state).toBe("recording");
+			expect(webcam.pause).not.toHaveBeenCalled();
 		});
 
 		it("cancel discards both screen and webcam recordings", () => {

@@ -45,6 +45,16 @@ interface Window {
 			message?: string;
 			error?: string;
 		}>;
+		pauseNativeScreenRecording: () => Promise<{
+			success: boolean;
+			message?: string;
+			error?: string;
+		}>;
+		resumeNativeScreenRecording: () => Promise<{
+			success: boolean;
+			message?: string;
+			error?: string;
+		}>;
 		startFfmpegRecording: (
 			source: any,
 		) => Promise<{ success: boolean; path?: string; message?: string; error?: string }>;

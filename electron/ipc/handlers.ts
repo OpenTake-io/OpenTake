@@ -75,6 +75,7 @@ let nativeCaptureOutputBuffer = ''
 let nativeCaptureTargetPath: string | null = null
 let nativeCaptureStopRequested = false
 let nativeCaptureMicrophonePath: string | null = null
+let nativeCapturePaused = false
 let nativeCursorMonitorProcess: ChildProcessWithoutNullStreams | null = null
 let nativeCursorMonitorOutputBuffer = ''
 let wgcCaptureProcess: ChildProcessWithoutNullStreams | null = null
@@ -82,6 +83,7 @@ let wgcCaptureOutputBuffer = ''
 let wgcCaptureTargetPath: string | null = null
 let wgcScreenRecordingActive = false
 let wgcCaptureStopRequested = false
+let wgcCapturePaused = false
 let wgcSystemAudioPath: string | null = null
 let wgcMicAudioPath: string | null = null
 let wgcPendingVideoPath: string | null = null
@@ -122,6 +124,7 @@ export function killWgcCaptureProcess() {
     wgcScreenRecordingActive = false
     nativeScreenRecordingActive = false
     wgcCaptureStopRequested = false
+    wgcCapturePaused = false
     wgcSystemAudioPath = null
     wgcMicAudioPath = null
     wgcPendingVideoPath = null
@@ -2137,6 +2140,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         wgcCaptureOutputBuffer = ''
         wgcCaptureTargetPath = outputPath
         wgcCaptureStopRequested = false
+        wgcCapturePaused = false
         wgcCaptureProcess = spawn(exePath, [JSON.stringify(config)], {
           cwd: recordingsDir,
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -2162,6 +2166,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         wgcCaptureProcess = null
         wgcCaptureTargetPath = null
         wgcCaptureStopRequested = false
+        wgcCapturePaused = false
         return {
           success: false,
           message: 'Failed to start WGC capture',
@@ -2240,6 +2245,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       nativeCaptureTargetPath = outputPath
       nativeCaptureMicrophonePath = microphoneOutputPath
       nativeCaptureStopRequested = false
+      nativeCapturePaused = false
       nativeCaptureProcess = spawn(helperPath, [JSON.stringify(config)], {
         cwd: recordingsDir,
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -2268,6 +2274,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       nativeCaptureTargetPath = null
       nativeCaptureMicrophonePath = null
       nativeCaptureStopRequested = false
+      nativeCapturePaused = false
       return {
         success: false,
         message: 'Failed to start native ScreenCaptureKit recording',
@@ -2294,6 +2301,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         nativeScreenRecordingActive = false
         wgcCaptureTargetPath = null
         wgcCaptureStopRequested = false
+        wgcCapturePaused = false
 
         const finalVideoPath = preferredVideoPath ?? tempVideoPath
         if (tempVideoPath !== finalVideoPath) {
@@ -2310,6 +2318,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         wgcCaptureProcess = null
         wgcCaptureTargetPath = null
         wgcCaptureStopRequested = false
+        wgcCapturePaused = false
         wgcSystemAudioPath = null
         wgcMicAudioPath = null
         wgcPendingVideoPath = null
@@ -2356,6 +2365,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       nativeCaptureTargetPath = null
       nativeCaptureMicrophonePath = null
       nativeCaptureStopRequested = false
+      nativeCapturePaused = false
 
       const finalVideoPath = preferredVideoPath ?? tempVideoPath
       if (tempVideoPath !== finalVideoPath) {
@@ -2380,6 +2390,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       nativeCaptureTargetPath = null
       nativeCaptureMicrophonePath = null
       nativeCaptureStopRequested = false
+      nativeCapturePaused = false
 
       // Try to recover: if the target file exists on disk, finalize with it
       if (fallbackPath) {
@@ -2397,6 +2408,86 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         message: 'Failed to stop native ScreenCaptureKit recording',
         error: String(error),
       }
+    }
+  })
+
+  ipcMain.handle('pause-native-screen-recording', async () => {
+    if (process.platform === 'win32') {
+      if (!wgcScreenRecordingActive || !wgcCaptureProcess) {
+        return { success: false, message: 'No WGC screen recording is active.' }
+      }
+
+      if (wgcCapturePaused) {
+        return { success: true }
+      }
+
+      try {
+        wgcCaptureProcess.stdin.write('pause\n')
+        wgcCapturePaused = true
+        return { success: true }
+      } catch (error) {
+        return { success: false, message: 'Failed to pause WGC capture', error: String(error) }
+      }
+    }
+
+    if (process.platform !== 'darwin') {
+      return { success: false, message: 'Native screen recording is only available on macOS.' }
+    }
+
+    if (!nativeScreenRecordingActive || !nativeCaptureProcess) {
+      return { success: false, message: 'No native screen recording is active.' }
+    }
+
+    if (nativeCapturePaused) {
+      return { success: true }
+    }
+
+    try {
+      nativeCaptureProcess.stdin.write('pause\n')
+      nativeCapturePaused = true
+      return { success: true }
+    } catch (error) {
+      return { success: false, message: 'Failed to pause native screen recording', error: String(error) }
+    }
+  })
+
+  ipcMain.handle('resume-native-screen-recording', async () => {
+    if (process.platform === 'win32') {
+      if (!wgcScreenRecordingActive || !wgcCaptureProcess) {
+        return { success: false, message: 'No WGC screen recording is active.' }
+      }
+
+      if (!wgcCapturePaused) {
+        return { success: true }
+      }
+
+      try {
+        wgcCaptureProcess.stdin.write('resume\n')
+        wgcCapturePaused = false
+        return { success: true }
+      } catch (error) {
+        return { success: false, message: 'Failed to resume WGC capture', error: String(error) }
+      }
+    }
+
+    if (process.platform !== 'darwin') {
+      return { success: false, message: 'Native screen recording is only available on macOS.' }
+    }
+
+    if (!nativeScreenRecordingActive || !nativeCaptureProcess) {
+      return { success: false, message: 'No native screen recording is active.' }
+    }
+
+    if (!nativeCapturePaused) {
+      return { success: true }
+    }
+
+    try {
+      nativeCaptureProcess.stdin.write('resume\n')
+      nativeCapturePaused = false
+      return { success: true }
+    } catch (error) {
+      return { success: false, message: 'Failed to resume native screen recording', error: String(error) }
     }
   })
 
