@@ -167,7 +167,7 @@ export function LaunchWindow() {
 	const [pausedTotal, setPausedTotal] = useState(0);
 	const [selectedSource, setSelectedSource] = useState("Screen");
 	const [hasSelectedSource, setHasSelectedSource] = useState(false);
-	const [recordingsDirectory, setRecordingsDirectory] = useState<string | null>(null);
+	const [, setRecordingsDirectory] = useState<string | null>(null);
 	const [activeDropdown, setActiveDropdown] = useState<"none" | "sources" | "more" | "mic" | "countdown" | "webcam">("none");
 	const [sources, setSources] = useState<DesktopSource[]>([]);
 	const [sourcesLoading, setSourcesLoading] = useState(false);

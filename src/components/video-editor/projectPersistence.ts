@@ -415,7 +415,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			reactToZoom:
 				typeof webcam.reactToZoom === "boolean"
 					? webcam.reactToZoom
-					: legacyZoomScaleEffect !== null
+					: legacyZoomScaleEffect != null
 						? legacyZoomScaleEffect > 0
 						: DEFAULT_WEBCAM_REACT_TO_ZOOM,
 			cornerRadius: isFiniteNumber(webcam.cornerRadius)

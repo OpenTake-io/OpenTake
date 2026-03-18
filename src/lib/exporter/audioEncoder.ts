@@ -208,26 +208,32 @@ export class AudioProcessor {
     }[] = []
 
     for (const region of audioRegions) {
-      const regionSource = await resolveMediaElementSource(region.audioPath)
+      const regionFileSource = await resolveMediaElementSource(region.audioPath)
       const audioEl = document.createElement('audio')
-      audioEl.src = regionSource.src
+      audioEl.src = regionFileSource.src
       audioEl.preload = 'auto'
       try {
         await this.waitForLoadedMetadata(audioEl)
       } catch {
-        regionSource.revoke()
+        regionFileSource.revoke()
         console.warn('[AudioProcessor] Failed to load audio region:', region.audioPath)
         continue
       }
       if (this.cancelled) throw new Error('Export cancelled')
 
-      const regionSource = audioContext.createMediaElementSource(audioEl)
+      const regionSourceNode = audioContext.createMediaElementSource(audioEl)
       const gainNode = audioContext.createGain()
       gainNode.gain.value = Math.max(0, Math.min(1, region.volume))
-      regionSource.connect(gainNode)
+      regionSourceNode.connect(gainNode)
       gainNode.connect(destinationNode)
 
-      audioRegionElements.push({ media: audioEl, sourceNode: regionSource, gainNode, region, cleanup: regionSource.revoke })
+      audioRegionElements.push({
+        media: audioEl,
+        sourceNode: regionSourceNode,
+        gainNode,
+        region,
+        cleanup: regionFileSource.revoke,
+      })
     }
 
     const { recorder, recordedBlobPromise } = this.startAudioRecording(destinationNode.stream)

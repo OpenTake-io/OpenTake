@@ -119,8 +119,8 @@ function getInitialLocale(): AppLocale {
   }
 
   const storedLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY)
-  if (storedLocale && isSupportedLocale(storedLocale)) {
-    return storedLocale
+  if (storedLocale) {
+    return normalizeLocale(storedLocale)
   }
 
   // Product default must be English on first launch unless user explicitly
