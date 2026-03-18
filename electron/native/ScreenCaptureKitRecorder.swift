@@ -11,6 +11,7 @@ struct CaptureConfig: Codable {
 	let capturesSystemAudio: Bool?
 	let capturesMicrophone: Bool?
 	let microphoneDeviceId: String?
+	let microphoneLabel: String?
 	let microphoneOutputPath: String?
 }
 
@@ -89,7 +90,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
 		if capturesMicrophone {
 			streamConfig.setValue(true, forKey: "captureMicrophone")
-			if let microphoneDeviceId = config.microphoneDeviceId, !microphoneDeviceId.isEmpty {
+			if let microphoneDeviceId = Self.resolveMicrophoneCaptureDeviceID(config: config) {
 				streamConfig.setValue(microphoneDeviceId, forKey: "microphoneCaptureDeviceID")
 			}
 		}
@@ -440,6 +441,24 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			AVNumberOfChannelsKey: 2,
 			AVEncoderBitRateKey: bitRate,
 		]
+	}
+
+	private static func resolveMicrophoneCaptureDeviceID(config: CaptureConfig) -> String? {
+		let audioDevices = AVCaptureDevice.devices(for: .audio)
+
+		if let microphoneLabel = config.microphoneLabel?.trimmingCharacters(in: .whitespacesAndNewlines), !microphoneLabel.isEmpty {
+			if let matchedDevice = audioDevices.first(where: { $0.localizedName == microphoneLabel }) {
+				return matchedDevice.uniqueID
+			}
+		}
+
+		if let microphoneDeviceId = config.microphoneDeviceId?.trimmingCharacters(in: .whitespacesAndNewlines), !microphoneDeviceId.isEmpty {
+			if audioDevices.contains(where: { $0.uniqueID == microphoneDeviceId }) {
+				return microphoneDeviceId
+			}
+		}
+
+		return nil
 	}
 
 	private func supportsNativeMicrophoneCapture(streamConfig: SCStreamConfiguration) -> Bool {

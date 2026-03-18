@@ -397,6 +397,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         void window.electronAPI.openSourceSelector();
       } else {
         console.error(state.message);
+        toast.error(state.message);
       }
     });
 
@@ -476,9 +477,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       }
 
       if (useNativeMacScreenCapture || useWgcCapture) {
-        // WGC: resolve mic device label for native WASAPI capture
+        // Resolve the selected mic label for native capture backends.
         let micLabel: string | undefined;
-        if (useWgcCapture && microphoneEnabled) {
+        if (microphoneEnabled) {
           try {
             const devices = await navigator.mediaDevices.enumerateDevices();
             const mic = devices.find(
@@ -486,7 +487,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
             );
             micLabel = mic?.label || undefined;
           } catch {
-            // Fall through — native process will use default mic
+            // Fall through — native process will use the default mic
           }
         }
 

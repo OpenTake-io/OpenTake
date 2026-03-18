@@ -10,6 +10,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import { RECORDINGS_DIR } from '../main'
+import { hideCursor, showCursor } from '../cursorHider'
 import { createCountdownWindow, getCountdownWindow, closeCountdownWindow } from '../windows'
 
 const execFileAsync = promisify(execFile)
@@ -2264,6 +2265,10 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         config.microphoneDeviceId = options.microphoneDeviceId
       }
 
+      if (options?.microphoneLabel) {
+        config.microphoneLabel = options.microphoneLabel
+      }
+
       if (microphoneOutputPath) {
         config.microphoneOutputPath = microphoneOutputPath
       }
@@ -2705,6 +2710,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       stopInteractionCapture()
       stopWindowBoundsCapture()
       stopNativeCursorMonitor()
+      showCursor()
       linuxCursorScreenPoint = null
       snapshotCursorTelemetryForPersistence()
       activeCursorSamples = []
@@ -3296,12 +3302,11 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
   // The IPC promise resolves only after the cursor hide attempt completes.
   // ---------------------------------------------------------------------------
   ipcMain.handle('hide-cursor', () => {
-    // No-op: macOS excludes the cursor at the ScreenCaptureKit capture level.
-    // Windows excludes the cursor via IsCursorCaptureEnabled(false) in wgc_session.cpp.
-    // Linux uses Electron desktopCapturer which does not support cursor hiding;
-    // if WGC is unavailable on Windows the call also falls back to browser capture
-    // where cursor hiding is unsupported — those users may see the real cursor.
-    return { success: true }
+    if (process.platform !== 'win32') {
+      return { success: true }
+    }
+
+    return { success: hideCursor() }
   })
 
   ipcMain.handle('get-shortcuts', async () => {
