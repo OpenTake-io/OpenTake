@@ -266,10 +266,6 @@ export function SettingsPanel({
 	const [customImages, setCustomImages] = useState<string[]>(
 		initialEditorPreferences.customWallpapers,
 	);
-	const removeBackgroundStateRef = useRef<{
-		aspectRatio: AspectRatio;
-		padding: number;
-	} | null>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
@@ -315,7 +311,6 @@ export function SettingsPanel({
 	const [gradient, setGradient] = useState<string>(
 		GRADIENTS.includes(selected) ? selected : GRADIENTS[0],
 	);
-	const removeBackgroundEnabled = aspectRatio === "native" && padding === 0;
 	const [backgroundTab, setBackgroundTab] = useState<BackgroundTab>(() =>
 		getBackgroundTabForWallpaper(selected),
 	);
@@ -341,24 +336,6 @@ export function SettingsPanel({
 	useEffect(() => {
 		saveEditorPreferences({ customWallpapers: customImages });
 	}, [customImages]);
-
-	const handleRemoveBackgroundToggle = (checked: boolean) => {
-		if (checked) {
-			removeBackgroundStateRef.current = {
-				aspectRatio,
-				padding,
-			};
-			onAspectRatioChange?.("native");
-			onPaddingChange?.(0);
-			return;
-		}
-
-		if (removeBackgroundStateRef.current) {
-			onAspectRatioChange?.(removeBackgroundStateRef.current.aspectRatio);
-			onPaddingChange?.(removeBackgroundStateRef.current.padding);
-			removeBackgroundStateRef.current = null;
-		}
-	};
 
 	const webcamFileName = webcam?.sourcePath?.split(/[\\/]/).pop() ?? null;
 
@@ -882,14 +859,6 @@ export function SettingsPanel({
 										onChange={(v) => onPaddingChange?.(v)}
 										formatValue={(v) => `${v}%`}
 										parseInput={(t) => parseFloat(t.replace(/%$/, ""))}
-									/>
-								</div>
-								<div className="col-span-2 flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5">
-									<div className="text-[10px] font-medium text-slate-300">{tSettings("effects.removeBackground")}</div>
-									<Switch
-										checked={removeBackgroundEnabled}
-										onCheckedChange={handleRemoveBackgroundToggle}
-										className="data-[state=checked]:bg-[#2563EB] scale-90"
 									/>
 								</div>
 							</div>

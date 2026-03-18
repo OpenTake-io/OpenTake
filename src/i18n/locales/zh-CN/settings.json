@@ -39,8 +39,7 @@
 		"webcamShadow": "摄像头阴影",
 		"shadow": "阴影",
 		"roundness": "圆角",
-		"padding": "内边距",
-		"removeBackground": "移除背景"
+		"padding": "内边距"
 	},
 	"crop": {
 		"title": "裁剪视频",
