@@ -37,6 +37,7 @@ import {
   preloadCursorAssets,
 } from "@/components/video-editor/videoPlayback/cursorRenderer";
 import { getWebcamOverlaySizePx } from "@/components/video-editor/webcamOverlay";
+import { resolveMediaElementSource } from "./localMediaSource";
 
 interface FrameRenderConfig {
   width: number;
@@ -118,6 +119,7 @@ export class FrameRenderer {
   private webcamFrameCacheCanvas: HTMLCanvasElement | null = null;
   private webcamFrameCacheCtx: CanvasRenderingContext2D | null = null;
   private lastSyncedWebcamTime: number | null = null;
+  private cleanupWebcamSource: (() => void) | null = null;
 
   constructor(config: FrameRenderConfig) {
     this.config = config;
@@ -422,6 +424,8 @@ export class FrameRenderer {
   private async setupWebcamSource(): Promise<void> {
     const webcamUrl = this.config.webcamUrl;
     if (!this.config.webcam?.enabled || !webcamUrl) {
+      this.cleanupWebcamSource?.();
+      this.cleanupWebcamSource = null;
       this.webcamVideoElement = null;
       this.webcamFrameCacheCanvas = null;
       this.webcamFrameCacheCtx = null;
@@ -429,8 +433,12 @@ export class FrameRenderer {
       return;
     }
 
+    this.cleanupWebcamSource?.();
+    const webcamSource = await resolveMediaElementSource(webcamUrl);
+    this.cleanupWebcamSource = webcamSource.revoke;
+
     const video = document.createElement("video");
-    video.src = webcamUrl;
+    video.src = webcamSource.src;
     video.muted = true;
     video.preload = "auto";
     video.playsInline = true;
@@ -1094,6 +1102,8 @@ export class FrameRenderer {
       this.webcamVideoElement.load();
       this.webcamVideoElement = null;
     }
+    this.cleanupWebcamSource?.();
+    this.cleanupWebcamSource = null;
     this.webcamFrameCacheCanvas = null;
     this.webcamFrameCacheCtx = null;
     this.lastSyncedWebcamTime = null;
