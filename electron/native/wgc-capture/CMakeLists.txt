@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(wgc-capture
   src/main.cpp
-  src/wgc_session.cpp
+  src/dxgi_session.cpp
   src/mf_encoder.cpp
   src/monitor_utils.cpp
   src/wasapi_loopback.cpp
@@ -15,9 +15,9 @@ add_executable(wgc-capture
 target_compile_options(wgc-capture PRIVATE /EHsc /W3 /utf-8)
 
 target_link_libraries(wgc-capture PRIVATE
-  windowsapp
   d3d11
   dxgi
+  dwmapi
   mfplat
   mfreadwrite
   mf

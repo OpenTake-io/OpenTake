@@ -27,6 +27,9 @@ const DIP_PER_INCH = 96;
 const CM_PER_INCH = 2.54;
 const HUD_EDGE_MARGIN_DIP = 16;
 const HUD_SHADOW_BLEED_DIP = 20;
+const HUD_WINDOW_WIDTH = 560;
+const HUD_COMPACT_HEIGHT = 96;
+const HUD_EXPANDED_HEIGHT = 520 + HUD_SHADOW_BLEED_DIP;
 
 function isHudOverlayCaptureProtectionSupported(): boolean {
 	return process.platform !== "linux";
@@ -72,10 +75,52 @@ function getScreen() {
 	return nodeRequire("electron").screen as typeof import("electron").screen;
 }
 
+function getHudOverlayBounds(expanded: boolean) {
+	const primaryDisplay = getScreen().getPrimaryDisplay();
+	const { bounds, workArea } = primaryDisplay;
+	const windowWidth = HUD_WINDOW_WIDTH;
+	const windowHeight = expanded ? HUD_EXPANDED_HEIGHT : HUD_COMPACT_HEIGHT;
+	const bottomClearanceDip = Math.round((HUD_BOTTOM_CLEARANCE_CM / CM_PER_INCH) * DIP_PER_INCH);
+	const screenBottom = bounds.y + bounds.height;
+	const workAreaBottom = workArea.y + workArea.height;
+	const preferredBottom = screenBottom - bottomClearanceDip;
+	const maximumSafeBottom = workAreaBottom - HUD_EDGE_MARGIN_DIP;
+	const windowBottom = Math.min(preferredBottom, maximumSafeBottom);
+
+	const x = Math.floor(workArea.x + (workArea.width - windowWidth) / 2);
+	const y = Math.max(
+		workArea.y + HUD_EDGE_MARGIN_DIP,
+		Math.floor(windowBottom - windowHeight),
+	);
+
+	return {
+		x,
+		y,
+		width: windowWidth,
+		height: windowHeight,
+	};
+}
+
+function applyHudOverlayBounds(expanded: boolean) {
+	if (!hudOverlayWindow || hudOverlayWindow.isDestroyed()) {
+		return;
+	}
+
+	hudOverlayWindow.setBounds(getHudOverlayBounds(expanded), false);
+	if (!hudOverlayWindow.isVisible()) {
+		return;
+	}
+	hudOverlayWindow.moveTop();
+}
+
 ipcMain.on("hud-overlay-hide", () => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
 		hudOverlayWindow.minimize();
 	}
+});
+
+ipcMain.on("set-hud-overlay-expanded", (_event, expanded: boolean) => {
+	applyHudOverlayBounds(Boolean(expanded));
 });
 
 ipcMain.handle("get-hud-overlay-capture-protection", () => {
@@ -108,34 +153,17 @@ ipcMain.handle("set-hud-overlay-capture-protection", (_event, enabled: boolean) 
 
 export function createHudOverlayWindow(): BrowserWindow {
 	loadHudOverlayCaptureProtectionSetting();
-
-	const primaryDisplay = getScreen().getPrimaryDisplay();
-	const { bounds, workArea } = primaryDisplay;
-
-	const windowWidth = 720;
-	const windowHeight = 520 + HUD_SHADOW_BLEED_DIP;
-	const bottomClearanceDip = Math.round((HUD_BOTTOM_CLEARANCE_CM / CM_PER_INCH) * DIP_PER_INCH);
-	const screenBottom = bounds.y + bounds.height;
-	const workAreaBottom = workArea.y + workArea.height;
-	const preferredBottom = screenBottom - bottomClearanceDip;
-	const maximumSafeBottom = workAreaBottom - HUD_EDGE_MARGIN_DIP;
-	const windowBottom = Math.min(preferredBottom, maximumSafeBottom);
-
-	const x = Math.floor(workArea.x + (workArea.width - windowWidth) / 2);
-	const y = Math.max(
-		workArea.y + HUD_EDGE_MARGIN_DIP,
-		Math.floor(windowBottom - windowHeight),
-	);
+	const initialBounds = getHudOverlayBounds(false);
 
 	const win = new BrowserWindow({
-		width: windowWidth,
-		height: windowHeight,
-		minWidth: 720,
-		maxWidth: 720,
-		minHeight: windowHeight,
-		maxHeight: windowHeight,
-		x: x,
-		y: y,
+		width: initialBounds.width,
+		height: initialBounds.height,
+		minWidth: HUD_WINDOW_WIDTH,
+		maxWidth: HUD_WINDOW_WIDTH,
+		minHeight: HUD_COMPACT_HEIGHT,
+		maxHeight: HUD_EXPANDED_HEIGHT,
+		x: initialBounds.x,
+		y: initialBounds.y,
 		frame: false,
 		transparent: true,
 		resizable: false,

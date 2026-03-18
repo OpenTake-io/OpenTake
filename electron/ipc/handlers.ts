@@ -79,15 +79,15 @@ let nativeCaptureMicrophonePath: string | null = null
 let nativeCapturePaused = false
 let nativeCursorMonitorProcess: ChildProcessWithoutNullStreams | null = null
 let nativeCursorMonitorOutputBuffer = ''
-let wgcCaptureProcess: ChildProcessWithoutNullStreams | null = null
-let wgcCaptureOutputBuffer = ''
-let wgcCaptureTargetPath: string | null = null
-let wgcScreenRecordingActive = false
-let wgcCaptureStopRequested = false
-let wgcCapturePaused = false
-let wgcSystemAudioPath: string | null = null
-let wgcMicAudioPath: string | null = null
-let wgcPendingVideoPath: string | null = null
+let windowsCaptureProcess: ChildProcessWithoutNullStreams | null = null
+let windowsCaptureOutputBuffer = ''
+let windowsCaptureTargetPath: string | null = null
+let windowsNativeCaptureActive = false
+let windowsCaptureStopRequested = false
+let windowsCapturePaused = false
+let windowsSystemAudioPath: string | null = null
+let windowsMicAudioPath: string | null = null
+let windowsPendingVideoPath: string | null = null
 let ffmpegScreenRecordingActive = false
 let ffmpegCaptureProcess: ChildProcessWithoutNullStreams | null = null
 let ffmpegCaptureOutputBuffer = ''
@@ -117,18 +117,18 @@ export function getSelectedSourceId(): string | null {
   return selectedSource?.id as string | null ?? null
 }
 
-export function killWgcCaptureProcess() {
-  if (wgcCaptureProcess) {
-    try { wgcCaptureProcess.kill() } catch { /* ignore */ }
-    wgcCaptureProcess = null
-    wgcCaptureTargetPath = null
-    wgcScreenRecordingActive = false
+export function killWindowsCaptureProcess() {
+  if (windowsCaptureProcess) {
+    try { windowsCaptureProcess.kill() } catch { /* ignore */ }
+    windowsCaptureProcess = null
+    windowsCaptureTargetPath = null
+    windowsNativeCaptureActive = false
     nativeScreenRecordingActive = false
-    wgcCaptureStopRequested = false
-    wgcCapturePaused = false
-    wgcSystemAudioPath = null
-    wgcMicAudioPath = null
-    wgcPendingVideoPath = null
+    windowsCaptureStopRequested = false
+    windowsCapturePaused = false
+    windowsSystemAudioPath = null
+    windowsMicAudioPath = null
+    windowsPendingVideoPath = null
   }
 }
 
@@ -847,7 +847,7 @@ async function buildFfmpegCaptureArgs(source: SelectedSource, outputPath: string
   throw new Error(`FFmpeg capture is not supported on ${process.platform}`)
 }
 
-function getWgcCaptureExePath() {
+function getWindowsCaptureExePath() {
   return resolveUnpackedAppPath('electron', 'native', 'wgc-capture', 'build', 'Release', 'wgc-capture.exe')
 }
 
@@ -855,26 +855,25 @@ function getCursorMonitorExePath() {
   return resolveUnpackedAppPath('electron', 'native', 'cursor-monitor', 'build', 'Release', 'cursor-monitor.exe')
 }
 
-async function isWgcCaptureAvailable(): Promise<boolean> {
+async function isNativeWindowsCaptureAvailable(): Promise<boolean> {
   if (process.platform !== 'win32') return false
 
   try {
-    await fs.access(getWgcCaptureExePath(), fsConstants.X_OK)
+    await fs.access(getWindowsCaptureExePath(), fsConstants.X_OK)
   } catch {
     return false
   }
 
-  // Windows 10 2004 (Build 19041) minimum for IsCursorCaptureEnabled
   const os = await import('node:os')
-  const [major, , build] = os.release().split('.').map(Number)
-  return major >= 10 && build >= 19041
+  const [major, minor] = os.release().split('.').map(Number)
+  return major > 6 || (major === 6 && minor >= 2)
 }
 
-function waitForWgcCaptureStart(proc: ChildProcessWithoutNullStreams) {
+function waitForWindowsCaptureStart(proc: ChildProcessWithoutNullStreams) {
   return new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
       cleanup()
-      reject(new Error('Timed out waiting for WGC capture to start'))
+      reject(new Error('Timed out waiting for native Windows capture to start'))
     }, 12000)
 
     const onStdout = (chunk: Buffer) => {
@@ -892,7 +891,7 @@ function waitForWgcCaptureStart(proc: ChildProcessWithoutNullStreams) {
 
     const onExit = (code: number | null) => {
       cleanup()
-      reject(new Error(wgcCaptureOutputBuffer.trim() || `WGC capture exited before recording started (code ${code ?? 'unknown'})`))
+      reject(new Error(windowsCaptureOutputBuffer.trim() || `Native Windows capture exited before recording started (code ${code ?? 'unknown'})`))
     }
 
     const cleanup = () => {
@@ -908,20 +907,20 @@ function waitForWgcCaptureStart(proc: ChildProcessWithoutNullStreams) {
   })
 }
 
-function waitForWgcCaptureStop(proc: ChildProcessWithoutNullStreams) {
+function waitForWindowsCaptureStop(proc: ChildProcessWithoutNullStreams) {
   return new Promise<string>((resolve, reject) => {
     const onClose = (code: number | null) => {
       cleanup()
-      const match = wgcCaptureOutputBuffer.match(/Recording stopped\. Output path: (.+)/)
+      const match = windowsCaptureOutputBuffer.match(/Recording stopped\. Output path: (.+)/)
       if (match?.[1]) {
         resolve(match[1].trim())
         return
       }
-      if (code === 0 && wgcCaptureTargetPath) {
-        resolve(wgcCaptureTargetPath)
+      if (code === 0 && windowsCaptureTargetPath) {
+        resolve(windowsCaptureTargetPath)
         return
       }
-      reject(new Error(wgcCaptureOutputBuffer.trim() || `WGC capture exited with code ${code ?? 'unknown'}`))
+      reject(new Error(windowsCaptureOutputBuffer.trim() || `Native Windows capture exited with code ${code ?? 'unknown'}`))
     }
 
     const onError = (error: Error) => {
@@ -939,18 +938,18 @@ function waitForWgcCaptureStop(proc: ChildProcessWithoutNullStreams) {
   })
 }
 
-function attachWgcCaptureLifecycle(proc: ChildProcessWithoutNullStreams) {
+function attachWindowsCaptureLifecycle(proc: ChildProcessWithoutNullStreams) {
   proc.once('close', () => {
-    const wasActive = wgcScreenRecordingActive
-    wgcCaptureProcess = null
+    const wasActive = windowsNativeCaptureActive
+    windowsCaptureProcess = null
 
-    if (!wasActive || wgcCaptureStopRequested) {
+    if (!wasActive || windowsCaptureStopRequested) {
       return
     }
 
-    wgcScreenRecordingActive = false
-    wgcCaptureTargetPath = null
-    wgcCaptureStopRequested = false
+    windowsNativeCaptureActive = false
+    windowsCaptureTargetPath = null
+    windowsCaptureStopRequested = false
 
     const sourceName = selectedSource?.name ?? 'Screen'
     BrowserWindow.getAllWindows().forEach((window) => {
@@ -966,7 +965,7 @@ function attachWgcCaptureLifecycle(proc: ChildProcessWithoutNullStreams) {
   })
 }
 
-async function muxWgcVideoWithAudio(videoPath: string, systemAudioPath: string | null, micAudioPath: string | null) {
+async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath: string | null, micAudioPath: string | null) {
   const ffmpegPath = getFfmpegBinaryPath()
   const inputs: string[] = ['-i', videoPath]
   const audioInputs: string[] = []
@@ -2120,26 +2119,26 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
   })
 
   ipcMain.handle('start-native-screen-recording', async (_, source: SelectedSource, options?: NativeMacRecordingOptions) => {
-    // Windows WGC path
+    // Windows native capture path
     if (process.platform === 'win32') {
-      const wgcAvailable = await isWgcCaptureAvailable()
-      if (!wgcAvailable) {
-        return { success: false, message: 'WGC capture is not available on this system.' }
+      const windowsCaptureAvailable = await isNativeWindowsCaptureAvailable()
+      if (!windowsCaptureAvailable) {
+        return { success: false, message: 'Native Windows capture is not available on this system.' }
       }
 
-      if (wgcCaptureProcess && !wgcScreenRecordingActive) {
-        try { wgcCaptureProcess.kill() } catch { /* ignore */ }
-        wgcCaptureProcess = null
-        wgcCaptureTargetPath = null
-        wgcCaptureStopRequested = false
+      if (windowsCaptureProcess && !windowsNativeCaptureActive) {
+        try { windowsCaptureProcess.kill() } catch { /* ignore */ }
+        windowsCaptureProcess = null
+        windowsCaptureTargetPath = null
+        windowsCaptureStopRequested = false
       }
 
-      if (wgcCaptureProcess) {
-        return { success: false, message: 'A WGC screen recording is already active.' }
+      if (windowsCaptureProcess) {
+        return { success: false, message: 'A native Windows screen recording is already active.' }
       }
 
       try {
-        const exePath = getWgcCaptureExePath()
+        const exePath = getWindowsCaptureExePath()
         const recordingsDir = await getRecordingsDir()
         const timestamp = Date.now()
         const outputPath = path.join(recordingsDir, `recording-${timestamp}.mp4`)
@@ -2153,7 +2152,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           const audioPath = path.join(recordingsDir, `recording-${timestamp}.system.wav`)
           config.captureSystemAudio = true
           config.audioOutputPath = audioPath
-          wgcSystemAudioPath = audioPath
+          windowsSystemAudioPath = audioPath
         }
 
         if (options?.capturesMicrophone) {
@@ -2163,7 +2162,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           if (options.microphoneLabel) {
             config.micDeviceName = options.microphoneLabel
           }
-          wgcMicAudioPath = micPath
+          windowsMicAudioPath = micPath
         }
 
         const windowId = parseWindowId(source?.id)
@@ -2176,39 +2175,39 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
             : Number(getScreen().getPrimaryDisplay().id)
         }
 
-        wgcCaptureOutputBuffer = ''
-        wgcCaptureTargetPath = outputPath
-        wgcCaptureStopRequested = false
-        wgcCapturePaused = false
-        wgcCaptureProcess = spawn(exePath, [JSON.stringify(config)], {
+        windowsCaptureOutputBuffer = ''
+        windowsCaptureTargetPath = outputPath
+        windowsCaptureStopRequested = false
+        windowsCapturePaused = false
+        windowsCaptureProcess = spawn(exePath, [JSON.stringify(config)], {
           cwd: recordingsDir,
           stdio: ['pipe', 'pipe', 'pipe'],
         })
-        attachWgcCaptureLifecycle(wgcCaptureProcess)
+        attachWindowsCaptureLifecycle(windowsCaptureProcess)
 
-        wgcCaptureProcess.stdout.on('data', (chunk: Buffer) => {
-          wgcCaptureOutputBuffer += chunk.toString()
+        windowsCaptureProcess.stdout.on('data', (chunk: Buffer) => {
+          windowsCaptureOutputBuffer += chunk.toString()
         })
-        wgcCaptureProcess.stderr.on('data', (chunk: Buffer) => {
-          wgcCaptureOutputBuffer += chunk.toString()
+        windowsCaptureProcess.stderr.on('data', (chunk: Buffer) => {
+          windowsCaptureOutputBuffer += chunk.toString()
         })
 
-        await waitForWgcCaptureStart(wgcCaptureProcess)
-        wgcScreenRecordingActive = true
+        await waitForWindowsCaptureStart(windowsCaptureProcess)
+        windowsNativeCaptureActive = true
         nativeScreenRecordingActive = true
         return { success: true }
       } catch (error) {
-        console.error('Failed to start WGC capture:', error)
-        try { wgcCaptureProcess?.kill() } catch { /* ignore */ }
-        wgcScreenRecordingActive = false
+        console.error('Failed to start native Windows capture:', error)
+        try { windowsCaptureProcess?.kill() } catch { /* ignore */ }
+        windowsNativeCaptureActive = false
         nativeScreenRecordingActive = false
-        wgcCaptureProcess = null
-        wgcCaptureTargetPath = null
-        wgcCaptureStopRequested = false
-        wgcCapturePaused = false
+        windowsCaptureProcess = null
+        windowsCaptureTargetPath = null
+        windowsCaptureStopRequested = false
+        windowsCapturePaused = false
         return {
           success: false,
-          message: 'Failed to start WGC capture',
+          message: 'Failed to start native Windows capture',
           error: String(error),
         }
       }
@@ -2327,49 +2326,49 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
   })
 
   ipcMain.handle('stop-native-screen-recording', async () => {
-    // Windows WGC stop path
-    if (process.platform === 'win32' && wgcScreenRecordingActive) {
+    // Windows native capture stop path
+    if (process.platform === 'win32' && windowsNativeCaptureActive) {
       try {
-        if (!wgcCaptureProcess) {
-          throw new Error('WGC capture process is not running')
+        if (!windowsCaptureProcess) {
+          throw new Error('Native Windows capture process is not running')
         }
 
-        const proc = wgcCaptureProcess
-        const preferredVideoPath = wgcCaptureTargetPath
-        wgcCaptureStopRequested = true
+        const proc = windowsCaptureProcess
+        const preferredVideoPath = windowsCaptureTargetPath
+        windowsCaptureStopRequested = true
         proc.stdin.write('stop\n')
-        const tempVideoPath = await waitForWgcCaptureStop(proc)
-        wgcCaptureProcess = null
-        wgcScreenRecordingActive = false
+        const tempVideoPath = await waitForWindowsCaptureStop(proc)
+        windowsCaptureProcess = null
+        windowsNativeCaptureActive = false
         nativeScreenRecordingActive = false
-        wgcCaptureTargetPath = null
-        wgcCaptureStopRequested = false
-        wgcCapturePaused = false
+        windowsCaptureTargetPath = null
+        windowsCaptureStopRequested = false
+        windowsCapturePaused = false
 
         const finalVideoPath = preferredVideoPath ?? tempVideoPath
         if (tempVideoPath !== finalVideoPath) {
           await moveFileWithOverwrite(tempVideoPath, finalVideoPath)
         }
 
-        wgcPendingVideoPath = finalVideoPath
+        windowsPendingVideoPath = finalVideoPath
         return { success: true, path: finalVideoPath }
       } catch (error) {
-        console.error('Failed to stop WGC capture:', error)
-        const fallbackPath = wgcCaptureTargetPath
-        wgcScreenRecordingActive = false
+        console.error('Failed to stop native Windows capture:', error)
+        const fallbackPath = windowsCaptureTargetPath
+        windowsNativeCaptureActive = false
         nativeScreenRecordingActive = false
-        wgcCaptureProcess = null
-        wgcCaptureTargetPath = null
-        wgcCaptureStopRequested = false
-        wgcCapturePaused = false
-        wgcSystemAudioPath = null
-        wgcMicAudioPath = null
-        wgcPendingVideoPath = null
+        windowsCaptureProcess = null
+        windowsCaptureTargetPath = null
+        windowsCaptureStopRequested = false
+        windowsCapturePaused = false
+        windowsSystemAudioPath = null
+        windowsMicAudioPath = null
+        windowsPendingVideoPath = null
 
         if (fallbackPath) {
           try {
             await fs.access(fallbackPath)
-            wgcPendingVideoPath = fallbackPath
+            windowsPendingVideoPath = fallbackPath
             return { success: true, path: fallbackPath }
           } catch {
             // File doesn't exist
@@ -2378,7 +2377,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
         return {
           success: false,
-          message: 'Failed to stop WGC capture',
+          message: 'Failed to stop native Windows capture',
           error: String(error),
         }
       }
@@ -2456,20 +2455,20 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
   ipcMain.handle('pause-native-screen-recording', async () => {
     if (process.platform === 'win32') {
-      if (!wgcScreenRecordingActive || !wgcCaptureProcess) {
-        return { success: false, message: 'No WGC screen recording is active.' }
+      if (!windowsNativeCaptureActive || !windowsCaptureProcess) {
+        return { success: false, message: 'No native Windows screen recording is active.' }
       }
 
-      if (wgcCapturePaused) {
+      if (windowsCapturePaused) {
         return { success: true }
       }
 
       try {
-        wgcCaptureProcess.stdin.write('pause\n')
-        wgcCapturePaused = true
+        windowsCaptureProcess.stdin.write('pause\n')
+        windowsCapturePaused = true
         return { success: true }
       } catch (error) {
-        return { success: false, message: 'Failed to pause WGC capture', error: String(error) }
+        return { success: false, message: 'Failed to pause native Windows capture', error: String(error) }
       }
     }
 
@@ -2496,20 +2495,20 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
   ipcMain.handle('resume-native-screen-recording', async () => {
     if (process.platform === 'win32') {
-      if (!wgcScreenRecordingActive || !wgcCaptureProcess) {
-        return { success: false, message: 'No WGC screen recording is active.' }
+      if (!windowsNativeCaptureActive || !windowsCaptureProcess) {
+        return { success: false, message: 'No native Windows screen recording is active.' }
       }
 
-      if (!wgcCapturePaused) {
+      if (!windowsCapturePaused) {
         return { success: true }
       }
 
       try {
-        wgcCaptureProcess.stdin.write('resume\n')
-        wgcCapturePaused = false
+        windowsCaptureProcess.stdin.write('resume\n')
+        windowsCapturePaused = false
         return { success: true }
       } catch (error) {
-        return { success: false, message: 'Failed to resume WGC capture', error: String(error) }
+        return { success: false, message: 'Failed to resume native Windows capture', error: String(error) }
       }
     }
 
@@ -2543,34 +2542,34 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
   })
 
-  ipcMain.handle('is-wgc-available', async () => {
-    return { available: await isWgcCaptureAvailable() }
+  ipcMain.handle('is-native-windows-capture-available', async () => {
+    return { available: await isNativeWindowsCaptureAvailable() }
   })
 
-  ipcMain.handle('mux-wgc-recording', async () => {
-    const videoPath = wgcPendingVideoPath
-    wgcPendingVideoPath = null
+  ipcMain.handle('mux-native-windows-recording', async () => {
+    const videoPath = windowsPendingVideoPath
+    windowsPendingVideoPath = null
 
     if (!videoPath) {
-      return { success: false, message: 'No WGC video pending for mux' }
+      return { success: false, message: 'No native Windows video pending for mux' }
     }
 
     try {
-      if (wgcSystemAudioPath || wgcMicAudioPath) {
-        await muxWgcVideoWithAudio(videoPath, wgcSystemAudioPath, wgcMicAudioPath)
-        wgcSystemAudioPath = null
-        wgcMicAudioPath = null
+      if (windowsSystemAudioPath || windowsMicAudioPath) {
+        await muxNativeWindowsVideoWithAudio(videoPath, windowsSystemAudioPath, windowsMicAudioPath)
+        windowsSystemAudioPath = null
+        windowsMicAudioPath = null
       }
 
       return await finalizeStoredVideo(videoPath)
     } catch (error) {
-      console.error('Failed to mux WGC recording:', error)
-      wgcSystemAudioPath = null
-      wgcMicAudioPath = null
+      console.error('Failed to mux native Windows recording:', error)
+      windowsSystemAudioPath = null
+      windowsMicAudioPath = null
       try {
         return await finalizeStoredVideo(videoPath)
       } catch {
-        return { success: false, message: 'Failed to mux WGC recording', error: String(error) }
+        return { success: false, message: 'Failed to mux native Windows recording', error: String(error) }
       }
     }
   })

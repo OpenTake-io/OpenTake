@@ -4,7 +4,7 @@ import path from 'node:path'
 import fs from 'node:fs/promises'
 import { createHudOverlayWindow, createEditorWindow, createSourceSelectorWindow } from './windows'
 import { showCursor } from './cursorHider'
-import { registerIpcHandlers, getSelectedSourceId, killWgcCaptureProcess } from './ipc/handlers'
+import { registerIpcHandlers, getSelectedSourceId, killWindowsCaptureProcess } from './ipc/handlers'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -347,7 +347,7 @@ function createSourceSelectorWindowWrapper() {
 // On macOS, applications and their menu bar stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('before-quit', () => {
-  killWgcCaptureProcess()
+  killWindowsCaptureProcess()
   showCursor()
 })
 
