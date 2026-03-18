@@ -731,6 +731,10 @@ export function LaunchWindow() {
 							<Square size={16} fill="currentColor" strokeWidth={0} />
 						</IconButton>
 
+						<IconButton onClick={() => window.electronAPI?.hudOverlayHide?.()} title={t("recording.hideHud")}>
+							<Minus size={16} />
+						</IconButton>
+
 						<IconButton onClick={cancelRecording} title={t("recording.cancel")}>
 							<X size={18} />
 						</IconButton>

@@ -534,19 +534,20 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
       let videoTrack: MediaStreamTrack | undefined;
       let systemAudioIncluded = false;
+      const browserScreenVideoConstraints = {
+        mandatory: {
+          chromeMediaSource: CHROME_MEDIA_SOURCE,
+          chromeMediaSourceId: selectedSource.id,
+          maxWidth: TARGET_WIDTH,
+          maxHeight: TARGET_HEIGHT,
+          maxFrameRate: TARGET_FRAME_RATE,
+          minFrameRate: MIN_FRAME_RATE,
+          googCaptureCursor: false,
+        },
+        cursor: "never" as const,
+      };
 
       if (wantsAudioCapture) {
-        const videoConstraints = {
-          mandatory: {
-            chromeMediaSource: CHROME_MEDIA_SOURCE,
-            chromeMediaSourceId: selectedSource.id,
-            maxWidth: TARGET_WIDTH,
-            maxHeight: TARGET_HEIGHT,
-            maxFrameRate: TARGET_FRAME_RATE,
-            minFrameRate: MIN_FRAME_RATE,
-          },
-        };
-
         let screenMediaStream: MediaStream;
 
         if (systemAudioEnabled) {
@@ -558,20 +559,20 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
                   chromeMediaSourceId: selectedSource.id,
                 },
               },
-              video: videoConstraints,
+                video: browserScreenVideoConstraints,
             });
           } catch (audioError) {
             console.warn("System audio capture failed, falling back to video-only:", audioError);
             alert("System audio is not available for this source. Recording will continue without system audio.");
             screenMediaStream = await (navigator.mediaDevices as any).getUserMedia({
               audio: false,
-              video: videoConstraints,
+                  video: browserScreenVideoConstraints,
             });
           }
         } else {
           screenMediaStream = await (navigator.mediaDevices as any).getUserMedia({
             audio: false,
-            video: videoConstraints,
+                video: browserScreenVideoConstraints,
           });
         }
 

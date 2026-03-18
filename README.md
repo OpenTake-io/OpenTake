@@ -160,7 +160,7 @@ xattr -rd com.apple.quarantine /Applications/Recordly.app
 | Platform | Minimum version | Notes |
 |---|---|---|
 | **macOS** | macOS 12.3 (Monterey) | Required for ScreenCaptureKit. Recording and cursor hiding will not work on older versions. |
-| **Windows** | Windows 10 20H1 (Build 19041, May 2020) | Required for Windows Graphics Capture (`IsCursorCaptureEnabled`). Older builds fall back to Electron browser capture — cursor will be visible in recordings. |
+| **Windows** | Windows 10 20H1 (Build 19041, May 2020) | Required for the native DXGI Desktop Duplication helper. Older builds fall back to Electron browser capture — cursor will be visible in recordings. |
 | **Linux** | Any modern distro | Recording works via Electron capture. Cursor is always visible in recordings. System audio requires PipeWire (Ubuntu 22.04+, Fedora 34+). |
 
 > [!IMPORTANT]
@@ -217,7 +217,7 @@ Adjust:
 
 **macOS**: Cursor is excluded from the recording at the ScreenCaptureKit level — always clean.
 
-**Windows**: Cursor is excluded via Windows Graphics Capture (`IsCursorCaptureEnabled(false)`) — requires **Windows 10 Build 19041+**. On older builds the app falls back to Electron’s browser capture and the real cursor will be visible in the recording.
+**Windows**: Cursor exclusion depends on the native DXGI Desktop Duplication helper plus OS cursor hide/show, and requires **Windows 10 Build 19041+**. On older builds the app falls back to Electron’s browser capture and the real cursor will be visible in the recording.
 
 **Linux**: Electron’s desktop capture API does not support cursor hiding. The real OS cursor will always be visible in recordings. If you also enable the animated cursor overlay in the editor, you may see **two cursors** in the output.
 

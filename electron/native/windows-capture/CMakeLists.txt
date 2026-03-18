@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
-project(wgc-capture LANGUAGES CXX)
+project(windows-capture LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(wgc-capture
+add_executable(windows-capture
   src/main.cpp
   src/dxgi_session.cpp
   src/mf_encoder.cpp
@@ -12,9 +12,9 @@ add_executable(wgc-capture
   src/wasapi_loopback.cpp
 )
 
-target_compile_options(wgc-capture PRIVATE /EHsc /W3 /utf-8)
+target_compile_options(windows-capture PRIVATE /EHsc /W3 /utf-8)
 
-target_link_libraries(wgc-capture PRIVATE
+target_link_libraries(windows-capture PRIVATE
   d3d11
   dxgi
   dwmapi
