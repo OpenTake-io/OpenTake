@@ -80,10 +80,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const startTime = useRef<number>(0);
   const recordingSessionTimestamp = useRef<number | null>(null);
   const nativeScreenRecording = useRef(false);
-  const wgcRecording = useRef(false);
+  const nativeWindowsRecording = useRef(false);
   const startInFlight = useRef(false);
   const hasPromptedForReselect = useRef(false);
-  const hasShownWgcFallbackToast = useRef(false);
+  const hasShownNativeWindowsFallbackToast = useRef(false);
   const countdownDelayLoaded = useRef(false);
   const pendingWebcamPathPromise = useRef<Promise<string | null> | null>(null);
   const webcamStopPromise = useRef<Promise<string | null> | null>(null);
@@ -311,8 +311,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
       void (async () => {
         const webcamPath = await stopWebcamRecorder();
-        const isWgc = wgcRecording.current;
-        wgcRecording.current = false;
+        const isNativeWindows = nativeWindowsRecording.current;
+        nativeWindowsRecording.current = false;
 
         const result = await window.electronAPI.stopNativeScreenRecording();
         window.electronAPI?.setRecordingState(false);
@@ -324,8 +324,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
         let finalPath = result.path;
 
-        if (isWgc) {
-          const muxResult = await window.electronAPI.muxWgcRecording();
+        if (isNativeWindows) {
+          const muxResult = await window.electronAPI.muxNativeWindowsRecording();
           finalPath = muxResult?.path ?? result.path;
         }
 
@@ -450,33 +450,33 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         (selectedSource.id?.startsWith("screen:") || selectedSource.id?.startsWith("window:")) &&
         typeof window.electronAPI.startNativeScreenRecording === "function";
 
-      let useWgcCapture = false;
+      let useNativeWindowsCapture = false;
       if (
         platform === "win32" &&
         (selectedSource.id?.startsWith("screen:") || selectedSource.id?.startsWith("window:")) &&
-        typeof window.electronAPI.isWgcAvailable === "function"
+        typeof window.electronAPI.isNativeWindowsCaptureAvailable === "function"
       ) {
         try {
-          const wgcResult = await window.electronAPI.isWgcAvailable();
-          useWgcCapture = wgcResult.available;
-          if (!useWgcCapture && !hasShownWgcFallbackToast.current) {
-            hasShownWgcFallbackToast.current = true;
+          const nativeWindowsResult = await window.electronAPI.isNativeWindowsCaptureAvailable();
+          useNativeWindowsCapture = nativeWindowsResult.available;
+          if (!useNativeWindowsCapture && !hasShownNativeWindowsFallbackToast.current) {
+            hasShownNativeWindowsFallbackToast.current = true;
             toast.info(
-              "Native Windows capture (WGC) is unavailable. Falling back to browser capture.",
+              "Native Windows capture is unavailable. Falling back to browser capture.",
             );
           }
         } catch {
-          useWgcCapture = false;
-          if (!hasShownWgcFallbackToast.current) {
-            hasShownWgcFallbackToast.current = true;
+          useNativeWindowsCapture = false;
+          if (!hasShownNativeWindowsFallbackToast.current) {
+            hasShownNativeWindowsFallbackToast.current = true;
             toast.info(
-              "Unable to check native Windows capture (WGC). Falling back to browser capture.",
+              "Unable to check native Windows capture. Falling back to browser capture.",
             );
           }
         }
       }
 
-      if (useNativeMacScreenCapture || useWgcCapture) {
+      if (useNativeMacScreenCapture || useNativeWindowsCapture) {
         // Resolve the selected mic label for native capture backends.
         let micLabel: string | undefined;
         if (microphoneEnabled) {
@@ -498,10 +498,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
           microphoneLabel: micLabel,
         });
         if (!nativeResult.success) {
-          if (useWgcCapture) {
-            console.warn("WGC capture failed, falling back to browser capture:", nativeResult.error ?? nativeResult.message);
-            if (!hasShownWgcFallbackToast.current) {
-              hasShownWgcFallbackToast.current = true;
+          if (useNativeWindowsCapture) {
+            console.warn("Native Windows capture failed, falling back to browser capture:", nativeResult.error ?? nativeResult.message);
+            if (!hasShownNativeWindowsFallbackToast.current) {
+              hasShownNativeWindowsFallbackToast.current = true;
               toast.warning(
                 "Native Windows capture failed to start. Falling back to browser capture.",
               );
@@ -515,7 +515,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
         if (nativeResult.success) {
           nativeScreenRecording.current = true;
-          wgcRecording.current = useWgcCapture;
+          nativeWindowsRecording.current = useNativeWindowsCapture;
           startTime.current = Date.now();
           setRecording(true);
           window.electronAPI?.setRecordingState(true);
@@ -817,7 +817,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
     if (nativeScreenRecording.current) {
       nativeScreenRecording.current = false;
-      wgcRecording.current = false;
+      nativeWindowsRecording.current = false;
       setRecording(false);
       window.electronAPI?.setRecordingState(false);
       void (async () => {

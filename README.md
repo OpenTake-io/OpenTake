@@ -63,7 +63,7 @@ On Windows, builds older than 19041 fall back to Electron capture and the cursor
 - Microphone or system audio recording
 - Chromium capture APIs on Windows/Linux
 - Native **ScreenCaptureKit** capture on macOS
-- native WGC recording helper for display and app-window capture on Windows, native WASAPI for system/mic audio, and more
+- native DXGI Desktop Duplication recording helper for display and app-window capture on Windows, native WASAPI for system/mic audio, and more
 
 ### Smart Motion
 
@@ -250,7 +250,7 @@ Recordly is a **desktop video editor with a renderer-driven motion pipeline and 
 **Capture**
 - Electron orchestrates recording
 - macOS uses native helpers for ScreenCaptureKit and cursor telemetry
-- Windows uses native WGC for screen capture
+- Windows uses a native DXGI Desktop Duplication helper for screen capture
 
 **Motion**
 - Zoom regions

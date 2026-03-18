@@ -24,6 +24,13 @@ declare namespace NodeJS {
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
 	electronAPI: {
+		hudOverlayHide: () => void;
+		hudOverlayClose: () => void;
+		setHudOverlayExpanded: (expanded: boolean) => void;
+		getHudOverlayCaptureProtection: () => Promise<{ success: boolean; enabled: boolean }>;
+		setHudOverlayCaptureProtection: (
+			enabled: boolean,
+		) => Promise<{ success: boolean; enabled: boolean }>;
 		getSources: (opts: Electron.SourcesOptions) => Promise<ProcessedDesktopSource[]>;
 		switchToEditor: () => Promise<void>;
 		openSourceSelector: () => Promise<void>;
@@ -185,16 +192,10 @@ interface Window {
 		}>;
 		getShortcuts: () => Promise<Record<string, unknown> | null>;
 		saveShortcuts: (shortcuts: unknown) => Promise<{ success: boolean; error?: string }>;
-		hudOverlayHide: () => void;
-		hudOverlayClose: () => void;
-		getHudOverlayCaptureProtection: () => Promise<{ success: boolean; enabled: boolean }>;
-		setHudOverlayCaptureProtection: (
-			enabled: boolean,
-		) => Promise<{ success: boolean; enabled: boolean }>;
 		setHasUnsavedChanges: (hasChanges: boolean) => void;
 		onRequestSaveBeforeClose: (callback: () => Promise<void>) => () => void;
-		isWgcAvailable: () => Promise<{ available: boolean }>;
-		muxWgcRecording: () => Promise<{
+		isNativeWindowsCaptureAvailable: () => Promise<{ available: boolean }>;
+		muxNativeWindowsRecording: () => Promise<{
 			success: boolean;
 			path?: string;
 			message?: string;

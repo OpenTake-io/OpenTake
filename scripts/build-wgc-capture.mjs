@@ -7,7 +7,7 @@ const sourceDir = path.join(projectRoot, 'electron', 'native', 'wgc-capture');
 const buildDir = path.join(sourceDir, 'build');
 
 if (process.platform !== 'win32') {
-  console.log('[build-wgc-capture] Skipping: host platform is not Windows.');
+  console.log('[build-wgc-capture] Skipping native Windows capture build: host platform is not Windows.');
   process.exit(0);
 }
 
@@ -69,7 +69,7 @@ try {
   }
 }
 
-console.log('[build-wgc-capture] Building...');
+console.log('[build-wgc-capture] Building native Windows capture helper...');
 try {
   execSync(`${cmake} --build . --config Release`, {
     cwd: buildDir,

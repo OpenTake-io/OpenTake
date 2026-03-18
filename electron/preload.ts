@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	hudOverlayClose: () => {
 		ipcRenderer.send("hud-overlay-close");
 	},
+	setHudOverlayExpanded: (expanded: boolean) => {
+		ipcRenderer.send("set-hud-overlay-expanded", expanded);
+	},
 	getHudOverlayCaptureProtection: () => {
 		return ipcRenderer.invoke("get-hud-overlay-capture-protection");
 	},
@@ -215,8 +218,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("request-save-before-close", listener);
 		return () => ipcRenderer.removeListener("request-save-before-close", listener);
 	},
-	isWgcAvailable: () => ipcRenderer.invoke("is-wgc-available"),
-	muxWgcRecording: () => ipcRenderer.invoke("mux-wgc-recording"),
+	isNativeWindowsCaptureAvailable: () => ipcRenderer.invoke("is-native-windows-capture-available"),
+	muxNativeWindowsRecording: () => ipcRenderer.invoke("mux-native-windows-recording"),
 	hideOsCursor: () => ipcRenderer.invoke("hide-cursor"),
 	getCountdownDelay: () => ipcRenderer.invoke("get-countdown-delay"),
 	setCountdownDelay: (delay: number) => ipcRenderer.invoke("set-countdown-delay", delay),

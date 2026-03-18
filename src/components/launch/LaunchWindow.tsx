@@ -349,6 +349,15 @@ export function LaunchWindow() {
 	}, []);
 
 	useEffect(() => {
+		const expanded = activeDropdown !== "none";
+		window.electronAPI.setHudOverlayExpanded(expanded);
+
+		return () => {
+			window.electronAPI.setHudOverlayExpanded(false);
+		};
+	}, [activeDropdown]);
+
+	useEffect(() => {
 		const handleClick = (e: MouseEvent) => {
 			if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
 				setActiveDropdown("none");
@@ -471,14 +480,17 @@ export function LaunchWindow() {
 
 	return (
 		<div
-			className="w-full flex flex-col bg-transparent overflow-visible pb-5"
+			className="w-full flex items-end justify-center bg-transparent overflow-visible pb-5"
 			style={{ height: "100vh" }}
 			ref={dropdownRef}
 		>
-			{/* Top area — flex:1 reserves space, menu card sits at bottom of this area */}
-			<div className={styles.menuArea}>
-				{activeDropdown !== "none" && (
-					<div className={`${styles.menuCard} ${styles.electronNoDrag}`}>
+			<div
+				className="flex flex-col items-center overflow-visible"
+			>
+				{/* Only the visible HUD content should become interactive. */}
+				<div className={styles.menuArea}>
+					{activeDropdown !== "none" && (
+						<div className={`${styles.menuCard} ${styles.electronNoDrag}`}>
 						{activeDropdown === "sources" && (
 							<>
 								{sourcesLoading ? (
@@ -680,13 +692,12 @@ export function LaunchWindow() {
 								))}
 							</>
 						)}
-					</div>
-				)}
-			</div>
+						</div>
+					)}
+				</div>
 
-			{/* Bottom section — fixed height, bar always stays here */}
-			<div className="flex flex-col items-center">
-				<div className={`${styles.bar} ${styles.electronDrag} mb-2`}>
+				<div className="flex flex-col items-center pointer-events-auto">
+					<div className={`${styles.bar} ${styles.electronDrag} mb-2`}>
 				<div className={`flex items-center px-0.5 ${styles.electronDrag}`}>
 					<RxDragHandleDots2 size={14} className="text-[#6b6b78]" />
 				</div>
@@ -790,6 +801,7 @@ export function LaunchWindow() {
 						</IconButton>
 					</>
 				)}
+					</div>
 				</div>
 			</div>
 		</div>
