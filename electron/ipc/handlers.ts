@@ -2138,7 +2138,6 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       }
 
       try {
-        hideCursor()
         const exePath = getWindowsCaptureExePath()
         const recordingsDir = await getRecordingsDir()
         const timestamp = Date.now()
@@ -2200,7 +2199,6 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       } catch (error) {
         console.error('Failed to start native Windows capture:', error)
         try { windowsCaptureProcess?.kill() } catch { /* ignore */ }
-        showCursor()
         windowsNativeCaptureActive = false
         nativeScreenRecordingActive = false
         windowsCaptureProcess = null
