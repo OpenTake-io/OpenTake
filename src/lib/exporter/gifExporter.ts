@@ -15,6 +15,7 @@ import type {
   AnnotationRegion,
   SpeedRegion,
   CursorTelemetryPoint,
+  WebcamOverlaySettings,
 } from "@/components/video-editor/types";
 
 const GIF_WORKER_URL = new URL(
@@ -42,6 +43,8 @@ interface GifExporterConfig {
   padding?: number;
   videoPadding?: number;
   cropRegion: CropRegion;
+  webcam?: WebcamOverlaySettings;
+  webcamUrl?: string | null;
   annotationRegions?: AnnotationRegion[];
   cursorTelemetry?: CursorTelemetryPoint[];
   showCursor?: boolean;
@@ -125,6 +128,8 @@ export class GifExporter {
         borderRadius: this.config.borderRadius,
         padding: this.config.padding,
         cropRegion: this.config.cropRegion,
+        webcam: this.config.webcam,
+        webcamUrl: this.config.webcamUrl,
         videoWidth: videoInfo.width,
         videoHeight: videoInfo.height,
         annotationRegions: this.config.annotationRegions,

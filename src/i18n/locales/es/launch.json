@@ -4,6 +4,8 @@
 		"enableSystemAudio": "Activar audio del sistema",
 		"disableMicrophone": "Desactivar micrófono",
 		"enableMicrophone": "Activar micrófono",
+		"disableWebcam": "Desactivar superposición de cámara",
+		"enableWebcam": "Activar superposición de cámara",
 		"countdownDelay": "Retraso de cuenta regresiva",
 		"noDelay": "Sin retraso",
 		"record": "Grabar",

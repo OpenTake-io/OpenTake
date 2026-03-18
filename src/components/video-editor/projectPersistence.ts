@@ -14,12 +14,19 @@ import {
 	DEFAULT_CURSOR_SIZE,
 	DEFAULT_CURSOR_SMOOTHING,
 	DEFAULT_CURSOR_SWAY,
+	DEFAULT_WEBCAM_CORNER_RADIUS,
+	DEFAULT_WEBCAM_MARGIN,
+	DEFAULT_WEBCAM_OVERLAY,
+	DEFAULT_WEBCAM_REACT_TO_ZOOM,
+	DEFAULT_WEBCAM_SHADOW,
+	DEFAULT_WEBCAM_SIZE,
 	DEFAULT_FIGURE_DATA,
 	DEFAULT_PLAYBACK_SPEED,
 	DEFAULT_ZOOM_DEPTH,
 	DEFAULT_ZOOM_MOTION_BLUR,
 	type SpeedRegion,
 	type TrimRegion,
+	type WebcamOverlaySettings,
 	type ZoomRegion,
 } from "./types";
 
@@ -46,6 +53,7 @@ export interface ProjectEditorState {
 	speedRegions: SpeedRegion[];
 	annotationRegions: AnnotationRegion[];
 	audioRegions: AudioRegion[];
+	webcam: WebcamOverlaySettings;
 	aspectRatio: AspectRatio;
 	exportQuality: ExportQuality;
 	exportFormat: ExportFormat;
@@ -347,6 +355,14 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 	const cropWidth = clamp(rawCropWidth, 0.01, 1 - cropX);
 	const cropHeight = clamp(rawCropHeight, 0.01, 1 - cropY);
 
+	const webcam: Partial<WebcamOverlaySettings> =
+		editor.webcam && typeof editor.webcam === "object" ? editor.webcam : {};
+	const webcamSourcePath = typeof webcam.sourcePath === "string" ? webcam.sourcePath : null;
+	const legacyZoomScaleEffect =
+		isFiniteNumber((webcam as Partial<{ zoomScaleEffect: number }>).zoomScaleEffect)
+			? (webcam as Partial<{ zoomScaleEffect: number }>).zoomScaleEffect
+			: null;
+
 	return {
 		wallpaper: typeof editor.wallpaper === "string" ? editor.wallpaper : WALLPAPER_PATHS[0],
 		shadowIntensity: typeof editor.shadowIntensity === "number" ? editor.shadowIntensity : 0.67,
@@ -383,6 +399,31 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		speedRegions: normalizedSpeedRegions,
 		annotationRegions: normalizedAnnotationRegions,
 		audioRegions: normalizedAudioRegions,
+		webcam: {
+			enabled:
+				typeof webcam.enabled === "boolean" ? webcam.enabled : DEFAULT_WEBCAM_OVERLAY.enabled,
+			sourcePath: webcamSourcePath,
+			mirror: typeof webcam.mirror === "boolean" ? webcam.mirror : DEFAULT_WEBCAM_OVERLAY.mirror,
+			corner:
+				webcam.corner === "top-left" ||
+				webcam.corner === "top-right" ||
+				webcam.corner === "bottom-left" ||
+				webcam.corner === "bottom-right"
+					? webcam.corner
+					: DEFAULT_WEBCAM_OVERLAY.corner,
+			size: isFiniteNumber(webcam.size) ? clamp(webcam.size, 10, 100) : DEFAULT_WEBCAM_SIZE,
+			reactToZoom:
+				typeof webcam.reactToZoom === "boolean"
+					? webcam.reactToZoom
+					: legacyZoomScaleEffect !== null
+						? legacyZoomScaleEffect > 0
+						: DEFAULT_WEBCAM_REACT_TO_ZOOM,
+			cornerRadius: isFiniteNumber(webcam.cornerRadius)
+				? clamp(webcam.cornerRadius, 0, 80)
+				: DEFAULT_WEBCAM_CORNER_RADIUS,
+			shadow: isFiniteNumber(webcam.shadow) ? clamp(webcam.shadow, 0, 1) : DEFAULT_WEBCAM_SHADOW,
+			margin: isFiniteNumber(webcam.margin) ? clamp(webcam.margin, 0, 96) : DEFAULT_WEBCAM_MARGIN,
+		},
 		aspectRatio:
 			typeof editor.aspectRatio === "string" &&
 			(validAspectRatios.has(editor.aspectRatio as AspectRatio) ||

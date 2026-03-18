@@ -111,6 +111,14 @@ interface Window {
 		openVideoFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
 		openAudioFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
 		setCurrentVideoPath: (path: string) => Promise<{ success: boolean }>;
+		setCurrentRecordingSession: (session: {
+			videoPath: string;
+			webcamPath?: string | null;
+		}) => Promise<{ success: boolean }>;
+		getCurrentRecordingSession: () => Promise<{
+			success: boolean;
+			session?: { videoPath: string; webcamPath?: string | null };
+		}>;
 		getCurrentVideoPath: () => Promise<{ success: boolean; path?: string }>;
 		clearCurrentVideoPath: () => Promise<{ success: boolean }>;
 		saveProjectFile: (

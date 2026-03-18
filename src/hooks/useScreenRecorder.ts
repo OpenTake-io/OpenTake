@@ -26,6 +26,11 @@ const VIDEO_FILE_EXTENSION = ".webm";
 const AUDIO_BITRATE_VOICE = 128_000;
 const AUDIO_BITRATE_SYSTEM = 192_000;
 const MIC_GAIN_BOOST = 1.4;
+const WEBCAM_BITRATE = 8_000_000;
+const WEBCAM_WIDTH = 1280;
+const WEBCAM_HEIGHT = 720;
+const WEBCAM_FRAME_RATE = 30;
+const WEBCAM_SUFFIX = "-webcam";
 
 type UseScreenRecorderReturn = {
   recording: boolean;
@@ -43,6 +48,10 @@ type UseScreenRecorderReturn = {
   setMicrophoneDeviceId: (deviceId: string | undefined) => void;
   systemAudioEnabled: boolean;
   setSystemAudioEnabled: (enabled: boolean) => void;
+  webcamEnabled: boolean;
+  setWebcamEnabled: (enabled: boolean) => void;
+  webcamDeviceId: string | undefined;
+  setWebcamDeviceId: (deviceId: string | undefined) => void;
   countdownDelay: number;
   setCountdownDelay: (delay: number) => void;
 };
@@ -56,20 +65,29 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(undefined);
   const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
+  const [webcamEnabled, setWebcamEnabled] = useState(false);
+  const [webcamDeviceId, setWebcamDeviceId] = useState<string | undefined>(undefined);
   const [countdownDelay, setCountdownDelayState] = useState(3);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
+  const webcamRecorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const screenStream = useRef<MediaStream | null>(null);
   const microphoneStream = useRef<MediaStream | null>(null);
+  const webcamStream = useRef<MediaStream | null>(null);
   const mixingContext = useRef<AudioContext | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const webcamChunks = useRef<Blob[]>([]);
   const startTime = useRef<number>(0);
+  const recordingSessionTimestamp = useRef<number | null>(null);
   const nativeScreenRecording = useRef(false);
   const wgcRecording = useRef(false);
   const startInFlight = useRef(false);
   const hasPromptedForReselect = useRef(false);
   const hasShownWgcFallbackToast = useRef(false);
   const countdownDelayLoaded = useRef(false);
+  const pendingWebcamPathPromise = useRef<Promise<string | null> | null>(null);
+  const webcamStopPromise = useRef<Promise<string | null> | null>(null);
+  const webcamStopResolver = useRef<((path: string | null) => void) | null>(null);
 
   const preparePermissions = useCallback(async (options: { startup?: boolean } = {}) => {
     const platform = await window.electronAPI.getPlatform();
@@ -156,11 +174,134 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       microphoneStream.current = null;
     }
 
+    if (webcamStream.current) {
+      webcamStream.current.getTracks().forEach((track) => track.stop());
+      webcamStream.current = null;
+    }
+
     if (mixingContext.current) {
       mixingContext.current.close().catch(() => {});
       mixingContext.current = null;
     }
   }, []);
+
+  const finalizeRecordingSession = useCallback(async (videoPath: string, webcamPath: string | null) => {
+    if (webcamPath) {
+      await window.electronAPI.setCurrentRecordingSession({
+        videoPath,
+        webcamPath,
+      });
+    } else {
+      await window.electronAPI.setCurrentVideoPath(videoPath);
+    }
+
+    await window.electronAPI.switchToEditor();
+  }, []);
+
+  const stopWebcamRecorder = useCallback(async () => {
+    const recorder = webcamRecorder.current;
+    const pending = webcamStopPromise.current;
+
+    if (!recorder) {
+      return null;
+    }
+
+    if (recorder.state !== "inactive") {
+      recorder.stop();
+    }
+
+    const result = pending ? await pending : null;
+    pendingWebcamPathPromise.current = null;
+    return result;
+  }, []);
+
+  const startWebcamRecorder = useCallback(async () => {
+    if (!webcamEnabled) {
+      pendingWebcamPathPromise.current = Promise.resolve(null);
+      return;
+    }
+
+    try {
+      webcamStream.current = await navigator.mediaDevices.getUserMedia({
+        video: webcamDeviceId
+          ? {
+              deviceId: { exact: webcamDeviceId },
+              width: { ideal: WEBCAM_WIDTH },
+              height: { ideal: WEBCAM_HEIGHT },
+              frameRate: { ideal: WEBCAM_FRAME_RATE, max: WEBCAM_FRAME_RATE },
+            }
+          : {
+              width: { ideal: WEBCAM_WIDTH },
+              height: { ideal: WEBCAM_HEIGHT },
+              frameRate: { ideal: WEBCAM_FRAME_RATE, max: WEBCAM_FRAME_RATE },
+            },
+        audio: false,
+      });
+
+      const mimeType = selectMimeType();
+      webcamChunks.current = [];
+      webcamStopPromise.current = new Promise((resolve) => {
+        webcamStopResolver.current = resolve;
+      });
+      pendingWebcamPathPromise.current = webcamStopPromise.current;
+
+      const recorder = new MediaRecorder(webcamStream.current, {
+        mimeType,
+        videoBitsPerSecond: WEBCAM_BITRATE,
+      });
+
+      webcamRecorder.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          webcamChunks.current.push(event.data);
+        }
+      };
+      recorder.onerror = () => {
+        webcamStopResolver.current?.(null);
+        webcamStopResolver.current = null;
+      };
+      recorder.onstop = async () => {
+        const sessionTimestamp = recordingSessionTimestamp.current ?? Date.now();
+        const webcamFileName = `${RECORDING_FILE_PREFIX}${sessionTimestamp}${WEBCAM_SUFFIX}${VIDEO_FILE_EXTENSION}`;
+
+        try {
+          if (webcamChunks.current.length === 0) {
+            webcamStopResolver.current?.(null);
+            return;
+          }
+
+          const duration = Date.now() - startTime.current;
+          const webcamBlob = new Blob(webcamChunks.current, { type: mimeType });
+          webcamChunks.current = [];
+          const fixedBlob = await fixWebmDuration(webcamBlob, duration);
+          const arrayBuffer = await fixedBlob.arrayBuffer();
+          const result = await window.electronAPI.storeRecordedVideo(arrayBuffer, webcamFileName);
+          webcamStopResolver.current?.(result.success ? result.path ?? null : null);
+        } catch (error) {
+          console.error("Error saving webcam recording:", error);
+          webcamStopResolver.current?.(null);
+        } finally {
+          webcamStopResolver.current = null;
+          webcamRecorder.current = null;
+          if (webcamStream.current) {
+            webcamStream.current.getTracks().forEach((track) => track.stop());
+            webcamStream.current = null;
+          }
+        }
+      };
+
+      recorder.start(RECORDER_TIMESLICE_MS);
+    } catch (error) {
+      console.warn("Failed to start webcam recording; continuing without webcam layer:", error);
+      pendingWebcamPathPromise.current = Promise.resolve(null);
+      webcamStopPromise.current = Promise.resolve(null);
+      webcamRecorder.current = null;
+      if (webcamStream.current) {
+        webcamStream.current.getTracks().forEach((track) => track.stop());
+        webcamStream.current = null;
+      }
+    }
+  }, [webcamDeviceId, webcamEnabled]);
 
   const stopRecording = useRef(() => {
     setPaused(false);
@@ -169,6 +310,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       setRecording(false);
 
       void (async () => {
+        const webcamPath = await stopWebcamRecorder();
         const isWgc = wgcRecording.current;
         wgcRecording.current = false;
 
@@ -187,8 +329,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
           finalPath = muxResult?.path ?? result.path;
         }
 
-        await window.electronAPI.setCurrentVideoPath(finalPath);
-        await window.electronAPI.switchToEditor();
+        await finalizeRecordingSession(finalPath, webcamPath);
       })();
       return;
     }
@@ -199,6 +340,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       if (recorderState === "paused") {
         recorder.resume();
       }
+      pendingWebcamPathPromise.current = stopWebcamRecorder();
       cleanupCapturedMedia();
       recorder.stop();
       setRecording(false);
@@ -296,6 +438,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       if (!permissionsReady) {
         return;
       }
+
+      recordingSessionTimestamp.current = Date.now();
+      startTime.current = recordingSessionTimestamp.current;
+      await startWebcamRecorder();
 
       const platform = await window.electronAPI.getPlatform();
       const useNativeMacScreenCapture =
@@ -563,7 +709,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         const recordedChunks = chunks.current;
         const buggyBlob = new Blob(recordedChunks, { type: mimeType });
         chunks.current = [];
-        const timestamp = Date.now();
+        const timestamp = recordingSessionTimestamp.current ?? Date.now();
         const videoFileName = `${RECORDING_FILE_PREFIX}${timestamp}${VIDEO_FILE_EXTENSION}`;
 
         try {
@@ -576,10 +722,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
           }
 
           if (videoResult.path) {
-            await window.electronAPI.setCurrentVideoPath(videoResult.path);
+            const webcamPath = await (pendingWebcamPathPromise.current ?? Promise.resolve(null));
+            await finalizeRecordingSession(videoResult.path, webcamPath);
           }
-
-          await window.electronAPI.switchToEditor();
         } catch (error) {
           console.error("Error saving recording:", error);
         }
@@ -596,6 +741,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       alert(error instanceof Error ? `Failed to start recording: ${error.message}` : "Failed to start recording");
       setRecording(false);
       cleanupCapturedMedia();
+      await stopWebcamRecorder();
     } finally {
       startInFlight.current = false;
       setStarting(false);
@@ -686,6 +832,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     setMicrophoneDeviceId,
     systemAudioEnabled,
     setSystemAudioEnabled,
+    webcamEnabled,
+    setWebcamEnabled,
+    webcamDeviceId,
+    setWebcamDeviceId,
     countdownDelay,
     setCountdownDelay,
   };

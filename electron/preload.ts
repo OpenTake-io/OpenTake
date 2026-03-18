@@ -138,6 +138,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	setCurrentVideoPath: (path: string) => {
 		return ipcRenderer.invoke("set-current-video-path", path);
 	},
+	setCurrentRecordingSession: (session: { videoPath: string; webcamPath?: string | null }) => {
+		return ipcRenderer.invoke("set-current-recording-session", session);
+	},
+	getCurrentRecordingSession: () => {
+		return ipcRenderer.invoke("get-current-recording-session");
+	},
 	getCurrentVideoPath: () => {
 		return ipcRenderer.invoke("get-current-video-path");
 	},
