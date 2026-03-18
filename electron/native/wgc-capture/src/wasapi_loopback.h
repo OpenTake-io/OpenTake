@@ -16,6 +16,8 @@ public:
     bool initializeLoopback(const std::string& outputPath);
     bool initializeMic(const std::string& outputPath, const std::string& deviceName = "");
     bool start();
+    bool pause();
+    bool resume();
     void stop();
 
 private:
@@ -27,6 +29,9 @@ private:
     std::string outputPath_;
     std::thread thread_;
     std::atomic<bool> capturing_{false};
+    std::atomic<bool> paused_{false};
+    HANDLE outputFile_ = INVALID_HANDLE_VALUE;
+    DWORD totalDataBytes_ = 0;
 
     IMMDeviceEnumerator* enumerator_ = nullptr;
     IMMDevice* device_ = nullptr;

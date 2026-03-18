@@ -125,11 +125,44 @@ bool WasapiCapture::initializeCommon() {
 }
 
 bool WasapiCapture::start() {
+    if (capturing_) return true;
+
+    outputFile_ = CreateFileA(
+        outputPath_.c_str(), GENERIC_WRITE, 0, nullptr,
+        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+
+    if (outputFile_ == INVALID_HANDLE_VALUE) {
+        std::cerr << "ERROR: Cannot create audio output file" << std::endl;
+        return false;
+    }
+
+    totalDataBytes_ = 0;
+    writeWavHeader(outputFile_, 0);
+
     HRESULT hr = audioClient_->Start();
-    if (FAILED(hr)) return false;
+    if (FAILED(hr)) {
+        CloseHandle(outputFile_);
+        outputFile_ = INVALID_HANDLE_VALUE;
+        return false;
+    }
 
     capturing_ = true;
+    paused_ = false;
     thread_ = std::thread(&WasapiCapture::captureThread, this);
+    return true;
+}
+
+bool WasapiCapture::pause() {
+    if (!capturing_ || paused_) return true;
+    paused_ = true;
+    return audioClient_ ? SUCCEEDED(audioClient_->Stop()) : false;
+}
+
+bool WasapiCapture::resume() {
+    if (!capturing_ || !paused_) return true;
+    HRESULT hr = audioClient_ ? audioClient_->Start() : E_FAIL;
+    if (FAILED(hr)) return false;
+    paused_ = false;
     return true;
 }
 
@@ -138,6 +171,15 @@ void WasapiCapture::stop() {
     capturing_ = false;
     if (thread_.joinable()) thread_.join();
     if (audioClient_) audioClient_->Stop();
+
+    if (outputFile_ != INVALID_HANDLE_VALUE) {
+        SetFilePointer(outputFile_, 0, nullptr, FILE_BEGIN);
+        writeWavHeader(outputFile_, totalDataBytes_);
+        CloseHandle(outputFile_);
+        outputFile_ = INVALID_HANDLE_VALUE;
+    }
+
+    paused_ = false;
 }
 
 static int16_t floatToInt16(float v) {
@@ -179,22 +221,16 @@ void WasapiCapture::captureThread() {
          reinterpret_cast<WAVEFORMATEXTENSIBLE*>(mixFormat_)->SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT);
 
     std::vector<int16_t> pcmBuffer;
-    HANDLE tmpFile = CreateFileA(
-        outputPath_.c_str(), GENERIC_WRITE, 0, nullptr,
-        CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-
-    if (tmpFile == INVALID_HANDLE_VALUE) {
-        std::cerr << "ERROR: Cannot create audio output file" << std::endl;
-        return;
-    }
-
-    writeWavHeader(tmpFile, 0);
-    DWORD totalDataBytes = 0;
 
     DWORD sleepMs = static_cast<DWORD>((static_cast<double>(bufferFrameCount_) / mixFormat_->nSamplesPerSec) * 500.0);
     if (sleepMs < 5) sleepMs = 5;
 
     while (capturing_) {
+        if (paused_) {
+            Sleep(10);
+            continue;
+        }
+
         Sleep(sleepMs);
 
         UINT32 packetLength = 0;
@@ -228,15 +264,11 @@ void WasapiCapture::captureThread() {
 
             DWORD bytesToWrite = totalSamples * sizeof(int16_t);
             DWORD written;
-            WriteFile(tmpFile, pcmBuffer.data(), bytesToWrite, &written, nullptr);
-            totalDataBytes += written;
+            WriteFile(outputFile_, pcmBuffer.data(), bytesToWrite, &written, nullptr);
+            totalDataBytes_ += written;
 
             hr = captureClient_->GetNextPacketSize(&packetLength);
             if (FAILED(hr)) break;
         }
     }
-
-    SetFilePointer(tmpFile, 0, nullptr, FILE_BEGIN);
-    writeWavHeader(tmpFile, totalDataBytes);
-    CloseHandle(tmpFile);
 }
