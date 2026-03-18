@@ -1,7 +1,7 @@
 import { WebDemuxer } from 'web-demuxer'
 import type { SpeedRegion, TrimRegion, AudioRegion } from '@/components/video-editor/types'
-import { toFileUrl } from '@/components/video-editor/projectPersistence'
 import type { VideoMuxer } from './muxer'
+import { resolveMediaElementSource } from './localMediaSource'
 
 const AUDIO_BITRATE = 128_000
 const DECODE_BACKPRESSURE_LIMIT = 20
@@ -172,8 +172,9 @@ export class AudioProcessor {
     speedRegions: SpeedRegion[],
     audioRegions: AudioRegion[],
   ): Promise<Blob> {
+    const mediaSource = await resolveMediaElementSource(videoUrl)
     const media = document.createElement('audio')
-    media.src = videoUrl
+    media.src = mediaSource.src
     media.preload = 'auto'
 
     const pitchMedia = media as HTMLMediaElement & {
@@ -203,15 +204,18 @@ export class AudioProcessor {
       sourceNode: MediaElementAudioSourceNode
       gainNode: GainNode
       region: AudioRegion
+      cleanup: () => void
     }[] = []
 
     for (const region of audioRegions) {
+      const regionSource = await resolveMediaElementSource(region.audioPath)
       const audioEl = document.createElement('audio')
-      audioEl.src = toFileUrl(region.audioPath)
+      audioEl.src = regionSource.src
       audioEl.preload = 'auto'
       try {
         await this.waitForLoadedMetadata(audioEl)
       } catch {
+        regionSource.revoke()
         console.warn('[AudioProcessor] Failed to load audio region:', region.audioPath)
         continue
       }
@@ -223,7 +227,7 @@ export class AudioProcessor {
       regionSource.connect(gainNode)
       gainNode.connect(destinationNode)
 
-      audioRegionElements.push({ media: audioEl, sourceNode: regionSource, gainNode, region })
+      audioRegionElements.push({ media: audioEl, sourceNode: regionSource, gainNode, region, cleanup: regionSource.revoke })
     }
 
     const { recorder, recordedBlobPromise } = this.startAudioRecording(destinationNode.stream)
@@ -327,6 +331,7 @@ export class AudioProcessor {
         entry.gainNode.disconnect()
         entry.media.src = ''
         entry.media.load()
+        entry.cleanup()
       }
       if (recorder.state !== 'inactive') {
         recorder.stop()
@@ -337,6 +342,7 @@ export class AudioProcessor {
       await audioContext.close()
       media.src = ''
       media.load()
+      mediaSource.revoke()
     }
 
     const recordedBlob = await recordedBlobPromise
