@@ -156,7 +156,7 @@ xattr -rd com.apple.quarantine /Applications/Recordly.app
 | 平台 | 最低版本 | 说明 |
 |---|---|---|
 | **macOS** | macOS 12.3 (Monterey) | ScreenCaptureKit 的最低要求。更旧版本无法正常进行录制和隐藏光标。 |
-| **Windows** | Windows 10 20H1（Build 19041，2020 年 5 月） | Windows Graphics Capture (`IsCursorCaptureEnabled`) 的最低要求。更旧版本会回退到 Electron 浏览器捕获，录制中会显示真实光标。 |
+| **Windows** | Windows 10 20H1（Build 19041，2020 年 5 月） | 原生 DXGI Desktop Duplication 录制助手的最低要求。更旧版本会回退到 Electron 浏览器捕获，录制中会显示真实光标。 |
 | **Linux** | 任意现代发行版 | 通过 Electron 捕获实现录制。录制中光标始终可见。系统音频需要 PipeWire（Ubuntu 22.04+、Fedora 34+）。 |
 
 > [!IMPORTANT]
@@ -213,7 +213,7 @@ xattr -rd com.apple.quarantine /Applications/Recordly.app
 
 **macOS**：在 ScreenCaptureKit 层级就会将光标排除，因此始终干净。
 
-**Windows**：通过 Windows Graphics Capture 的 `IsCursorCaptureEnabled(false)` 排除光标，需要 **Windows 10 Build 19041+**。在更旧版本中，应用会回退到 Electron 浏览器捕获，真实光标会出现在录制里。
+**Windows**：光标排除依赖原生 DXGI Desktop Duplication 录制助手以及系统光标隐藏/恢复逻辑，需要 **Windows 10 Build 19041+**。在更旧版本中，应用会回退到 Electron 浏览器捕获，真实光标会出现在录制里。
 
 **Linux**：Electron 的桌面捕获 API 不支持隐藏光标。真实系统光标将始终出现在录制中。如果你同时在编辑器中启用动画光标叠加，导出结果中可能会出现**两个光标**。
 

@@ -42,7 +42,7 @@ Run a single test file: `npx vitest run src/lib/exporter/gifExporter.test.ts`
 ### Recording Pipeline (Platform-Specific)
 
 - **macOS**: ScreenCaptureKit via compiled Swift helpers (`scripts/build-native-helpers.mjs`)
-- **Windows**: DXGI Desktop Duplication via C++ CMake build (`scripts/build-wgc-capture.mjs`), fallback to FFmpeg
+- **Windows**: DXGI Desktop Duplication via C++ CMake build (`scripts/build-windows-capture.mjs`), fallback to FFmpeg
 - **Linux**: Chromium `getDisplayMedia`
 - Core recording logic: `src/hooks/useScreenRecorder.ts` (60 FPS target, adaptive bitrate)
 

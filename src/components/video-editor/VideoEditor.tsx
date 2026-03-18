@@ -38,7 +38,6 @@ import {
 import { SettingsPanel } from "./SettingsPanel";
 import TimelineEditor from "./timeline/TimelineEditor";
 import {
-	detectInteractionCandidates,
 	normalizeCursorTelemetry,
 } from "./timeline/zoomSuggestionUtils";
 import {
@@ -189,7 +188,6 @@ export default function VideoEditor() {
 	const nextAnnotationIdRef = useRef(1);
 	const nextAnnotationZIndexRef = useRef(1); // Track z-index for stacking order
 	const exporterRef = useRef<VideoExporter | null>(null);
-	const autoSuggestedVideoPathRef = useRef<string | null>(null);
 	const historyPastRef = useRef<EditorHistorySnapshot[]>([]);
 	const historyFutureRef = useRef<EditorHistorySnapshot[]>([]);
 	const historyCurrentRef = useRef<EditorHistorySnapshot | null>(null);
@@ -909,84 +907,6 @@ export default function VideoEditor() {
 
 		return [...zoomRegions.filter((region) => region.id !== loopEndRegion.id), loopEndRegion];
 	}, [loopCursor, zoomRegions, displayedTimelineWindow, connectZooms]);
-
-	useEffect(() => {
-		if (
-			!videoPath ||
-			duration <= 0 ||
-			zoomRegions.length > 0 ||
-			normalizedCursorTelemetry.length < 2
-		) {
-			return;
-		}
-
-		if (autoSuggestedVideoPathRef.current === videoPath) {
-			return;
-		}
-
-		const totalMs = Math.max(0, Math.round(duration * 1000));
-		if (totalMs <= 0) {
-			return;
-		}
-
-		const candidates = detectInteractionCandidates(normalizedCursorTelemetry);
-		if (candidates.length === 0) {
-			autoSuggestedVideoPathRef.current = videoPath;
-			return;
-		}
-
-		const DEFAULT_DURATION_MS = 1100;
-		const MIN_SPACING_MS = 1800;
-		const sortedCandidates = [...candidates].sort((a, b) => b.strength - a.strength);
-		const acceptedCenters: number[] = [];
-
-		setZoomRegions((prev) => {
-			if (prev.length > 0) {
-				return prev;
-			}
-
-			const reservedSpans: Array<{ start: number; end: number }> = [];
-			const additions: ZoomRegion[] = [];
-			let nextId = nextZoomIdRef.current;
-
-			sortedCandidates.forEach((candidate) => {
-				const tooCloseToAccepted = acceptedCenters.some(
-					(center) => Math.abs(center - candidate.centerTimeMs) < MIN_SPACING_MS,
-				);
-				if (tooCloseToAccepted) {
-					return;
-				}
-
-				const centeredStart = Math.round(candidate.centerTimeMs - DEFAULT_DURATION_MS / 2);
-				const startMs = Math.max(0, Math.min(centeredStart, totalMs - DEFAULT_DURATION_MS));
-				const endMs = Math.min(totalMs, startMs + DEFAULT_DURATION_MS);
-
-				const hasOverlap = reservedSpans.some((span) => endMs > span.start && startMs < span.end);
-				if (hasOverlap) {
-					return;
-				}
-
-				additions.push({
-					id: `zoom-${nextId++}`,
-					startMs,
-					endMs,
-					depth: DEFAULT_ZOOM_DEPTH,
-					focus: clampFocusToDepth(candidate.focus, DEFAULT_ZOOM_DEPTH),
-				});
-				reservedSpans.push({ start: startMs, end: endMs });
-				acceptedCenters.push(candidate.centerTimeMs);
-			});
-
-			if (additions.length === 0) {
-				return prev;
-			}
-
-			nextZoomIdRef.current = nextId;
-			return [...prev, ...additions];
-		});
-
-		autoSuggestedVideoPathRef.current = videoPath;
-	}, [videoPath, duration, normalizedCursorTelemetry, zoomRegions.length]);
 
 	// Initialize default wallpaper with resolved asset path
 	useEffect(() => {

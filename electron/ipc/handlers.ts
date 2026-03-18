@@ -848,7 +848,7 @@ async function buildFfmpegCaptureArgs(source: SelectedSource, outputPath: string
 }
 
 function getWindowsCaptureExePath() {
-  return resolveUnpackedAppPath('electron', 'native', 'wgc-capture', 'build', 'Release', 'wgc-capture.exe')
+  return resolveUnpackedAppPath('electron', 'native', 'windows-capture', 'build', 'Release', 'windows-capture.exe')
 }
 
 function getCursorMonitorExePath() {
