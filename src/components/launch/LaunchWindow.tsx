@@ -1,10 +1,19 @@
 import { Eye, EyeOff, Languages, Timer } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BsRecordCircle } from "react-icons/bs";
 import { FaRegStopCircle } from "react-icons/fa";
 import { FaFolderOpen } from "react-icons/fa6";
 import { FiMinus, FiX } from "react-icons/fi";
-import { MdMic, MdMicOff, MdMonitor, MdVideoFile, MdVolumeOff, MdVolumeUp } from "react-icons/md";
+import {
+	MdMic,
+	MdMicOff,
+	MdMonitor,
+	MdOutlineVideocam,
+	MdOutlineVideocamOff,
+	MdVideoFile,
+	MdVolumeOff,
+	MdVolumeUp,
+} from "react-icons/md";
 import { RxDragHandleDots2 } from "react-icons/rx";
 import { useI18n } from "@/contexts/I18nContext";
 import type { AppLocale } from "@/i18n/config";
@@ -13,6 +22,7 @@ import { useScopedT } from "../../contexts/I18nContext";
 import { useAudioLevelMeter } from "../../hooks/useAudioLevelMeter";
 import { useMicrophoneDevices } from "../../hooks/useMicrophoneDevices";
 import { useScreenRecorder } from "../../hooks/useScreenRecorder";
+import { useVideoDevices } from "../../hooks/useVideoDevices";
 import { AudioLevelMeter } from "../ui/audio-level-meter";
 import { Button } from "../ui/button";
 import { ContentClamp } from "../ui/content-clamp";
@@ -39,14 +49,25 @@ export function LaunchWindow() {
 		setMicrophoneDeviceId,
 		systemAudioEnabled,
 		setSystemAudioEnabled,
+		webcamEnabled,
+		setWebcamEnabled,
+		webcamDeviceId,
+		setWebcamDeviceId,
 		countdownDelay,
 		setCountdownDelay,
 	} = useScreenRecorder();
 	const [recordingStart, setRecordingStart] = useState<number | null>(null);
 	const [elapsed, setElapsed] = useState(0);
+	const webcamPreviewRef = useRef<HTMLVideoElement | null>(null);
 	const showMicControls = microphoneEnabled && !recording;
+	const showWebcamControls = webcamEnabled && !recording;
 	const { devices, selectedDeviceId, setSelectedDeviceId } =
 		useMicrophoneDevices(microphoneEnabled);
+	const {
+		devices: videoDevices,
+		selectedDeviceId: selectedVideoDeviceId,
+		setSelectedDeviceId: setSelectedVideoDeviceId,
+	} = useVideoDevices(webcamEnabled);
 	const { level } = useAudioLevelMeter({
 		enabled: showMicControls,
 		deviceId: microphoneDeviceId,
@@ -57,6 +78,65 @@ export function LaunchWindow() {
 			setMicrophoneDeviceId(selectedDeviceId);
 		}
 	}, [selectedDeviceId, setMicrophoneDeviceId]);
+
+	useEffect(() => {
+		if (selectedVideoDeviceId && selectedVideoDeviceId !== "default") {
+			setWebcamDeviceId(selectedVideoDeviceId);
+		}
+	}, [selectedVideoDeviceId, setWebcamDeviceId]);
+
+	useEffect(() => {
+		let mounted = true;
+		let previewStream: MediaStream | null = null;
+
+		const startPreview = async () => {
+			if (!showWebcamControls || !webcamPreviewRef.current) {
+				return;
+			}
+
+			try {
+				previewStream = await navigator.mediaDevices.getUserMedia({
+					video: webcamDeviceId
+						? {
+								deviceId: { exact: webcamDeviceId },
+								width: { ideal: 320 },
+								height: { ideal: 320 },
+								frameRate: { ideal: 24, max: 30 },
+							}
+						: {
+								width: { ideal: 320 },
+								height: { ideal: 320 },
+								frameRate: { ideal: 24, max: 30 },
+							},
+					audio: false,
+				});
+
+				if (!mounted || !webcamPreviewRef.current) {
+					previewStream.getTracks().forEach((track) => track.stop());
+					return;
+				}
+
+				webcamPreviewRef.current.srcObject = previewStream;
+				const playPromise = webcamPreviewRef.current.play();
+				if (playPromise) {
+					playPromise.catch(() => {});
+				}
+			} catch (error) {
+				console.warn("Failed to start live webcam preview:", error);
+			}
+		};
+
+		void startPreview();
+
+		return () => {
+			mounted = false;
+			if (webcamPreviewRef.current) {
+				webcamPreviewRef.current.pause();
+				webcamPreviewRef.current.srcObject = null;
+			}
+			previewStream?.getTracks().forEach((track) => track.stop());
+		};
+	}, [showWebcamControls, webcamDeviceId]);
 
 	useEffect(() => {
 		let timer: NodeJS.Timeout | null = null;
@@ -262,6 +342,36 @@ export function LaunchWindow() {
 					</div>
 				)}
 
+				{showWebcamControls && (
+					<div
+						className={`flex items-center gap-2 rounded-full border border-white/15 bg-[rgba(18,18,26,0.92)] px-3 py-2 shadow-xl backdrop-blur-xl ${styles.electronNoDrag}`}
+					>
+						<div className="h-9 w-9 overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/10">
+							<video
+								ref={webcamPreviewRef}
+								className="h-full w-full object-cover"
+								muted
+								playsInline
+								style={{ transform: "scaleX(-1)" }}
+							/>
+						</div>
+						<select
+							value={webcamDeviceId || selectedVideoDeviceId}
+							onChange={(event) => {
+								setSelectedVideoDeviceId(event.target.value);
+								setWebcamDeviceId(event.target.value);
+							}}
+							className="max-w-[230px] rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs text-white outline-none"
+						>
+							{videoDevices.map((device) => (
+								<option key={device.deviceId} value={device.deviceId}>
+									{device.label}
+								</option>
+							))}
+						</select>
+					</div>
+				)}
+
 				<div
 					className={`mx-auto inline-flex max-w-full items-center gap-1.5 px-3 py-2 ${styles.electronDrag} ${styles.hudBar}`}
 					style={{
@@ -327,6 +437,24 @@ export function LaunchWindow() {
 								<MdVolumeUp size={16} className="text-[#2563EB]" />
 							) : (
 								<MdVolumeOff size={16} className="text-white/35" />
+							)}
+						</Button>
+						<Button
+							variant="link"
+							size="icon"
+							onClick={() => !recording && setWebcamEnabled(!webcamEnabled)}
+							disabled={recording}
+							title={
+								webcamEnabled
+									? t("recording.disableWebcam")
+									: t("recording.enableWebcam")
+							}
+							className="text-white/80 hover:bg-transparent"
+						>
+							{webcamEnabled ? (
+								<MdOutlineVideocam size={16} className="text-[#2563EB]" />
+							) : (
+								<MdOutlineVideocamOff size={16} className="text-white/35" />
 							)}
 						</Button>
 						<Button

@@ -23,6 +23,7 @@ const AUTO_RECORDING_PREFIX = 'recording-'
 const AUTO_RECORDING_RETENTION_COUNT = 20
 const AUTO_RECORDING_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000
 const ALLOW_RECORDLY_WINDOW_CAPTURE = Boolean(process.env['VITE_DEV_SERVER_URL'])
+const RECORDING_SESSION_MANIFEST_SUFFIX = '.recordly-session.json'
 
 function getScreen() {
   return nodeRequire('electron').screen as typeof import('electron').screen
@@ -52,10 +53,22 @@ type WindowBounds = {
   height: number
 }
 
+type RecordingSessionData = {
+  videoPath: string
+  webcamPath?: string | null
+}
+
+type RecordingSessionManifest = {
+  version: 1
+  videoFileName: string
+  webcamFileName?: string | null
+}
+
 let selectedSource: SelectedSource | null = null
 let currentProjectPath: string | null = null
 let nativeScreenRecordingActive = false
 let currentVideoPath: string | null = null
+let currentRecordingSession: RecordingSessionData | null = null
 let nativeCaptureProcess: ChildProcessWithoutNullStreams | null = null
 let nativeCaptureOutputBuffer = ''
 let nativeCaptureTargetPath: string | null = null
@@ -207,6 +220,124 @@ function normalizeVideoSourcePath(videoPath?: string | null): string | null {
   }
 
   return trimmed
+}
+
+function getRecordingSessionManifestPath(videoPath: string) {
+  const extension = path.extname(videoPath)
+  const baseName = path.basename(videoPath, extension)
+  return path.join(path.dirname(videoPath), `${baseName}${RECORDING_SESSION_MANIFEST_SUFFIX}`)
+}
+
+async function persistRecordingSessionManifest(session: RecordingSessionData): Promise<void> {
+  const normalizedVideoPath = normalizeVideoSourcePath(session.videoPath)
+  if (!normalizedVideoPath) {
+    return
+  }
+
+  const normalizedWebcamPath = normalizeVideoSourcePath(session.webcamPath ?? null)
+  const manifestPath = getRecordingSessionManifestPath(normalizedVideoPath)
+
+  if (!normalizedWebcamPath) {
+    await fs.rm(manifestPath, { force: true })
+    return
+  }
+
+  const manifest: RecordingSessionManifest = {
+    version: 1,
+    videoFileName: path.basename(normalizedVideoPath),
+    webcamFileName: path.basename(normalizedWebcamPath),
+  }
+
+  await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
+}
+
+async function resolveRecordingSessionManifest(videoPath?: string | null): Promise<RecordingSessionData | null> {
+  const normalizedVideoPath = normalizeVideoSourcePath(videoPath)
+  if (!normalizedVideoPath) {
+    return null
+  }
+
+  const manifestPath = getRecordingSessionManifestPath(normalizedVideoPath)
+
+  try {
+    const content = await fs.readFile(manifestPath, 'utf-8')
+    const parsed = JSON.parse(content) as Partial<RecordingSessionManifest>
+    if (parsed.version !== 1) {
+      return null
+    }
+
+    const webcamFileName = typeof parsed.webcamFileName === 'string' && parsed.webcamFileName.trim()
+      ? parsed.webcamFileName.trim()
+      : null
+
+    if (!webcamFileName) {
+      return {
+        videoPath: normalizedVideoPath,
+        webcamPath: null,
+      }
+    }
+
+    const webcamPath = path.join(path.dirname(normalizedVideoPath), webcamFileName)
+    await fs.access(webcamPath, fsConstants.F_OK)
+
+    return {
+      videoPath: normalizedVideoPath,
+      webcamPath,
+    }
+  } catch {
+    return null
+  }
+}
+
+async function resolveLinkedWebcamPath(videoPath?: string | null): Promise<string | null> {
+  const normalizedVideoPath = normalizeVideoSourcePath(videoPath)
+  if (!normalizedVideoPath) {
+    return null
+  }
+
+  const extension = path.extname(normalizedVideoPath)
+  const baseName = path.basename(normalizedVideoPath, extension)
+  if (!baseName || baseName.endsWith('-webcam')) {
+    return null
+  }
+
+  const candidateExtensions = Array.from(
+    new Set([extension, '.webm', '.mp4', '.mov', '.mkv', '.avi'].filter(Boolean)),
+  )
+
+  for (const candidateExtension of candidateExtensions) {
+    const candidatePath = path.join(
+      path.dirname(normalizedVideoPath),
+      `${baseName}-webcam${candidateExtension}`,
+    )
+
+    try {
+      await fs.access(candidatePath, fsConstants.F_OK)
+      return candidatePath
+    } catch {
+      continue
+    }
+  }
+
+  return null
+}
+
+async function resolveRecordingSession(videoPath?: string | null): Promise<RecordingSessionData | null> {
+  const manifestSession = await resolveRecordingSessionManifest(videoPath)
+  if (manifestSession) {
+    return manifestSession
+  }
+
+  const normalizedVideoPath = normalizeVideoSourcePath(videoPath)
+  if (!normalizedVideoPath) {
+    return null
+  }
+
+  const linkedWebcamPath = await resolveLinkedWebcamPath(normalizedVideoPath)
+  return {
+    videoPath: normalizedVideoPath,
+    webcamPath: linkedWebcamPath,
+  }
 }
 
 async function hasSiblingProjectFile(videoPath: string) {
@@ -2724,7 +2855,18 @@ export function registerIpcHandlers(
       const project = JSON.parse(content)
       currentProjectPath = filePath
       if (project && typeof project === 'object' && typeof project.videoPath === 'string') {
-        currentVideoPath = normalizeVideoSourcePath(project.videoPath) ?? project.videoPath
+        const normalizedVideoPath = normalizeVideoSourcePath(project.videoPath) ?? project.videoPath
+        currentVideoPath = normalizedVideoPath
+        const webcamPath =
+          typeof (project as { editor?: { webcam?: { sourcePath?: unknown } } }).editor?.webcam
+            ?.sourcePath === 'string'
+            ? ((project as { editor?: { webcam?: { sourcePath?: string } } }).editor?.webcam
+                ?.sourcePath ?? null)
+            : null
+        currentRecordingSession = {
+          videoPath: normalizedVideoPath,
+          webcamPath,
+        }
       }
 
       return {
@@ -2751,7 +2893,18 @@ export function registerIpcHandlers(
       const content = await fs.readFile(currentProjectPath, 'utf-8')
       const project = JSON.parse(content)
       if (project && typeof project === 'object' && typeof project.videoPath === 'string') {
-        currentVideoPath = normalizeVideoSourcePath(project.videoPath) ?? project.videoPath
+        const normalizedVideoPath = normalizeVideoSourcePath(project.videoPath) ?? project.videoPath
+        currentVideoPath = normalizedVideoPath
+        const webcamPath =
+          typeof (project as { editor?: { webcam?: { sourcePath?: unknown } } }).editor?.webcam
+            ?.sourcePath === 'string'
+            ? ((project as { editor?: { webcam?: { sourcePath?: string } } }).editor?.webcam
+                ?.sourcePath ?? null)
+            : null
+        currentRecordingSession = {
+          videoPath: normalizedVideoPath,
+          webcamPath,
+        }
       }
       return {
         success: true,
@@ -2767,10 +2920,45 @@ export function registerIpcHandlers(
       }
     }
   })
-  ipcMain.handle('set-current-video-path', (_, path: string) => {
+  ipcMain.handle('set-current-video-path', async (_, path: string) => {
     currentVideoPath = normalizeVideoSourcePath(path) ?? path
+    const resolvedSession = await resolveRecordingSession(currentVideoPath)
+      ?? {
+        videoPath: currentVideoPath,
+        webcamPath: null,
+      }
+
+    currentRecordingSession = resolvedSession
+
+    if (resolvedSession.webcamPath) {
+      await persistRecordingSessionManifest(resolvedSession)
+    }
+
     currentProjectPath = null
+    return { success: true, webcamPath: resolvedSession.webcamPath ?? null }
+  })
+
+  ipcMain.handle('set-current-recording-session', async (_, session: { videoPath: string; webcamPath?: string | null }) => {
+    const normalizedVideoPath = normalizeVideoSourcePath(session.videoPath) ?? session.videoPath
+    currentVideoPath = normalizedVideoPath
+    currentRecordingSession = {
+      videoPath: normalizedVideoPath,
+      webcamPath: normalizeVideoSourcePath(session.webcamPath ?? null),
+    }
+    currentProjectPath = null
+    await persistRecordingSessionManifest(currentRecordingSession)
     return { success: true }
+  })
+
+  ipcMain.handle('get-current-recording-session', () => {
+    if (!currentRecordingSession) {
+      return { success: false }
+    }
+
+    return {
+      success: true,
+      session: currentRecordingSession,
+    }
   })
 
   ipcMain.handle('get-current-video-path', () => {
@@ -2779,6 +2967,7 @@ export function registerIpcHandlers(
 
   ipcMain.handle('clear-current-video-path', () => {
     currentVideoPath = null;
+    currentRecordingSession = null;
     return { success: true };
   });
 

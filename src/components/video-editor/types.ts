@@ -44,12 +44,43 @@ export interface CursorVisualSettings {
   sway: number;
 }
 
+export type WebcamCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
+export interface WebcamOverlaySettings {
+  enabled: boolean;
+  sourcePath: string | null;
+  mirror: boolean;
+  corner: WebcamCorner;
+  size: number;
+  reactToZoom: boolean;
+  cornerRadius: number;
+  shadow: number;
+  margin: number;
+}
+
 export const DEFAULT_CURSOR_SIZE = 3.0;
 export const DEFAULT_CURSOR_SMOOTHING = 0.67;
 export const DEFAULT_CURSOR_MOTION_BLUR = 0.35;
 export const DEFAULT_CURSOR_CLICK_BOUNCE = 2.5;
 export const DEFAULT_CURSOR_SWAY = 0.25;
 export const DEFAULT_ZOOM_MOTION_BLUR = 0.35;
+export const DEFAULT_WEBCAM_SIZE = 35;
+export const DEFAULT_WEBCAM_REACT_TO_ZOOM = true;
+export const DEFAULT_WEBCAM_CORNER_RADIUS = 18;
+export const DEFAULT_WEBCAM_SHADOW = 0.35;
+export const DEFAULT_WEBCAM_MARGIN = 24;
+
+export const DEFAULT_WEBCAM_OVERLAY: WebcamOverlaySettings = {
+  enabled: false,
+  sourcePath: null,
+  mirror: true,
+  corner: "bottom-right",
+  size: DEFAULT_WEBCAM_SIZE,
+  reactToZoom: DEFAULT_WEBCAM_REACT_TO_ZOOM,
+  cornerRadius: DEFAULT_WEBCAM_CORNER_RADIUS,
+  shadow: DEFAULT_WEBCAM_SHADOW,
+  margin: DEFAULT_WEBCAM_MARGIN,
+};
 
 export interface TrimRegion {
   id: string;
