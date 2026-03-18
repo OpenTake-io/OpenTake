@@ -455,6 +455,48 @@ export default function VideoEditor() {
 		gifSizePreset,
 	]);
 
+	const syncRecordingSessionWebcam = useCallback(
+		async (webcamPath: string | null) => {
+			const sourcePath = videoSourcePath ?? (videoPath ? fromFileUrl(videoPath) : null);
+			if (!sourcePath || !window.electronAPI.setCurrentRecordingSession) {
+				return;
+			}
+
+			await window.electronAPI.setCurrentRecordingSession({
+				videoPath: sourcePath,
+				webcamPath,
+			});
+		},
+		[videoPath, videoSourcePath],
+	);
+
+	const handleUploadWebcam = useCallback(async () => {
+		const result = await window.electronAPI.openVideoFilePicker();
+		if (!result.success || !result.path) {
+			return;
+		}
+
+		setWebcam((prev) => ({
+			...prev,
+			enabled: true,
+			sourcePath: result.path ?? null,
+		}));
+
+		await syncRecordingSessionWebcam(result.path);
+		toast.success(t("settings.effects.webcamFootageAdded"));
+	}, [syncRecordingSessionWebcam, t]);
+
+	const handleClearWebcam = useCallback(async () => {
+		setWebcam((prev) => ({
+			...prev,
+			enabled: false,
+			sourcePath: null,
+		}));
+
+		await syncRecordingSessionWebcam(null);
+		toast.success(t("settings.effects.webcamFootageRemoved"));
+	}, [syncRecordingSessionWebcam, t]);
+
 	useEffect(() => {
 		const snapshot = cloneSnapshot(buildHistorySnapshot());
 
@@ -2208,6 +2250,8 @@ export default function VideoEditor() {
 					onBorderRadiusChange={setBorderRadius}
 					webcam={webcam}
 					onWebcamChange={setWebcam}
+					onUploadWebcam={handleUploadWebcam}
+					onClearWebcam={handleClearWebcam}
 					padding={padding}
 					onPaddingChange={setPadding}
 					cropRegion={cropRegion}
