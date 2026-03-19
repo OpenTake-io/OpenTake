@@ -848,7 +848,7 @@ async function buildFfmpegCaptureArgs(source: SelectedSource, outputPath: string
 }
 
 function getWindowsCaptureExePath() {
-  return resolveUnpackedAppPath('electron', 'native', 'windows-capture', 'build', 'Release', 'windows-capture.exe')
+  return resolveUnpackedAppPath('electron', 'native', 'wgc-capture', 'build', 'Release', 'wgc-capture.exe')
 }
 
 function getCursorMonitorExePath() {
@@ -865,8 +865,8 @@ async function isNativeWindowsCaptureAvailable(): Promise<boolean> {
   }
 
   const os = await import('node:os')
-  const [major, minor] = os.release().split('.').map(Number)
-  return major > 6 || (major === 6 && minor >= 2)
+  const [major, , build] = os.release().split('.').map(Number)
+  return major >= 10 && build >= 19041
 }
 
 function waitForWindowsCaptureStart(proc: ChildProcessWithoutNullStreams) {

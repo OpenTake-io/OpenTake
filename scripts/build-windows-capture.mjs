@@ -3,7 +3,7 @@ import { mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
 const projectRoot = process.cwd();
-const sourceDir = path.join(projectRoot, 'electron', 'native', 'windows-capture');
+const sourceDir = path.join(projectRoot, 'electron', 'native', 'wgc-capture');
 const buildDir = path.join(sourceDir, 'build');
 
 if (process.platform !== 'win32') {
@@ -81,7 +81,7 @@ try {
   process.exit(1);
 }
 
-const exePath = path.join(buildDir, 'Release', 'windows-capture.exe');
+const exePath = path.join(buildDir, 'Release', 'wgc-capture.exe');
 if (existsSync(exePath)) {
   console.log(`[build-windows-capture] Built successfully: ${exePath}`);
 } else {
