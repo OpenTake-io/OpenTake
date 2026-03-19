@@ -10,6 +10,7 @@ import {
 	DEFAULT_ANNOTATION_STYLE,
 	DEFAULT_CROP_REGION,
 	DEFAULT_CURSOR_CLICK_BOUNCE,
+	DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
 	DEFAULT_CURSOR_MOTION_BLUR,
 	DEFAULT_CURSOR_SIZE,
 	DEFAULT_CURSOR_SMOOTHING,
@@ -44,6 +45,7 @@ export interface ProjectEditorState {
 	cursorSmoothing: number;
 	cursorMotionBlur: number;
 	cursorClickBounce: number;
+	cursorClickBounceDuration: number;
 	cursorSway: number;
 	borderRadius: number;
 	padding: number;
@@ -65,7 +67,7 @@ export interface ProjectEditorState {
 export interface EditorProjectData {
 	version: number;
 	videoPath: string;
-	editor: ProjectEditorState;
+	editor: Partial<ProjectEditorState>;
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -383,6 +385,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		cursorClickBounce: isFiniteNumber((editor as Partial<ProjectEditorState>).cursorClickBounce)
 			? clamp((editor as Partial<ProjectEditorState>).cursorClickBounce as number, 0, 5)
 			: DEFAULT_CURSOR_CLICK_BOUNCE,
+		cursorClickBounceDuration: isFiniteNumber((editor as Partial<ProjectEditorState>).cursorClickBounceDuration)
+			? clamp((editor as Partial<ProjectEditorState>).cursorClickBounceDuration as number, 60, 500)
+			: DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
 		cursorSway: isFiniteNumber((editor as Partial<ProjectEditorState>).cursorSway)
 			? clamp((editor as Partial<ProjectEditorState>).cursorSway as number, 0, 2)
 			: DEFAULT_CURSOR_SWAY,
@@ -457,7 +462,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 
 export function createProjectData(
 	videoPath: string,
-	editor: ProjectEditorState,
+	editor: Partial<ProjectEditorState>,
 ): EditorProjectData {
 	return {
 		version: PROJECT_VERSION,

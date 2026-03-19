@@ -52,6 +52,7 @@ interface GifExporterConfig {
   cursorSmoothing?: number;
   cursorMotionBlur?: number;
   cursorClickBounce?: number;
+  cursorClickBounceDuration?: number;
   cursorSway?: number;
   previewWidth?: number;
   previewHeight?: number;
@@ -142,6 +143,7 @@ export class GifExporter {
         cursorSmoothing: this.config.cursorSmoothing,
         cursorMotionBlur: this.config.cursorMotionBlur,
         cursorClickBounce: this.config.cursorClickBounce,
+        cursorClickBounceDuration: this.config.cursorClickBounceDuration,
         cursorSway: this.config.cursorSway,
       });
       await this.renderer.initialize();

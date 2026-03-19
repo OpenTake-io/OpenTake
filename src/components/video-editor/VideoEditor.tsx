@@ -1,10 +1,15 @@
 import type { Span } from "dnd-timeline";
-import { Camera, Download, FolderOpen, Languages, MousePointer2, Save, Sparkles } from "lucide-react";
+import { Camera, Download, FolderOpen, Languages, MousePointer2, Redo2, Save, Sparkles, Undo2, X } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Toaster } from "@/components/ui/sonner";
 import { useI18n } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
@@ -26,9 +31,10 @@ import {
 import { matchesShortcut } from "@/lib/shortcuts";
 import { DEFAULT_WALLPAPER_RELATIVE_PATH } from "@/lib/wallpapers";
 import { type AspectRatio, getAspectRatioValue } from "@/utils/aspectRatioUtils";
-import { ExportDialog } from "./ExportDialog";
+import { ExportSettingsMenu } from "./ExportSettingsMenu";
 import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
 import PlaybackControls from "./PlaybackControls";
+import { CropControl } from "./CropControl";
 import {
 	createProjectData,
 	deriveNextId,
@@ -38,6 +44,7 @@ import {
 	validateProjectData,
 } from "./projectPersistence";
 import { type EditorEffectSection, SettingsPanel } from "./SettingsPanel";
+import { APP_HEADER_ACTION_BUTTON_CLASS, FeedbackDialog, KeyboardShortcutsDialog } from "./TutorialHelp";
 import TimelineEditor from "./timeline/TimelineEditor";
 import {
 	detectInteractionCandidates,
@@ -54,6 +61,7 @@ import {
 	DEFAULT_ANNOTATION_STYLE,
 	DEFAULT_FIGURE_DATA,
 	DEFAULT_PLAYBACK_SPEED,
+	DEFAULT_CROP_REGION,
 	DEFAULT_WEBCAM_OVERLAY,
 	DEFAULT_ZOOM_DEPTH,
 	type FigureData,
@@ -73,16 +81,6 @@ import {
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
 
 const LOOP_CURSOR_END_WINDOW_MS = 670;
-
-const EDITOR_SECTION_BUTTONS: Array<{
-	id: EditorEffectSection;
-	label: string;
-	icon: React.ComponentType<{ className?: string }>;
-}> = [
-	{ id: "scene", label: "Scene", icon: Sparkles },
-	{ id: "cursor", label: "Cursor", icon: MousePointer2 },
-	{ id: "webcam", label: "Webcam", icon: Camera },
-];
 
 type EditorHistorySnapshot = {
 	zoomRegions: ZoomRegion[];
@@ -112,16 +110,18 @@ function LanguageSwitcher() {
 		"zh-CN": "中文",
 	};
 	return (
-		<button
+		<Button
 			type="button"
+			variant="ghost"
+			size="sm"
 			onClick={() => setLocale(next)}
-			className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-white/90 transition hover:bg-white/8 hover:text-white cursor-pointer"
+			className={APP_HEADER_ACTION_BUTTON_CLASS}
 			title={t("common.app.language", "Language")}
 			aria-label={t("common.app.language", "Language")}
 		>
 			<Languages className="h-4 w-4" />
-			<span className="text-xs font-normal">{labels[locale] ?? locale.toUpperCase()}</span>
-		</button>
+			<span className="font-medium">{labels[locale] ?? locale.toUpperCase()}</span>
+		</Button>
 	);
 }
 
@@ -151,10 +151,13 @@ export default function VideoEditor() {
 	const [cursorClickBounce, setCursorClickBounce] = useState(
 		initialEditorPreferences.cursorClickBounce,
 	);
+	const [cursorClickBounceDuration, setCursorClickBounceDuration] = useState(
+		initialEditorPreferences.cursorClickBounceDuration,
+	);
 	const [cursorSway, setCursorSway] = useState(initialEditorPreferences.cursorSway);
 	const [borderRadius, setBorderRadius] = useState(initialEditorPreferences.borderRadius);
 	const [padding, setPadding] = useState(initialEditorPreferences.padding);
-	const [cropRegion, setCropRegion] = useState<CropRegion>(initialEditorPreferences.cropRegion);
+	const [cropRegion, setCropRegion] = useState<CropRegion>(DEFAULT_CROP_REGION);
 	const [webcam, setWebcam] = useState<WebcamOverlaySettings>(
 		initialEditorPreferences.webcam ?? DEFAULT_WEBCAM_OVERLAY,
 	);
@@ -172,7 +175,7 @@ export default function VideoEditor() {
 	const [isExporting, setIsExporting] = useState(false);
 	const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
 	const [exportError, setExportError] = useState<string | null>(null);
-	const [showExportDialog, setShowExportDialog] = useState(false);
+	const [showExportDropdown, setShowExportDropdown] = useState(false);
 	const [previewVolume, setPreviewVolume] = useState(1);
 	const [aspectRatio, setAspectRatio] = useState<AspectRatio>(initialEditorPreferences.aspectRatio);
 	const [activeEffectSection, setActiveEffectSection] = useState<EditorEffectSection>("scene");
@@ -192,6 +195,7 @@ export default function VideoEditor() {
 	const [exportedFilePath, setExportedFilePath] = useState<string | undefined>(undefined);
 	const [hasPendingExportSave, setHasPendingExportSave] = useState(false);
 	const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string | null>(null);
+	const [showCropModal, setShowCropModal] = useState(false);
 
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
 	const nextZoomIdRef = useRef(1);
@@ -209,6 +213,17 @@ export default function VideoEditor() {
 	const historyCurrentRef = useRef<EditorHistorySnapshot | null>(null);
 	const applyingHistoryRef = useRef(false);
 	const pendingExportSaveRef = useRef<PendingExportSave | null>(null);
+	const cropSnapshotRef = useRef<CropRegion | null>(null);
+	const [historyVersion, setHistoryVersion] = useState(0);
+
+	const syncHistoryButtons = useCallback(() => {
+		setHistoryVersion((version) => version + 1);
+	}, []);
+
+	const canUndo = historyPastRef.current.length > 0;
+	const canRedo = historyFutureRef.current.length > 0;
+
+	void historyVersion;
 
 	const cloneSnapshot = useCallback((snapshot: EditorHistorySnapshot): EditorHistorySnapshot => {
 		return {
@@ -239,8 +254,56 @@ export default function VideoEditor() {
 	const projectDisplayName = useMemo(() => {
 		const fileName = currentProjectPath?.split(/[\\/]/).pop() ?? "";
 		const withoutExtension = fileName.replace(/\.recordly$/i, "").replace(/\.[^.]+$/, "");
-		return withoutExtension || "Untitled";
-	}, [currentProjectPath]);
+		return withoutExtension || t("editor.project.untitled", "Untitled");
+	}, [currentProjectPath, t]);
+
+	const editorSectionButtons = useMemo(
+		() => [
+			{ id: "scene" as const, label: t("settings.sections.scene", "Scene"), icon: Sparkles },
+			{ id: "cursor" as const, label: t("settings.sections.cursor", "Cursor"), icon: MousePointer2 },
+			{ id: "webcam" as const, label: t("settings.sections.webcam", "Webcam"), icon: Camera },
+		],
+		[t],
+	);
+
+	const buildPersistedEditorState = useCallback(
+		(
+			editor: Partial<{
+				wallpaper: string;
+				shadowIntensity: number;
+				backgroundBlur: number;
+				zoomMotionBlur: number;
+				connectZooms: boolean;
+				showCursor: boolean;
+				loopCursor: boolean;
+				cursorSize: number;
+				cursorSmoothing: number;
+				cursorMotionBlur: number;
+				cursorClickBounce: number;
+				cursorClickBounceDuration: number;
+				cursorSway: number;
+				borderRadius: number;
+				padding: number;
+				cropRegion: CropRegion;
+				webcam: WebcamOverlaySettings;
+				zoomRegions: ZoomRegion[];
+				trimRegions: TrimRegion[];
+				speedRegions: SpeedRegion[];
+				annotationRegions: AnnotationRegion[];
+				audioRegions: AudioRegion[];
+				aspectRatio: AspectRatio;
+				exportQuality: ExportQuality;
+				exportFormat: ExportFormat;
+				gifFrameRate: GifFrameRate;
+				gifLoop: boolean;
+				gifSizePreset: GifSizePreset;
+			}>,
+		) => {
+			const { cropRegion: _cropRegion, ...persistedEditor } = editor;
+			return persistedEditor;
+		},
+		[],
+	);
 
 	const buildHistorySnapshot = useCallback((): EditorHistorySnapshot => {
 		return {
@@ -319,7 +382,8 @@ export default function VideoEditor() {
 		historyFutureRef.current.push(cloneSnapshot(current));
 		historyCurrentRef.current = cloneSnapshot(previous);
 		applyHistorySnapshot(previous);
-	}, [applyHistorySnapshot, buildHistorySnapshot, cloneSnapshot]);
+		syncHistoryButtons();
+	}, [applyHistorySnapshot, buildHistorySnapshot, cloneSnapshot, syncHistoryButtons]);
 
 	const handleRedo = useCallback(() => {
 		if (historyFutureRef.current.length === 0) return;
@@ -331,7 +395,8 @@ export default function VideoEditor() {
 		historyPastRef.current.push(cloneSnapshot(current));
 		historyCurrentRef.current = cloneSnapshot(next);
 		applyHistorySnapshot(next);
-	}, [applyHistorySnapshot, buildHistorySnapshot, cloneSnapshot]);
+		syncHistoryButtons();
+	}, [applyHistorySnapshot, buildHistorySnapshot, cloneSnapshot, syncHistoryButtons]);
 
 	const applyLoadedProject = useCallback(async (candidate: unknown, path?: string | null) => {
 		if (!validateProjectData(candidate)) {
@@ -367,10 +432,11 @@ export default function VideoEditor() {
 		setCursorSmoothing(normalizedEditor.cursorSmoothing);
 		setCursorMotionBlur(normalizedEditor.cursorMotionBlur);
 		setCursorClickBounce(normalizedEditor.cursorClickBounce);
+		setCursorClickBounceDuration(normalizedEditor.cursorClickBounceDuration);
 		setCursorSway(normalizedEditor.cursorSway);
 		setBorderRadius(normalizedEditor.borderRadius);
 		setPadding(normalizedEditor.padding);
-		setCropRegion(normalizedEditor.cropRegion);
+		setCropRegion(DEFAULT_CROP_REGION);
 		setWebcam(normalizedEditor.webcam);
 		setZoomRegions(normalizedEditor.zoomRegions);
 		setTrimRegions(normalizedEditor.trimRegions);
@@ -414,9 +480,17 @@ export default function VideoEditor() {
 			normalizedEditor.annotationRegions.reduce((max, region) => Math.max(max, region.zIndex), 0) +
 			1;
 
-		setLastSavedSnapshot(JSON.stringify(createProjectData(sourcePath, normalizedEditor)));
+		historyPastRef.current = [];
+		historyFutureRef.current = [];
+		historyCurrentRef.current = null;
+		applyingHistoryRef.current = false;
+		syncHistoryButtons();
+
+		setLastSavedSnapshot(
+			JSON.stringify(createProjectData(sourcePath, buildPersistedEditorState(normalizedEditor))),
+		);
 		return true;
-	}, []);
+	}, [buildPersistedEditorState, syncHistoryButtons]);
 
 	const currentProjectSnapshot = useMemo(() => {
 		const sourcePath = videoSourcePath ?? (videoPath ? fromFileUrl(videoPath) : null);
@@ -424,39 +498,44 @@ export default function VideoEditor() {
 			return null;
 		}
 		return JSON.stringify(
-			createProjectData(sourcePath, {
-				wallpaper,
-				shadowIntensity,
-				backgroundBlur,
-				zoomMotionBlur,
-				connectZooms,
-				showCursor,
-				loopCursor,
-				cursorSize,
-				cursorSmoothing,
-				cursorMotionBlur,
-				cursorClickBounce,
-				cursorSway,
-				borderRadius,
-				padding,
-				cropRegion,
-				webcam,
-				zoomRegions,
-				trimRegions,
-				speedRegions,
-				annotationRegions,
-				audioRegions,
-				aspectRatio,
-				exportQuality,
-				exportFormat,
-				gifFrameRate,
-				gifLoop,
-				gifSizePreset,
-			}),
+			createProjectData(
+				sourcePath,
+				buildPersistedEditorState({
+					wallpaper,
+					shadowIntensity,
+					backgroundBlur,
+					zoomMotionBlur,
+					connectZooms,
+					showCursor,
+					loopCursor,
+					cursorSize,
+					cursorSmoothing,
+					cursorMotionBlur,
+					cursorClickBounce,
+					cursorClickBounceDuration,
+					cursorSway,
+					borderRadius,
+					padding,
+					cropRegion,
+					webcam,
+					zoomRegions,
+					trimRegions,
+					speedRegions,
+					annotationRegions,
+					audioRegions,
+					aspectRatio,
+					exportQuality,
+					exportFormat,
+					gifFrameRate,
+					gifLoop,
+					gifSizePreset,
+				}),
+			),
 		);
 	}, [
 		videoPath,
 		videoSourcePath,
+		buildPersistedEditorState,
 		wallpaper,
 		shadowIntensity,
 		backgroundBlur,
@@ -468,6 +547,7 @@ export default function VideoEditor() {
 		cursorSmoothing,
 		cursorMotionBlur,
 		cursorClickBounce,
+		cursorClickBounceDuration,
 		cursorSway,
 		borderRadius,
 		padding,
@@ -484,6 +564,7 @@ export default function VideoEditor() {
 		gifFrameRate,
 		gifLoop,
 		gifSizePreset,
+		buildPersistedEditorState,
 	]);
 
 	const syncRecordingSessionWebcam = useCallback(
@@ -533,12 +614,14 @@ export default function VideoEditor() {
 
 		if (!historyCurrentRef.current) {
 			historyCurrentRef.current = snapshot;
+			syncHistoryButtons();
 			return;
 		}
 
 		if (applyingHistoryRef.current) {
 			historyCurrentRef.current = snapshot;
 			applyingHistoryRef.current = false;
+			syncHistoryButtons();
 			return;
 		}
 
@@ -554,7 +637,8 @@ export default function VideoEditor() {
 		}
 		historyCurrentRef.current = snapshot;
 		historyFutureRef.current = [];
-	}, [buildHistorySnapshot, cloneSnapshot]);
+		syncHistoryButtons();
+	}, [buildHistorySnapshot, cloneSnapshot, syncHistoryButtons]);
 
 	const hasUnsavedChanges = Boolean(
 		currentProjectPath &&
@@ -630,10 +714,10 @@ export default function VideoEditor() {
 			cursorSmoothing,
 			cursorMotionBlur,
 			cursorClickBounce,
+			cursorClickBounceDuration,
 			cursorSway,
 			borderRadius,
 			padding,
-			cropRegion,
 			webcam,
 			aspectRatio,
 			exportQuality,
@@ -654,10 +738,10 @@ export default function VideoEditor() {
 		cursorSmoothing,
 		cursorMotionBlur,
 		cursorClickBounce,
+		cursorClickBounceDuration,
 		cursorSway,
 		borderRadius,
 		padding,
-		cropRegion,
 		webcam,
 		aspectRatio,
 		exportQuality,
@@ -680,35 +764,39 @@ export default function VideoEditor() {
 				return;
 			}
 
-			const projectData = createProjectData(sourcePath, {
-				wallpaper,
-				shadowIntensity,
-				backgroundBlur,
-				zoomMotionBlur,
-				connectZooms,
-				showCursor,
-				loopCursor,
-				cursorSize,
-				cursorSmoothing,
-				cursorMotionBlur,
-				cursorClickBounce,
-				cursorSway,
-				borderRadius,
-				padding,
-				cropRegion,
-				webcam,
-				zoomRegions,
-				trimRegions,
-				speedRegions,
-				annotationRegions,
-				audioRegions,
-				aspectRatio,
-				exportQuality,
-				exportFormat,
-				gifFrameRate,
-				gifLoop,
-				gifSizePreset,
-			});
+			const projectData = createProjectData(
+				sourcePath,
+				buildPersistedEditorState({
+					wallpaper,
+					shadowIntensity,
+					backgroundBlur,
+					zoomMotionBlur,
+					connectZooms,
+					showCursor,
+					loopCursor,
+					cursorSize,
+					cursorSmoothing,
+					cursorMotionBlur,
+					cursorClickBounce,
+					cursorClickBounceDuration,
+					cursorSway,
+					borderRadius,
+					padding,
+					cropRegion,
+					webcam,
+					zoomRegions,
+					trimRegions,
+					speedRegions,
+					annotationRegions,
+					audioRegions,
+					aspectRatio,
+					exportQuality,
+					exportFormat,
+					gifFrameRate,
+					gifLoop,
+					gifSizePreset,
+				}),
+			);
 
 			const fileNameBase =
 				sourcePath
@@ -754,6 +842,7 @@ export default function VideoEditor() {
 			cursorSmoothing,
 			cursorMotionBlur,
 			cursorClickBounce,
+			cursorClickBounceDuration,
 			cursorSway,
 			borderRadius,
 			padding,
@@ -770,6 +859,7 @@ export default function VideoEditor() {
 			gifFrameRate,
 			gifLoop,
 			gifSizePreset,
+			buildPersistedEditorState,
 		],
 	);
 
@@ -1687,6 +1777,7 @@ export default function VideoEditor() {
 						cursorSmoothing,
 						cursorMotionBlur,
 						cursorClickBounce,
+						cursorClickBounceDuration,
 						cursorSway,
 						previewWidth,
 						previewHeight,
@@ -1833,6 +1924,7 @@ export default function VideoEditor() {
 						cursorSmoothing,
 						cursorMotionBlur,
 						cursorClickBounce,
+						cursorClickBounceDuration,
 						cursorSway,
 						audioRegions,
 						previewWidth,
@@ -1890,7 +1982,7 @@ export default function VideoEditor() {
 				}
 				setIsExporting(false);
 				exporterRef.current = null;
-				setShowExportDialog(keepExportDialogOpen);
+				setShowExportDropdown(keepExportDialogOpen);
 				setExportProgress(null);
 			}
 		},
@@ -1924,18 +2016,18 @@ export default function VideoEditor() {
 		],
 	);
 
-	const handleOpenExportDialog = useCallback(() => {
+	const handleOpenExportDropdown = useCallback(() => {
 		if (!videoPath) {
 			toast.error("No video loaded");
 			return;
 		}
 
 		if (hasPendingExportSave) {
-			setShowExportDialog(true);
+			setShowExportDropdown(true);
 			setExportError("Save dialog canceled. Click Save Again to save without re-rendering.");
 			return;
 		}
-		setShowExportDialog(true);
+		setShowExportDropdown(true);
 		setExportProgress(null);
 		setExportError(null);
 	}, [
@@ -1943,7 +2035,7 @@ export default function VideoEditor() {
 		hasPendingExportSave,
 	]);
 
-	const handleStartExportFromDialog = useCallback(() => {
+	const handleStartExportFromDropdown = useCallback(() => {
 		const video = videoPlaybackRef.current?.video;
 		if (!videoPath) {
 			toast.error("No video loaded");
@@ -1979,6 +2071,8 @@ export default function VideoEditor() {
 		};
 
 		setExportError(null);
+		setExportedFilePath(undefined);
+		setShowExportDropdown(true);
 		handleExport(settings);
 	}, [videoPath, exportFormat, exportQuality, gifFrameRate, gifLoop, gifSizePreset, handleExport]);
 
@@ -1986,7 +2080,7 @@ export default function VideoEditor() {
 		if (exporterRef.current) {
 			exporterRef.current.cancel();
 			toast.info("Export canceled");
-			setShowExportDialog(false);
+			setShowExportDropdown(false);
 			setIsExporting(false);
 			setExportProgress(null);
 			setExportError(null);
@@ -1994,8 +2088,8 @@ export default function VideoEditor() {
 		}
 	}, []);
 
-	const handleExportDialogClose = useCallback(() => {
-		setShowExportDialog(false);
+	const handleExportDropdownClose = useCallback(() => {
+		setShowExportDropdown(false);
 		setExportProgress(null);
 		setExportError(null);
 		setExportedFilePath(undefined);
@@ -2024,7 +2118,7 @@ export default function VideoEditor() {
 			setExportError(null);
 			setExportedFilePath(saveResult.path);
 			showExportSuccessToast(saveResult.path);
-			setShowExportDialog(false);
+			setShowExportDropdown(true);
 			return;
 		}
 
@@ -2032,6 +2126,30 @@ export default function VideoEditor() {
 		setExportError(errorMessage);
 		toast.error(errorMessage);
 	}, [showExportSuccessToast]);
+
+	const handleOpenCropEditor = useCallback(() => {
+		cropSnapshotRef.current = { ...cropRegion };
+		setShowCropModal(true);
+	}, [cropRegion]);
+
+	const handleCloseCropEditor = useCallback(() => {
+		setShowCropModal(false);
+	}, []);
+
+	const handleCancelCropEditor = useCallback(() => {
+		if (cropSnapshotRef.current) {
+			setCropRegion(cropSnapshotRef.current);
+		}
+		setShowCropModal(false);
+	}, []);
+
+	const isCropped = useMemo(() => {
+		const top = Math.round(cropRegion.y * 100);
+		const left = Math.round(cropRegion.x * 100);
+		const bottom = Math.round((1 - cropRegion.y - cropRegion.height) * 100);
+		const right = Math.round((1 - cropRegion.x - cropRegion.width) * 100);
+		return top > 0 || left > 0 || bottom > 0 || right > 0;
+	}, [cropRegion]);
 
 	const openRecordingsFolder = useCallback(async () => {
 		try {
@@ -2043,6 +2161,19 @@ export default function VideoEditor() {
 			toast.error(`Failed to open recordings folder: ${String(error)}`);
 		}
 	}, []);
+
+	const revealExportedFile = useCallback(async () => {
+		if (!exportedFilePath) return;
+
+		try {
+			const result = await window.electronAPI.revealInFolder(exportedFilePath);
+			if (!result.success) {
+				toast.error(result.error || result.message || "Failed to reveal item in folder.");
+			}
+		} catch (error) {
+			toast.error(`Failed to reveal item in folder: ${String(error)}`);
+		}
+	}, [exportedFilePath]);
 
 	if (loading) {
 		return (
@@ -2074,7 +2205,7 @@ export default function VideoEditor() {
 				className="relative h-11 flex-shrink-0 bg-[#151518]/88 backdrop-blur-md border-b border-white/10 flex items-center justify-center px-8 z-50"
 				style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
 			>
-				<div className="flex items-baseline gap-1.5">
+				<div className="flex items-baseline gap-0">
 					<span className="text-sm font-semibold tracking-tight text-white/90">{projectDisplayName}</span>
 					<span className="text-xs font-medium tracking-tight text-slate-500">.recordly</span>
 				</div>
@@ -2082,45 +2213,141 @@ export default function VideoEditor() {
 					className="absolute left-[88px] flex items-center gap-2"
 					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
 				>
+					<LanguageSwitcher />
 					<Button
 						type="button"
-						onClick={handleLoadProject}
-						className="inline-flex h-8 min-w-[96px] items-center justify-center gap-1.5 rounded-lg bg-white px-4 text-black transition-colors hover:bg-white/92"
+						variant="ghost"
+						size="sm"
+						onClick={() => void openRecordingsFolder()}
+						className={`${APP_HEADER_ACTION_BUTTON_CLASS} px-2.5`}
+						title={t("common.app.manageRecordings", "Open recordings folder")}
+						aria-label={t("common.app.manageRecordings", "Open recordings folder")}
 					>
 						<FolderOpen className="h-4 w-4" />
-						<span className="text-sm font-semibold tracking-tight">Load</span>
 					</Button>
-					<Button
-						type="button"
-						onClick={handleSaveProject}
-						className="inline-flex h-8 min-w-[96px] items-center justify-center gap-1.5 rounded-lg bg-white px-4 text-black transition-colors hover:bg-white/92"
-					>
-						<Save className="h-4 w-4" />
-						<span className="text-sm font-semibold tracking-tight">Save</span>
-					</Button>
+					<KeyboardShortcutsDialog />
+					<FeedbackDialog />
+					<div className="ml-1 h-5 w-px bg-white/10" />
 				</div>
 				<div
 					className="absolute right-5 flex items-center gap-2 pr-3"
 					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
 				>
-					<LanguageSwitcher />
-					<button
-						type="button"
-						onClick={() => void openRecordingsFolder()}
-						className="inline-flex h-7 items-center justify-center rounded-md px-2 text-white/90 transition hover:bg-white/8 hover:text-white cursor-pointer"
-						title={t("common.app.manageRecordings", "Open recordings folder")}
-						aria-label={t("common.app.manageRecordings", "Open recordings folder")}
-					>
-						<FolderOpen className="h-4 w-4" />
-					</button>
 					<Button
 						type="button"
-						onClick={handleOpenExportDialog}
-						className="inline-flex h-8 min-w-[112px] items-center justify-center gap-2 rounded-lg bg-[#2563EB] px-4.5 text-white transition-colors hover:bg-[#2563EB]/92"
+						variant="ghost"
+						onClick={handleUndo}
+						disabled={!canUndo}
+						className="inline-flex h-8 w-8 items-center justify-center rounded-[5px] border border-white/10 bg-white/5 p-0 text-slate-200 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+						title={t("common.actions.undo", "Undo")}
+						aria-label={t("common.actions.undo", "Undo")}
 					>
-						<Download className="h-4 w-4" />
-						<span className="text-sm font-semibold tracking-tight">Export</span>
+						<Undo2 className="h-4 w-4" />
 					</Button>
+					<Button
+						type="button"
+						variant="ghost"
+						onClick={handleRedo}
+						disabled={!canRedo}
+						className="inline-flex h-8 w-8 items-center justify-center rounded-[5px] border border-white/10 bg-white/5 p-0 text-slate-200 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+						title={t("common.actions.redo", "Redo")}
+						aria-label={t("common.actions.redo", "Redo")}
+					>
+						<Redo2 className="h-4 w-4" />
+					</Button>
+					<div className="mx-1 h-5 w-px bg-white/10" />
+					<Button
+						type="button"
+						onClick={handleLoadProject}
+						className="inline-flex h-8 min-w-[96px] items-center justify-center gap-1.5 rounded-[5px] bg-white px-4 text-black transition-colors hover:bg-white/92"
+					>
+						<FolderOpen className="h-4 w-4" />
+						<span className="text-sm font-semibold tracking-tight">{t("common.actions.load", "Load")}</span>
+					</Button>
+					<Button
+						type="button"
+						onClick={handleSaveProject}
+						className="inline-flex h-8 min-w-[96px] items-center justify-center gap-1.5 rounded-[5px] bg-white px-4 text-black transition-colors hover:bg-white/92"
+					>
+						<Save className="h-4 w-4" />
+						<span className="text-sm font-semibold tracking-tight">{t("common.actions.save")}</span>
+					</Button>
+					<div className="mx-1 h-5 w-px bg-white/10" />
+					<DropdownMenu open={showExportDropdown} onOpenChange={setShowExportDropdown} modal={false}>
+						<DropdownMenuTrigger asChild>
+							<Button
+						type="button"
+								onClick={handleOpenExportDropdown}
+								className="inline-flex h-8 min-w-[112px] items-center justify-center gap-2 rounded-[5px] bg-[#2563EB] px-4.5 text-white transition-colors hover:bg-[#2563EB]/92"
+							>
+								<Download className="h-4 w-4" />
+								<span className="text-sm font-semibold tracking-tight">{t("common.actions.export", "Export")}</span>
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent
+							align="end"
+							sideOffset={10}
+							className="w-[360px] border-none bg-transparent p-0 shadow-none"
+						>
+							{isExporting ? (
+								<div className="rounded-2xl border border-white/10 bg-[#17171a] p-4 text-slate-200 shadow-2xl">
+									<div className="mb-3 flex items-center justify-between gap-3">
+										<div>
+											<p className="text-sm font-semibold text-white">{t("editor.exportStatus.exporting", "Exporting")}</p>
+											<p className="text-xs text-slate-400">{t("editor.exportStatus.renderingFile", "Rendering your file.")}</p>
+										</div>
+										<Button type="button" variant="outline" onClick={handleCancelExport} className="h-8 border-red-500/20 bg-red-500/10 px-3 text-xs text-red-400 hover:bg-red-500/20">{t("common.actions.cancel")}</Button>
+									</div>
+									<div className="h-2 overflow-hidden rounded-full border border-white/5 bg-white/5">
+										<div
+											className="h-full bg-[#2563EB] transition-all duration-300 ease-out"
+											style={{ width: `${Math.min(exportProgress?.percentage ?? 8, 100)}%` }}
+										/>
+									</div>
+									<p className="mt-2 text-xs text-slate-400">
+										{exportProgress ? t("editor.exportStatus.completePercent", "{{percent}}% complete", { percent: Math.round(exportProgress.percentage) }) : t("editor.exportStatus.preparing", "Preparing export...")}
+									</p>
+								</div>
+							) : exportError ? (
+								<div className="rounded-2xl border border-white/10 bg-[#17171a] p-4 text-slate-200 shadow-2xl">
+									<p className="text-sm font-semibold text-white">{t("editor.exportStatus.issue", "Export issue")}</p>
+									<p className="mt-1 text-xs leading-relaxed text-slate-400">{exportError}</p>
+									<div className="mt-4 flex gap-2">
+										{hasPendingExportSave ? (
+											<Button type="button" onClick={handleRetrySaveExport} className="h-8 flex-1 rounded-[5px] bg-[#2563EB] text-xs font-semibold text-white hover:bg-[#2563EB]/92">{t("editor.actions.saveAgain", "Save Again")}</Button>
+										) : null}
+										<Button type="button" variant="outline" onClick={handleExportDropdownClose} className="h-8 flex-1 border-white/10 bg-white/5 text-xs text-slate-300 hover:bg-white/10">{t("common.actions.close", "Close")}</Button>
+									</div>
+								</div>
+							) : exportedFilePath ? (
+								<div className="rounded-2xl border border-white/10 bg-[#17171a] p-4 text-slate-200 shadow-2xl">
+									<p className="text-sm font-semibold text-white">{t("editor.exportStatus.complete", "Export complete")}</p>
+									<p className="mt-1 text-xs text-slate-400">{t("editor.exportStatus.savedSuccessfully", "Your file was saved successfully.")}</p>
+									<p className="mt-3 truncate text-xs text-slate-500">{exportedFilePath.split("/").pop()}</p>
+									<div className="mt-4 flex gap-2">
+										<Button type="button" onClick={revealExportedFile} className="h-8 flex-1 rounded-[5px] bg-[#2563EB] text-xs font-semibold text-white hover:bg-[#2563EB]/92">{t("editor.actions.showInFolder", "Show In Folder")}</Button>
+										<Button type="button" variant="outline" onClick={handleExportDropdownClose} className="h-8 flex-1 border-white/10 bg-white/5 text-xs text-slate-300 hover:bg-white/10">Done</Button>
+									</div>
+								</div>
+							) : (
+								<ExportSettingsMenu
+									exportFormat={exportFormat}
+									onExportFormatChange={setExportFormat}
+									exportQuality={exportQuality}
+									onExportQualityChange={setExportQuality}
+									gifFrameRate={gifFrameRate}
+									onGifFrameRateChange={setGifFrameRate}
+									gifLoop={gifLoop}
+									onGifLoopChange={setGifLoop}
+									gifSizePreset={gifSizePreset}
+									onGifSizePresetChange={setGifSizePreset}
+									gifOutputDimensions={gifOutputDimensions}
+									onExport={handleStartExportFromDropdown}
+									className="shadow-2xl"
+								/>
+							)}
+						</DropdownMenuContent>
+					</DropdownMenu>
 				</div>
 			</div>
 
@@ -2139,7 +2366,7 @@ export default function VideoEditor() {
 									<div className="flex w-11 flex-shrink-0 items-center justify-center pl-1">
 										<LayoutGroup id="preview-icon-rail">
 											<div className="flex flex-col items-center gap-3">
-												{EDITOR_SECTION_BUTTONS.map((section) => {
+												{editorSectionButtons.map((section) => {
 													const Icon = section.icon;
 													const isActive = activeEffectSection === section.id;
 													return (
@@ -2233,6 +2460,7 @@ export default function VideoEditor() {
 											cursorSmoothing={cursorSmoothing}
 											cursorMotionBlur={cursorMotionBlur}
 											cursorClickBounce={cursorClickBounce}
+											cursorClickBounceDuration={cursorClickBounceDuration}
 											cursorSway={cursorSway}
 											volume={previewVolume}
 										/>
@@ -2309,6 +2537,8 @@ export default function VideoEditor() {
 									onSelectAnnotation={handleSelectAnnotation}
 									aspectRatio={aspectRatio}
 									onAspectRatioChange={setAspectRatio}
+												onOpenCropEditor={handleOpenCropEditor}
+												isCropped={isCropped}
 								/>
 							</div>
 						</Panel>
@@ -2350,6 +2580,8 @@ export default function VideoEditor() {
 					onCursorMotionBlurChange={setCursorMotionBlur}
 					cursorClickBounce={cursorClickBounce}
 					onCursorClickBounceChange={setCursorClickBounce}
+					cursorClickBounceDuration={cursorClickBounceDuration}
+					onCursorClickBounceDurationChange={setCursorClickBounceDuration}
 					cursorSway={cursorSway}
 					onCursorSwayChange={setCursorSway}
 					borderRadius={borderRadius}
@@ -2364,7 +2596,6 @@ export default function VideoEditor() {
 					onCropChange={setCropRegion}
 					aspectRatio={aspectRatio}
 					onAspectRatioChange={setAspectRatio}
-					videoElement={videoPlaybackRef.current?.video || null}
 					selectedAnnotationId={selectedAnnotationId}
 					annotationRegions={annotationRegions}
 					onAnnotationContentChange={handleAnnotationContentChange}
@@ -2384,33 +2615,48 @@ export default function VideoEditor() {
 				</div>
 			</div>
 
+			{showCropModal ? (
+				<>
+					<div
+						className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+						onClick={handleCancelCropEditor}
+					/>
+					<div className="fixed left-1/2 top-1/2 z-[60] max-h-[90vh] w-[90vw] max-w-5xl -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-2xl border border-white/10 bg-[#09090b] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+						<div className="mb-6 flex items-center justify-between">
+							<div>
+								<span className="text-xl font-bold text-slate-200">{t("settings.crop.title")}</span>
+								<p className="mt-2 text-sm text-slate-400">{t("settings.crop.instruction")}</p>
+							</div>
+							<Button
+								variant="ghost"
+								size="icon"
+								onClick={handleCancelCropEditor}
+								className="text-slate-400 hover:bg-white/10 hover:text-white"
+							>
+								<X className="h-5 w-5" />
+							</Button>
+						</div>
+						<CropControl
+							videoElement={videoPlaybackRef.current?.video || null}
+							cropRegion={cropRegion}
+							onCropChange={setCropRegion}
+							aspectRatio={aspectRatio}
+						/>
+						<div className="mt-6 flex justify-end">
+							<Button
+								onClick={handleCloseCropEditor}
+								size="lg"
+								className="bg-[#2563EB] text-white hover:bg-[#2563EB]/90"
+							>
+								{t("common.actions.done")}
+							</Button>
+						</div>
+					</div>
+				</>
+			) : null}
+
 			<Toaster theme="dark" className="pointer-events-auto" />
 
-			<ExportDialog
-				isOpen={showExportDialog}
-				onClose={handleExportDialogClose}
-				progress={exportProgress}
-				isExporting={isExporting}
-				error={exportError}
-				onCancel={handleCancelExport}
-				onRetrySave={handleRetrySaveExport}
-				canRetrySave={hasPendingExportSave}
-				exportFormat={exportFormat}
-				exportedFilePath={exportedFilePath}
-				exportQuality={exportQuality}
-				onExportQualityChange={setExportQuality}
-				onExportFormatChange={setExportFormat}
-				gifFrameRate={gifFrameRate}
-				onGifFrameRateChange={setGifFrameRate}
-				gifLoop={gifLoop}
-				onGifLoopChange={setGifLoop}
-				gifSizePreset={gifSizePreset}
-				onGifSizePresetChange={setGifSizePreset}
-				gifOutputDimensions={gifOutputDimensions}
-				onLoadProject={handleLoadProject}
-				onSaveProject={handleSaveProject}
-				onStartExport={handleStartExportFromDialog}
-			/>
 		</div>
 	);
 }

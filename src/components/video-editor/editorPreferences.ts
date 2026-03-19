@@ -13,10 +13,10 @@ type PersistedEditorControls = Pick<
 	| "cursorSmoothing"
 	| "cursorMotionBlur"
 	| "cursorClickBounce"
+	| "cursorClickBounceDuration"
 	| "cursorSway"
 	| "borderRadius"
 	| "padding"
-	| "cropRegion"
 	| "webcam"
 	| "aspectRatio"
 	| "exportQuality"
@@ -50,10 +50,10 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
 	cursorSmoothing: DEFAULT_EDITOR_CONTROLS.cursorSmoothing,
 	cursorMotionBlur: DEFAULT_EDITOR_CONTROLS.cursorMotionBlur,
 	cursorClickBounce: DEFAULT_EDITOR_CONTROLS.cursorClickBounce,
+	cursorClickBounceDuration: DEFAULT_EDITOR_CONTROLS.cursorClickBounceDuration,
 	cursorSway: DEFAULT_EDITOR_CONTROLS.cursorSway,
 	borderRadius: DEFAULT_EDITOR_CONTROLS.borderRadius,
 	padding: DEFAULT_EDITOR_CONTROLS.padding,
-	cropRegion: DEFAULT_EDITOR_CONTROLS.cropRegion,
 	webcam: DEFAULT_EDITOR_CONTROLS.webcam,
 	aspectRatio: DEFAULT_EDITOR_CONTROLS.aspectRatio,
 	exportQuality: DEFAULT_EDITOR_CONTROLS.exportQuality,
@@ -77,41 +77,6 @@ function normalizePositiveIntegerString(value: unknown, fallback: string): strin
 	}
 
 	return String(parsed);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-	return typeof value === "number" && Number.isFinite(value);
-}
-
-function clamp(value: number, min: number, max: number): number {
-	return Math.min(max, Math.max(min, value));
-}
-
-function normalizeCropRegion(
-	value: unknown,
-	fallback: EditorPreferences["cropRegion"],
-): EditorPreferences["cropRegion"] {
-	if (!value || typeof value !== "object") {
-		return fallback;
-	}
-
-	const raw = value as Partial<EditorPreferences["cropRegion"]>;
-	const x = isFiniteNumber(raw.x) && raw.x >= 0 && raw.x < 1 ? raw.x : fallback.x;
-	const y = isFiniteNumber(raw.y) && raw.y >= 0 && raw.y < 1 ? raw.y : fallback.y;
-	const maxWidth = 1 - x;
-	const maxHeight = 1 - y;
-	const fallbackWidth = clamp(fallback.width, 0.01, maxWidth);
-	const fallbackHeight = clamp(fallback.height, 0.01, maxHeight);
-	const width =
-		isFiniteNumber(raw.width) && raw.width >= 0.01 && raw.width <= maxWidth
-			? raw.width
-			: fallbackWidth;
-	const height =
-		isFiniteNumber(raw.height) && raw.height >= 0.01 && raw.height <= maxHeight
-			? raw.height
-			: fallbackHeight;
-
-	return { x, y, width, height };
 }
 
 function normalizeCustomWallpapers(value: unknown, fallback: string[]): string[] {
@@ -140,10 +105,11 @@ function normalizeEditorControls(
 		cursorSmoothing: raw.cursorSmoothing ?? fallback.cursorSmoothing,
 		cursorMotionBlur: raw.cursorMotionBlur ?? fallback.cursorMotionBlur,
 		cursorClickBounce: raw.cursorClickBounce ?? fallback.cursorClickBounce,
+		cursorClickBounceDuration:
+			raw.cursorClickBounceDuration ?? fallback.cursorClickBounceDuration,
 		cursorSway: raw.cursorSway ?? fallback.cursorSway,
 		borderRadius: raw.borderRadius ?? fallback.borderRadius,
 		padding: raw.padding ?? fallback.padding,
-		cropRegion: normalizeCropRegion(raw.cropRegion, fallback.cropRegion),
 		webcam: raw.webcam ?? fallback.webcam,
 		aspectRatio: raw.aspectRatio ?? fallback.aspectRatio,
 		exportQuality: raw.exportQuality ?? fallback.exportQuality,
@@ -167,10 +133,10 @@ function normalizeEditorControls(
 		cursorSmoothing: normalized.cursorSmoothing,
 		cursorMotionBlur: normalized.cursorMotionBlur,
 		cursorClickBounce: normalized.cursorClickBounce,
+		cursorClickBounceDuration: normalized.cursorClickBounceDuration,
 		cursorSway: normalized.cursorSway,
 		borderRadius: normalized.borderRadius,
 		padding: normalized.padding,
-		cropRegion: normalized.cropRegion,
 		webcam: normalized.webcam,
 		aspectRatio: normalized.aspectRatio,
 		exportQuality: normalized.exportQuality,

@@ -66,6 +66,7 @@ interface FrameRenderConfig {
   cursorSmoothing?: number;
   cursorMotionBlur?: number;
   cursorClickBounce?: number;
+  cursorClickBounceDuration?: number;
   cursorSway?: number;
 }
 
@@ -187,6 +188,8 @@ export class FrameRenderer {
         motionBlur: this.config.cursorMotionBlur ?? 0,
         clickBounce:
           this.config.cursorClickBounce ?? DEFAULT_CURSOR_CONFIG.clickBounce,
+        clickBounceDuration:
+          this.config.cursorClickBounceDuration ?? DEFAULT_CURSOR_CONFIG.clickBounceDuration,
         sway: this.config.cursorSway ?? DEFAULT_CURSOR_CONFIG.sway,
       });
     }
