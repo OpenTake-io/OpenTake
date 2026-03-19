@@ -385,7 +385,7 @@ function TimelineAxis({
 
 	return (
 		<div
-			className="h-8 bg-[#09090b] border-b border-white/5 relative overflow-hidden select-none"
+      className="h-8 bg-[#161619] border-b border-white/10 relative overflow-hidden select-none"
 			style={{
 				[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth}px`,
 			}}
@@ -513,7 +513,7 @@ function Timeline({
 		<div
 			ref={setRefs}
 			style={style}
-			className="select-none bg-[#09090b] min-h-[140px] relative cursor-pointer group"
+      className="select-none bg-[#17171a] h-full min-h-0 relative cursor-pointer group flex flex-col"
 			onClick={handleTimelineClick}
 		>
 			<div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px)] bg-[length:20px_100%] pointer-events-none" />
@@ -526,91 +526,93 @@ function Timeline({
 				keyframes={keyframes}
 			/>
 
-			<Row id={ZOOM_ROW_ID} isEmpty={zoomItems.length === 0} hint="Press Z to add zoom">
-				{zoomItems.map((item) => (
-					<Item
-						id={item.id}
-						key={item.id}
-						rowId={item.rowId}
-						span={item.span}
-						isSelected={item.id === selectedZoomId}
-						onSelect={() => onSelectZoom?.(item.id)}
-						zoomDepth={item.zoomDepth}
-						variant="zoom"
-					>
-						{item.label}
-					</Item>
-				))}
-			</Row>
+      <div className="relative z-10 flex flex-1 min-h-0 flex-col">
+        <Row id={ZOOM_ROW_ID} isEmpty={zoomItems.length === 0} hint="Press Z to add zoom">
+          {zoomItems.map((item) => (
+            <Item
+              id={item.id}
+              key={item.id}
+              rowId={item.rowId}
+              span={item.span}
+              isSelected={item.id === selectedZoomId}
+              onSelect={() => onSelectZoom?.(item.id)}
+              zoomDepth={item.zoomDepth}
+              variant="zoom"
+            >
+              {item.label}
+            </Item>
+          ))}
+        </Row>
 
-			<Row id={TRIM_ROW_ID} isEmpty={trimItems.length === 0} hint="Press T to add trim">
-				{trimItems.map((item) => (
-					<Item
-						id={item.id}
-						key={item.id}
-						rowId={item.rowId}
-						span={item.span}
-						isSelected={item.id === selectedTrimId}
-						onSelect={() => onSelectTrim?.(item.id)}
-						variant="trim"
-					>
-						{item.label}
-					</Item>
-				))}
-			</Row>
+        <Row id={TRIM_ROW_ID} isEmpty={trimItems.length === 0} hint="Press T to add trim">
+          {trimItems.map((item) => (
+            <Item
+              id={item.id}
+              key={item.id}
+              rowId={item.rowId}
+              span={item.span}
+              isSelected={item.id === selectedTrimId}
+              onSelect={() => onSelectTrim?.(item.id)}
+              variant="trim"
+            >
+              {item.label}
+            </Item>
+          ))}
+        </Row>
 
-			<Row
-				id={ANNOTATION_ROW_ID}
-				isEmpty={annotationItems.length === 0}
-				hint="Press A to add annotation"
-			>
-				{annotationItems.map((item) => (
-					<Item
-						id={item.id}
-						key={item.id}
-						rowId={item.rowId}
-						span={item.span}
-						isSelected={item.id === selectedAnnotationId}
-						onSelect={() => onSelectAnnotation?.(item.id)}
-						variant="annotation"
-					>
-						{item.label}
-					</Item>
-				))}
-			</Row>
+        <Row
+          id={ANNOTATION_ROW_ID}
+          isEmpty={annotationItems.length === 0}
+          hint="Press A to add annotation"
+        >
+          {annotationItems.map((item) => (
+            <Item
+              id={item.id}
+              key={item.id}
+              rowId={item.rowId}
+              span={item.span}
+              isSelected={item.id === selectedAnnotationId}
+              onSelect={() => onSelectAnnotation?.(item.id)}
+              variant="annotation"
+            >
+              {item.label}
+            </Item>
+          ))}
+        </Row>
 
-      <Row id={SPEED_ROW_ID} isEmpty={speedItems.length === 0} hint="Press S to add speed">
-        {speedItems.map((item) => (
-          <Item
-            id={item.id}
-            key={item.id}
-            rowId={item.rowId}
-            span={item.span}
-            isSelected={item.id === selectedSpeedId}
-            onSelect={() => onSelectSpeed?.(item.id)}
-            variant="speed"
-            speedValue={item.speedValue}
-          >
-            {item.label}
-          </Item>
-        ))}
-      </Row>
+        <Row id={SPEED_ROW_ID} isEmpty={speedItems.length === 0} hint="Press S to add speed">
+          {speedItems.map((item) => (
+            <Item
+              id={item.id}
+              key={item.id}
+              rowId={item.rowId}
+              span={item.span}
+              isSelected={item.id === selectedSpeedId}
+              onSelect={() => onSelectSpeed?.(item.id)}
+              variant="speed"
+              speedValue={item.speedValue}
+            >
+              {item.label}
+            </Item>
+          ))}
+        </Row>
 
-      <Row id={AUDIO_ROW_ID} isEmpty={audioItems.length === 0} hint="Click music icon to add audio">
-        {audioItems.map((item) => (
-          <Item
-            id={item.id}
-            key={item.id}
-            rowId={item.rowId}
-            span={item.span}
-            isSelected={item.id === selectedAudioId}
-            onSelect={() => onSelectAudio?.(item.id)}
-            variant="audio"
-          >
-            {item.label}
-          </Item>
-        ))}
-      </Row>
+        <Row id={AUDIO_ROW_ID} isEmpty={audioItems.length === 0} hint="Click music icon to add audio">
+          {audioItems.map((item) => (
+            <Item
+              id={item.id}
+              key={item.id}
+              rowId={item.rowId}
+              span={item.span}
+              isSelected={item.id === selectedAudioId}
+              onSelect={() => onSelectAudio?.(item.id)}
+              variant="audio"
+            >
+              {item.label}
+            </Item>
+          ))}
+        </Row>
+      </div>
     </div>
   );
 }
@@ -674,6 +676,10 @@ export default function TimelineEditor({
   });
   const timelineContainerRef = useRef<HTMLDivElement>(null);
   const { shortcuts: keyShortcuts, isMac } = useShortcuts();
+
+  useEffect(() => {
+    setRange(createInitialRange(totalMs));
+  }, [totalMs]);
 
   useEffect(() => {
     if (aspectRatio === 'native') {
@@ -1340,7 +1346,7 @@ export default function TimelineEditor({
 
   if (!videoDuration || videoDuration === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center rounded-lg bg-[#09090b] gap-3">
+      <div className="flex-1 flex flex-col items-center justify-center rounded-lg bg-[#17171a] gap-3">
         <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
           <Plus className="w-6 h-6 text-slate-600" />
         </div>
@@ -1353,8 +1359,8 @@ export default function TimelineEditor({
   }
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col bg-[#09090b] overflow-auto">
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-white/5 bg-[#09090b]">
+    <div className="flex-1 min-h-0 flex flex-col bg-[#17171a] overflow-auto">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-[#161619]">
         <div className="flex items-center gap-1">
           <Button
             onClick={handleAddZoom}
@@ -1423,7 +1429,7 @@ export default function TimelineEditor({
                 <ChevronDown className="w-3 h-3" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-[#1a1a1a] border-white/10">
+            <DropdownMenuContent align="end" className="bg-[#1a1a1c] border-white/10">
               {ASPECT_RATIOS.map((ratio) => (
                 <DropdownMenuItem
                   key={ratio}
@@ -1489,7 +1495,7 @@ export default function TimelineEditor({
       </div>
       <div
         ref={timelineContainerRef}
-        className="flex-1 min-h-0 overflow-auto bg-[#09090b] relative"
+        className="flex-1 min-h-0 overflow-auto bg-[#17171a] relative"
         onClick={() => setSelectedKeyframeId(null)}
         onWheel={handleTimelineWheel}
       >
