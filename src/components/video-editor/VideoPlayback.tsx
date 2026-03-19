@@ -137,6 +137,7 @@ interface VideoPlaybackProps {
   cursorMotionBlur?: number;
   cursorClickBounce?: number;
   cursorSway?: number;
+  volume?: number;
 }
 
 export interface VideoPlaybackRef {
@@ -190,6 +191,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       cursorMotionBlur = DEFAULT_CURSOR_MOTION_BLUR,
       cursorClickBounce = DEFAULT_CURSOR_CLICK_BOUNCE,
       cursorSway = DEFAULT_CURSOR_SWAY,
+      volume = 1,
     },
     ref,
   ) => {
@@ -384,6 +386,15 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         applyWebcamBubbleLayout(animationStateRef.current.appliedScale || 1);
       }
     }, [updateOverlayForRegion, cropRegion, borderRadius, padding, applyWebcamBubbleLayout]);
+
+    useEffect(() => {
+      const video = videoRef.current;
+      if (!video) return;
+
+      const nextVolume = Math.max(0, Math.min(1, volume));
+      video.volume = nextVolume;
+      video.muted = nextVolume <= 0.001;
+    }, [volume, videoPath]);
 
     useEffect(() => {
       layoutVideoContentRef.current = layoutVideoContent;

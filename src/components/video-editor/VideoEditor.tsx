@@ -1,8 +1,10 @@
 import type { Span } from "dnd-timeline";
-import { FolderOpen, Languages } from "lucide-react";
+import { Camera, Download, FolderOpen, Languages, MousePointer2, Save, Sparkles } from "lucide-react";
+import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { useI18n } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
@@ -35,9 +37,10 @@ import {
 	toFileUrl,
 	validateProjectData,
 } from "./projectPersistence";
-import { SettingsPanel } from "./SettingsPanel";
+import { type EditorEffectSection, SettingsPanel } from "./SettingsPanel";
 import TimelineEditor from "./timeline/TimelineEditor";
 import {
+	detectInteractionCandidates,
 	normalizeCursorTelemetry,
 } from "./timeline/zoomSuggestionUtils";
 import {
@@ -70,6 +73,16 @@ import {
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
 
 const LOOP_CURSOR_END_WINDOW_MS = 670;
+
+const EDITOR_SECTION_BUTTONS: Array<{
+	id: EditorEffectSection;
+	label: string;
+	icon: React.ComponentType<{ className?: string }>;
+}> = [
+	{ id: "scene", label: "Scene", icon: Sparkles },
+	{ id: "cursor", label: "Cursor", icon: MousePointer2 },
+	{ id: "webcam", label: "Webcam", icon: Camera },
+];
 
 type EditorHistorySnapshot = {
 	zoomRegions: ZoomRegion[];
@@ -160,7 +173,9 @@ export default function VideoEditor() {
 	const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
 	const [exportError, setExportError] = useState<string | null>(null);
 	const [showExportDialog, setShowExportDialog] = useState(false);
+	const [previewVolume, setPreviewVolume] = useState(1);
 	const [aspectRatio, setAspectRatio] = useState<AspectRatio>(initialEditorPreferences.aspectRatio);
+	const [activeEffectSection, setActiveEffectSection] = useState<EditorEffectSection>("scene");
 	const [exportQuality, setExportQuality] = useState<ExportQuality>(
 		initialEditorPreferences.exportQuality,
 	);
@@ -188,6 +203,7 @@ export default function VideoEditor() {
 	const nextAnnotationIdRef = useRef(1);
 	const nextAnnotationZIndexRef = useRef(1); // Track z-index for stacking order
 	const exporterRef = useRef<VideoExporter | null>(null);
+	const autoSuggestedVideoPathRef = useRef<string | null>(null);
 	const historyPastRef = useRef<EditorHistorySnapshot[]>([]);
 	const historyFutureRef = useRef<EditorHistorySnapshot[]>([]);
 	const historyCurrentRef = useRef<EditorHistorySnapshot | null>(null);
@@ -208,6 +224,23 @@ export default function VideoEditor() {
 			selectedAudioId: snapshot.selectedAudioId,
 		};
 	}, []);
+
+	const gifOutputDimensions = useMemo(
+		() =>
+			calculateOutputDimensions(
+				videoPlaybackRef.current?.video?.videoWidth || 1920,
+				videoPlaybackRef.current?.video?.videoHeight || 1080,
+				gifSizePreset,
+				GIF_SIZE_PRESETS,
+			),
+		[gifSizePreset, videoPath],
+	);
+
+	const projectDisplayName = useMemo(() => {
+		const fileName = currentProjectPath?.split(/[\\/]/).pop() ?? "";
+		const withoutExtension = fileName.replace(/\.recordly$/i, "").replace(/\.[^.]+$/, "");
+		return withoutExtension || "Untitled";
+	}, [currentProjectPath]);
 
 	const buildHistorySnapshot = useCallback((): EditorHistorySnapshot => {
 		return {
@@ -907,6 +940,84 @@ export default function VideoEditor() {
 
 		return [...zoomRegions.filter((region) => region.id !== loopEndRegion.id), loopEndRegion];
 	}, [loopCursor, zoomRegions, displayedTimelineWindow, connectZooms]);
+
+	useEffect(() => {
+		if (
+			!videoPath ||
+			duration <= 0 ||
+			zoomRegions.length > 0 ||
+			normalizedCursorTelemetry.length < 2
+		) {
+			return;
+		}
+
+		if (autoSuggestedVideoPathRef.current === videoPath) {
+			return;
+		}
+
+		const totalMs = Math.max(0, Math.round(duration * 1000));
+		if (totalMs <= 0) {
+			return;
+		}
+
+		const candidates = detectInteractionCandidates(normalizedCursorTelemetry);
+		if (candidates.length === 0) {
+			autoSuggestedVideoPathRef.current = videoPath;
+			return;
+		}
+
+		const DEFAULT_DURATION_MS = 1100;
+		const MIN_SPACING_MS = 1800;
+		const sortedCandidates = [...candidates].sort((a, b) => b.strength - a.strength);
+		const acceptedCenters: number[] = [];
+
+		setZoomRegions((prev) => {
+			if (prev.length > 0) {
+				return prev;
+			}
+
+			const reservedSpans: Array<{ start: number; end: number }> = [];
+			const additions: ZoomRegion[] = [];
+			let nextId = nextZoomIdRef.current;
+
+			sortedCandidates.forEach((candidate) => {
+				const tooCloseToAccepted = acceptedCenters.some(
+					(center) => Math.abs(center - candidate.centerTimeMs) < MIN_SPACING_MS,
+				);
+				if (tooCloseToAccepted) {
+					return;
+				}
+
+				const centeredStart = Math.round(candidate.centerTimeMs - DEFAULT_DURATION_MS / 2);
+				const startMs = Math.max(0, Math.min(centeredStart, totalMs - DEFAULT_DURATION_MS));
+				const endMs = Math.min(totalMs, startMs + DEFAULT_DURATION_MS);
+
+				const hasOverlap = reservedSpans.some((span) => endMs > span.start && startMs < span.end);
+				if (hasOverlap) {
+					return;
+				}
+
+				additions.push({
+					id: `zoom-${nextId++}`,
+					startMs,
+					endMs,
+					depth: DEFAULT_ZOOM_DEPTH,
+					focus: clampFocusToDepth(candidate.focus, DEFAULT_ZOOM_DEPTH),
+				});
+				reservedSpans.push({ start: startMs, end: endMs });
+				acceptedCenters.push(candidate.centerTimeMs);
+			});
+
+			if (additions.length === 0) {
+				return prev;
+			}
+
+			nextZoomIdRef.current = nextId;
+			return [...prev, ...additions];
+		});
+
+		autoSuggestedVideoPathRef.current = videoPath;
+	}, [videoPath, duration, normalizedCursorTelemetry, zoomRegions.length]);
 
 	// Initialize default wallpaper with resolved asset path
 	useEffect(() => {
@@ -1824,14 +1935,25 @@ export default function VideoEditor() {
 			setExportError("Save dialog canceled. Click Save Again to save without re-rendering.");
 			return;
 		}
+		setShowExportDialog(true);
+		setExportProgress(null);
+		setExportError(null);
+	}, [
+		videoPath,
+		hasPendingExportSave,
+	]);
 
+	const handleStartExportFromDialog = useCallback(() => {
 		const video = videoPlaybackRef.current?.video;
+		if (!videoPath) {
+			toast.error("No video loaded");
+			return;
+		}
 		if (!video) {
 			toast.error("Video not ready");
 			return;
 		}
 
-		// Build export settings from current state
 		const sourceWidth = video.videoWidth || 1920;
 		const sourceHeight = video.videoHeight || 1080;
 		const gifDimensions = calculateOutputDimensions(
@@ -1856,21 +1978,9 @@ export default function VideoEditor() {
 					: undefined,
 		};
 
-		setShowExportDialog(true);
 		setExportError(null);
-
-		// Start export immediately
 		handleExport(settings);
-	}, [
-		videoPath,
-		hasPendingExportSave,
-		exportFormat,
-		exportQuality,
-		gifFrameRate,
-		gifLoop,
-		gifSizePreset,
-		handleExport,
-	]);
+	}, [videoPath, exportFormat, exportQuality, gifFrameRate, gifLoop, gifSizePreset, handleExport]);
 
 	const handleCancelExport = useCallback(() => {
 		if (exporterRef.current) {
@@ -1886,6 +1996,8 @@ export default function VideoEditor() {
 
 	const handleExportDialogClose = useCallback(() => {
 		setShowExportDialog(false);
+		setExportProgress(null);
+		setExportError(null);
 		setExportedFilePath(undefined);
 	}, []);
 
@@ -1957,46 +2069,113 @@ export default function VideoEditor() {
 	}
 
 	return (
-		<div className="flex flex-col h-screen bg-[#09090b] text-slate-200 overflow-hidden selection:bg-[#2563EB]/30">
+		<div className="flex flex-col h-screen bg-[#111113] text-slate-200 overflow-hidden selection:bg-[#2563EB]/30">
 			<div
-				className="relative h-10 flex-shrink-0 bg-[#09090b]/80 backdrop-blur-md border-b border-white/5 flex items-center justify-center px-6 z-50"
+				className="relative h-11 flex-shrink-0 bg-[#151518]/88 backdrop-blur-md border-b border-white/10 flex items-center justify-center px-8 z-50"
 				style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
 			>
-				<span className="text-sm font-semibold tracking-tight text-white/90">Recordly</span>
+				<div className="flex items-baseline gap-1.5">
+					<span className="text-sm font-semibold tracking-tight text-white/90">{projectDisplayName}</span>
+					<span className="text-xs font-medium tracking-tight text-slate-500">.recordly</span>
+				</div>
 				<div
-					className="absolute right-4 flex items-center gap-1"
+					className="absolute left-[88px] flex items-center gap-2"
+					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+				>
+					<Button
+						type="button"
+						onClick={handleLoadProject}
+						className="inline-flex h-8 min-w-[96px] items-center justify-center gap-1.5 rounded-lg bg-white px-4 text-black transition-colors hover:bg-white/92"
+					>
+						<FolderOpen className="h-4 w-4" />
+						<span className="text-sm font-semibold tracking-tight">Load</span>
+					</Button>
+					<Button
+						type="button"
+						onClick={handleSaveProject}
+						className="inline-flex h-8 min-w-[96px] items-center justify-center gap-1.5 rounded-lg bg-white px-4 text-black transition-colors hover:bg-white/92"
+					>
+						<Save className="h-4 w-4" />
+						<span className="text-sm font-semibold tracking-tight">Save</span>
+					</Button>
+				</div>
+				<div
+					className="absolute right-5 flex items-center gap-2 pr-3"
 					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
 				>
 					<LanguageSwitcher />
 					<button
 						type="button"
 						onClick={() => void openRecordingsFolder()}
-						className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-white/90 transition hover:bg-white/8 hover:text-white cursor-pointer"
+						className="inline-flex h-7 items-center justify-center rounded-md px-2 text-white/90 transition hover:bg-white/8 hover:text-white cursor-pointer"
 						title={t("common.app.manageRecordings", "Open recordings folder")}
 						aria-label={t("common.app.manageRecordings", "Open recordings folder")}
 					>
 						<FolderOpen className="h-4 w-4" />
-						<span className="text-xs font-normal">
-							{t("common.app.manageRecordings", "Manage recordings")}
-						</span>
 					</button>
+					<Button
+						type="button"
+						onClick={handleOpenExportDialog}
+						className="inline-flex h-8 min-w-[112px] items-center justify-center gap-2 rounded-lg bg-[#2563EB] px-4.5 text-white transition-colors hover:bg-[#2563EB]/92"
+					>
+						<Download className="h-4 w-4" />
+						<span className="text-sm font-semibold tracking-tight">Export</span>
+					</Button>
 				</div>
 			</div>
 
-			<div className="flex-1 p-5 gap-4 flex min-h-0 relative">
+			<div className="relative flex min-h-0 flex-1 gap-3 p-4">
 				{/* Left Column - Video & Timeline */}
-				<div className="flex-[7] flex flex-col gap-3 min-w-0 h-full">
+				<div className="order-2 flex h-full min-w-0 flex-[7] flex-col gap-3">
 					<PanelGroup direction="vertical" className="gap-3">
 						{/* Top section: video preview and controls */}
-						<Panel defaultSize={70} minSize={40}>
-							<div className="w-full h-full flex flex-col items-center justify-center bg-black/40 rounded-2xl border border-white/5 shadow-2xl overflow-hidden">
+						<Panel defaultSize={67} minSize={40}>
+							<div className="relative flex h-full flex-col overflow-hidden">
 								{/* Video preview */}
 								<div
-									className="w-full flex justify-center items-center"
+									className="flex w-full min-h-0 flex-1 items-stretch"
 									style={{ flex: "1 1 auto", margin: "6px 0 0" }}
 								>
-									<div
-										className="relative"
+									<div className="flex w-11 flex-shrink-0 items-center justify-center pl-1">
+										<LayoutGroup id="preview-icon-rail">
+											<div className="flex flex-col items-center gap-3">
+												{EDITOR_SECTION_BUTTONS.map((section) => {
+													const Icon = section.icon;
+													const isActive = activeEffectSection === section.id;
+													return (
+														<motion.button
+															key={section.id}
+															type="button"
+															onClick={() => setActiveEffectSection(section.id)}
+															title={section.label}
+															className="group relative flex h-8 w-8 items-center justify-center text-white/75 outline-none transition-colors hover:text-white focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+															animate={{ scale: isActive ? 1.06 : 1, opacity: isActive ? 1 : 0.82 }}
+															transition={{ type: "spring", stiffness: 420, damping: 28 }}
+														>
+															<motion.span animate={{ color: isActive ? "#2563EB" : "rgba(255,255,255,0.75)" }} transition={{ duration: 0.16 }}>
+																<Icon className="h-4 w-4" />
+															</motion.span>
+															<AnimatePresence initial={false}>
+																{isActive ? (
+																	<motion.span
+																		layoutId="preview-active-dot"
+																		className="absolute -left-1 h-1.5 w-1.5 rounded-full bg-[#2563EB]"
+																		initial={{ opacity: 0, scale: 0.6 }}
+																		animate={{ opacity: 1, scale: 1 }}
+																		exit={{ opacity: 0, scale: 0.6 }}
+																		transition={{ type: "spring", stiffness: 500, damping: 32 }}
+																	/>
+																) : null}
+															</AnimatePresence>
+														</motion.button>
+													);
+												})}
+											</div>
+										</LayoutGroup>
+									</div>
+									<div className="flex min-w-0 flex-1 items-center justify-center pl-2 pr-1">
+										<div
+										className="relative overflow-hidden rounded-[30px]"
 										style={{
 											width: "auto",
 											height: "100%",
@@ -2055,7 +2234,9 @@ export default function VideoEditor() {
 											cursorMotionBlur={cursorMotionBlur}
 											cursorClickBounce={cursorClickBounce}
 											cursorSway={cursorSway}
+											volume={previewVolume}
 										/>
+										</div>
 									</div>
 								</div>
 								{/* Playback controls */}
@@ -2075,19 +2256,21 @@ export default function VideoEditor() {
 											duration={duration}
 											onTogglePlayPause={togglePlayPause}
 											onSeek={handleSeek}
+											volume={previewVolume}
+											onVolumeChange={setPreviewVolume}
 										/>
 									</div>
 								</div>
 							</div>
 						</Panel>
 
-						<PanelResizeHandle className="h-3 bg-[#09090b]/80 hover:bg-[#09090b] transition-colors rounded-full mx-4 flex items-center justify-center">
+						<PanelResizeHandle className="h-3 bg-transparent transition-colors mx-4 flex items-center justify-center">
 							<div className="w-8 h-1 bg-white/20 rounded-full"></div>
 						</PanelResizeHandle>
 
 						{/* Timeline section */}
-						<Panel defaultSize={30} minSize={20}>
-							<div className="h-full min-h-0 bg-[#09090b] rounded-2xl border border-white/5 shadow-lg overflow-auto flex flex-col">
+						<Panel defaultSize={33} minSize={20}>
+							<div className="h-full min-h-0 bg-[#17171a] rounded-2xl border border-white/10 shadow-lg overflow-auto flex flex-col">
 								<TimelineEditor
 									videoDuration={duration}
 									currentTime={currentTime}
@@ -2132,8 +2315,11 @@ export default function VideoEditor() {
 					</PanelGroup>
 				</div>
 
-				{/* Right section: settings panel */}
-				<SettingsPanel
+				{/* Left section: settings panel */}
+				<div className="order-1 flex">
+					<SettingsPanel
+					panelMode="editor"
+					activeEffectSection={activeEffectSection}
 					selected={wallpaper}
 					onWallpaperChange={setWallpaper}
 					selectedZoomDepth={
@@ -2179,23 +2365,6 @@ export default function VideoEditor() {
 					aspectRatio={aspectRatio}
 					onAspectRatioChange={setAspectRatio}
 					videoElement={videoPlaybackRef.current?.video || null}
-					exportQuality={exportQuality}
-					onExportQualityChange={setExportQuality}
-					exportFormat={exportFormat}
-					onExportFormatChange={setExportFormat}
-					gifFrameRate={gifFrameRate}
-					onGifFrameRateChange={setGifFrameRate}
-					gifLoop={gifLoop}
-					onGifLoopChange={setGifLoop}
-					gifSizePreset={gifSizePreset}
-					onGifSizePresetChange={setGifSizePreset}
-					gifOutputDimensions={calculateOutputDimensions(
-						videoPlaybackRef.current?.video?.videoWidth || 1920,
-						videoPlaybackRef.current?.video?.videoHeight || 1080,
-						gifSizePreset,
-						GIF_SIZE_PRESETS,
-					)}
-					onExport={handleOpenExportDialog}
 					selectedAnnotationId={selectedAnnotationId}
 					annotationRegions={annotationRegions}
 					onAnnotationContentChange={handleAnnotationContentChange}
@@ -2203,8 +2372,6 @@ export default function VideoEditor() {
 					onAnnotationStyleChange={handleAnnotationStyleChange}
 					onAnnotationFigureDataChange={handleAnnotationFigureDataChange}
 					onAnnotationDelete={handleAnnotationDelete}
-					onSaveProject={handleSaveProject}
-					onLoadProject={handleLoadProject}
 					selectedSpeedId={selectedSpeedId}
 					selectedSpeedValue={
 						selectedSpeedId
@@ -2213,7 +2380,8 @@ export default function VideoEditor() {
 					}
 					onSpeedChange={handleSpeedChange}
 					onSpeedDelete={handleSpeedDelete}
-				/>
+					/>
+				</div>
 			</div>
 
 			<Toaster theme="dark" className="pointer-events-auto" />
@@ -2229,6 +2397,19 @@ export default function VideoEditor() {
 				canRetrySave={hasPendingExportSave}
 				exportFormat={exportFormat}
 				exportedFilePath={exportedFilePath}
+				exportQuality={exportQuality}
+				onExportQualityChange={setExportQuality}
+				onExportFormatChange={setExportFormat}
+				gifFrameRate={gifFrameRate}
+				onGifFrameRateChange={setGifFrameRate}
+				gifLoop={gifLoop}
+				onGifLoopChange={setGifLoop}
+				gifSizePreset={gifSizePreset}
+				onGifSizePresetChange={setGifSizePreset}
+				gifOutputDimensions={gifOutputDimensions}
+				onLoadProject={handleLoadProject}
+				onSaveProject={handleSaveProject}
+				onStartExport={handleStartExportFromDialog}
 			/>
 		</div>
 	);

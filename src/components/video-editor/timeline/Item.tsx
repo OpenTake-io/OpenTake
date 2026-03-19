@@ -84,8 +84,8 @@ export default function Item({
 		[span.start, span.end],
 	);
 
-	const MIN_ITEM_PX = 6;
-	const safeItemStyle = { ...itemStyle, minWidth: MIN_ITEM_PX };
+  const MIN_ITEM_PX = 6;
+  const safeItemStyle = { ...itemStyle, minWidth: MIN_ITEM_PX, height: "100%" };
 
   return (
     <div
@@ -94,16 +94,16 @@ export default function Item({
       {...listeners}
       {...attributes}
       onPointerDownCapture={() => onSelect?.()}
-      className="group"
+      className="group h-full"
     >
-      <div style={{ ...itemContentStyle, minWidth: 24 }}>
+      <div className="h-full" style={{ ...itemContentStyle, minWidth: 24, height: "100%" }}>
         <div
           className={cn(
             glassClass,
             "w-full h-full overflow-hidden flex items-center justify-center gap-1.5 cursor-grab active:cursor-grabbing relative",
             isSelected && glassStyles.selected
           )}
-          style={{ height: 40, color: '#fff', minWidth: 24 }}
+          style={{ height: "100%", minHeight: 22, color: '#fff', minWidth: 24 }}
           onClick={(event) => {
             event.stopPropagation();
             onSelect?.();
