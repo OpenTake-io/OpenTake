@@ -14,7 +14,7 @@
 		"folderPath": "路径：/{{name}}/",
 		"openVideoFile": "打开视频文件",
 		"openProject": "打开项目",
-		"hideHudFromVideo": "在录制中隐藏 HUD",
+		"hideHudFromVideo": "从录制中隐藏 HUD",
 		"showHudInVideo": "在录制中显示 HUD",
 		"hideHud": "隐藏 HUD",
 		"closeApp": "关闭应用",
