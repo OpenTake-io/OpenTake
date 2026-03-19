@@ -1,4 +1,4 @@
-import { Download, Film, FolderOpen, Image, Save } from "lucide-react";
+import { Download, Film, Image } from "lucide-react";
 import { LayoutGroup, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -24,8 +24,6 @@ interface ExportSettingsMenuProps {
 	gifSizePreset: GifSizePreset;
 	onGifSizePresetChange?: (preset: GifSizePreset) => void;
 	gifOutputDimensions: { width: number; height: number };
-	onLoadProject?: () => void;
-	onSaveProject?: () => void;
 	onExport?: () => void;
 	className?: string;
 }
@@ -42,8 +40,6 @@ export function ExportSettingsMenu({
 	gifSizePreset,
 	onGifSizePresetChange,
 	gifOutputDimensions,
-	onLoadProject,
-	onSaveProject,
 	onExport,
 	className,
 }: ExportSettingsMenuProps) {
@@ -53,7 +49,7 @@ export function ExportSettingsMenu({
 		<div className={cn("w-full rounded-2xl border border-white/10 bg-[#17171a] p-3 text-slate-200", className)}>
 			<div className="mb-2 flex items-center justify-between">
 				<span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-					Export
+					{tSettings("export.title", "Export")}
 				</span>
 			</div>
 
@@ -166,7 +162,11 @@ export function ExportSettingsMenu({
 												<motion.span layoutId="header-gif-size-pill" className="absolute inset-0 rounded-lg bg-white" transition={{ type: "spring", stiffness: 420, damping: 34 }} />
 											) : null}
 											<span className={cn("relative z-10", isActive ? "text-black" : "text-slate-400 hover:text-slate-200")}>
-												{key === "original" ? "Orig" : key.charAt(0).toUpperCase() + key.slice(1, 3)}
+												{key === "original"
+													? tSettings("export.sizePresetOriginalShort", "Orig")
+													: key === "medium"
+														? tSettings("export.sizePresetMediumShort", "Med")
+														: tSettings("export.sizePresetLargeShort", "Lar")}
 											</span>
 										</button>
 									);
@@ -185,17 +185,6 @@ export function ExportSettingsMenu({
 					</div>
 				</div>
 			)}
-
-			<div className="mb-2 grid grid-cols-2 gap-2">
-				<Button type="button" variant="outline" onClick={onLoadProject} className="h-8 gap-1.5 border-white/10 bg-white/5 text-[10px] font-medium text-slate-300 hover:bg-white/10">
-					<FolderOpen className="h-3.5 w-3.5" />
-					{tSettings("export.loadProject")}
-				</Button>
-				<Button type="button" variant="outline" onClick={onSaveProject} className="h-8 gap-1.5 border-white/10 bg-white/5 text-[10px] font-medium text-slate-300 hover:bg-white/10">
-					<Save className="h-3.5 w-3.5" />
-					{tSettings("export.saveProject")}
-				</Button>
-			</div>
 
 			<Button type="button" size="lg" onClick={onExport} className="h-11 w-full gap-2 rounded-lg bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-200 hover:bg-[#2563EB]/90">
 				<Download className="h-4 w-4" />

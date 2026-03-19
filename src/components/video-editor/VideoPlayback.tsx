@@ -64,6 +64,7 @@ import {
 import { AnnotationOverlay } from "./AnnotationOverlay";
 import {
   DEFAULT_CURSOR_CLICK_BOUNCE,
+  DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
   DEFAULT_CURSOR_MOTION_BLUR,
   DEFAULT_CURSOR_SIZE,
   DEFAULT_CURSOR_SMOOTHING,
@@ -136,6 +137,7 @@ interface VideoPlaybackProps {
   cursorSmoothing?: number;
   cursorMotionBlur?: number;
   cursorClickBounce?: number;
+  cursorClickBounceDuration?: number;
   cursorSway?: number;
   volume?: number;
 }
@@ -190,6 +192,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       cursorSmoothing = DEFAULT_CURSOR_SMOOTHING,
       cursorMotionBlur = DEFAULT_CURSOR_MOTION_BLUR,
       cursorClickBounce = DEFAULT_CURSOR_CLICK_BOUNCE,
+      cursorClickBounceDuration = DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
       cursorSway = DEFAULT_CURSOR_SWAY,
       volume = 1,
     },
@@ -245,6 +248,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const cursorSmoothingRef = useRef(cursorSmoothing);
     const cursorMotionBlurRef = useRef(cursorMotionBlur);
     const cursorClickBounceRef = useRef(cursorClickBounce);
+    const cursorClickBounceDurationRef = useRef(cursorClickBounceDuration);
     const cursorSwayRef = useRef(cursorSway);
     const motionBlurStateRef = useRef<MotionBlurState>(createMotionBlurState());
 
@@ -605,6 +609,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     }, [cursorClickBounce]);
 
     useEffect(() => {
+      cursorClickBounceDurationRef.current = cursorClickBounceDuration;
+    }, [cursorClickBounceDuration]);
+
+    useEffect(() => {
       cursorSwayRef.current = cursorSway;
     }, [cursorSway]);
 
@@ -814,6 +822,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
             smoothingFactor: cursorSmoothingRef.current,
             motionBlur: cursorMotionBlurRef.current,
             clickBounce: cursorClickBounceRef.current,
+            clickBounceDuration: cursorClickBounceDurationRef.current,
             sway: cursorSwayRef.current,
           });
           cursorOverlayRef.current = cursorOverlay;
@@ -1164,6 +1173,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       overlay.setSmoothingFactor(cursorSmoothing);
       overlay.setMotionBlur(cursorMotionBlur);
       overlay.setClickBounce(cursorClickBounce);
+      overlay.setClickBounceDuration(cursorClickBounceDuration);
       overlay.setSway(cursorSway);
       overlay.reset();
     }, [
@@ -1171,6 +1181,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       cursorSmoothing,
       cursorMotionBlur,
       cursorClickBounce,
+      cursorClickBounceDuration,
       cursorSway,
     ]);
 

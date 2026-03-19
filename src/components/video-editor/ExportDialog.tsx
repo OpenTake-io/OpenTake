@@ -29,8 +29,6 @@ interface ExportDialogProps {
   gifSizePreset?: GifSizePreset;
   onGifSizePresetChange?: (preset: GifSizePreset) => void;
   gifOutputDimensions?: { width: number; height: number };
-  onLoadProject?: () => void;
-  onSaveProject?: () => void;
   onStartExport?: () => void;
 }
 
@@ -48,15 +46,13 @@ export function ExportDialog({
   exportQuality = 'good',
   onExportQualityChange,
   onExportFormatChange,
-  gifFrameRate = '10',
+  gifFrameRate = 15,
   onGifFrameRateChange,
   gifLoop = true,
   onGifLoopChange,
   gifSizePreset = 'medium',
   onGifSizePresetChange,
   gifOutputDimensions = { width: 1280, height: 720 },
-  onLoadProject,
-  onSaveProject,
   onStartExport,
 }: ExportDialogProps) {
   const t = useScopedT('dialogs');
@@ -175,8 +171,6 @@ export function ExportDialog({
               gifSizePreset={gifSizePreset}
               onGifSizePresetChange={onGifSizePresetChange}
               gifOutputDimensions={gifOutputDimensions}
-              onLoadProject={onLoadProject}
-              onSaveProject={onSaveProject}
               onExport={onStartExport}
               className="border-white/8 bg-[#121216] p-0 shadow-none"
             />

@@ -38,6 +38,7 @@ interface VideoExporterConfig extends ExportConfig {
 	cursorSmoothing?: number;
 	cursorMotionBlur?: number;
 	cursorClickBounce?: number;
+	cursorClickBounceDuration?: number;
 	cursorSway?: number;
 	audioRegions?: AudioRegion[];
 	previewWidth?: number;
@@ -103,6 +104,7 @@ export class VideoExporter {
 				cursorSmoothing: this.config.cursorSmoothing,
 				cursorMotionBlur: this.config.cursorMotionBlur,
 				cursorClickBounce: this.config.cursorClickBounce,
+				cursorClickBounceDuration: this.config.cursorClickBounceDuration,
 				cursorSway: this.config.cursorSway,
 			});
 			await this.renderer.initialize();

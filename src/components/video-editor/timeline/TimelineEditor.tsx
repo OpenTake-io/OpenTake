@@ -7,10 +7,11 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Scissors, ZoomIn, MessageSquare, ChevronDown, Check, Gauge, WandSparkles, Music } from "lucide-react";
+import { Plus, Scissors, ZoomIn, MessageSquare, ChevronDown, Check, Gauge, WandSparkles, Music, Crop } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { v4 as uuidv4 } from 'uuid';
+import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
@@ -73,6 +74,8 @@ interface TimelineEditorProps {
   onSelectAudio?: (id: string | null) => void;
   aspectRatio: AspectRatio;
   onAspectRatioChange: (aspectRatio: AspectRatio) => void;
+  onOpenCropEditor?: () => void;
+  isCropped?: boolean;
 }
 
 interface TimelineScaleConfig {
@@ -655,7 +658,10 @@ export default function TimelineEditor({
   onSelectAudio,
   aspectRatio,
   onAspectRatioChange,
+  onOpenCropEditor,
+  isCropped = false,
 }: TimelineEditorProps) {
+  const t = useScopedT("settings");
   const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
   const totalMs = useMemo(() => Math.max(0, Math.round(videoDuration * 1000)), [videoDuration]);
   const currentTimeMs = useMemo(() => Math.round(currentTime * 1000), [currentTime]);
@@ -1475,6 +1481,16 @@ export default function TimelineEditor({
             </DropdownMenuContent>
           </DropdownMenu>
           <div className="w-[1px] h-4 bg-white/10" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onOpenCropEditor?.()}
+            className="h-7 px-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-white/10 transition-all gap-1.5"
+          >
+            <Crop className="w-3.5 h-3.5" />
+            <span className="font-medium">{t("sections.crop", "Crop")}</span>
+            {isCropped ? <span className="h-1.5 w-1.5 rounded-full bg-[#2563EB]" /> : null}
+          </Button>
           <TutorialHelp />
         </div>
         <div className="flex-1" />

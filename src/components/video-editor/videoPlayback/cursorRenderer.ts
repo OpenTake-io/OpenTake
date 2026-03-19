@@ -7,7 +7,7 @@ import {
   Texture,
 } from "pixi.js";
 import { MotionBlurFilter } from "pixi-filters/motion-blur";
-import type { CursorTelemetryPoint } from "../types";
+import { DEFAULT_CURSOR_CLICK_BOUNCE_DURATION, type CursorTelemetryPoint } from "../types";
 import {
   createSpringState,
   getCursorSpringConfig,
@@ -55,6 +55,8 @@ export interface CursorRenderConfig {
   motionBlur: number;
   /** Click bounce multiplier. */
   clickBounce: number;
+  /** Click bounce duration in milliseconds. */
+  clickBounceDuration: number;
   /** Cursor sway multiplier. */
   sway: number;
 }
@@ -67,12 +69,12 @@ export const DEFAULT_CURSOR_CONFIG: CursorRenderConfig = {
   smoothingFactor: 0.18,
   motionBlur: 0,
   clickBounce: 1,
+  clickBounceDuration: DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
   sway: 0,
 };
 
 const REFERENCE_WIDTH = 1920;
 const MIN_CURSOR_VIEWPORT_SCALE = 0.55;
-const CLICK_ANIMATION_MS = 140;
 const CLICK_RING_FADE_MS = 240;
 const CURSOR_MOTION_BLUR_BASE_MULTIPLIER = 0.08;
 const CURSOR_TIME_DISCONTINUITY_MS = 100;
@@ -446,7 +448,11 @@ function getCursorSwaySpringConfig(smoothingFactor: number) {
   };
 }
 
-function getCursorVisualState(samples: CursorTelemetryPoint[], timeMs: number) {
+function getCursorVisualState(
+  samples: CursorTelemetryPoint[],
+  timeMs: number,
+  clickBounceDuration: number,
+) {
   const latestClick = findLatestInteractionSample(samples, timeMs);
   const interactionType = latestClick?.interactionType;
   const ageMs = latestClick
@@ -458,8 +464,8 @@ function getCursorVisualState(samples: CursorTelemetryPoint[], timeMs: number) {
     interactionType === "right-click" ||
     interactionType === "middle-click";
   const clickBounceProgress =
-    latestClick && isClickEvent && ageMs <= CLICK_ANIMATION_MS
-      ? 1 - ageMs / CLICK_ANIMATION_MS
+    latestClick && isClickEvent && ageMs <= clickBounceDuration
+      ? 1 - ageMs / clickBounceDuration
       : 0;
 
   return {
@@ -655,6 +661,10 @@ export class PixiCursorOverlay {
     this.config.clickBounce = Math.max(0, clickBounce);
   }
 
+  setClickBounceDuration(clickBounceDuration: number) {
+    this.config.clickBounceDuration = clamp(clickBounceDuration, 60, 500);
+  }
+
   setSway(sway: number) {
     this.config.sway = clamp(sway, 0, 2);
   }
@@ -708,7 +718,7 @@ export class PixiCursorOverlay {
     const py = viewport.y + this.state.y * viewport.height;
     const h = this.config.dotRadius * getCursorViewportScale(viewport);
     const { cursorType, clickBounceProgress, clickProgress } =
-      getCursorVisualState(samples, timeMs);
+      getCursorVisualState(samples, timeMs, this.config.clickBounceDuration);
     const spriteKey = (
       cursorType in this.cursorSprites ? cursorType : "arrow"
     ) as CursorAssetKey;
@@ -893,6 +903,7 @@ export function drawCursorOnCanvas(
   const { cursorType, clickBounceProgress } = getCursorVisualState(
     samples,
     timeMs,
+    config.clickBounceDuration,
   );
   const spriteKey = (
     cursorType && loadedCursorAssets[cursorType] ? cursorType : "arrow"
