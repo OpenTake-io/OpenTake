@@ -669,7 +669,6 @@ export function LaunchWindow() {
 										{hideHudFromCapture ? t("recording.hideHudFromVideo") : t("recording.showHudInVideo")}
 									</DropdownItem>
 								)}
-								{supportsHudCaptureProtection && <Separator />}
 								<DropdownItem icon={<FolderOpen size={16} />} onClick={chooseRecordingsDirectory}>
 									{t("recording.recordingsFolder")}
 								</DropdownItem>
