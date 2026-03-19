@@ -772,6 +772,7 @@ export class FrameRenderer {
         y: centerOffsetY,
         width: croppedDisplayWidth,
         height: croppedDisplayHeight,
+        sourceCrop: cropRegion,
       },
     };
   }

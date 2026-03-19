@@ -225,7 +225,18 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const videoSizeRef = useRef({ width: 0, height: 0 });
     const baseScaleRef = useRef(1);
     const baseOffsetRef = useRef({ x: 0, y: 0 });
-    const baseMaskRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+    const baseMaskRef = useRef<{
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      sourceCrop?: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      };
+    }>({ x: 0, y: 0, width: 0, height: 0 });
     const cropBoundsRef = useRef({ startX: 0, endX: 0, startY: 0, endY: 0 });
     const maskGraphicsRef = useRef<Graphics | null>(null);
     const isPlayingRef = useRef(isPlaying);
