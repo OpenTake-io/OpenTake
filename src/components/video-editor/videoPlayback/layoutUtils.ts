@@ -18,7 +18,13 @@ interface LayoutResult {
   videoSize: { width: number; height: number };
   baseScale: number;
   baseOffset: { x: number; y: number };
-  maskRect: { x: number; y: number; width: number; height: number };
+  maskRect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    sourceCrop?: CropRegion;
+  };
   cropBounds: { startX: number; endX: number; startY: number; endY: number };
 }
 
@@ -105,7 +111,13 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
     videoSize: { width: croppedVideoWidth, height: croppedVideoHeight },
     baseScale: scale,
     baseOffset: { x: spriteX, y: spriteY },
-    maskRect: { x: maskX, y: maskY, width: croppedDisplayWidth, height: croppedDisplayHeight },
+    maskRect: {
+      x: maskX,
+      y: maskY,
+      width: croppedDisplayWidth,
+      height: croppedDisplayHeight,
+      sourceCrop: crop,
+    },
     cropBounds: { startX: cropStartX, endX: cropEndX, startY: cropStartY, endY: cropEndY },
   };
 }
