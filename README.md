@@ -307,9 +307,10 @@ Pull requests are welcome.
 
 Greatful for all supporters, you are helping Recordly stay open-source and supporting development.
 
-• Tadees ($100)
-• Anonymous supporter ($5)
-• Anonymous supporter ($1)
+• Tadees
+
+• Anonymous supporter
+• Anonymous supporter
 
 Email youngchen3442@gmail.com for other inquiries or DM me via [@webadderall](https://x.com/webadderall)
 
