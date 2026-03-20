@@ -99,6 +99,7 @@ let cachedSystemCursorAssetsSourceMtimeMs: number | null = null
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 let countdownCancelled = false
 let countdownInProgress = false
+let countdownRemaining: number | null = null
 
 type SystemCursorAsset = {
   dataUrl: string
@@ -3357,17 +3358,21 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
     countdownInProgress = true
     countdownCancelled = false
+    countdownRemaining = seconds
 
     const countdownWin = createCountdownWindow()
 
-    await new Promise<void>((resolve) => {
-      countdownWin.webContents.once('did-finish-load', () => {
-        resolve()
+    if (countdownWin.webContents.isLoadingMainFrame()) {
+      await new Promise<void>((resolve) => {
+        countdownWin.webContents.once('did-finish-load', () => {
+          resolve()
+        })
       })
-    })
+    }
 
     return new Promise<{ success: boolean; cancelled?: boolean }>((resolve) => {
       let remaining = seconds
+      countdownRemaining = remaining
 
       countdownWin.webContents.send('countdown-tick', remaining)
 
@@ -3379,11 +3384,13 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           }
           closeCountdownWindow()
           countdownInProgress = false
+          countdownRemaining = null
           resolve({ success: false, cancelled: true })
           return
         }
 
         remaining--
+        countdownRemaining = remaining
 
         if (remaining <= 0) {
           if (countdownTimer) {
@@ -3392,6 +3399,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           }
           closeCountdownWindow()
           countdownInProgress = false
+          countdownRemaining = null
           resolve({ success: true })
         } else {
           const win = getCountdownWindow()
@@ -3406,12 +3414,20 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
   ipcMain.handle('cancel-countdown', () => {
     countdownCancelled = true
     countdownInProgress = false
+    countdownRemaining = null
     if (countdownTimer) {
       clearInterval(countdownTimer)
       countdownTimer = null
     }
     closeCountdownWindow()
     return { success: true }
+  })
+
+  ipcMain.handle('get-active-countdown', () => {
+    return {
+      success: true,
+      seconds: countdownInProgress ? countdownRemaining : null,
+    }
   })
 }
 

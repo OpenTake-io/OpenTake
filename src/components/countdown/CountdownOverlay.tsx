@@ -4,6 +4,12 @@ export function CountdownOverlay() {
 	const [countdown, setCountdown] = useState<number | null>(null);
 
 	useEffect(() => {
+		void window.electronAPI.getActiveCountdown().then((result) => {
+			if (result.success && typeof result.seconds === "number") {
+				setCountdown(result.seconds);
+			}
+		});
+
 		const cleanup = window.electronAPI.onCountdownTick((seconds: number) => {
 			setCountdown(seconds);
 		});

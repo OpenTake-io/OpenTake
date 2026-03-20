@@ -233,6 +233,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	setCountdownDelay: (delay: number) => ipcRenderer.invoke("set-countdown-delay", delay),
 	startCountdown: (seconds: number) => ipcRenderer.invoke("start-countdown", seconds),
 	cancelCountdown: () => ipcRenderer.invoke("cancel-countdown"),
+	getActiveCountdown: () => ipcRenderer.invoke("get-active-countdown"),
 	onCountdownTick: (callback: (seconds: number) => void) => {
 		const listener = (_event: Electron.IpcRendererEvent, seconds: number) => callback(seconds);
 		ipcRenderer.on("countdown-tick", listener);

@@ -38,6 +38,7 @@ import {
 } from "@/components/video-editor/videoPlayback/cursorRenderer";
 import { clampMediaTimeToDuration } from "@/lib/mediaTiming";
 import { getWebcamOverlayPosition, getWebcamOverlaySizePx } from "@/components/video-editor/webcamOverlay";
+import { drawSquircleOnCanvas, drawSquircleOnGraphics } from "@/lib/geometry/squircle";
 import { ForwardFrameSource } from "./forwardFrameSource";
 import { resolveMediaElementSource } from "./localMediaSource";
 
@@ -842,13 +843,13 @@ export class FrameRenderer {
     const scaledBorderRadius = borderRadius * canvasScaleFactor;
 
     this.maskGraphics.clear();
-    this.maskGraphics.roundRect(
-      centerOffsetX,
-      centerOffsetY,
-      croppedDisplayWidth,
-      croppedDisplayHeight,
-      scaledBorderRadius,
-    );
+    drawSquircleOnGraphics(this.maskGraphics, {
+      x: centerOffsetX,
+      y: centerOffsetY,
+      width: croppedDisplayWidth,
+      height: croppedDisplayHeight,
+      radius: scaledBorderRadius,
+    });
     this.maskGraphics.fill({ color: 0xffffff });
 
     // Cache layout info
@@ -1172,8 +1173,7 @@ export class FrameRenderer {
     const drawY = (size - drawHeight) / 2;
 
     bubbleCtx.save();
-    bubbleCtx.beginPath();
-    bubbleCtx.roundRect(0, 0, size, size, radius);
+    drawSquircleOnCanvas(bubbleCtx, { x: 0, y: 0, width: size, height: size, radius });
     bubbleCtx.clip();
     if (webcam.mirror) {
       bubbleCtx.save();

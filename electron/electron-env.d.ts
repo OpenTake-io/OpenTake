@@ -209,6 +209,7 @@ interface Window {
 		setCountdownDelay: (delay: number) => Promise<{ success: boolean; error?: string }>;
 		startCountdown: (seconds: number) => Promise<{ success: boolean; cancelled?: boolean }>;
 		cancelCountdown: () => Promise<{ success: boolean }>;
+		getActiveCountdown: () => Promise<{ success: boolean; seconds: number | null }>;
 		onCountdownTick: (callback: (seconds: number) => void) => () => void;
 	};
 }

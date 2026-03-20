@@ -1,5 +1,6 @@
 import { Application, Sprite, Graphics } from 'pixi.js';
 import type { CropRegion } from '../types';
+import { drawSquircleOnGraphics } from '@/lib/geometry/squircle';
 
 interface LayoutParams {
   container: HTMLDivElement;
@@ -103,7 +104,13 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
   
   // Apply border radius
   maskGraphics.clear();
-  maskGraphics.roundRect(maskX, maskY, croppedDisplayWidth, croppedDisplayHeight, borderRadius);
+  drawSquircleOnGraphics(maskGraphics, {
+    x: maskX,
+    y: maskY,
+    width: croppedDisplayWidth,
+    height: croppedDisplayHeight,
+    radius: borderRadius,
+  });
   maskGraphics.fill({ color: 0xffffff });
 
   return {
