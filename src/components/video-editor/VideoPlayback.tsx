@@ -70,6 +70,10 @@ import {
   DEFAULT_CURSOR_SIZE,
   DEFAULT_CURSOR_SMOOTHING,
   DEFAULT_CURSOR_SWAY,
+  DEFAULT_WEBCAM_CORNER_RADIUS,
+  DEFAULT_WEBCAM_REACT_TO_ZOOM,
+  DEFAULT_WEBCAM_SHADOW,
+  DEFAULT_WEBCAM_SIZE,
 } from "./types";
 import { getWebcamOverlayPosition, getWebcamOverlaySizePx } from "./webcamOverlay";
 import { getSquircleSvgPath } from "@/lib/geometry/squircle";
@@ -214,6 +218,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const focusIndicatorRef = useRef<HTMLDivElement | null>(null);
     const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
     const webcamBubbleRef = useRef<HTMLDivElement | null>(null);
+    const webcamBubbleInnerRef = useRef<HTMLDivElement | null>(null);
     const currentTimeRef = useRef(0);
     const zoomRegionsRef = useRef<ZoomRegion[]>([]);
     const selectedZoomIdRef = useRef<string | null>(null);
@@ -268,8 +273,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
     const applyWebcamBubbleLayout = useCallback((zoomScale: number) => {
       const bubble = webcamBubbleRef.current;
+      const bubbleInner = webcamBubbleInnerRef.current;
       const overlay = overlayRef.current;
-      if (!bubble || !overlay || !webcam?.enabled || !webcamVideoPath) {
+      if (!bubble || !bubbleInner || !overlay || !webcam?.enabled || !webcamVideoPath) {
         if (bubble) {
           bubble.style.display = "none";
         }
@@ -280,10 +286,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       const scaledSize = getWebcamOverlaySizePx({
     		containerWidth: overlay.clientWidth,
     		containerHeight: overlay.clientHeight,
-    		sizePercent: webcam.size ?? 50,
+      		sizePercent: webcam.size ?? DEFAULT_WEBCAM_SIZE,
     		margin,
     		zoomScale,
-    		reactToZoom: webcam.reactToZoom ?? true,
+      		reactToZoom: webcam.reactToZoom ?? DEFAULT_WEBCAM_REACT_TO_ZOOM,
     	});
       const { x, y } = getWebcamOverlayPosition({
         containerWidth: overlay.clientWidth,
@@ -306,14 +312,17 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         y: 0,
         width: scaledSize,
         height: scaledSize,
-        radius: webcam.cornerRadius ?? 18,
+        radius: webcam.cornerRadius ?? DEFAULT_WEBCAM_CORNER_RADIUS,
       });
-      bubble.style.borderRadius = "0px";
-      bubble.style.clipPath = `path('${squirclePath}')`;
-      bubble.style.setProperty("-webkit-clip-path", `path('${squirclePath}')`);
-      bubble.style.boxShadow = `0 ${Math.round(scaledSize * 0.06)}px ${Math.round(
+      bubble.style.filter = `drop-shadow(0 ${Math.round(scaledSize * 0.06)}px ${Math.round(
         scaledSize * 0.22,
-      )}px rgba(0, 0, 0, ${webcam.shadow ?? 0.35})`;
+      )}px rgba(0, 0, 0, ${webcam.shadow ?? DEFAULT_WEBCAM_SHADOW}))`;
+      bubble.style.borderRadius = "0px";
+      bubble.style.boxShadow = "none";
+
+      bubbleInner.style.borderRadius = "0px";
+      bubbleInner.style.clipPath = `path('${squirclePath}')`;
+      bubbleInner.style.setProperty("-webkit-clip-path", `path('${squirclePath}')`);
     }, [webcam, webcamVideoPath]);
 
     const clampFocusToStage = useCallback(
@@ -1394,21 +1403,26 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
             {webcam && webcamVideoPath ? (
               <div
                 ref={webcamBubbleRef}
-                className="absolute overflow-hidden bg-black/80"
+                className="absolute"
                 style={{
                   display: webcam.enabled ? "block" : "none",
                   pointerEvents: "none",
                 }}
               >
-                <video
-                  ref={webcamVideoRef}
-                  src={webcamVideoPath}
-                  className="h-full w-full object-cover"
-                  muted
-                  playsInline
-                  preload="auto"
-                  style={{ transform: webcam.mirror ? "scaleX(-1)" : undefined }}
-                />
+                <div
+                  ref={webcamBubbleInnerRef}
+                  className="h-full w-full overflow-hidden bg-black/80"
+                >
+                  <video
+                    ref={webcamVideoRef}
+                    src={webcamVideoPath}
+                    className="h-full w-full object-cover"
+                    muted
+                    playsInline
+                    preload="auto"
+                    style={{ transform: webcam.mirror ? "scaleX(-1)" : undefined }}
+                  />
+                </div>
               </div>
             ) : null}
             {(() => {

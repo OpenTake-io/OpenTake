@@ -451,7 +451,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						? legacyZoomScaleEffect > 0
 						: DEFAULT_WEBCAM_REACT_TO_ZOOM,
 			cornerRadius: isFiniteNumber(webcam.cornerRadius)
-				? clamp(webcam.cornerRadius, 0, 80)
+				? clamp(webcam.cornerRadius, 0, 160)
 				: DEFAULT_WEBCAM_CORNER_RADIUS,
 			shadow: isFiniteNumber(webcam.shadow) ? clamp(webcam.shadow, 0, 1) : DEFAULT_WEBCAM_SHADOW,
 			margin: isFiniteNumber(webcam.margin) ? clamp(webcam.margin, 0, 96) : DEFAULT_WEBCAM_MARGIN,
