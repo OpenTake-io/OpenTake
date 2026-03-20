@@ -9,6 +9,7 @@ import {
   useCallback,
 } from "react";
 import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
+import { clampMediaTimeToDuration } from "@/lib/mediaTiming";
 import {
   DEFAULT_WALLPAPER_PATH,
   DEFAULT_WALLPAPER_RELATIVE_PATH,
@@ -249,6 +250,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const layoutVideoContentRef = useRef<(() => void) | null>(null);
     const trimRegionsRef = useRef<TrimRegion[]>([]);
     const speedRegionsRef = useRef<SpeedRegion[]>([]);
+    const lastWebcamSyncTimeRef = useRef<number | null>(null);
     const zoomMotionBlurRef = useRef(zoomMotionBlur);
     const connectZoomsRef = useRef(connectZooms);
     const videoReadyRafRef = useRef<number | null>(null);
@@ -736,8 +738,24 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         return;
       }
 
-      const targetTime = Math.max(0, currentTime);
-      if (Math.abs(webcamVideo.currentTime - targetTime) > (isPlaying ? 0.1 : 0.01)) {
+      const targetTime = clampMediaTimeToDuration(
+        currentTime,
+        Number.isFinite(webcamVideo.duration) ? webcamVideo.duration : null,
+      );
+
+      const activeSpeedRegion = speedRegionsRef.current.find(
+        (region) => targetTime * 1000 >= region.startMs && targetTime * 1000 < region.endMs,
+      );
+      const targetPlaybackRate = activeSpeedRegion ? activeSpeedRegion.speed : 1;
+      if (Math.abs(webcamVideo.playbackRate - targetPlaybackRate) > 0.001) {
+        webcamVideo.playbackRate = targetPlaybackRate;
+      }
+
+      const previousTimelineTime = lastWebcamSyncTimeRef.current;
+      const timelineJumped =
+        previousTimelineTime === null || Math.abs(targetTime - previousTimelineTime) > 0.25;
+      const driftThreshold = isPlaying ? 0.35 : 0.01;
+      if (timelineJumped || Math.abs(webcamVideo.currentTime - targetTime) > driftThreshold) {
         try {
           webcamVideo.currentTime = targetTime;
         } catch {
@@ -753,7 +771,13 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       } else {
         webcamVideo.pause();
       }
+
+      lastWebcamSyncTimeRef.current = targetTime;
     }, [currentTime, isPlaying, webcam, webcamVideoPath]);
+
+    useEffect(() => {
+      lastWebcamSyncTimeRef.current = null;
+    }, [webcamVideoPath]);
 
     useEffect(() => {
       const overlayEl = overlayRef.current;

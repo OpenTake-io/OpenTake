@@ -755,13 +755,13 @@ export default function VideoEditor() {
 		async (forceSaveAs: boolean) => {
 			if (!videoPath) {
 				toast.error("No video loaded");
-				return;
+				return false;
 			}
 
 			const sourcePath = videoSourcePath ?? fromFileUrl(videoPath);
 			if (!sourcePath) {
 				toast.error("Unable to determine source video path");
-				return;
+				return false;
 			}
 
 			const projectData = createProjectData(
@@ -812,12 +812,12 @@ export default function VideoEditor() {
 
 			if (result.canceled) {
 				toast.info("Project save canceled");
-				return;
+				return false;
 			}
 
 			if (!result.success) {
 				toast.error(result.message || "Failed to save project");
-				return;
+				return false;
 			}
 
 			if (result.path) {
@@ -826,6 +826,7 @@ export default function VideoEditor() {
 			setLastSavedSnapshot(projectSnapshot);
 
 			toast.success(`Project saved to ${result.path}`);
+			return true;
 		},
 		[
 			videoPath,
@@ -864,26 +865,12 @@ export default function VideoEditor() {
 	);
 
 	useEffect(() => {
-		const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-			if (!hasUnsavedChanges) {
-				return;
-			}
-
-			event.preventDefault();
-			event.returnValue = "";
-		};
-
-		window.addEventListener("beforeunload", handleBeforeUnload);
-		return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-	}, [hasUnsavedChanges]);
-
-	useEffect(() => {
 		window.electronAPI.setHasUnsavedChanges(hasUnsavedChanges);
 	}, [hasUnsavedChanges]);
 
 	useEffect(() => {
 		const cleanup = window.electronAPI.onRequestSaveBeforeClose(async () => {
-			await saveProject(false);
+			return saveProject(false);
 		});
 
 		return () => cleanup?.();

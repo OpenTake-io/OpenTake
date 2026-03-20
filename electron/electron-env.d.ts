@@ -193,7 +193,7 @@ interface Window {
 		getShortcuts: () => Promise<Record<string, unknown> | null>;
 		saveShortcuts: (shortcuts: unknown) => Promise<{ success: boolean; error?: string }>;
 		setHasUnsavedChanges: (hasChanges: boolean) => void;
-		onRequestSaveBeforeClose: (callback: () => Promise<void>) => () => void;
+		onRequestSaveBeforeClose: (callback: () => Promise<boolean>) => () => void;
 		isNativeWindowsCaptureAvailable: () => Promise<{ available: boolean }>;
 		muxNativeWindowsRecording: () => Promise<{
 			success: boolean;
