@@ -217,7 +217,7 @@ export function SettingsPanel({
 	onCursorSizeChange,
 	cursorSmoothing = 2,
 	onCursorSmoothingChange,
-	cursorMotionBlur = 0.35,
+	cursorMotionBlur = DEFAULT_CURSOR_MOTION_BLUR,
 	onCursorMotionBlurChange,
 	cursorClickBounce = 1,
 	onCursorClickBounceChange,
@@ -994,7 +994,7 @@ export function SettingsPanel({
 								</>
 							) : null}
 							<SliderControl label={tSettings("effects.webcamMargin", "Margin")} value={webcam?.margin ?? DEFAULT_WEBCAM_MARGIN} defaultValue={DEFAULT_WEBCAM_MARGIN} min={0} max={96} step={1} onChange={(v) => updateWebcam({ margin: v })} formatValue={(v) => `${Math.round(v)}px`} parseInput={(text) => parseFloat(text.replace(/px$/, ""))} />
-							<SliderControl label={tSettings("effects.webcamRoundness")} value={webcam?.cornerRadius ?? DEFAULT_WEBCAM_CORNER_RADIUS} defaultValue={DEFAULT_WEBCAM_CORNER_RADIUS} min={0} max={80} step={1} onChange={(v) => updateWebcam({ cornerRadius: v })} formatValue={(v) => `${Math.round(v)}px`} parseInput={(text) => parseFloat(text.replace(/px$/, ""))} />
+							<SliderControl label={tSettings("effects.webcamRoundness")} value={webcam?.cornerRadius ?? DEFAULT_WEBCAM_CORNER_RADIUS} defaultValue={DEFAULT_WEBCAM_CORNER_RADIUS} min={0} max={160} step={1} onChange={(v) => updateWebcam({ cornerRadius: v })} formatValue={(v) => `${Math.round(v)}px`} parseInput={(text) => parseFloat(text.replace(/px$/, ""))} />
 							<SliderControl label={tSettings("effects.webcamShadow")} value={webcam?.shadow ?? DEFAULT_WEBCAM_SHADOW} defaultValue={DEFAULT_WEBCAM_SHADOW} min={0} max={1} step={0.01} onChange={(v) => updateWebcam({ shadow: v })} formatValue={(v) => `${Math.round(v * 100)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100} />
 							<div className="rounded-lg bg-white/[0.03] px-2.5 py-2">
 								<div className="flex items-center justify-between gap-2">

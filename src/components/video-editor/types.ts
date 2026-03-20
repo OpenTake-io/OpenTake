@@ -72,15 +72,15 @@ export interface WebcamOverlaySettings {
 
 export const DEFAULT_CURSOR_SIZE = 3.0;
 export const DEFAULT_CURSOR_SMOOTHING = 0.67;
-export const DEFAULT_CURSOR_MOTION_BLUR = 0.35;
+export const DEFAULT_CURSOR_MOTION_BLUR = 0.5;
 export const DEFAULT_CURSOR_CLICK_BOUNCE = 2.5;
 export const DEFAULT_CURSOR_CLICK_BOUNCE_DURATION = 350;
 export const DEFAULT_CURSOR_SWAY = 0.25;
 export const DEFAULT_ZOOM_MOTION_BLUR = 0.35;
-export const DEFAULT_WEBCAM_SIZE = 35;
+export const DEFAULT_WEBCAM_SIZE = 40;
 export const DEFAULT_WEBCAM_REACT_TO_ZOOM = true;
-export const DEFAULT_WEBCAM_CORNER_RADIUS = 18;
-export const DEFAULT_WEBCAM_SHADOW = 0.35;
+export const DEFAULT_WEBCAM_CORNER_RADIUS = 82;
+export const DEFAULT_WEBCAM_SHADOW = 0.67;
 export const DEFAULT_WEBCAM_MARGIN = 24;
 export const DEFAULT_WEBCAM_POSITION_PRESET: WebcamPositionPreset = "bottom-right";
 export const DEFAULT_WEBCAM_POSITION_X = 1;
