@@ -197,6 +197,7 @@ export function ShortcutsConfigDialog() {
 
         <DialogFooter className="flex gap-2 sm:justify-between mt-2">
           <Button
+            title={t('shortcutsConfig.resetToDefaults')}
             variant="ghost"
             size="sm"
             className="text-slate-400 hover:text-white hover:bg-white/10 gap-1.5 max-w-[200px]"
