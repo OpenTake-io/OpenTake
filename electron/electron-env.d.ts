@@ -28,6 +28,7 @@ interface Window {
 		hudOverlayClose: () => void;
 		setHudOverlayExpanded: (expanded: boolean) => void;
 		setHudOverlayCompactWidth: (width: number) => void;
+		setHudOverlayMeasuredHeight: (height: number, expanded: boolean) => void;
 		getHudOverlayCaptureProtection: () => Promise<{ success: boolean; enabled: boolean }>;
 		setHudOverlayCaptureProtection: (
 			enabled: boolean,
