@@ -46,12 +46,23 @@ export interface CursorVisualSettings {
 }
 
 export type WebcamCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+export type WebcamPositionPreset =
+  | WebcamCorner
+  | "top-center"
+  | "center-left"
+  | "center"
+  | "center-right"
+  | "bottom-center"
+  | "custom";
 
 export interface WebcamOverlaySettings {
   enabled: boolean;
   sourcePath: string | null;
   mirror: boolean;
   corner: WebcamCorner;
+  positionPreset: WebcamPositionPreset;
+  positionX: number;
+  positionY: number;
   size: number;
   reactToZoom: boolean;
   cornerRadius: number;
@@ -71,12 +82,18 @@ export const DEFAULT_WEBCAM_REACT_TO_ZOOM = true;
 export const DEFAULT_WEBCAM_CORNER_RADIUS = 18;
 export const DEFAULT_WEBCAM_SHADOW = 0.35;
 export const DEFAULT_WEBCAM_MARGIN = 24;
+export const DEFAULT_WEBCAM_POSITION_PRESET: WebcamPositionPreset = "bottom-right";
+export const DEFAULT_WEBCAM_POSITION_X = 1;
+export const DEFAULT_WEBCAM_POSITION_Y = 1;
 
 export const DEFAULT_WEBCAM_OVERLAY: WebcamOverlaySettings = {
   enabled: false,
   sourcePath: null,
   mirror: true,
   corner: "bottom-right",
+  positionPreset: DEFAULT_WEBCAM_POSITION_PRESET,
+  positionX: DEFAULT_WEBCAM_POSITION_X,
+  positionY: DEFAULT_WEBCAM_POSITION_Y,
   size: DEFAULT_WEBCAM_SIZE,
   reactToZoom: DEFAULT_WEBCAM_REACT_TO_ZOOM,
   cornerRadius: DEFAULT_WEBCAM_CORNER_RADIUS,

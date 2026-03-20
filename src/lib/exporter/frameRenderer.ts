@@ -37,7 +37,7 @@ import {
   preloadCursorAssets,
 } from "@/components/video-editor/videoPlayback/cursorRenderer";
 import { clampMediaTimeToDuration } from "@/lib/mediaTiming";
-import { getWebcamOverlaySizePx } from "@/components/video-editor/webcamOverlay";
+import { getWebcamOverlayPosition, getWebcamOverlaySizePx } from "@/components/video-editor/webcamOverlay";
 import { ForwardFrameSource } from "./forwardFrameSource";
 import { resolveMediaElementSource } from "./localMediaSource";
 
@@ -1079,8 +1079,16 @@ export class FrameRenderer {
     zoomScale: this.animationState.appliedScale || 1,
     reactToZoom: webcam.reactToZoom ?? true,
   });
-    const x = webcam.corner.endsWith("right") ? width - size - margin : margin;
-    const y = webcam.corner.startsWith("bottom") ? height - size - margin : margin;
+    const { x, y } = getWebcamOverlayPosition({
+      containerWidth: width,
+      containerHeight: height,
+      size,
+      margin,
+      positionPreset: webcam.positionPreset ?? webcam.corner,
+      positionX: webcam.positionX ?? 1,
+      positionY: webcam.positionY ?? 1,
+      legacyCorner: webcam.corner,
+    });
     const radius = Math.max(0, webcam.cornerRadius ?? 18);
 
     const bubbleCanvas = this.webcamBubbleCanvas ?? document.createElement("canvas");
