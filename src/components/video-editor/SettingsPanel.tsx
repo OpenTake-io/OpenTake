@@ -24,11 +24,16 @@ import type {
 	CropRegion,
 	FigureData,
 	PlaybackSpeed,
+	WebcamPositionPreset,
 	WebcamOverlaySettings,
 	ZoomDepth,
 } from "./types";
 import {
 	DEFAULT_WEBCAM_CORNER_RADIUS,
+	DEFAULT_WEBCAM_MARGIN,
+	DEFAULT_WEBCAM_POSITION_PRESET,
+	DEFAULT_WEBCAM_POSITION_X,
+	DEFAULT_WEBCAM_POSITION_Y,
 	DEFAULT_WEBCAM_REACT_TO_ZOOM,
 	DEFAULT_WEBCAM_SHADOW,
 	DEFAULT_WEBCAM_SIZE,
@@ -42,6 +47,7 @@ import {
 	DEFAULT_ZOOM_MOTION_BLUR,
 	SPEED_OPTIONS,
 } from "./types";
+import { getWebcamPositionForPreset, resolveWebcamCorner } from "./webcamOverlay";
 import { fromCursorSwaySliderValue, toCursorSwaySliderValue } from "./videoPlayback/cursorSway";
 
 const GRADIENTS = [
@@ -167,6 +173,21 @@ const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
 	{ depth: 4, label: "2.2×" },
 	{ depth: 5, label: "3.5×" },
 	{ depth: 6, label: "5×" },
+];
+
+const WEBCAM_POSITION_PRESETS: Array<{
+	preset: Exclude<WebcamPositionPreset, "custom">;
+	label: string;
+}> = [
+	{ preset: "top-left", label: "↖" },
+	{ preset: "top-center", label: "↑" },
+	{ preset: "top-right", label: "↗" },
+	{ preset: "center-left", label: "←" },
+	{ preset: "center", label: "•" },
+	{ preset: "center-right", label: "→" },
+	{ preset: "bottom-left", label: "↙" },
+	{ preset: "bottom-center", label: "↓" },
+	{ preset: "bottom-right", label: "↘" },
 ];
 
 export function SettingsPanel({
@@ -334,6 +355,9 @@ export function SettingsPanel({
 
 	const webcamFileName = webcam?.sourcePath?.split(/[\\/]/).pop() ?? null;
 	const visibleColorPalette = colorPalette.slice(0, 15);
+	const webcamPositionPreset = webcam?.positionPreset ?? DEFAULT_WEBCAM_POSITION_PRESET;
+	const webcamPositionX = webcam?.positionX ?? DEFAULT_WEBCAM_POSITION_X;
+	const webcamPositionY = webcam?.positionY ?? DEFAULT_WEBCAM_POSITION_Y;
 
 	const getWallpaperTileState = (candidateValue: string, previewPath?: string) => {
 		if (!selected) return false;
@@ -489,6 +513,23 @@ export function SettingsPanel({
 	const updateWebcam = (patch: Partial<WebcamOverlaySettings>) => {
 		if (!webcam || !onWebcamChange) return;
 		onWebcamChange({ ...webcam, ...patch });
+	};
+
+	const applyWebcamPositionPreset = (preset: WebcamPositionPreset) => {
+		if (!webcam) return;
+
+		if (preset === "custom") {
+			updateWebcam({ positionPreset: "custom" });
+			return;
+		}
+
+		const position = getWebcamPositionForPreset(preset);
+		updateWebcam({
+			positionPreset: preset,
+			positionX: position.x,
+			positionY: position.y,
+			corner: resolveWebcamCorner(preset, webcam.corner),
+		});
 	};
 
 	const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -919,6 +960,40 @@ export function SettingsPanel({
 							<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5"><span className="text-[10px] text-slate-400">{tSettings("effects.show", "Show")}</span><Switch checked={webcam?.enabled ?? false} onCheckedChange={(enabled) => updateWebcam({ enabled })} className="data-[state=checked]:bg-[#2563EB] scale-75" /></div>
 							<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5"><span className="text-[10px] text-slate-400">{tSettings("effects.webcamReactToZoom")}</span><Switch checked={webcam?.reactToZoom ?? DEFAULT_WEBCAM_REACT_TO_ZOOM} onCheckedChange={(reactToZoom) => updateWebcam({ reactToZoom })} className="data-[state=checked]:bg-[#2563EB] scale-75" /></div>
 							<SliderControl label={tSettings("effects.webcamSize")} value={webcam?.size ?? DEFAULT_WEBCAM_SIZE} defaultValue={DEFAULT_WEBCAM_SIZE} min={10} max={100} step={1} onChange={(v) => updateWebcam({ size: v })} formatValue={(v) => `${Math.round(v)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
+							<div className="rounded-lg bg-white/[0.03] px-2.5 py-2">
+								<div className="mb-2 text-[10px] text-slate-400">{tSettings("effects.webcamPosition", "Position")}</div>
+								<div className="grid grid-cols-3 gap-1.5">
+									{WEBCAM_POSITION_PRESETS.map((option) => {
+										const isActive = webcamPositionPreset === option.preset;
+										return (
+											<Button
+												key={option.preset}
+												type="button"
+												onClick={() => applyWebcamPositionPreset(option.preset)}
+												className={cn(
+													"h-8 rounded-lg border px-0 text-sm font-semibold transition-all",
+													isActive
+														? "border-[#2563EB] bg-[#2563EB] text-white"
+														: "border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10",
+												)}
+											>
+												{option.label}
+											</Button>
+										);
+									})}
+								</div>
+								<div className="mt-2 flex items-center justify-between rounded-lg bg-black/10 px-2.5 py-1.5">
+									<span className="text-[10px] text-slate-400">{tSettings("effects.webcamCustomPosition", "Custom position")}</span>
+									<Switch checked={webcamPositionPreset === "custom"} onCheckedChange={(checked) => applyWebcamPositionPreset(checked ? "custom" : DEFAULT_WEBCAM_POSITION_PRESET)} className="data-[state=checked]:bg-[#2563EB] scale-75" />
+								</div>
+							</div>
+							{webcamPositionPreset === "custom" ? (
+								<>
+									<SliderControl label={tSettings("effects.webcamHorizontal", "Horizontal")} value={webcamPositionX * 100} defaultValue={DEFAULT_WEBCAM_POSITION_X * 100} min={0} max={100} step={1} onChange={(v) => updateWebcam({ positionPreset: "custom", positionX: v / 100 })} formatValue={(v) => `${Math.round(v)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
+									<SliderControl label={tSettings("effects.webcamVertical", "Vertical")} value={webcamPositionY * 100} defaultValue={DEFAULT_WEBCAM_POSITION_Y * 100} min={0} max={100} step={1} onChange={(v) => updateWebcam({ positionPreset: "custom", positionY: v / 100 })} formatValue={(v) => `${Math.round(v)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
+								</>
+							) : null}
+							<SliderControl label={tSettings("effects.webcamMargin", "Margin")} value={webcam?.margin ?? DEFAULT_WEBCAM_MARGIN} defaultValue={DEFAULT_WEBCAM_MARGIN} min={0} max={96} step={1} onChange={(v) => updateWebcam({ margin: v })} formatValue={(v) => `${Math.round(v)}px`} parseInput={(text) => parseFloat(text.replace(/px$/, ""))} />
 							<SliderControl label={tSettings("effects.webcamRoundness")} value={webcam?.cornerRadius ?? DEFAULT_WEBCAM_CORNER_RADIUS} defaultValue={DEFAULT_WEBCAM_CORNER_RADIUS} min={0} max={80} step={1} onChange={(v) => updateWebcam({ cornerRadius: v })} formatValue={(v) => `${Math.round(v)}px`} parseInput={(text) => parseFloat(text.replace(/px$/, ""))} />
 							<SliderControl label={tSettings("effects.webcamShadow")} value={webcam?.shadow ?? DEFAULT_WEBCAM_SHADOW} defaultValue={DEFAULT_WEBCAM_SHADOW} min={0} max={1} step={0.01} onChange={(v) => updateWebcam({ shadow: v })} formatValue={(v) => `${Math.round(v * 100)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100} />
 							<div className="rounded-lg bg-white/[0.03] px-2.5 py-2">

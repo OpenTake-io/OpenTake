@@ -41,6 +41,7 @@ interface TimelineEditorProps {
   currentTime: number;
   onSeek?: (time: number) => void;
   cursorTelemetry?: CursorTelemetryPoint[];
+  disableSuggestedZooms?: boolean;
   zoomRegions: ZoomRegion[];
   onZoomAdded: (span: Span) => void;
   onZoomSuggested?: (span: Span, focus: ZoomFocus) => void;
@@ -625,6 +626,7 @@ export default function TimelineEditor({
   currentTime,
   onSeek,
   cursorTelemetry = [],
+  disableSuggestedZooms = false,
   zoomRegions,
   onZoomAdded,
   onZoomSuggested,
@@ -937,6 +939,11 @@ export default function TimelineEditor({
       return;
     }
 
+    if (disableSuggestedZooms) {
+      toast.info("Suggested zooms are unavailable while cursor looping is enabled.");
+      return;
+    }
+
     if (!onZoomSuggested) {
       toast.error("Zoom suggestion handler unavailable");
       return;
@@ -1015,7 +1022,15 @@ export default function TimelineEditor({
     }
 
     toast.success(`Added ${addedCount} interaction-based zoom suggestion${addedCount === 1 ? "" : "s"}`);
-  }, [videoDuration, totalMs, defaultRegionDurationMs, zoomRegions, onZoomSuggested, cursorTelemetry]);
+  }, [
+    videoDuration,
+    totalMs,
+    defaultRegionDurationMs,
+    zoomRegions,
+    disableSuggestedZooms,
+    onZoomSuggested,
+    cursorTelemetry,
+  ]);
 
   const handleAddTrim = useCallback(() => {
     if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onTrimAdded) {

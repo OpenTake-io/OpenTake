@@ -18,6 +18,9 @@ import {
 	DEFAULT_WEBCAM_CORNER_RADIUS,
 	DEFAULT_WEBCAM_MARGIN,
 	DEFAULT_WEBCAM_OVERLAY,
+	DEFAULT_WEBCAM_POSITION_PRESET,
+	DEFAULT_WEBCAM_POSITION_X,
+	DEFAULT_WEBCAM_POSITION_Y,
 	DEFAULT_WEBCAM_REACT_TO_ZOOM,
 	DEFAULT_WEBCAM_SHADOW,
 	DEFAULT_WEBCAM_SIZE,
@@ -409,6 +412,30 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				typeof webcam.enabled === "boolean" ? webcam.enabled : DEFAULT_WEBCAM_OVERLAY.enabled,
 			sourcePath: webcamSourcePath,
 			mirror: typeof webcam.mirror === "boolean" ? webcam.mirror : DEFAULT_WEBCAM_OVERLAY.mirror,
+			positionPreset:
+				webcam.positionPreset === "top-left" ||
+				webcam.positionPreset === "top-center" ||
+				webcam.positionPreset === "top-right" ||
+				webcam.positionPreset === "center-left" ||
+				webcam.positionPreset === "center" ||
+				webcam.positionPreset === "center-right" ||
+				webcam.positionPreset === "bottom-left" ||
+				webcam.positionPreset === "bottom-center" ||
+				webcam.positionPreset === "bottom-right" ||
+				webcam.positionPreset === "custom"
+					? webcam.positionPreset
+					: webcam.corner === "top-left" ||
+						webcam.corner === "top-right" ||
+						webcam.corner === "bottom-left" ||
+						webcam.corner === "bottom-right"
+							? webcam.corner
+							: DEFAULT_WEBCAM_POSITION_PRESET,
+			positionX: isFiniteNumber(webcam.positionX)
+				? clamp(webcam.positionX, 0, 1)
+				: DEFAULT_WEBCAM_POSITION_X,
+			positionY: isFiniteNumber(webcam.positionY)
+				? clamp(webcam.positionY, 0, 1)
+				: DEFAULT_WEBCAM_POSITION_Y,
 			corner:
 				webcam.corner === "top-left" ||
 				webcam.corner === "top-right" ||

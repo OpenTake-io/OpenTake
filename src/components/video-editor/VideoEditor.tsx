@@ -804,10 +804,20 @@ export default function VideoEditor() {
 					.pop()
 					?.replace(/\.[^.]+$/, "") || `project-${Date.now()}`;
 			const projectSnapshot = JSON.stringify(projectData);
+			let targetProjectPath = forceSaveAs ? undefined : (currentProjectPath ?? undefined);
+
+			if (!forceSaveAs && !targetProjectPath) {
+				const activeProjectResult = await window.electronAPI.loadCurrentProjectFile();
+				if (activeProjectResult.success && activeProjectResult.path) {
+					targetProjectPath = activeProjectResult.path;
+					setCurrentProjectPath(activeProjectResult.path);
+				}
+			}
+
 			const result = await window.electronAPI.saveProjectFile(
 				projectData,
 				fileNameBase,
-				forceSaveAs ? undefined : (currentProjectPath ?? undefined),
+				targetProjectPath,
 			);
 
 			if (result.canceled) {
@@ -1019,11 +1029,13 @@ export default function VideoEditor() {
 	}, [loopCursor, zoomRegions, displayedTimelineWindow, connectZooms]);
 
 	useEffect(() => {
+		const suggestionTelemetry = effectiveCursorTelemetry;
 		if (
 			!videoPath ||
 			duration <= 0 ||
+			loopCursor ||
 			zoomRegions.length > 0 ||
-			normalizedCursorTelemetry.length < 2
+			suggestionTelemetry.length < 2
 		) {
 			return;
 		}
@@ -1037,7 +1049,7 @@ export default function VideoEditor() {
 			return;
 		}
 
-		const candidates = detectInteractionCandidates(normalizedCursorTelemetry);
+		const candidates = detectInteractionCandidates(suggestionTelemetry);
 		if (candidates.length === 0) {
 			autoSuggestedVideoPathRef.current = videoPath;
 			return;
@@ -1094,7 +1106,7 @@ export default function VideoEditor() {
 		});
 
 		autoSuggestedVideoPathRef.current = videoPath;
-	}, [videoPath, duration, normalizedCursorTelemetry, zoomRegions.length]);
+	}, [videoPath, duration, effectiveCursorTelemetry, loopCursor, zoomRegions.length]);
 
 	// Initialize default wallpaper with resolved asset path
 	useEffect(() => {
@@ -2491,6 +2503,7 @@ export default function VideoEditor() {
 									currentTime={currentTime}
 									onSeek={handleSeek}
 									cursorTelemetry={effectiveCursorTelemetry}
+									disableSuggestedZooms={loopCursor}
 									zoomRegions={effectiveZoomRegions}
 									onZoomAdded={handleZoomAdded}
 									onZoomSuggested={handleZoomSuggested}

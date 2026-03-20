@@ -71,7 +71,7 @@ import {
   DEFAULT_CURSOR_SMOOTHING,
   DEFAULT_CURSOR_SWAY,
 } from "./types";
-import { getWebcamOverlaySizePx } from "./webcamOverlay";
+import { getWebcamOverlayPosition, getWebcamOverlaySizePx } from "./webcamOverlay";
 
 type PlaybackAnimationState = {
   scale: number;
@@ -284,12 +284,16 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     		zoomScale,
     		reactToZoom: webcam.reactToZoom ?? true,
     	});
-      const x = webcam.corner.endsWith("right")
-        ? overlay.clientWidth - scaledSize - margin
-        : margin;
-      const y = webcam.corner.startsWith("bottom")
-        ? overlay.clientHeight - scaledSize - margin
-        : margin;
+      const { x, y } = getWebcamOverlayPosition({
+        containerWidth: overlay.clientWidth,
+        containerHeight: overlay.clientHeight,
+        size: scaledSize,
+        margin,
+        positionPreset: webcam.positionPreset ?? webcam.corner,
+        positionX: webcam.positionX ?? 1,
+        positionY: webcam.positionY ?? 1,
+        legacyCorner: webcam.corner,
+      });
 
       bubble.style.display = "block";
       bubble.style.left = `${x}px`;
