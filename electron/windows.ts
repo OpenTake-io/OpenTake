@@ -274,10 +274,11 @@ export function createHudOverlayWindow(): BrowserWindow {
 
 export function createEditorWindow(): BrowserWindow {
 	const isMac = process.platform === "darwin";
+	const { width, height } = getScreen().getPrimaryDisplay().workAreaSize;
 
 	const win = new BrowserWindow({
-		width: 1200,
-		height: 800,
+		width: Math.round(width * 0.8),
+		height: Math.round(height * 0.8),
 		minWidth: 800,
 		minHeight: 600,
 		...(process.platform !== "darwin" && {
@@ -305,7 +306,6 @@ export function createEditorWindow(): BrowserWindow {
 
 	win.once("ready-to-show", () => {
 		win.show();
-		win.maximize();
 	});
 
 	win.webContents.on("did-finish-load", () => {
