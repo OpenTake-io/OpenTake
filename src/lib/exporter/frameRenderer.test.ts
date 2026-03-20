@@ -150,7 +150,9 @@ class FakeVideoElement {
 function createMockContext() {
   return {
     beginPath: vi.fn(),
-    roundRect: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    closePath: vi.fn(),
     clip: vi.fn(),
     drawImage: vi.fn(),
     save: vi.fn(),

@@ -72,6 +72,7 @@ import {
   DEFAULT_CURSOR_SWAY,
 } from "./types";
 import { getWebcamOverlayPosition, getWebcamOverlaySizePx } from "./webcamOverlay";
+import { getSquircleSvgPath } from "@/lib/geometry/squircle";
 
 type PlaybackAnimationState = {
   scale: number;
@@ -300,7 +301,16 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       bubble.style.top = `${y}px`;
       bubble.style.width = `${scaledSize}px`;
       bubble.style.height = `${scaledSize}px`;
-      bubble.style.borderRadius = `${webcam.cornerRadius ?? 18}px`;
+      const squirclePath = getSquircleSvgPath({
+        x: 0,
+        y: 0,
+        width: scaledSize,
+        height: scaledSize,
+        radius: webcam.cornerRadius ?? 18,
+      });
+      bubble.style.borderRadius = "0px";
+      bubble.style.clipPath = `path('${squirclePath}')`;
+      bubble.style.setProperty("-webkit-clip-path", `path('${squirclePath}')`);
       bubble.style.boxShadow = `0 ${Math.round(scaledSize * 0.06)}px ${Math.round(
         scaledSize * 0.22,
       )}px rgba(0, 0, 0, ${webcam.shadow ?? 0.35})`;
