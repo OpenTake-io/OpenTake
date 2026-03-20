@@ -15,7 +15,6 @@ import { useI18n } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import type { AppLocale } from "@/i18n/config";
 import { SUPPORTED_LOCALES } from "@/i18n/config";
-import { getAssetPath } from "@/lib/assetPath";
 import {
 	calculateOutputDimensions,
 	type ExportFormat,
@@ -29,7 +28,6 @@ import {
 	VideoExporter,
 } from "@/lib/exporter";
 import { matchesShortcut } from "@/lib/shortcuts";
-import { DEFAULT_WALLPAPER_RELATIVE_PATH } from "@/lib/wallpapers";
 import { type AspectRatio, getAspectRatioValue } from "@/utils/aspectRatioUtils";
 import { ExportSettingsMenu } from "./ExportSettingsMenu";
 import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
@@ -196,6 +194,7 @@ export default function VideoEditor() {
 	const [hasPendingExportSave, setHasPendingExportSave] = useState(false);
 	const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string | null>(null);
 	const [showCropModal, setShowCropModal] = useState(false);
+	const [previewVersion, setPreviewVersion] = useState(0);
 
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
 	const nextZoomIdRef = useRef(1);
@@ -1108,31 +1107,12 @@ export default function VideoEditor() {
 		autoSuggestedVideoPathRef.current = videoPath;
 	}, [videoPath, duration, effectiveCursorTelemetry, loopCursor, zoomRegions.length]);
 
-	// Initialize default wallpaper with resolved asset path
-	useEffect(() => {
-		let mounted = true;
-		(async () => {
-			try {
-				const resolvedPath = await getAssetPath(DEFAULT_WALLPAPER_RELATIVE_PATH);
-				if (mounted) {
-					setWallpaper(resolvedPath);
-				}
-			} catch (err) {
-				// If resolution fails, keep the fallback
-				console.warn("Failed to resolve default wallpaper path:", err);
-			}
-		})();
-		return () => {
-			mounted = false;
-		};
-	}, []);
-
 	function togglePlayPause() {
 		const playback = videoPlaybackRef.current;
 		const video = playback?.video;
 		if (!playback || !video) return;
 
-		if (isPlaying) {
+		if (!video.paused && !video.ended) {
 			playback.pause();
 		} else {
 			playback.play().catch((err) => console.error("Video play failed:", err));
@@ -1968,7 +1948,6 @@ export default function VideoEditor() {
 					videoPlaybackRef.current?.play();
 				} else {
 					video.currentTime = restoreTime;
-					await videoPlaybackRef.current?.refreshFrame();
 				}
 			} catch (error) {
 				console.error("Export error:", error);
@@ -1976,13 +1955,11 @@ export default function VideoEditor() {
 				setExportError(errorMessage);
 				toast.error(`Export failed: ${errorMessage}`);
 			} finally {
-				if (!isPlaying) {
-					await videoPlaybackRef.current?.refreshFrame().catch(() => undefined);
-				}
 				setIsExporting(false);
 				exporterRef.current = null;
 				setShowExportDropdown(keepExportDialogOpen);
 				setExportProgress(null);
+				setPreviewVersion((version) => version + 1);
 			}
 		},
 		[
@@ -2421,7 +2398,7 @@ export default function VideoEditor() {
 										}}
 									>
 										<VideoPlayback
-											key={videoPath || "no-video"}
+											key={`${videoPath || "no-video"}:${previewVersion}`}
 											aspectRatio={aspectRatio}
 											ref={videoPlaybackRef}
 											videoPath={videoPath || ""}

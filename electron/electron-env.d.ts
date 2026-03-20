@@ -78,6 +78,11 @@ interface Window {
 			fileName: string,
 		) => Promise<{ success: boolean; path?: string; message?: string }>;
 		getRecordedVideoPath: () => Promise<{ success: boolean; path?: string; message?: string }>;
+		listAssetDirectory: (relativeDir: string) => Promise<{
+			success: boolean;
+			files?: string[];
+			error?: string;
+		}>;
 		readLocalFile: (
 			filePath: string,
 		) => Promise<{ success: boolean; data?: Uint8Array; error?: string }>;

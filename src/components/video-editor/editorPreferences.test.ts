@@ -101,6 +101,19 @@ describe("editorPreferences", () => {
 		});
 	});
 
+	it("preserves a stored wallpaper choice on startup", () => {
+		vi.stubGlobal(
+			"localStorage",
+			createStorageMock({
+				[EDITOR_PREFERENCES_STORAGE_KEY]: JSON.stringify({
+					wallpaper: "/wallpapers/wallpaper1.jpg",
+				}),
+			}),
+		);
+
+		expect(loadEditorPreferences().wallpaper).toBe("/wallpapers/wallpaper1.jpg");
+	});
+
 	it("preserves the last valid custom aspect inputs while typing", () => {
 		const localStorage = createStorageMock({
 			[EDITOR_PREFERENCES_STORAGE_KEY]: JSON.stringify({

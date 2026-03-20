@@ -653,6 +653,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     }, [cursorSway]);
 
     useEffect(() => {
+      currentTimeRef.current = currentTime * 1000;
+    }, [currentTime]);
+
+    useEffect(() => {
       if (!pixiReady || !videoReady) return;
 
       const app = appRef.current;
@@ -672,11 +676,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       }
 
       animationStateRef.current = createPlaybackAnimationState();
-
-      // Reset cursor overlay smoothing on layout change
       cursorOverlayRef.current?.reset();
-
-      // Reset motion blur state for clean transitions
       motionBlurStateRef.current = createMotionBlurState();
 
       if (blurFilterRef.current) {
@@ -1248,10 +1248,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     ) => {
       const video = e.currentTarget;
       onDurationChange(video.duration);
-      video.currentTime = 0;
+      const targetTime = clampMediaTimeToDuration(
+        currentTime,
+        Number.isFinite(video.duration) ? video.duration : null,
+      );
+      video.currentTime = targetTime;
       video.pause();
       allowPlaybackRef.current = false;
-      currentTimeRef.current = 0;
+      currentTimeRef.current = targetTime * 1000;
 
       if (videoReadyRafRef.current) {
         cancelAnimationFrame(videoReadyRafRef.current);
