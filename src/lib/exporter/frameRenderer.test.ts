@@ -206,6 +206,7 @@ describe('FrameRenderer webcam export path', () => {
         callback(0);
         return 1;
       },
+      cancelAnimationFrame: vi.fn(),
       HTMLMediaElement: {
         HAVE_CURRENT_DATA: 2,
       },
@@ -235,6 +236,25 @@ describe('FrameRenderer webcam export path', () => {
     expect(renderer.webcamSeekPromise).toBeNull();
   });
 
+  it('falls back to animation frame when requestVideoFrameCallback does not fire', async () => {
+    const renderer = createRenderer() as any;
+    const webcamVideo = new FakeVideoElement({ duration: 4.5, currentTime: 0.25 }) as FakeVideoElement & {
+      requestVideoFrameCallback?: (callback: () => void) => number;
+      cancelVideoFrameCallback?: (handle: number) => void;
+    };
+    webcamVideo.requestVideoFrameCallback = vi.fn(() => 7);
+    webcamVideo.cancelVideoFrameCallback = vi.fn();
+    renderer.webcamVideoElement = webcamVideo;
+
+    await renderer.syncWebcamFrame(1.5);
+
+    expect(webcamVideo.currentTime).toBe(1.5);
+    expect(renderer.lastSyncedWebcamTime).toBe(1.5);
+    expect(webcamVideo.requestVideoFrameCallback).toHaveBeenCalledTimes(1);
+    expect(webcamVideo.cancelVideoFrameCallback).not.toHaveBeenCalled();
+    expect(renderer.webcamSeekPromise).toBeNull();
+  });
+
   it('uses the cached webcam frame when the live video is out of sync', () => {
     const renderer = createRenderer() as any;
     const outputContext = createMockContext();
@@ -252,6 +272,34 @@ describe('FrameRenderer webcam export path', () => {
     renderer.webcamFrameCacheCanvas = cachedFrameCanvas;
     renderer.webcamFrameCacheCtx = cachedFrameCanvas.getContext('2d');
     renderer.lastSyncedWebcamTime = 1.5;
+    renderer.currentVideoTime = 2;
+    renderer.animationState.appliedScale = 1;
+
+    renderer.drawWebcamOverlay(outputContext, 1280, 720);
+
+    const bubbleCanvas = createdCanvases[0];
+    expect(bubbleCanvas).toBeDefined();
+    expect((bubbleCanvas.context.drawImage as any).mock.calls[0][0]).toBe(cachedFrameCanvas);
+    expect((outputContext.drawImage as any).mock.calls[0][0]).toBe(bubbleCanvas);
+  });
+
+  it('keeps drawing the cached webcam frame when the live element temporarily has no current data', () => {
+    const renderer = createRenderer() as any;
+    const outputContext = createMockContext();
+    const webcamVideo = new FakeVideoElement({
+      currentTime: 2,
+      readyState: 0,
+      videoWidth: 640,
+      videoHeight: 360,
+    });
+    const cachedFrameCanvas = createMockCanvas();
+    cachedFrameCanvas.width = 640;
+    cachedFrameCanvas.height = 360;
+
+    renderer.webcamVideoElement = webcamVideo;
+    renderer.webcamFrameCacheCanvas = cachedFrameCanvas;
+    renderer.webcamFrameCacheCtx = cachedFrameCanvas.getContext('2d');
+    renderer.lastSyncedWebcamTime = 2;
     renderer.currentVideoTime = 2;
     renderer.animationState.appliedScale = 1;
 
@@ -284,7 +332,28 @@ describe('FrameRenderer webcam export path', () => {
     const cacheCanvas = createdCanvases[1];
     expect(cacheCanvas).toBeDefined();
     expect((cacheCanvas.context.drawImage as any).mock.calls[0][0]).toBe(webcamVideo);
-    expect((bubbleCanvas.context.drawImage as any).mock.calls[0][0]).toBe(webcamVideo);
+    expect((bubbleCanvas.context.drawImage as any).mock.calls[0][0]).toBe(cacheCanvas);
     expect((outputContext.drawImage as any).mock.calls[0][0]).toBe(bubbleCanvas);
+  });
+
+  it('reuses the webcam bubble canvas across frames', () => {
+    const renderer = createRenderer() as any;
+    const outputContext = createMockContext();
+    const webcamVideo = new FakeVideoElement({
+      currentTime: 2,
+      readyState: 2,
+      videoWidth: 800,
+      videoHeight: 600,
+    });
+
+    renderer.webcamVideoElement = webcamVideo;
+    renderer.lastSyncedWebcamTime = 2;
+    renderer.currentVideoTime = 2;
+    renderer.animationState.appliedScale = 1;
+
+    renderer.drawWebcamOverlay(outputContext, 1280, 720);
+    renderer.drawWebcamOverlay(outputContext, 1280, 720);
+
+    expect(createdCanvases).toHaveLength(2);
   });
 });

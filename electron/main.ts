@@ -327,8 +327,10 @@ function createEditorWindowWrapper() {
 
     if (choice === 0) {
       mainWindow!.webContents.send('request-save-before-close')
-      ipcMain.once('save-before-close-done', () => {
-        closeEditorWindowBypassingUnsavedPrompt(mainWindow)
+      ipcMain.once('save-before-close-done', (_event, saved: boolean) => {
+        if (saved) {
+          closeEditorWindowBypassingUnsavedPrompt(mainWindow)
+        }
       })
     } else if (choice === 1) {
       closeEditorWindowBypassingUnsavedPrompt(mainWindow)
@@ -352,7 +354,9 @@ app.on('before-quit', () => {
 })
 
 app.on('window-all-closed', () => {
-  // Keep app running (macOS behavior)
+  if (process.platform !== 'darwin') {
+    app.quit()
+  }
 })
 
 app.on('activate', () => {

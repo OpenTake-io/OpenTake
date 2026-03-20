@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { fixWebmDuration } from "@fix-webm-duration/fix";
 import { toast } from "sonner";
+import { getEffectiveRecordingDurationMs } from "@/lib/mediaTiming";
 
 const TARGET_FRAME_RATE = 60;
 const TARGET_WIDTH = 3840;
@@ -88,6 +89,41 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const pendingWebcamPathPromise = useRef<Promise<string | null> | null>(null);
   const webcamStopPromise = useRef<Promise<string | null> | null>(null);
   const webcamStopResolver = useRef<((path: string | null) => void) | null>(null);
+  const accumulatedPausedDurationMs = useRef(0);
+  const pauseStartedAtMs = useRef<number | null>(null);
+
+  const resetRecordingClock = useCallback((startedAt: number) => {
+    startTime.current = startedAt;
+    accumulatedPausedDurationMs.current = 0;
+    pauseStartedAtMs.current = null;
+  }, []);
+
+  const markRecordingPaused = useCallback((pausedAt: number) => {
+    if (pauseStartedAtMs.current === null) {
+      pauseStartedAtMs.current = pausedAt;
+    }
+  }, []);
+
+  const markRecordingResumed = useCallback((resumedAt: number) => {
+    if (pauseStartedAtMs.current === null) {
+      return;
+    }
+
+    accumulatedPausedDurationMs.current += Math.max(
+      0,
+      resumedAt - pauseStartedAtMs.current,
+    );
+    pauseStartedAtMs.current = null;
+  }, []);
+
+  const getRecordingDurationMs = useCallback((endedAt: number) => {
+    return getEffectiveRecordingDurationMs({
+      startTimeMs: startTime.current,
+      endTimeMs: endedAt,
+      accumulatedPausedDurationMs: accumulatedPausedDurationMs.current,
+      pauseStartedAtMs: pauseStartedAtMs.current,
+    });
+  }, []);
 
   const preparePermissions = useCallback(async (options: { startup?: boolean } = {}) => {
     const platform = await window.electronAPI.getPlatform();
@@ -270,7 +306,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
             return;
           }
 
-          const duration = Date.now() - startTime.current;
+          const duration = getRecordingDurationMs(Date.now());
           const webcamBlob = new Blob(webcamChunks.current, { type: mimeType });
           webcamChunks.current = [];
           const fixedBlob = await fixWebmDuration(webcamBlob, duration);
@@ -301,7 +337,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         webcamStream.current = null;
       }
     }
-  }, [webcamDeviceId, webcamEnabled]);
+  }, [getRecordingDurationMs, webcamDeviceId, webcamEnabled]);
 
   const stopRecording = useRef(() => {
     setPaused(false);
@@ -338,6 +374,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     const recorderState = recorder?.state;
     if (recorder && (recorderState === "recording" || recorderState === "paused")) {
       if (recorderState === "paused") {
+        markRecordingResumed(Date.now());
         recorder.resume();
       }
       pendingWebcamPathPromise.current = stopWebcamRecorder();
@@ -441,7 +478,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       }
 
       recordingSessionTimestamp.current = Date.now();
-      startTime.current = recordingSessionTimestamp.current;
+      resetRecordingClock(recordingSessionTimestamp.current);
       await startWebcamRecorder();
 
       const platform = await window.electronAPI.getPlatform();
@@ -516,7 +553,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         if (nativeResult.success) {
           nativeScreenRecording.current = true;
           nativeWindowsRecording.current = useNativeWindowsCapture;
-          startTime.current = Date.now();
+          resetRecordingClock(Date.now());
           setRecording(true);
           window.electronAPI?.setRecordingState(true);
 
@@ -707,7 +744,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         cleanupCapturedMedia();
         if (chunks.current.length === 0) return;
 
-        const duration = Date.now() - startTime.current;
+        const duration = getRecordingDurationMs(Date.now());
         const recordedChunks = chunks.current;
         const buggyBlob = new Blob(recordedChunks, { type: mimeType });
         chunks.current = [];
@@ -735,7 +772,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         setRecording(false);
       };
       recorder.start(RECORDER_TIMESLICE_MS);
-      startTime.current = Date.now();
+      resetRecordingClock(Date.now());
       setRecording(true);
       window.electronAPI?.setRecordingState(true);
     } catch (error) {
@@ -763,6 +800,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         if (webcamRecorder.current?.state === "recording") {
           webcamRecorder.current.pause();
         }
+        markRecordingPaused(Date.now());
         setPaused(true);
       })();
       return;
@@ -772,9 +810,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       if (webcamRecorder.current?.state === "recording") {
         webcamRecorder.current.pause();
       }
+      markRecordingPaused(Date.now());
       setPaused(true);
     }
-  }, [recording, paused]);
+  }, [markRecordingPaused, paused, recording]);
 
   const resumeRecording = useCallback(() => {
     if (!recording || !paused) return;
@@ -789,6 +828,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         if (webcamRecorder.current?.state === "paused") {
           webcamRecorder.current.resume();
         }
+        markRecordingResumed(Date.now());
         setPaused(false);
       })();
       return;
@@ -798,13 +838,15 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       if (webcamRecorder.current?.state === "paused") {
         webcamRecorder.current.resume();
       }
+      markRecordingResumed(Date.now());
       setPaused(false);
     }
-  }, [recording, paused]);
+  }, [markRecordingResumed, paused, recording]);
 
   const cancelRecording = useCallback(() => {
     if (!recording) return;
     setPaused(false);
+    markRecordingResumed(Date.now());
 
     // Discard webcam recording regardless of recording mode
     webcamChunks.current = [];
@@ -843,7 +885,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       setRecording(false);
       window.electronAPI?.setRecordingState(false);
     }
-  }, [recording, cleanupCapturedMedia]);
+  }, [cleanupCapturedMedia, markRecordingResumed, recording]);
 
   const toggleRecording = async () => {
     if (starting || countdownActive) {

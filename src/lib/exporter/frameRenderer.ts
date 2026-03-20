@@ -36,7 +36,9 @@ import {
   DEFAULT_CURSOR_CONFIG,
   preloadCursorAssets,
 } from "@/components/video-editor/videoPlayback/cursorRenderer";
+import { clampMediaTimeToDuration } from "@/lib/mediaTiming";
 import { getWebcamOverlaySizePx } from "@/components/video-editor/webcamOverlay";
+import { ForwardFrameSource } from "./forwardFrameSource";
 import { resolveMediaElementSource } from "./localMediaSource";
 
 interface FrameRenderConfig {
@@ -115,10 +117,14 @@ export class FrameRenderer {
   private currentVideoTime = 0;
   private lastMotionVector = { x: 0, y: 0 };
   private cursorOverlay: PixiCursorOverlay | null = null;
+  private webcamForwardFrameSource: ForwardFrameSource | null = null;
+  private webcamDecodedFrame: VideoFrame | null = null;
   private webcamVideoElement: HTMLVideoElement | null = null;
   private webcamSeekPromise: Promise<void> | null = null;
   private webcamFrameCacheCanvas: HTMLCanvasElement | null = null;
   private webcamFrameCacheCtx: CanvasRenderingContext2D | null = null;
+  private webcamBubbleCanvas: HTMLCanvasElement | null = null;
+  private webcamBubbleCtx: CanvasRenderingContext2D | null = null;
   private lastSyncedWebcamTime: number | null = null;
   private cleanupWebcamSource: (() => void) | null = null;
 
@@ -427,6 +433,10 @@ export class FrameRenderer {
   private async setupWebcamSource(): Promise<void> {
     const webcamUrl = this.config.webcamUrl;
     if (!this.config.webcam?.enabled || !webcamUrl) {
+      this.webcamForwardFrameSource?.cancel();
+      void this.webcamForwardFrameSource?.destroy();
+      this.webcamForwardFrameSource = null;
+      this.closeWebcamDecodedFrame();
       this.cleanupWebcamSource?.();
       this.cleanupWebcamSource = null;
       this.webcamVideoElement = null;
@@ -436,7 +446,30 @@ export class FrameRenderer {
       return;
     }
 
+    this.webcamForwardFrameSource?.cancel();
+    void this.webcamForwardFrameSource?.destroy();
+    this.webcamForwardFrameSource = null;
+    this.closeWebcamDecodedFrame();
     this.cleanupWebcamSource?.();
+    this.cleanupWebcamSource = null;
+
+    try {
+      const frameSource = new ForwardFrameSource();
+      await frameSource.initialize(webcamUrl);
+      this.webcamForwardFrameSource = frameSource;
+      this.webcamVideoElement = null;
+      this.webcamSeekPromise = null;
+      this.webcamFrameCacheCanvas = null;
+      this.webcamFrameCacheCtx = null;
+      this.lastSyncedWebcamTime = null;
+      return;
+    } catch (error) {
+      console.warn(
+        "[FrameRenderer] Decoder-backed webcam source unavailable during export; falling back to media element sync:",
+        error,
+      );
+    }
+
     const webcamSource = await resolveMediaElementSource(webcamUrl);
     this.cleanupWebcamSource = webcamSource.revoke;
 
@@ -490,15 +523,26 @@ export class FrameRenderer {
   }
 
   private async syncWebcamFrame(targetTime: number): Promise<void> {
+    if (this.webcamForwardFrameSource) {
+      const clampedTime = clampMediaTimeToDuration(targetTime, null);
+      const decodedFrame = await this.webcamForwardFrameSource.getFrameAtTime(clampedTime);
+      this.closeWebcamDecodedFrame();
+      this.webcamDecodedFrame = decodedFrame;
+      if (decodedFrame) {
+        this.lastSyncedWebcamTime = clampedTime;
+      }
+      return;
+    }
+
     const webcamVideo = this.webcamVideoElement;
     if (!webcamVideo) {
       return;
     }
 
-    const duration = Number.isFinite(webcamVideo.duration)
-      ? webcamVideo.duration
-      : targetTime;
-    const clampedTime = Math.max(0, Math.min(targetTime, duration || targetTime));
+    const clampedTime = clampMediaTimeToDuration(
+      targetTime,
+      Number.isFinite(webcamVideo.duration) ? webcamVideo.duration : null,
+    );
 
     if (Math.abs(webcamVideo.currentTime - clampedTime) <= 0.008) {
       this.lastSyncedWebcamTime = clampedTime;
@@ -512,10 +556,37 @@ export class FrameRenderer {
     this.webcamSeekPromise = new Promise<void>((resolve) => {
       let settled = false;
       let fallbackTimeout: number | null = null;
+      let animationFrameRequestId: number | null = null;
+      let videoFrameRequestId: number | null = null;
       const waitForPresentedFrame = () => {
-        requestAnimationFrame(() => {
-          finish();
-        });
+        const requestVideoFrameCallback = (
+          webcamVideo as HTMLVideoElement & {
+            requestVideoFrameCallback?: (
+              callback: (now: DOMHighResTimeStamp, metadata: VideoFrameCallbackMetadata) => void,
+            ) => number;
+            cancelVideoFrameCallback?: (handle: number) => void;
+          }
+        ).requestVideoFrameCallback;
+
+        const scheduleAnimationFrameFinish = () => {
+          animationFrameRequestId = requestAnimationFrame(() => {
+            animationFrameRequestId = null;
+            finish();
+          });
+        };
+
+        scheduleAnimationFrameFinish();
+
+        if (typeof requestVideoFrameCallback === "function") {
+          videoFrameRequestId = requestVideoFrameCallback.call(
+            webcamVideo,
+            () => {
+              videoFrameRequestId = null;
+              finish();
+            },
+          );
+          return;
+        }
       };
       const finish = () => {
         if (settled) {
@@ -542,6 +613,25 @@ export class FrameRenderer {
         webcamVideo.removeEventListener("loadeddata", handleMediaReady);
         webcamVideo.removeEventListener("canplay", handleMediaReady);
         webcamVideo.removeEventListener("error", finish);
+        if (animationFrameRequestId !== null) {
+          cancelAnimationFrame(animationFrameRequestId);
+          animationFrameRequestId = null;
+        }
+        if (
+          videoFrameRequestId !== null &&
+          typeof (
+            webcamVideo as HTMLVideoElement & {
+              cancelVideoFrameCallback?: (handle: number) => void;
+            }
+          ).cancelVideoFrameCallback === "function"
+        ) {
+          (
+            webcamVideo as HTMLVideoElement & {
+              cancelVideoFrameCallback: (handle: number) => void;
+            }
+          ).cancelVideoFrameCallback(videoFrameRequestId);
+          videoFrameRequestId = null;
+        }
         if (fallbackTimeout !== null) {
           window.clearTimeout(fallbackTimeout);
         }
@@ -561,7 +651,7 @@ export class FrameRenderer {
       });
       fallbackTimeout = window.setTimeout(() => {
         finish();
-      }, 250);
+      }, 50);
 
       try {
         webcamVideo.currentTime = clampedTime;
@@ -593,7 +683,7 @@ export class FrameRenderer {
 
     this.currentVideoTime = timestamp / 1000000;
 
-    if (this.webcamVideoElement) {
+    if (this.webcamForwardFrameSource || this.webcamVideoElement) {
       const targetTime = Math.max(0, this.currentVideoTime);
       await this.syncWebcamFrame(targetTime);
     }
@@ -956,8 +1046,27 @@ export class FrameRenderer {
     height: number,
   ): void {
     const webcam = this.config.webcam;
+    const webcamDecodedFrame = this.webcamDecodedFrame;
     const webcamVideo = this.webcamVideoElement;
-    if (!webcam?.enabled || !webcamVideo || webcamVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+    if (!webcam?.enabled || (!webcamDecodedFrame && !webcamVideo)) {
+      return;
+    }
+
+    const hasCachedWebcamFrame = Boolean(
+      this.webcamFrameCacheCanvas &&
+        this.webcamFrameCacheCanvas.width > 0 &&
+        this.webcamFrameCacheCanvas.height > 0,
+    );
+    const hasLiveWebcamFrame =
+      webcamDecodedFrame
+        ? webcamDecodedFrame.displayWidth > 0 && webcamDecodedFrame.displayHeight > 0
+        : Boolean(
+            webcamVideo &&
+              webcamVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+              webcamVideo.videoWidth > 0 &&
+              webcamVideo.videoHeight > 0,
+          );
+    if (!hasLiveWebcamFrame && !hasCachedWebcamFrame) {
       return;
     }
 
@@ -974,32 +1083,45 @@ export class FrameRenderer {
     const y = webcam.corner.startsWith("bottom") ? height - size - margin : margin;
     const radius = Math.max(0, webcam.cornerRadius ?? 18);
 
-    const bubbleCanvas = document.createElement("canvas");
-    bubbleCanvas.width = Math.ceil(size);
-    bubbleCanvas.height = Math.ceil(size);
-    const bubbleCtx = bubbleCanvas.getContext("2d");
+    const bubbleCanvas = this.webcamBubbleCanvas ?? document.createElement("canvas");
+    const bubbleSize = Math.max(1, Math.ceil(size));
+    if (bubbleCanvas.width !== bubbleSize || bubbleCanvas.height !== bubbleSize) {
+      bubbleCanvas.width = bubbleSize;
+      bubbleCanvas.height = bubbleSize;
+    }
+    this.webcamBubbleCanvas = bubbleCanvas;
+    const bubbleCtx = this.webcamBubbleCtx ?? bubbleCanvas.getContext("2d");
     if (!bubbleCtx) {
       return;
     }
+    this.webcamBubbleCtx = bubbleCtx;
+    bubbleCtx.clearRect(0, 0, bubbleCanvas.width, bubbleCanvas.height);
 
     const canRefreshCache =
-      webcamVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-      !webcamVideo.seeking &&
+      hasLiveWebcamFrame &&
       this.lastSyncedWebcamTime !== null &&
       Math.abs(this.lastSyncedWebcamTime - this.currentVideoTime) <= 0.02 &&
-      Math.abs(webcamVideo.currentTime - this.currentVideoTime) <= 0.02 &&
-      webcamVideo.videoWidth > 0 &&
-      webcamVideo.videoHeight > 0;
+      (webcamDecodedFrame
+        ? true
+        : Boolean(
+            webcamVideo &&
+              !webcamVideo.seeking &&
+              Math.abs(webcamVideo.currentTime - this.currentVideoTime) <= 0.02 &&
+              webcamVideo.videoWidth > 0 &&
+              webcamVideo.videoHeight > 0,
+          ));
 
     if (canRefreshCache) {
+      const liveFrameWidth = webcamDecodedFrame?.displayWidth ?? webcamVideo?.videoWidth ?? 0;
+      const liveFrameHeight = webcamDecodedFrame?.displayHeight ?? webcamVideo?.videoHeight ?? 0;
       if (
         !this.webcamFrameCacheCanvas ||
-        this.webcamFrameCacheCanvas.width !== webcamVideo.videoWidth ||
-        this.webcamFrameCacheCanvas.height !== webcamVideo.videoHeight
+        this.webcamFrameCacheCanvas.width !== liveFrameWidth ||
+        this.webcamFrameCacheCanvas.height !== liveFrameHeight
       ) {
         this.webcamFrameCacheCanvas = document.createElement("canvas");
-        this.webcamFrameCacheCanvas.width = webcamVideo.videoWidth;
-        this.webcamFrameCacheCanvas.height = webcamVideo.videoHeight;
+        this.webcamFrameCacheCanvas.width = liveFrameWidth;
+        this.webcamFrameCacheCanvas.height = liveFrameHeight;
         this.webcamFrameCacheCtx = this.webcamFrameCacheCanvas.getContext("2d");
       }
 
@@ -1010,7 +1132,7 @@ export class FrameRenderer {
         this.webcamFrameCacheCanvas!.height,
       );
       this.webcamFrameCacheCtx?.drawImage(
-        webcamVideo,
+        webcamDecodedFrame ?? webcamVideo!,
         0,
         0,
         this.webcamFrameCacheCanvas!.width,
@@ -1018,27 +1140,30 @@ export class FrameRenderer {
       );
     }
 
-    const webcamFrameSource = canRefreshCache
-      ? webcamVideo
-      : this.webcamFrameCacheCanvas;
+    const webcamFrameSource = this.webcamFrameCacheCanvas ?? (hasLiveWebcamFrame ? (webcamDecodedFrame ?? webcamVideo) : null);
     if (!webcamFrameSource) {
       return;
     }
 
     const sourceWidth =
-      ("videoWidth" in webcamFrameSource
-        ? webcamFrameSource.videoWidth
-        : webcamFrameSource.width) || size;
+      ("displayWidth" in webcamFrameSource
+        ? webcamFrameSource.displayWidth
+        : "videoWidth" in webcamFrameSource
+          ? webcamFrameSource.videoWidth
+          : webcamFrameSource.width) || size;
     const sourceHeight =
-      ("videoHeight" in webcamFrameSource
-        ? webcamFrameSource.videoHeight
-        : webcamFrameSource.height) || size;
+      ("displayHeight" in webcamFrameSource
+        ? webcamFrameSource.displayHeight
+        : "videoHeight" in webcamFrameSource
+          ? webcamFrameSource.videoHeight
+          : webcamFrameSource.height) || size;
     const coverScale = Math.max(size / sourceWidth, size / sourceHeight);
     const drawWidth = sourceWidth * coverScale;
     const drawHeight = sourceHeight * coverScale;
     const drawX = (size - drawWidth) / 2;
     const drawY = (size - drawHeight) / 2;
 
+    bubbleCtx.save();
     bubbleCtx.beginPath();
     bubbleCtx.roundRect(0, 0, size, size, radius);
     bubbleCtx.clip();
@@ -1051,6 +1176,7 @@ export class FrameRenderer {
     } else {
       bubbleCtx.drawImage(webcamFrameSource, drawX, drawY, drawWidth, drawHeight);
     }
+    bubbleCtx.restore();
 
     if ((webcam.shadow ?? 0) > 0) {
       const shadow = Math.max(0, Math.min(1, webcam.shadow));
@@ -1062,6 +1188,15 @@ export class FrameRenderer {
     }
 
     ctx.drawImage(bubbleCanvas, x, y, size, size);
+  }
+
+  private closeWebcamDecodedFrame(): void {
+    if (!this.webcamDecodedFrame) {
+      return;
+    }
+
+    this.webcamDecodedFrame.close();
+    this.webcamDecodedFrame = null;
   }
 
   getCanvas(): HTMLCanvasElement {
@@ -1106,10 +1241,16 @@ export class FrameRenderer {
       this.webcamVideoElement.load();
       this.webcamVideoElement = null;
     }
+    this.webcamForwardFrameSource?.cancel();
+    void this.webcamForwardFrameSource?.destroy();
+    this.webcamForwardFrameSource = null;
+    this.closeWebcamDecodedFrame();
     this.cleanupWebcamSource?.();
     this.cleanupWebcamSource = null;
     this.webcamFrameCacheCanvas = null;
     this.webcamFrameCacheCtx = null;
+    this.webcamBubbleCanvas = null;
+    this.webcamBubbleCtx = null;
     this.lastSyncedWebcamTime = null;
   }
 }
