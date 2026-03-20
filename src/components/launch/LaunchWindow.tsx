@@ -175,6 +175,7 @@ export function LaunchWindow() {
 	const [hideHudFromCapture, setHideHudFromCapture] = useState(true);
 	const [platform, setPlatform] = useState<string | null>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
+	const hudBarRef = useRef<HTMLDivElement>(null);
 	const webcamPreviewRef = useRef<HTMLVideoElement | null>(null);
 
 	const micDropdownOpen = activeDropdown === "mic";
@@ -359,6 +360,43 @@ export function LaunchWindow() {
 	}, [activeDropdown]);
 
 	useEffect(() => {
+		const hudBar = hudBarRef.current;
+		if (!hudBar || typeof ResizeObserver === "undefined") {
+			return;
+		}
+
+		let frameId = 0;
+		const reportWidth = () => {
+			frameId = 0;
+			const measuredWidth = Math.ceil(
+				Math.max(hudBar.getBoundingClientRect().width, hudBar.scrollWidth) + 24,
+			);
+			window.electronAPI.setHudOverlayCompactWidth(measuredWidth);
+		};
+
+		const scheduleWidthReport = () => {
+			if (frameId !== 0) {
+				cancelAnimationFrame(frameId);
+			}
+			frameId = requestAnimationFrame(reportWidth);
+		};
+
+		scheduleWidthReport();
+
+		const resizeObserver = new ResizeObserver(() => {
+			scheduleWidthReport();
+		});
+		resizeObserver.observe(hudBar);
+
+		return () => {
+			resizeObserver.disconnect();
+			if (frameId !== 0) {
+				cancelAnimationFrame(frameId);
+			}
+		};
+	}, [selectedSource, recording, paused, activeDropdown]);
+
+	useEffect(() => {
 		const handleClick = (e: MouseEvent) => {
 			if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
 				setActiveDropdown("none");
@@ -528,7 +566,9 @@ export function LaunchWindow() {
 				title={selectedSource}
 			>
 				<Monitor size={16} />
-				<ContentClamp truncateLength={10}>{selectedSource}</ContentClamp>
+				<ContentClamp className={styles.sourceLabel} truncateLength={36}>
+					{selectedSource}
+				</ContentClamp>
 				<ChevronUp size={10} className={`text-[#6b6b78] ml-0.5 transition-transform duration-200 ${activeDropdown === "sources" ? "" : "rotate-180"}`} />
 			</button>
 
@@ -805,6 +845,7 @@ export function LaunchWindow() {
 
 				<div className="flex flex-col items-center pointer-events-auto">
 					<motion.div
+						ref={hudBarRef}
 						layout
 						transition={hudStateTransition}
 						className={`${styles.bar} ${styles.electronDrag} mb-2`}

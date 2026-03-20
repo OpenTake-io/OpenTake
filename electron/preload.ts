@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	setHudOverlayExpanded: (expanded: boolean) => {
 		ipcRenderer.send("set-hud-overlay-expanded", expanded);
 	},
+	setHudOverlayCompactWidth: (width: number) => {
+		ipcRenderer.send("set-hud-overlay-compact-width", width);
+	},
 	getHudOverlayCaptureProtection: () => {
 		return ipcRenderer.invoke("get-hud-overlay-capture-protection");
 	},
