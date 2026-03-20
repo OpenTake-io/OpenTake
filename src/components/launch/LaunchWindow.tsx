@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import {
 	Monitor,
 	Mic,
@@ -472,11 +473,118 @@ export function LaunchWindow() {
 
 	const screenSources = sources.filter((s) => s.sourceType === "screen");
 	const windowSources = sources.filter((s) => s.sourceType === "window");
+	const hudStateTransition = { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const };
 
 	const toggleWebcam = () => {
 		if (recording) return;
 		toggleDropdown("webcam");
 	};
+
+	const recordingControls = (
+		<>
+			<div className="flex items-center gap-[5px]">
+				<div className={`w-[7px] h-[7px] rounded-full ${paused ? "bg-[#fbbf24]" : `bg-[#f43f5e] ${styles.recDotBlink}`}`} />
+				<span className={`text-[10px] font-bold tracking-[0.06em] ${paused ? "text-[#fbbf24]" : "text-[#f43f5e]"}`}>
+					{paused ? t("recording.paused") : t("recording.rec")}
+				</span>
+			</div>
+
+			<span className={`font-mono text-xs font-semibold min-w-[52px] text-center tracking-[0.02em] ${paused ? "text-[#fbbf24]" : "text-[#eeeef2]"}`}>
+				{formatTime(elapsed)}
+			</span>
+
+			<Separator />
+
+			<IconButton title={microphoneEnabled ? t("recording.disableMicrophone") : t("recording.enableMicrophone")} className={microphoneEnabled ? styles.ibActive : ""}>
+				{microphoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
+			</IconButton>
+
+			<Separator />
+
+			<IconButton onClick={paused ? resumeRecording : pauseRecording} title={paused ? t("recording.resume") : t("recording.pause")} className={paused ? styles.ibGreen : ""}>
+				{paused ? <Play size={18} fill="currentColor" strokeWidth={0} /> : <Pause size={18} />}
+			</IconButton>
+
+			<IconButton onClick={toggleRecording} title={t("recording.stop")} className={styles.ibRed}>
+				<Square size={16} fill="currentColor" strokeWidth={0} />
+			</IconButton>
+
+			<IconButton onClick={() => window.electronAPI?.hudOverlayHide?.()} title={t("recording.hideHud")}>
+				<Minus size={16} />
+			</IconButton>
+
+			<IconButton onClick={cancelRecording} title={t("recording.cancel")}>
+				<X size={18} />
+			</IconButton>
+		</>
+	);
+
+	const idleControls = (
+		<>
+			<button
+				type="button"
+				className={`${styles.screenSel} ${styles.electronNoDrag}`}
+				onClick={() => toggleDropdown("sources")}
+				title={selectedSource}
+			>
+				<Monitor size={16} />
+				<ContentClamp truncateLength={10}>{selectedSource}</ContentClamp>
+				<ChevronUp size={10} className={`text-[#6b6b78] ml-0.5 transition-transform duration-200 ${activeDropdown === "sources" ? "" : "rotate-180"}`} />
+			</button>
+
+			<Separator />
+
+			<IconButton
+				onClick={toggleMicrophone}
+				title={microphoneEnabled ? t("recording.disableMicrophone") : t("recording.enableMicrophone")}
+				className={microphoneEnabled ? styles.ibActive : ""}
+			>
+				{microphoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
+			</IconButton>
+
+			<IconButton
+				onClick={toggleWebcam}
+				title={webcamEnabled ? t("recording.disableWebcam") : t("recording.enableWebcam")}
+				className={webcamEnabled ? styles.ibActive : ""}
+			>
+				{webcamEnabled ? <Video size={18} /> : <VideoOff size={18} />}
+			</IconButton>
+
+			<IconButton
+				onClick={() => toggleDropdown("countdown")}
+				title={t("recording.countdownDelay")}
+				className={countdownDelay > 0 ? styles.ibActive : ""}
+			>
+				<Timer size={18} />
+			</IconButton>
+
+			<Separator />
+
+			<button
+				type="button"
+				className={`${styles.recBtn} ${styles.electronNoDrag}`}
+				onClick={hasSelectedSource ? toggleRecording : () => toggleDropdown("sources")}
+				disabled={countdownActive}
+				title={t("recording.record")}
+			>
+				<div className={styles.recDot} />
+			</button>
+
+			<Separator />
+
+			<IconButton onClick={() => toggleDropdown("more")} title={t("recording.more")}>
+				<MoreVertical size={18} />
+			</IconButton>
+
+			<IconButton onClick={() => window.electronAPI?.hudOverlayHide?.()} title={t("recording.hideHud")}>
+				<Minus size={16} />
+			</IconButton>
+
+			<IconButton onClick={() => window.electronAPI?.hudOverlayClose?.()} title={t("recording.closeApp")}>
+				<X size={16} />
+			</IconButton>
+		</>
+	);
 
 	return (
 		<div
@@ -696,115 +804,31 @@ export function LaunchWindow() {
 				</div>
 
 				<div className="flex flex-col items-center pointer-events-auto">
-					<div className={`${styles.bar} ${styles.electronDrag} mb-2`}>
-				<div className={`flex items-center px-0.5 ${styles.electronDrag}`}>
-					<RxDragHandleDots2 size={14} className="text-[#6b6b78]" />
-				</div>
-
-				{recording ? (
-					<>
-						<div className="flex items-center gap-[5px]">
-							<div className={`w-[7px] h-[7px] rounded-full ${paused ? "bg-[#fbbf24]" : `bg-[#f43f5e] ${styles.recDotBlink}`}`} />
-							<span className={`text-[10px] font-bold tracking-[0.06em] ${paused ? "text-[#fbbf24]" : "text-[#f43f5e]"}`}>
-								{paused ? t("recording.paused") : t("recording.rec")}
-							</span>
+					<motion.div
+						layout
+						transition={hudStateTransition}
+						className={`${styles.bar} ${styles.electronDrag} mb-2`}
+					>
+						<div className={`flex items-center px-0.5 ${styles.electronDrag}`}>
+							<RxDragHandleDots2 size={14} className="text-[#6b6b78]" />
 						</div>
 
-						<span className={`font-mono text-xs font-semibold min-w-[52px] text-center tracking-[0.02em] ${paused ? "text-[#fbbf24]" : "text-[#eeeef2]"}`}>
-							{formatTime(elapsed)}
-						</span>
-
-						<Separator />
-
-						<IconButton title={microphoneEnabled ? t("recording.disableMicrophone") : t("recording.enableMicrophone")} className={microphoneEnabled ? styles.ibActive : ""}>
-							{microphoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
-						</IconButton>
-
-						<Separator />
-
-						<IconButton onClick={paused ? resumeRecording : pauseRecording} title={paused ? t("recording.resume") : t("recording.pause")} className={paused ? styles.ibGreen : ""}>
-							{paused ? <Play size={18} fill="currentColor" strokeWidth={0} /> : <Pause size={18} />}
-						</IconButton>
-
-						<IconButton onClick={toggleRecording} title={t("recording.stop")} className={styles.ibRed}>
-							<Square size={16} fill="currentColor" strokeWidth={0} />
-						</IconButton>
-
-						<IconButton onClick={() => window.electronAPI?.hudOverlayHide?.()} title={t("recording.hideHud")}>
-							<Minus size={16} />
-						</IconButton>
-
-						<IconButton onClick={cancelRecording} title={t("recording.cancel")}>
-							<X size={18} />
-						</IconButton>
-					</>
-				) : (
-					<>
-						<button
-							type="button"
-							className={`${styles.screenSel} ${styles.electronNoDrag}`}
-							onClick={() => toggleDropdown("sources")}
-							title={selectedSource}
-						>
-							<Monitor size={16} />
-							<ContentClamp truncateLength={10}>{selectedSource}</ContentClamp>
-							<ChevronUp size={10} className={`text-[#6b6b78] ml-0.5 transition-transform duration-200 ${activeDropdown === "sources" ? "" : "rotate-180"}`} />
-						</button>
-
-						<Separator />
-
-						<IconButton
-							onClick={toggleMicrophone}
-							title={microphoneEnabled ? t("recording.disableMicrophone") : t("recording.enableMicrophone")}
-							className={microphoneEnabled ? styles.ibActive : ""}
-						>
-							{microphoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
-						</IconButton>
-
-						<IconButton
-							onClick={toggleWebcam}
-							title={webcamEnabled ? t("recording.disableWebcam") : t("recording.enableWebcam")}
-							className={webcamEnabled ? styles.ibActive : ""}
-						>
-							{webcamEnabled ? <Video size={18} /> : <VideoOff size={18} />}
-						</IconButton>
-
-						<IconButton
-							onClick={() => toggleDropdown("countdown")}
-							title={t("recording.countdownDelay")}
-							className={countdownDelay > 0 ? styles.ibActive : ""}
-						>
-							<Timer size={18} />
-						</IconButton>
-
-						<Separator />
-
-						<button
-							type="button"
-							className={`${styles.recBtn} ${styles.electronNoDrag}`}
-							onClick={hasSelectedSource ? toggleRecording : () => toggleDropdown("sources")}
-							disabled={countdownActive}
-							title={t("recording.record")}
-						>
-							<div className={styles.recDot} />
-						</button>
-
-						<Separator />
-
-						<IconButton onClick={() => toggleDropdown("more")} title={t("recording.more")}>
-							<MoreVertical size={18} />
-						</IconButton>
-
-						<IconButton onClick={() => window.electronAPI?.hudOverlayHide?.()} title={t("recording.hideHud")}>
-							<Minus size={16} />
-						</IconButton>
-
-						<IconButton onClick={() => window.electronAPI?.hudOverlayClose?.()} title={t("recording.closeApp")}>
-							<X size={16} />
-						</IconButton>
-					</>
-				)}
-					</div>
+						<div className={styles.barStateViewport}>
+							<AnimatePresence initial={false} mode="wait">
+								<motion.div
+									key={recording ? "recording" : "idle"}
+									layout
+									className={styles.barState}
+									initial={{ opacity: 0, y: 10, scale: 0.985, filter: "blur(8px)" }}
+									animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+									exit={{ opacity: 0, y: -10, scale: 0.985, filter: "blur(6px)" }}
+									transition={hudStateTransition}
+								>
+									{recording ? recordingControls : idleControls}
+								</motion.div>
+							</AnimatePresence>
+						</div>
+					</motion.div>
 				</div>
 			</div>
 		</div>
