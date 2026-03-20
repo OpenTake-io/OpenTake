@@ -277,8 +277,8 @@ export function createEditorWindow(): BrowserWindow {
 	const { width, height } = getScreen().getPrimaryDisplay().workAreaSize;
 
 	const win = new BrowserWindow({
-		width: Math.round(width * 0.8),
-		height: Math.round(height * 0.8),
+		width: Math.round(width * 0.85),
+		height: Math.round(height * 0.85),
 		minWidth: 800,
 		minHeight: 600,
 		...(process.platform !== "darwin" && {
