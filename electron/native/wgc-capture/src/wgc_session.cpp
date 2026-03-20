@@ -129,7 +129,6 @@ bool WgcSession::initializeWithItem(int fps) {
     try {
         session_.IsBorderRequired(false);
     } catch (winrt::hresult_error const& e) {
-        std::cerr << "WARNING: IsBorderRequired not supported on this OS (hr=0x" << std::hex << static_cast<uint32_t>(e.code()) << ")" << std::endl;
     }
 
     return true;
