@@ -175,6 +175,7 @@ export function LaunchWindow() {
 	const [hideHudFromCapture, setHideHudFromCapture] = useState(true);
 	const [platform, setPlatform] = useState<string | null>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
+	const hudContentRef = useRef<HTMLDivElement>(null);
 	const hudBarRef = useRef<HTMLDivElement>(null);
 	const webcamPreviewRef = useRef<HTMLVideoElement | null>(null);
 
@@ -360,32 +361,46 @@ export function LaunchWindow() {
 	}, [activeDropdown]);
 
 	useEffect(() => {
+		const hudContent = hudContentRef.current;
 		const hudBar = hudBarRef.current;
-		if (!hudBar || typeof ResizeObserver === "undefined") {
+		if (!hudContent || !hudBar || typeof ResizeObserver === "undefined") {
 			return;
 		}
 
 		let frameId = 0;
-		const reportWidth = () => {
+		const reportHudSize = () => {
 			frameId = 0;
 			const measuredWidth = Math.ceil(
-				Math.max(hudBar.getBoundingClientRect().width, hudBar.scrollWidth) + 24,
+				Math.max(
+					hudBar.getBoundingClientRect().width,
+					hudBar.scrollWidth,
+					hudContent.getBoundingClientRect().width,
+					hudContent.scrollWidth,
+				) + 24,
+			);
+			const measuredHeight = Math.ceil(
+				Math.max(hudContent.getBoundingClientRect().height, hudContent.scrollHeight) + 24,
 			);
 			window.electronAPI.setHudOverlayCompactWidth(measuredWidth);
+			window.electronAPI.setHudOverlayMeasuredHeight(
+				measuredHeight,
+				activeDropdown !== "none",
+			);
 		};
 
-		const scheduleWidthReport = () => {
+		const scheduleHudSizeReport = () => {
 			if (frameId !== 0) {
 				cancelAnimationFrame(frameId);
 			}
-			frameId = requestAnimationFrame(reportWidth);
+			frameId = requestAnimationFrame(reportHudSize);
 		};
 
-		scheduleWidthReport();
+		scheduleHudSizeReport();
 
 		const resizeObserver = new ResizeObserver(() => {
-			scheduleWidthReport();
+			scheduleHudSizeReport();
 		});
+		resizeObserver.observe(hudContent);
 		resizeObserver.observe(hudBar);
 
 		return () => {
@@ -633,6 +648,7 @@ export function LaunchWindow() {
 			ref={dropdownRef}
 		>
 			<div
+				ref={hudContentRef}
 				className="flex flex-col items-center overflow-visible"
 			>
 				{/* Only the visible HUD content should become interactive. */}
