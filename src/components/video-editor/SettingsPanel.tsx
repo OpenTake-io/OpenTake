@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
 import { cn } from "@/lib/utils";
-import { BUILT_IN_WALLPAPERS, WALLPAPER_PATHS, WALLPAPER_RELATIVE_PATHS } from "@/lib/wallpapers";
+import { BUILT_IN_WALLPAPERS, getAvailableWallpapers } from "@/lib/wallpapers";
+import type { BuiltInWallpaper } from "@/lib/wallpapers";
 import { type AspectRatio } from "@/utils/aspectRatioUtils";
 import { useI18n, useScopedT } from "../../contexts/I18nContext";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
@@ -253,6 +254,9 @@ export function SettingsPanel({
 	const { t } = useI18n();
 	const isBackgroundPanel = panelMode === "background";
 	const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
+	const [builtInWallpapers, setBuiltInWallpapers] = useState<BuiltInWallpaper[]>(
+		BUILT_IN_WALLPAPERS,
+	);
 	const [wallpaperPreviewPaths, setWallpaperPreviewPaths] = useState<string[]>([]);
 	const [customImages, setCustomImages] = useState<string[]>(
 		initialEditorPreferences.customWallpapers,
@@ -262,19 +266,30 @@ export function SettingsPanel({
 		padding: number;
 	} | null>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
+	const builtInWallpaperPaths = useMemo(
+		() => builtInWallpapers.map((wallpaper) => wallpaper.publicPath),
+		[builtInWallpapers],
+	);
 
 	useEffect(() => {
 		let mounted = true;
 		(async () => {
 			try {
+				const availableWallpapers = await getAvailableWallpapers();
 				const resolved = await Promise.all(
-					WALLPAPER_RELATIVE_PATHS.map(async (path) =>
-						getRenderableAssetUrl(await getAssetPath(path)),
+					availableWallpapers.map(async (wallpaper) =>
+						getRenderableAssetUrl(await getAssetPath(wallpaper.relativePath)),
 					),
 				);
-				if (mounted) setWallpaperPreviewPaths(resolved);
+				if (mounted) {
+					setBuiltInWallpapers(availableWallpapers);
+					setWallpaperPreviewPaths(resolved);
+				}
 			} catch {
-				if (mounted) setWallpaperPreviewPaths(WALLPAPER_PATHS);
+				if (mounted) {
+					setBuiltInWallpapers(BUILT_IN_WALLPAPERS);
+					setWallpaperPreviewPaths(BUILT_IN_WALLPAPERS.map((wallpaper) => wallpaper.publicPath));
+				}
 			}
 		})();
 		return () => {
@@ -575,7 +590,7 @@ export function SettingsPanel({
 		setCustomImages((prev) => prev.filter((img) => img !== imageUrl));
 		// If the removed image was selected, clear selection
 		if (selected === imageUrl) {
-			onWallpaperChange(WALLPAPER_PATHS[0]);
+			onWallpaperChange(builtInWallpaperPaths[0] ?? BUILT_IN_WALLPAPERS[0]?.publicPath ?? "");
 		}
 	};
 
@@ -686,10 +701,10 @@ export function SettingsPanel({
 
 										{(wallpaperPreviewPaths.length > 0
 											? wallpaperPreviewPaths
-											: WALLPAPER_PATHS
+											: builtInWallpaperPaths
 										).map((previewPath, index) => {
-											const wallpaper = BUILT_IN_WALLPAPERS[index];
-											const wallpaperValue = WALLPAPER_PATHS[index] ?? previewPath;
+											const wallpaper = builtInWallpapers[index] ?? BUILT_IN_WALLPAPERS[index];
+											const wallpaperValue = wallpaper?.publicPath ?? builtInWallpaperPaths[index] ?? previewPath;
 											const isSelected = getWallpaperTileState(wallpaperValue, previewPath);
 											return renderWallpaperImageTile(previewPath, isSelected, {
 												key: wallpaperValue,

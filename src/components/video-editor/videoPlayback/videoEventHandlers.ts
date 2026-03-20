@@ -78,11 +78,6 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
   }
 
   const handlePlay = () => {
-    if (isSeekingRef.current) {
-      video.pause();
-      return;
-    }
-
     if (!allowPlaybackRef.current) {
       video.pause();
       return;
@@ -123,19 +118,12 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
         emitTime(skipToTime);
       }
     } else {
-      if (!isPlayingRef.current && !video.paused) {
-        video.pause();
-      }
       emitTime(video.currentTime);
     }
   };
 
   const handleSeeking = () => {
     isSeekingRef.current = true;
-
-    if (!isPlayingRef.current && !video.paused) {
-      video.pause();
-    }
     emitTime(video.currentTime);
   };
 

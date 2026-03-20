@@ -5,6 +5,8 @@ export interface BuiltInWallpaper {
   publicPath: string;
 }
 
+const IMAGE_FILE_PATTERN = /\.(avif|gif|jpe?g|png|svg|webp)$/i;
+
 export const BUILT_IN_WALLPAPERS: BuiltInWallpaper[] = [
   { id: 'wallpaper-1', label: 'Wallpaper 1', relativePath: 'wallpapers/wallpaper1.jpg', publicPath: '/wallpapers/wallpaper1.jpg' },
   { id: 'wallpaper-2', label: 'Wallpaper 2', relativePath: 'wallpapers/wallpaper2.jpg', publicPath: '/wallpapers/wallpaper2.jpg' },
@@ -33,5 +35,69 @@ export const BUILT_IN_WALLPAPERS: BuiltInWallpaper[] = [
 
 export const WALLPAPER_PATHS = BUILT_IN_WALLPAPERS.map((wallpaper) => wallpaper.publicPath);
 export const WALLPAPER_RELATIVE_PATHS = BUILT_IN_WALLPAPERS.map((wallpaper) => wallpaper.relativePath);
-export const DEFAULT_WALLPAPER_PATH = WALLPAPER_PATHS[0];
-export const DEFAULT_WALLPAPER_RELATIVE_PATH = WALLPAPER_RELATIVE_PATHS[0];
+export const DEFAULT_WALLPAPER_PATH = '/wallpapers/wallpaper2.jpg';
+export const DEFAULT_WALLPAPER_RELATIVE_PATH = 'wallpapers/wallpaper2.jpg';
+
+function toWallpaperId(fileName: string) {
+  return fileName
+    .replace(/\.[^.]+$/, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function toWallpaperLabel(fileName: string) {
+  const baseName = fileName.replace(/\.[^.]+$/, "").trim();
+  if (!baseName) {
+    return "Wallpaper";
+  }
+
+  return baseName
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function createWallpaperEntry(fileName: string): BuiltInWallpaper {
+  const encodedFileName = encodeURIComponent(fileName);
+  return {
+    id: toWallpaperId(fileName) || `wallpaper-${encodedFileName.toLowerCase()}`,
+    label: toWallpaperLabel(fileName),
+    relativePath: `wallpapers/${fileName}`,
+    publicPath: `/wallpapers/${encodedFileName}`,
+  };
+}
+
+function sortWallpaperFiles(fileNames: string[]) {
+  return [...fileNames].sort(
+    new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }).compare,
+  );
+}
+
+export async function getAvailableWallpapers(): Promise<BuiltInWallpaper[]> {
+  const fallbackWallpapers = BUILT_IN_WALLPAPERS;
+
+  if (typeof window === "undefined" || !window.electronAPI?.listAssetDirectory) {
+    return fallbackWallpapers;
+  }
+
+  try {
+    const result = await window.electronAPI.listAssetDirectory("wallpapers");
+    if (!result.success || !result.files?.length) {
+      return fallbackWallpapers;
+    }
+
+    const discoveredFiles = sortWallpaperFiles(
+      result.files.filter((fileName) => IMAGE_FILE_PATTERN.test(fileName)),
+    );
+
+    if (discoveredFiles.length === 0) {
+      return fallbackWallpapers;
+    }
+
+    return discoveredFiles.map(createWallpaperEntry);
+  } catch {
+    return fallbackWallpapers;
+  }
+}

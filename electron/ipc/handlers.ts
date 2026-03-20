@@ -27,6 +27,14 @@ const AUTO_RECORDING_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000
 const ALLOW_RECORDLY_WINDOW_CAPTURE = Boolean(process.env['VITE_DEV_SERVER_URL'])
 const RECORDING_SESSION_MANIFEST_SUFFIX = '.recordly-session.json'
 
+function getAssetRootPath() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'assets')
+  }
+
+  return path.join(app.getAppPath(), 'public')
+}
+
 function getScreen() {
   return nodeRequire('electron').screen as typeof import('electron').screen
 }
@@ -2869,15 +2877,36 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
   // Return base path for assets so renderer can resolve file:// paths in production
   ipcMain.handle('get-asset-base-path', () => {
     try {
-      if (app.isPackaged) {
-        const assetPath = path.join(process.resourcesPath, 'assets')
-        return pathToFileURL(`${assetPath}${path.sep}`).toString()
-      }
-      const assetPath = path.join(app.getAppPath(), 'public')
+      const assetPath = getAssetRootPath()
       return pathToFileURL(`${assetPath}${path.sep}`).toString()
     } catch (err) {
       console.error('Failed to resolve asset base path:', err)
       return null
+    }
+  })
+
+  ipcMain.handle('list-asset-directory', async (_, relativeDir: string) => {
+    try {
+      const normalizedRelativeDir = String(relativeDir ?? '')
+        .replace(/\\/g, '/')
+        .replace(/^\/+/, '')
+
+      const assetRootPath = path.resolve(getAssetRootPath())
+      const targetDirPath = path.resolve(assetRootPath, normalizedRelativeDir)
+      if (targetDirPath !== assetRootPath && !targetDirPath.startsWith(`${assetRootPath}${path.sep}`)) {
+        return { success: false, error: 'Invalid asset directory' }
+      }
+
+      const entries = await fs.readdir(targetDirPath, { withFileTypes: true })
+      const files = entries
+        .filter((entry) => entry.isFile())
+        .map((entry) => entry.name)
+        .sort(new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' }).compare)
+
+      return { success: true, files }
+    } catch (error) {
+      console.error('Failed to list asset directory:', error)
+      return { success: false, error: String(error) }
     }
   })
 
