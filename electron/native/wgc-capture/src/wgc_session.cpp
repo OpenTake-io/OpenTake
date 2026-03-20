@@ -124,7 +124,13 @@ bool WgcSession::initializeWithItem(int fps) {
     session_ = framePool_.CreateCaptureSession(captureItem_);
 
     session_.IsCursorCaptureEnabled(false);
-    session_.IsBorderRequired(false);
+
+    // IsBorderRequired is only available on Windows 11+ (build 22000). propagating an hresult_error results in Native Windows capture failure
+    try {
+        session_.IsBorderRequired(false);
+    } catch (winrt::hresult_error const& e) {
+        std::cerr << "WARNING: IsBorderRequired not supported on this OS (hr=0x" << std::hex << static_cast<uint32_t>(e.code()) << ")" << std::endl;
+    }
 
     return true;
 }
