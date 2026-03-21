@@ -21,10 +21,6 @@ Language: EN | [简中](README.zh-CN.md)
 > Huge thank you to **tadees** for supporting! This donation directly helps cover the Apple Developer fees to get Recordly signed and notarised for macOS. Still waiting for Apple approval.
 [**Support the project**](https://ko-fi.com/webadderall/goal?g=0)
 
-> Recordly originally started as a fork of OpenScreen, and is expanded to include a full cursor animation/rendering pipeline, native macOS and Windows screen recording workflow, an animated webcam overlay bubble system, zoom animations faithful to Screen Studio, cursor loops, audio tracks, and more major features.
-
-
-
 ---
 ## What is Recordly?
 
@@ -329,6 +325,7 @@ Recordly is licensed under the **MIT License**.
 ## Acknowledgements
 
 Originally built on top of the excellent [OpenScreen](https://github.com/siddharthvaddem/openscreen) project.
+> Recordly originally started as a fork of OpenScreen, and is expanded to include a full cursor animation/rendering pipeline, native macOS and Windows screen recording workflow, an animated webcam overlay bubble system, zoom animations faithful to Screen Studio, cursor loops, audio tracks, and more major features.
 
 Created by  
 [@webadderall](https://x.com/webadderall)
