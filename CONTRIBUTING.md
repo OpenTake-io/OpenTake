@@ -10,6 +10,7 @@ Areas where help is especially valuable:
 - Code optimisation/refactoring
 - Auto-zoom suggestion logic improvements
 - Regular updating of Chinese Readme
+- Wallpaper submissions
 
 ## How to Contribute
 
