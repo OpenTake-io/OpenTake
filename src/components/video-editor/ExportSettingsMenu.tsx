@@ -17,6 +17,7 @@ interface ExportSettingsMenuProps {
 	onExportFormatChange?: (format: ExportFormat) => void;
 	exportQuality: ExportQuality;
 	onExportQualityChange?: (quality: ExportQuality) => void;
+	mp4OutputDimensions?: Record<ExportQuality, { width: number; height: number }>;
 	gifFrameRate: GifFrameRate;
 	onGifFrameRateChange?: (rate: GifFrameRate) => void;
 	gifLoop: boolean;
@@ -33,6 +34,7 @@ export function ExportSettingsMenu({
 	onExportFormatChange,
 	exportQuality,
 	onExportQualityChange,
+	mp4OutputDimensions,
 	gifFrameRate,
 	onGifFrameRateChange,
 	gifLoop,
@@ -92,7 +94,7 @@ export function ExportSettingsMenu({
 
 			{exportFormat === "mp4" ? (
 				<LayoutGroup id="header-export-quality-toggle">
-					<div className="mb-3 grid h-8 w-full grid-cols-4 rounded-xl border border-white/5 bg-white/5 p-0.5">
+					<div className="mb-3 grid min-h-12 w-full grid-cols-4 rounded-xl border border-white/5 bg-white/5 p-0.5">
 						{([
 							{ value: "medium", label: tSettings("export.quality.low") },
 							{ value: "good", label: tSettings("export.quality.medium") },
@@ -105,7 +107,7 @@ export function ExportSettingsMenu({
 									key={option.value}
 									type="button"
 									onClick={() => onExportQualityChange?.(option.value)}
-									className="relative rounded-lg text-[11px] font-medium transition-colors"
+									className="relative rounded-lg px-1 py-1 text-[11px] font-medium transition-colors"
 								>
 									{isActive ? (
 										<motion.span
@@ -114,8 +116,15 @@ export function ExportSettingsMenu({
 											transition={{ type: "spring", stiffness: 420, damping: 34 }}
 										/>
 									) : null}
-									<span className={cn("relative z-10", isActive ? "text-black" : "text-slate-400 hover:text-slate-200")}>
-										{option.label}
+									<span className="relative z-10 flex h-full flex-col items-center justify-center leading-tight">
+										<span className={cn(isActive ? "text-black" : "text-slate-400 hover:text-slate-200")}>
+											{option.label}
+										</span>
+										{mp4OutputDimensions ? (
+											<span className={cn("mt-0.5 text-[9px]", isActive ? "text-black/75" : "text-slate-500") }>
+												{mp4OutputDimensions[option.value].width} x {mp4OutputDimensions[option.value].height}
+											</span>
+										) : null}
 									</span>
 								</button>
 							);
