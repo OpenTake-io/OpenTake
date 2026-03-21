@@ -17,6 +17,7 @@ import type { AppLocale } from "@/i18n/config";
 import { SUPPORTED_LOCALES } from "@/i18n/config";
 import {
 	calculateOutputDimensions,
+	DEFAULT_MP4_CODEC,
 	type ExportFormat,
 	type ExportProgress,
 	type ExportQuality,
@@ -25,6 +26,8 @@ import {
 	GifExporter,
 	type GifFrameRate,
 	type GifSizePreset,
+	probeSupportedMp4Dimensions,
+	type SupportedMp4Dimensions,
 	VideoExporter,
 } from "@/lib/exporter";
 import { matchesShortcut } from "@/lib/shortcuts";
@@ -97,6 +100,89 @@ type PendingExportSave = {
 	fileName: string;
 	arrayBuffer: ArrayBuffer;
 };
+
+const MP4_EXPORT_FRAME_RATE = 60;
+
+function calculateMp4SourceDimensions(
+	sourceWidth: number,
+	sourceHeight: number,
+	aspectRatio: AspectRatio,
+): { width: number; height: number } {
+	const safeSourceWidth = Math.max(2, Math.floor(sourceWidth / 2) * 2);
+	const safeSourceHeight = Math.max(2, Math.floor(sourceHeight / 2) * 2);
+	const sourceAspectRatio = safeSourceHeight > 0 ? safeSourceWidth / safeSourceHeight : 16 / 9;
+	const aspectRatioValue = getAspectRatioValue(aspectRatio, sourceAspectRatio);
+
+	if (aspectRatio === "native") {
+		return { width: safeSourceWidth, height: safeSourceHeight };
+	}
+
+	if (aspectRatioValue === 1) {
+		const baseDimension = Math.max(
+			2,
+			Math.floor(Math.min(safeSourceWidth, safeSourceHeight) / 2) * 2,
+		);
+		return { width: baseDimension, height: baseDimension };
+	}
+
+	if (aspectRatioValue > 1) {
+		const baseWidth = safeSourceWidth;
+		for (let width = baseWidth; width >= 100; width -= 2) {
+			const height = Math.round(width / aspectRatioValue);
+			if (height % 2 === 0 && Math.abs(width / height - aspectRatioValue) < 0.0001) {
+				return { width, height };
+			}
+		}
+
+		return {
+			width: baseWidth,
+			height: Math.max(2, Math.floor(baseWidth / aspectRatioValue / 2) * 2),
+		};
+	}
+
+	const baseHeight = safeSourceHeight;
+	for (let height = baseHeight; height >= 100; height -= 2) {
+		const width = Math.round(height * aspectRatioValue);
+		if (width % 2 === 0 && Math.abs(width / height - aspectRatioValue) < 0.0001) {
+			return { width, height };
+		}
+	}
+
+	return {
+		height: baseHeight,
+		width: Math.max(2, Math.floor((baseHeight * aspectRatioValue) / 2) * 2),
+	};
+}
+
+function calculateMp4ExportDimensions(
+	baseWidth: number,
+	baseHeight: number,
+	quality: ExportQuality,
+): { width: number; height: number } {
+	if (quality === "source") {
+		return {
+			width: Math.max(2, Math.floor(baseWidth / 2) * 2),
+			height: Math.max(2, Math.floor(baseHeight / 2) * 2),
+		};
+	}
+
+	const qualityScale = quality === "medium" ? 0.6 : quality === "good" ? 0.75 : 0.9;
+	return {
+		width: Math.max(2, Math.floor((baseWidth * qualityScale) / 2) * 2),
+		height: Math.max(2, Math.floor((baseHeight * qualityScale) / 2) * 2),
+	};
+}
+
+function getSourceQualityBitrate(width: number, height: number): number {
+	const totalPixels = width * height;
+	if (totalPixels > 2560 * 1440) {
+		return 80_000_000;
+	}
+	if (totalPixels > 1920 * 1080) {
+		return 50_000_000;
+	}
+	return 30_000_000;
+}
 
 function LanguageSwitcher() {
 	const { locale, setLocale, t } = useI18n();
@@ -213,7 +299,14 @@ export default function VideoEditor() {
 	const applyingHistoryRef = useRef(false);
 	const pendingExportSaveRef = useRef<PendingExportSave | null>(null);
 	const cropSnapshotRef = useRef<CropRegion | null>(null);
+	const mp4SupportRequestRef = useRef(0);
 	const [historyVersion, setHistoryVersion] = useState(0);
+	const [supportedMp4SourceDimensions, setSupportedMp4SourceDimensions] = useState<SupportedMp4Dimensions>({
+		width: 1920,
+		height: 1080,
+		capped: false,
+		encoderPath: null,
+	});
 
 	const syncHistoryButtons = useCallback(() => {
 		setHistoryVersion((version) => version + 1);
@@ -249,6 +342,99 @@ export default function VideoEditor() {
 			),
 		[gifSizePreset, videoPath],
 	);
+
+	const desiredMp4SourceDimensions = useMemo(
+		() =>
+			calculateMp4SourceDimensions(
+				videoPlaybackRef.current?.video?.videoWidth || 1920,
+				videoPlaybackRef.current?.video?.videoHeight || 1080,
+				aspectRatio,
+			),
+		[aspectRatio, duration, videoPath],
+	);
+
+	const mp4OutputDimensions = useMemo(() => {
+		const baseWidth = supportedMp4SourceDimensions.encoderPath
+			? supportedMp4SourceDimensions.width
+			: desiredMp4SourceDimensions.width;
+		const baseHeight = supportedMp4SourceDimensions.encoderPath
+			? supportedMp4SourceDimensions.height
+			: desiredMp4SourceDimensions.height;
+
+		return {
+			medium: calculateMp4ExportDimensions(baseWidth, baseHeight, "medium"),
+			good: calculateMp4ExportDimensions(baseWidth, baseHeight, "good"),
+			high: calculateMp4ExportDimensions(baseWidth, baseHeight, "high"),
+			source: calculateMp4ExportDimensions(baseWidth, baseHeight, "source"),
+		};
+	}, [desiredMp4SourceDimensions.height, desiredMp4SourceDimensions.width, supportedMp4SourceDimensions.encoderPath, supportedMp4SourceDimensions.height, supportedMp4SourceDimensions.width]);
+
+	const ensureSupportedMp4SourceDimensions = useCallback(async () => {
+		const result = await probeSupportedMp4Dimensions({
+			width: desiredMp4SourceDimensions.width,
+			height: desiredMp4SourceDimensions.height,
+			frameRate: MP4_EXPORT_FRAME_RATE,
+			codec: DEFAULT_MP4_CODEC,
+			getBitrate: getSourceQualityBitrate,
+		});
+
+		if (!result.encoderPath) {
+			throw new Error(
+				`Video encoding not supported on this system. Tried codec ${DEFAULT_MP4_CODEC} at up to ${desiredMp4SourceDimensions.width}x${desiredMp4SourceDimensions.height}.`,
+			);
+		}
+
+		setSupportedMp4SourceDimensions((current) => {
+			if (
+				current.width === result.width &&
+				current.height === result.height &&
+				current.capped === result.capped &&
+				current.encoderPath?.codec === result.encoderPath?.codec &&
+				current.encoderPath?.hardwareAcceleration === result.encoderPath?.hardwareAcceleration
+			) {
+				return current;
+			}
+
+			return result;
+		});
+
+		return result;
+	}, [desiredMp4SourceDimensions.height, desiredMp4SourceDimensions.width]);
+
+	useEffect(() => {
+		let cancelled = false;
+		const requestId = mp4SupportRequestRef.current + 1;
+		mp4SupportRequestRef.current = requestId;
+		setSupportedMp4SourceDimensions({
+			width: desiredMp4SourceDimensions.width,
+			height: desiredMp4SourceDimensions.height,
+			capped: false,
+			encoderPath: null,
+		});
+
+		void ensureSupportedMp4SourceDimensions()
+			.then((result) => {
+				if (cancelled || requestId !== mp4SupportRequestRef.current) {
+					return;
+				}
+				setSupportedMp4SourceDimensions(result);
+			})
+			.catch(() => {
+				if (cancelled || requestId !== mp4SupportRequestRef.current) {
+					return;
+				}
+				setSupportedMp4SourceDimensions({
+					width: desiredMp4SourceDimensions.width,
+					height: desiredMp4SourceDimensions.height,
+					capped: false,
+					encoderPath: null,
+				});
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [desiredMp4SourceDimensions.height, desiredMp4SourceDimensions.width, ensureSupportedMp4SourceDimensions]);
 
 	const projectDisplayName = useMemo(() => {
 		const fileName = currentProjectPath?.split(/[\\/]/).pop() ?? "";
@@ -1628,7 +1814,7 @@ export default function VideoEditor() {
 			if (audio.src !== expectedSrc) {
 				audio.src = expectedSrc;
 			}
-			audio.volume = Math.max(0, Math.min(1, region.volume));
+			audio.volume = Math.max(0, Math.min(1, region.volume * previewVolume));
 		}
 
 		return () => {
@@ -1638,7 +1824,7 @@ export default function VideoEditor() {
 			}
 			existing.clear();
 		};
-	}, [audioRegions]);
+	}, [audioRegions, previewVolume]);
 
 	// Sync audio playback with video currentTime and isPlaying state
 	useEffect(() => {
@@ -1713,11 +1899,6 @@ export default function VideoEditor() {
 				if (wasPlaying) {
 					videoPlaybackRef.current?.pause();
 				}
-
-				const sourceWidth = video.videoWidth || 1920;
-				const sourceHeight = video.videoHeight || 1080;
-				const sourceAspectRatio = sourceHeight > 0 ? sourceWidth / sourceHeight : 16 / 9;
-				const aspectRatioValue = getAspectRatioValue(aspectRatio, sourceAspectRatio);
 
 				// Get preview CONTAINER dimensions for scaling
 				const playbackRef = videoPlaybackRef.current;
@@ -1797,57 +1978,15 @@ export default function VideoEditor() {
 				} else {
 					// MP4 Export
 					const quality = settings.quality || exportQuality;
-					let exportWidth: number;
-					let exportHeight: number;
+					const supportedSourceDimensions = await ensureSupportedMp4SourceDimensions();
+					const { width: exportWidth, height: exportHeight } = calculateMp4ExportDimensions(
+						supportedSourceDimensions.width,
+						supportedSourceDimensions.height,
+						quality,
+					);
 					let bitrate: number;
 
 					if (quality === "source") {
-						// Use source resolution
-						exportWidth = sourceWidth;
-						exportHeight = sourceHeight;
-
-						if (aspectRatio === "native") {
-							exportWidth = Math.floor(sourceWidth / 2) * 2;
-							exportHeight = Math.floor(sourceHeight / 2) * 2;
-						} else if (aspectRatioValue === 1) {
-							// Square (1:1): use smaller dimension to avoid codec limits
-							const baseDimension = Math.floor(Math.min(sourceWidth, sourceHeight) / 2) * 2;
-							exportWidth = baseDimension;
-							exportHeight = baseDimension;
-						} else if (aspectRatioValue > 1) {
-							// Landscape: find largest even dimensions that exactly match aspect ratio
-							const baseWidth = Math.floor(sourceWidth / 2) * 2;
-							let found = false;
-							for (let w = baseWidth; w >= 100 && !found; w -= 2) {
-								const h = Math.round(w / aspectRatioValue);
-								if (h % 2 === 0 && Math.abs(w / h - aspectRatioValue) < 0.0001) {
-									exportWidth = w;
-									exportHeight = h;
-									found = true;
-								}
-							}
-							if (!found) {
-								exportWidth = baseWidth;
-								exportHeight = Math.floor(baseWidth / aspectRatioValue / 2) * 2;
-							}
-						} else {
-							// Portrait: find largest even dimensions that exactly match aspect ratio
-							const baseHeight = Math.floor(sourceHeight / 2) * 2;
-							let found = false;
-							for (let h = baseHeight; h >= 100 && !found; h -= 2) {
-								const w = Math.round(h * aspectRatioValue);
-								if (w % 2 === 0 && Math.abs(w / h - aspectRatioValue) < 0.0001) {
-									exportWidth = w;
-									exportHeight = h;
-									found = true;
-								}
-							}
-							if (!found) {
-								exportHeight = baseHeight;
-								exportWidth = Math.floor((baseHeight * aspectRatioValue) / 2) * 2;
-							}
-						}
-
 						// Calculate visually lossless bitrate matching screen recording optimization
 						const totalPixels = exportWidth * exportHeight;
 						bitrate = 30_000_000;
@@ -1857,13 +1996,6 @@ export default function VideoEditor() {
 							bitrate = 80_000_000;
 						}
 					} else {
-						// Use quality-based target resolution
-						const targetHeight = quality === "medium" ? 720 : 1080;
-
-						// Calculate dimensions maintaining aspect ratio
-						exportHeight = Math.floor(targetHeight / 2) * 2;
-						exportWidth = Math.floor((exportHeight * aspectRatioValue) / 2) * 2;
-
 						// Adjust bitrate for lower resolutions
 						const totalPixels = exportWidth * exportHeight;
 						if (totalPixels <= 1280 * 720) {
@@ -1879,9 +2011,9 @@ export default function VideoEditor() {
 						videoUrl: videoPath,
 						width: exportWidth,
 						height: exportHeight,
-						frameRate: 60,
+						frameRate: MP4_EXPORT_FRAME_RATE,
 						bitrate,
-						codec: "avc1.640033",
+						codec: DEFAULT_MP4_CODEC,
 						wallpaper,
 						trimRegions,
 						speedRegions,
@@ -2317,6 +2449,7 @@ export default function VideoEditor() {
 									onGifLoopChange={setGifLoop}
 									gifSizePreset={gifSizePreset}
 									onGifSizePresetChange={setGifSizePreset}
+									mp4OutputDimensions={mp4OutputDimensions}
 									gifOutputDimensions={gifOutputDimensions}
 									onExport={handleStartExportFromDropdown}
 									className="shadow-2xl"
