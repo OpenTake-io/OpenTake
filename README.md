@@ -12,112 +12,136 @@ Language: EN | [简中](README.zh-CN.md)
 </p>
 
 ### Create polished, pro-grade screen recordings.
-[Recordly](https://www.recordly.dev) is an **open-source screen recorder and editor** for creating **polished walkthroughs, demos, tutorials, and product videos**. Contribution encouraged.
+[Recordly](https://www.recordly.dev) is an open-source screen recorder and editor for walkthroughs, demos, tutorials, product videos, and social clips. Record a screen or window, jump straight into the editor, and export a polished result with cursor effects, zooms, backgrounds, annotations, webcam overlays, and more.
+
 <p align="center">
   <img src="./demo.gif" width="750" alt="Recordly demo video">
 </p>
 
 > [!NOTE]
-> Huge thank you to **tadees** for supporting! This donation directly helps cover the Apple Developer fees to get Recordly signed and notarised for macOS. Still waiting for Apple approval.
+> Huge thank you to **tadees** for supporting the project. This donation helps cover Apple Developer fees for macOS signing and notarization.
 [**Support the project**](https://ko-fi.com/webadderall/goal?g=0)
 
 ---
+
 ## What is Recordly?
 
-Recordly lets you record your screen and automatically transform it into a polished video. It handles the heavy lifting of zooming into important actions and smoothing out jittery cursor movement so your demos look professional by default.
+Recordly is a desktop app for recording and editing screen captures with motion-driven presentation tools built in. Instead of sending raw footage into a separate editor just to add zooms, cursor polish, or a styled background, Recordly handles that workflow in one place.
 
 Recordly runs on:
 
 - **macOS** 12.3+
 - **Windows** 10 Build 19041+
-- **Linux** (modern distros)
+- **Linux** on modern distros
 
-On Windows, builds older than 19041 fall back to Electron capture and the cursor cannot be hidden. On Linux, cursor hiding is not supported (contribute).
+Platform notes:
 
-
+- **macOS** uses native ScreenCaptureKit-based capture helpers.
+- **Windows** uses a native Windows Graphics Capture (WGC) helper on supported builds, with native WASAPI audio support.
+- **Linux** records through Electron capture APIs. Cursor hiding is not supported on Linux today.
 
 ---
 
 # Core Features
 
-## Auto-zooms, silky cursor & beautiful backgrounds
-Recordly adds beautiful cursor animations and auto-zooming plus a background to your recordings so you can spend less time editing and more time shipping.
+## Auto-zooms, cursor polish, and styled frames
+Recordly can automatically emphasize activity with zoom suggestions, smooth cursor movement, add motion effects, and place the final composition inside a styled frame with wallpapers, colors, gradients, blur, padding, and shadows.
+
 <p>
-  <img src="./feature1.gif" width="450" alt="Recordly sway demo video">
+  <img src="./feature1.gif" width="450" alt="Recordly cursor and zoom demo video">
 </p>
 
-## Dynamic bubble webcam overlay
-Record your face with smart webcam bubbles that expand and shrink to make sure you get the spotlight when you need to. Perfect for demos and tutorials.
+## Dynamic webcam bubble overlays
+Add webcam footage as an overlay bubble, position it with presets or custom coordinates, mirror it, control shadow and roundness, and optionally make it react to zoom so it stays visually balanced during motion.
+
 <p>
-  <img src="./feature2.gif" width="450" alt="Recordly sway demo video">
+  <img src="./feature2.gif" width="450" alt="Recordly webcam overlay demo video">
 </p>
 
-## Intuitive timeline editing interface
-Use drag-and-drop pieces to control video speed, zooms, annotations, audio tracks and video length, and save your projects as .recordly files so you can save your progress or edit other projects.
+## Timeline editing built for demos
+Use drag-and-drop timeline tools for zooms, trims, speed regions, annotations, extra audio regions, and crop-aware edits. Save and reopen work as `.recordly` project files.
+
 <p>
-  <img src="./feature3.png" width="450" alt="Recordly sway demo video">
+  <img src="./feature3.png" width="450" alt="Recordly timeline editor screenshot">
 </p>
 
-## All features
-### Cursor Animations
-<p>
-  <img src="./CursorSwayDemo.gif" width="450" alt="Recordly sway demo video">
-</p>
-
-- Adjustable cursor size
-- Cursor smoothing
-- Motion blur
-- Click bounce animation
-- macOS-style cursor assets
-- Cursor sway effects
+## All Features
 
 ### Recording
 
-- Record an entire screen or a single window
-- Jump straight from recording into the editor
-- Microphone or system audio recording
-- Chromium capture APIs on Windows/Linux
-- Native **ScreenCaptureKit** capture on macOS
-- native DXGI Desktop Duplication recording helper for display and app-window capture on Windows, native WASAPI for system/mic audio, and more
+- Record an entire display or a single app window
+- Jump directly from recording into the editor
+- Capture microphone audio and system audio
+- Use native capture backends where supported
+- Resume editing from saved `.recordly` project files
+- Open existing recordings or existing project files from the app
 
-### Smart Motion
+### Timeline and Editing
 
-- Apple-style zoom animations
-- Automatic zoom suggestions based on cursor activity
-- Manual zoom regions
-- Smooth pan transitions between zoom regions
+- Drag-and-drop timeline editing
+- Trim unwanted sections
+- Add manual zoom regions
+- Use automatic zoom suggestions based on cursor activity
+- Add speed-up and slow-down regions
+- Add text, image, and figure annotations
+- Add extra audio regions on the timeline
+- Crop the recorded frame
+- Save and reopen projects with editor state preserved
 
-### Infinite Loops
-<p>
-  <img src="./CursorLoop.gif" width="450" alt="Recordly gif loop demo video">
-</p>
+### Cursor Controls
 
-- Toggle to make cursor return to original position at end of video/GIF for clean loops
+- Show or hide the rendered cursor overlay
+- Cursor size adjustment
+- Cursor smoothing
+- Cursor motion blur
+- Cursor click bounce
+- Cursor sway
+- Cursor loop mode for cleaner looping exports
+- macOS-style cursor assets for the rendered overlay
 
-### Editing Tools
+### Webcam Overlay
 
-- Timeline trimming
-- Speed-up / slow-down regions
-- Annotations
-- Zoom spans
-- Project save + reopen (`.recordly` files)
+- Enable or disable webcam overlay footage
+- Upload, replace, or remove webcam footage
+- Mirror webcam footage
+- Size control
+- Preset positions and custom X/Y placement
+- Margin control
+- Roundness control
+- Shadow control
+- Optional zoom-reactive webcam scaling
 
-### Frame Styling
+### Frame Styling and Backgrounds
 
-- Wallpapers
-- Gradients
-- Solid fills
-- Padding
+- Built-in wallpapers
+- Runtime wallpaper discovery from the wallpapers directory
+- Custom uploaded backgrounds
+- Solid color backgrounds
+- Gradient backgrounds
+- Frame padding
 - Rounded corners
-- Blur
+- Background blur
 - Drop shadows
+- Aspect ratio presets for the final frame
 
 ### Export
 
-- MP4 video export
+- MP4 export
 - GIF export
-- Aspect ratio controls
-- Quality settings
+- Export quality selection
+- GIF frame-rate selection
+- GIF loop toggle
+- GIF size presets
+- Aspect ratio and output dimension controls
+- Reveal exported files in the system file manager
+
+### Workflow and Usability
+
+- Customizable keyboard shortcuts
+- In-app shortcut reference
+- Feedback and issue links from the editor
+- Project persistence for editor preferences
+- Faster preview recovery after export
 
 ---
 
@@ -127,13 +151,12 @@ Use drag-and-drop pieces to control video speed, zooms, annotations, audio track
   <img src="https://i.postimg.cc/CKxm8DRs/Screenshot-2026-03-20-at-7-07-22-pm.png" width="700" alt="Recordly editor screenshot">
 </p>
 
-
 <p align="center">
   <img src="https://i.postimg.cc/hjwdYRyV/Screenshot-2026-03-20-at-1-53-57-pm.png" width="700" alt="Recordly recording interface screenshot">
 </p>
 
 <p align="center">
-  <img src="https://i.postimg.cc/Zn9VY6bg/Screenshot-2026-03-18-at-6-32-59-pm.png" width="700" alt="Recordly recording interface screenshot">
+  <img src="https://i.postimg.cc/Zn9VY6bg/Screenshot-2026-03-18-at-6-32-59-pm.png" width="700" alt="Recordly timeline screenshot">
 </p>
 
 ---
@@ -142,7 +165,7 @@ Use drag-and-drop pieces to control video speed, zooms, annotations, audio track
 
 ## Download a build
 
-Prebuilt releases are available here:
+Prebuilt releases are available at:
 
 https://github.com/webadderall/Recordly/releases
 
@@ -157,11 +180,23 @@ npm install
 npm run dev
 ```
 
+For packaged builds:
+
+```bash
+npm run build
+```
+
+Target-specific build commands are also available:
+
+- `npm run build:mac`
+- `npm run build:win`
+- `npm run build:linux`
+
 ---
 
 ## macOS: "App cannot be opened"
 
-Recordly is not signed. macOS may quarantine locally built apps.
+Locally built apps may be quarantined by macOS.
 
 Remove the quarantine flag with:
 
@@ -175,12 +210,12 @@ xattr -rd com.apple.quarantine /Applications/Recordly.app
 
 | Platform | Minimum version | Notes |
 |---|---|---|
-| **macOS** | macOS 12.3 (Monterey) | Required for ScreenCaptureKit. Recording and cursor hiding will not work on older versions. |
-| **Windows** | Windows 10 20H1 (Build 19041, May 2020) | Required for the native DXGI Desktop Duplication helper. Older builds fall back to Electron browser capture — cursor will be visible in recordings. |
-| **Linux** | Any modern distro | Recording works via Electron capture. Cursor is always visible in recordings. System audio requires PipeWire (Ubuntu 22.04+, Fedora 34+). |
+| **macOS** | macOS 12.3 (Monterey) | Required for ScreenCaptureKit-based capture. |
+| **Windows** | Windows 10 20H1 (Build 19041, May 2020) | Required for the native Windows Graphics Capture (WGC) helper and best cursor-hiding behavior. |
+| **Linux** | Any modern distro | Recording works through Electron capture. System audio generally requires PipeWire. |
 
 > [!IMPORTANT]
-> On Windows, if your build is older than 19041, recording will still work but **the cursor cannot be hidden** from the captured video.
+> On Windows builds older than 19041, recording can still work through fallback capture, but the real OS cursor may remain visible in recordings.
 
 ---
 
@@ -188,120 +223,105 @@ xattr -rd com.apple.quarantine /Applications/Recordly.app
 
 ## Record
 
-1. Launch Recordly
-2. Select a screen or window
-3. Choose audio recording options
-4. Start recording
-5. Stop recording to open the editor
-
----
+1. Launch Recordly.
+2. Select a screen or window.
+3. Choose microphone and system-audio options.
+4. Start recording.
+5. Stop recording to open the editor.
 
 ## Edit
 
 Inside the editor you can:
 
-- Add zoom regions manually
-- Use automatic zoom suggestions
-- Adjust cursor behavior
-- Trim the video
-- Add speed changes
-- Add annotations
-- Style the frame
+- add trims, zooms, speed regions, and annotations
+- tune cursor behavior and preview volume
+- style the frame with wallpapers, colors, gradients, blur, padding, and corners
+- add or adjust webcam overlay footage
+- add extra audio regions
+- crop the frame and choose an aspect ratio
 
 Save your work anytime as a `.recordly` project.
-
----
 
 ## Export
 
 Export options include:
 
-- **MP4** for full-quality video
-- **GIF** for lightweight sharing
+- **MP4** for standard video output
+- **GIF** for lightweight sharing and loops
 
-Adjust:
-
-- Aspect ratio
-- Output resolution
-- Quality settings
+You can adjust format-specific settings such as quality, GIF frame rate, GIF looping, and output size before export.
 
 ---
 
 # Limitations
 
-### Cursor Capture (We overlay a second animated cursor over the original hidden one)
+### Cursor capture
 
-**macOS**: Cursor is excluded from the recording at the ScreenCaptureKit level — always clean.
-
-**Windows**: Cursor exclusion depends on the native DXGI Desktop Duplication helper plus OS cursor hide/show, and requires **Windows 10 Build 19041+**. On older builds the app falls back to Electron’s browser capture and the real cursor will be visible in the recording.
-
-**Linux**: Electron’s desktop capture API does not support cursor hiding. The real OS cursor will always be visible in recordings. If you also enable the animated cursor overlay in the editor, you may see **two cursors** in the output.
-
-Improving cross-platform cursor capture is an area where contributions are welcome.
-
----
-
-### System Audio
-
-System audio capture depends on platform support.
-
-**Windows**
-- Works out of the box via native WASAPI
-- Requires Windows 10 Build 19041+
-
-**Linux**
-- Requires PipeWire (Ubuntu 22.04+, Fedora 34+)
-- Older PulseAudio setups may not support system audio
+Recordly renders a polished cursor overlay on top of the recording. Platform cursor-hiding behavior still depends on OS support.
 
 **macOS**
-- Requires macOS 12.3+
-- Uses ScreenCaptureKit helper
+- ScreenCaptureKit can exclude the real cursor cleanly.
+
+**Windows**
+- Best results require Windows 10 Build 19041+ and the native capture helper.
+- Older builds fall back to Electron capture, so the real cursor may remain visible.
+
+**Linux**
+- Electron desktop capture does not currently support cursor hiding.
+- If you also enable the rendered cursor overlay, exports may show both the real cursor and the styled cursor.
+
+### System audio
+
+System audio support varies by platform.
+
+**Windows**
+- Native WASAPI support
+
+**Linux**
+- Usually requires PipeWire
+
+**macOS**
+- Requires macOS 12.3+ and the ScreenCaptureKit-based workflow
 
 ---
 
 # How It Works
 
-Recordly is a **desktop video editor with a renderer-driven motion pipeline and platform-specific capture layer**.
+Recordly combines a platform-specific capture layer with a renderer-driven editor and export pipeline.
 
 **Capture**
-- Electron orchestrates recording
-- macOS uses native helpers for ScreenCaptureKit and cursor telemetry
-- Windows uses a native DXGI Desktop Duplication helper for screen capture
+- Electron coordinates recording and application flow
+- macOS uses native ScreenCaptureKit helpers
+- Windows uses a native Windows Graphics Capture (WGC) helper and native audio helpers where available
 
-**Motion**
-- Zoom regions
-- Cursor tracking
-- Speed changes
-- Timeline edits
+**Editing**
+- Timeline regions define zooms, trims, speed changes, audio overlays, and annotations
+- Cursor and webcam styling are applied in the editor state
 
 **Rendering**
-- Scene composition handled by **PixiJS**
+- Scene composition is handled by **PixiJS**
 
 **Export**
-- Frames rendered through the same scene pipeline
-- Encoded to MP4 or GIF
+- The same scene logic used in preview is rendered into exported MP4 or GIF output
 
 **Projects**
-- `.recordly` files store the source video path and editor state
+- `.recordly` files store the source media path plus editor state so work can be reopened later
 
 ---
 
 # Contribution
 
-All contributors welcomed!
+Contributions are welcome.
 
-Areas where help is especially valuable:
+Areas where help is especially useful:
 
-- Smooth cursor pipeline for **Linux**
-- **Webcam** overlay bubble
-- **Localisation** support, especially Chinese
-- UI/UX **design** **improvements**
-- **Export speed** improvements
+- Linux capture and cursor behavior
+- Export performance and stability
+- UI and UX refinement
+- Localisation work
+- Additional editor tools and workflow polish
 
-Please:
-- Keep pull requests **focused and modular**
-- Test playback, editing, and export flows
-- Avoid large unrelated refactors
+Please keep pull requests focused, test recording/edit/export flows, and avoid unrelated refactors.
 
 See `CONTRIBUTING.md` for guidelines.
 
@@ -321,16 +341,13 @@ Pull requests are welcome.
 
 [Donations](https://ko-fi.com/webadderall/goal?g=0)
 
-Greatful for all supporters, you are helping Recordly stay open-source and supporting development.
+Thanks to everyone supporting the project and helping keep Recordly open source.
 
-• Tadees
+- Tadees
+- Anonymous supporter
+- Anonymous supporter
 
-• Anonymous supporter
-• Anonymous supporter
-
-Email youngchen3442@gmail.com for other inquiries or DM me via [@webadderall](https://x.com/webadderall)
-
-
+For other inquiries, email `youngchen3442@gmail.com` or DM [@webadderall](https://x.com/webadderall).
 
 ---
 
@@ -344,8 +361,7 @@ Recordly is licensed under the **MIT License**.
 
 ## Acknowledgements
 
-Originally built on top of the excellent [OpenScreen](https://github.com/siddharthvaddem/openscreen) project.
-> Recordly originally started as a fork of OpenScreen, and is expanded to include a full cursor animation/rendering pipeline, native macOS and Windows screen recording workflow, an animated webcam overlay bubble system, zoom animations faithful to Screen Studio, cursor loops, audio tracks, and more major features.
+Recordly was originally built on top of the excellent [OpenScreen](https://github.com/siddharthvaddem/openscreen) project and has since been expanded with its own recording, editing, cursor, webcam, export, and packaging workflow.
 
 Created by  
 [@webadderall](https://x.com/webadderall)
