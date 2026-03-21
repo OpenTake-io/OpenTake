@@ -112,7 +112,7 @@ export function ShortcutsConfigDialog() {
 
   return (
     <Dialog open={isConfigOpen} onOpenChange={(open: boolean) => { if (!open) handleClose(); }}>
-      <DialogContent className="bg-[#09090b] border-white/10 text-white max-w-[420px]">
+      <DialogContent className="bg-[#09090b] border-white/10 text-white max-w-[460px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm">
             <Keyboard className="w-4 h-4 text-[#2563EB]" />
@@ -197,13 +197,14 @@ export function ShortcutsConfigDialog() {
 
         <DialogFooter className="flex gap-2 sm:justify-between mt-2">
           <Button
+            title={t('shortcutsConfig.resetToDefaults')}
             variant="ghost"
             size="sm"
-            className="text-slate-400 hover:text-white hover:bg-white/10 gap-1.5"
+            className="text-slate-400 hover:text-white hover:bg-white/10 gap-1.5 max-w-[200px]"
             onClick={handleReset}
           >
             <RotateCcw className="w-3 h-3" />
-            {t('shortcutsConfig.resetToDefaults')}
+            <span className="truncate">{t('shortcutsConfig.resetToDefaults')}</span>
           </Button>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm" onClick={handleClose}>
