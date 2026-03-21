@@ -9,7 +9,6 @@ Language: EN | [简中](README.zh-CN.md)
 <p align="center">
   <img src="https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-111827?style=for-the-badge" alt="macOS Windows Linux" />
   <img src="https://img.shields.io/badge/open%20source-MIT-2563eb?style=for-the-badge" alt="MIT license" />
-  <a href="https://aur.archlinux.org/packages/recordly-bin"><img src="https://img.shields.io/aur/version/recordly-bin?label=AUR&style=for-the-badge" alt="AUR recordly-bin" /></a>
 </p>
 
 ### Create polished, pro-grade screen recordings.
