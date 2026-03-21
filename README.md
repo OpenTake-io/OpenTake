@@ -9,6 +9,7 @@ Language: EN | [简中](README.zh-CN.md)
 <p align="center">
   <img src="https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-111827?style=for-the-badge" alt="macOS Windows Linux" />
   <img src="https://img.shields.io/badge/open%20source-MIT-2563eb?style=for-the-badge" alt="MIT license" />
+  <a href="https://aur.archlinux.org/packages/recordly-bin"><img src="https://img.shields.io/aur/version/recordly-bin?label=AUR&style=for-the-badge" alt="AUR recordly-bin" /></a>
 </p>
 
 ### Create polished, pro-grade screen recordings.
@@ -168,6 +169,18 @@ Use drag-and-drop timeline tools for zooms, trims, speed regions, annotations, e
 Prebuilt releases are available at:
 
 https://github.com/webadderall/Recordly/releases
+
+---
+
+## Arch Linux / Manjaro (yay)
+
+Install from the AUR ([recordly-bin](https://aur.archlinux.org/packages/recordly-bin)):
+
+```bash
+yay -S recordly-bin
+```
+
+PKGBUILD, desktop entry, release sync, and optional **local-from-source** packaging live in **[recordly-aur](https://github.com/firtoz/recordly-aur)** so this repository stays free of Arch release chores. For maintainer contact and how the package is updated, see that repo or the AUR package page.
 
 ---
 
