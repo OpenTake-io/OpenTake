@@ -105,16 +105,17 @@ On Windows, builds older than 19041 fall back to Electron capture and the cursor
 # Screenshots
 
 <p align="center">
-  <img src="https://i.postimg.cc/B6bX9gcy/Screenshot-2026-03-16-at-1-33-51-pm.png" width="700" alt="Recordly editor screenshot">
+  <img src="https://i.postimg.cc/CKxm8DRs/Screenshot-2026-03-20-at-7-07-22-pm.png" width="700" alt="Recordly editor screenshot">
 </p>
 
+
 <p align="center">
-  <img src="https://i.postimg.cc/c4FLGYgH/Screenshot-2026-03-18-at-6-33-14-pm.png" width="700" alt="Recordly recording interface screenshot">
+  <img src="https://i.postimg.cc/hjwdYRyV/Screenshot-2026-03-20-at-1-53-57-pm.png" width="700" alt="Recordly recording interface screenshot">
 </p>
+
 <p align="center">
   <img src="https://i.postimg.cc/Zn9VY6bg/Screenshot-2026-03-18-at-6-32-59-pm.png" width="700" alt="Recordly recording interface screenshot">
 </p>
-
 
 ---
 
