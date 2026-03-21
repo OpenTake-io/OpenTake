@@ -14,7 +14,7 @@ Language: EN | [简中](README.zh-CN.md)
 ### Create polished, pro-grade screen recordings.
 [Recordly](https://www.recordly.dev) is an **open-source screen recorder and editor** for creating **polished walkthroughs, demos, tutorials, and product videos**. Contribution encouraged.
 <p align="center">
-  <img src="./recordlydemo.gif" width="750" alt="Recordly demo video">
+  <img src="./demo.gif" width="750" alt="Recordly demo video">
 </p>
 
 > [!NOTE]
