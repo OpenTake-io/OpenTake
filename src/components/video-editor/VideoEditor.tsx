@@ -2377,6 +2377,10 @@ export default function VideoEditor() {
 						onClick={handleSaveProject}
 						className="inline-flex h-8 min-w-[96px] items-center justify-center gap-1.5 rounded-[5px] bg-white px-4 text-black transition-colors hover:bg-white/92"
 					>
+						<span className={`${hasUnsavedChanges ? "flex" : "hidden"} size-2 relative`}>
+ 							<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-75"></span>
+  							<span className="relative inline-flex size-2 rounded-full bg-sky-500"></span>
+						</span>
 						<Save className="h-4 w-4" />
 						<span className="text-sm font-semibold tracking-tight">{t("common.actions.save")}</span>
 					</Button>
@@ -2384,7 +2388,7 @@ export default function VideoEditor() {
 					<DropdownMenu open={showExportDropdown} onOpenChange={setShowExportDropdown} modal={false}>
 						<DropdownMenuTrigger asChild>
 							<Button
-						type="button"
+								type="button"
 								onClick={handleOpenExportDropdown}
 								className="inline-flex h-8 min-w-[112px] items-center justify-center gap-2 rounded-[5px] bg-[#2563EB] px-4.5 text-white transition-colors hover:bg-[#2563EB]/92"
 							>
