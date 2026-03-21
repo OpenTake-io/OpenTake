@@ -5,8 +5,7 @@ Thank you for considering contributing to this project! By contributing, you hel
 Areas where help is especially valuable:
 
 - Native screen recording for Linux
-- **Webcam overlay bubble**
-- **UI/UX design improvements (very helpful)**
+- UI/UX design improvements
 - German localisation
 - Code optimisation/refactoring
 - Auto-zoom suggestion logic improvements

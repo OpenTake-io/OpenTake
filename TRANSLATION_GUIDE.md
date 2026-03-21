@@ -8,6 +8,7 @@ All locale files live under:
 
 - `src/i18n/locales/en/`
 - `src/i18n/locales/es/`
+- `src/i18n/locales/zh-CN/`
 
 Each locale has the same namespace files:
 
