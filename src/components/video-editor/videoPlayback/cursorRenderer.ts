@@ -7,7 +7,13 @@ import {
   Texture,
 } from "pixi.js";
 import { MotionBlurFilter } from "pixi-filters/motion-blur";
-import { DEFAULT_CURSOR_CLICK_BOUNCE_DURATION, type CursorTelemetryPoint } from "../types";
+import minimalCursorUrl from "../../../../Minimal Cursor.svg";
+import {
+  DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
+  DEFAULT_CURSOR_STYLE,
+  type CursorStyle,
+  type CursorTelemetryPoint,
+} from "../types";
 import {
   projectCursorPositionToViewport,
   type CursorViewportRect,
@@ -56,6 +62,8 @@ export interface CursorRenderConfig {
   clickBounceDuration: number;
   /** Cursor sway multiplier. */
   sway: number;
+  /** Cursor visual style. */
+  style: CursorStyle;
 }
 
 export const DEFAULT_CURSOR_CONFIG: CursorRenderConfig = {
@@ -68,6 +76,7 @@ export const DEFAULT_CURSOR_CONFIG: CursorRenderConfig = {
   clickBounce: 1,
   clickBounceDuration: DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
   sway: 0,
+  style: DEFAULT_CURSOR_STYLE,
 };
 
 const REFERENCE_WIDTH = 1920;
@@ -88,6 +97,10 @@ const CURSOR_SHADOW_PADDING = 12;
 
 let cursorAssetsPromise: Promise<void> | null = null;
 let loadedCursorAssets: Partial<Record<CursorAssetKey, LoadedCursorAsset>> = {};
+let loadedInvertedCursorAssets: Partial<Record<CursorAssetKey, LoadedCursorAsset>> = {};
+let loadedCursorStyleAssets: Partial<
+  Record<Exclude<CursorStyle, "tahoe">, LoadedCursorAsset>
+> = {};
 const SUPPORTED_CURSOR_KEYS: CursorAssetKey[] = [
   "arrow",
   "text",
@@ -99,6 +112,106 @@ const SUPPORTED_CURSOR_KEYS: CursorAssetKey[] = [
   "resize-ns",
   "not-allowed",
 ];
+
+const CUSTOM_CURSOR_ARROW_WIDTH = 150;
+const CUSTOM_CURSOR_ARROW_HEIGHT = 214;
+const CUSTOM_CURSOR_ARROW_TIP_X = 14;
+const CUSTOM_CURSOR_ARROW_TIP_Y = 12;
+
+function drawArrowCursorPath(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+) {
+  ctx.beginPath();
+  ctx.moveTo(width * 0.093, height * 0.056);
+  ctx.lineTo(width * 0.136, height * 0.78);
+  ctx.lineTo(width * 0.34, height * 0.618);
+  ctx.lineTo(width * 0.453, height * 0.967);
+  ctx.lineTo(width * 0.62, height * 0.906);
+  ctx.lineTo(width * 0.501, height * 0.57);
+  ctx.lineTo(width * 0.933, height * 0.57);
+  ctx.closePath();
+}
+
+async function createCursorStyleAsset(
+  style: Exclude<CursorStyle, "tahoe">,
+): Promise<LoadedCursorAsset> {
+  if (style === "figma") {
+    const image = await loadImage(minimalCursorUrl);
+    const sourceCanvas = document.createElement("canvas");
+    sourceCanvas.width = image.naturalWidth;
+    sourceCanvas.height = image.naturalHeight;
+    const sourceCtx = sourceCanvas.getContext("2d")!;
+    sourceCtx.drawImage(image, 0, 0);
+    const trimmed = trimCanvasToAlpha(sourceCanvas, { x: 40, y: 22 });
+    await Assets.load(trimmed.dataUrl);
+    const trimmedImage = await loadImage(trimmed.dataUrl);
+    const texture = Texture.from(trimmed.dataUrl);
+
+    return {
+      texture,
+      image: trimmedImage,
+      aspectRatio:
+        trimmed.height > 0
+          ? trimmed.width / trimmed.height
+          : 1,
+      anchorX:
+        trimmed.hotspot && trimmed.width > 0 ? trimmed.hotspot.x / trimmed.width : 0,
+      anchorY:
+        trimmed.hotspot && trimmed.height > 0 ? trimmed.hotspot.y / trimmed.height : 0,
+    };
+  }
+
+  const canvas = document.createElement("canvas");
+  let anchorX = 0.5;
+  let anchorY = 0.5;
+
+  if (style === "dot") {
+    canvas.width = 112;
+    canvas.height = 112;
+    anchorX = 0.5;
+    anchorY = 0.5;
+    const ctx = canvas.getContext("2d")!;
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const radius = 26;
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = "rgba(15, 23, 42, 0.88)";
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    canvas.width = CUSTOM_CURSOR_ARROW_WIDTH;
+    canvas.height = CUSTOM_CURSOR_ARROW_HEIGHT;
+    anchorX = CUSTOM_CURSOR_ARROW_TIP_X / CUSTOM_CURSOR_ARROW_WIDTH;
+    anchorY = CUSTOM_CURSOR_ARROW_TIP_Y / CUSTOM_CURSOR_ARROW_HEIGHT;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = "#111111";
+    ctx.lineWidth = 11;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    drawArrowCursorPath(ctx, canvas.width, canvas.height);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  const dataUrl = canvas.toDataURL("image/png");
+  await Assets.load(dataUrl);
+  const image = await loadImage(dataUrl);
+  const texture = Texture.from(dataUrl);
+
+  return {
+    texture,
+    image,
+    aspectRatio: canvas.height > 0 ? canvas.width / canvas.height : 1,
+    anchorX,
+    anchorY,
+  };
+}
 
 function loadImage(dataUrl: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -114,6 +227,107 @@ function loadImage(dataUrl: string) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function trimCanvasToAlpha(
+  canvas: HTMLCanvasElement,
+  hotspot?: { x: number; y: number },
+) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return {
+      dataUrl: canvas.toDataURL("image/png"),
+      width: canvas.width,
+      height: canvas.height,
+      hotspot,
+    };
+  }
+
+  const { width, height } = canvas;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const { data } = imageData;
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const alpha = data[(y * width + x) * 4 + 3];
+      if (alpha === 0) {
+        continue;
+      }
+
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return {
+      dataUrl: canvas.toDataURL("image/png"),
+      width,
+      height,
+      hotspot,
+    };
+  }
+
+  const croppedWidth = maxX - minX + 1;
+  const croppedHeight = maxY - minY + 1;
+  const croppedCanvas = document.createElement("canvas");
+  croppedCanvas.width = croppedWidth;
+  croppedCanvas.height = croppedHeight;
+  const croppedCtx = croppedCanvas.getContext("2d")!;
+  croppedCtx.drawImage(canvas, minX, minY, croppedWidth, croppedHeight, 0, 0, croppedWidth, croppedHeight);
+
+  return {
+    dataUrl: croppedCanvas.toDataURL("image/png"),
+    width: croppedWidth,
+    height: croppedHeight,
+    hotspot: hotspot
+      ? {
+          x: hotspot.x - minX,
+          y: hotspot.y - minY,
+        }
+      : undefined,
+  };
+}
+
+async function createInvertedCursorAsset(
+  asset: LoadedCursorAsset,
+): Promise<LoadedCursorAsset> {
+  const canvas = document.createElement("canvas");
+  canvas.width = asset.image.naturalWidth;
+  canvas.height = asset.image.naturalHeight;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(asset.image, 0, 0);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const { data } = imageData;
+  for (let index = 0; index < data.length; index += 4) {
+    if (data[index + 3] === 0) {
+      continue;
+    }
+
+    data[index] = 255 - data[index];
+    data[index + 1] = 255 - data[index + 1];
+    data[index + 2] = 255 - data[index + 2];
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  const dataUrl = canvas.toDataURL("image/png");
+  await Assets.load(dataUrl);
+  const image = await loadImage(dataUrl);
+  const texture = Texture.from(dataUrl);
+
+  return {
+    texture,
+    image,
+    aspectRatio: asset.aspectRatio,
+    anchorX: asset.anchorX,
+    anchorY: asset.anchorY,
+  };
 }
 
 function getNormalizedAnchor(
@@ -189,6 +403,25 @@ function getCursorAsset(key: CursorAssetKey): LoadedCursorAsset {
 function getAvailableCursorKeys(): CursorAssetKey[] {
   const loadedKeys = Object.keys(loadedCursorAssets) as CursorAssetKey[];
   return loadedKeys.length > 0 ? loadedKeys : ["arrow"];
+}
+
+function getCursorStyleAsset(style: Exclude<CursorStyle, "tahoe">) {
+  const asset = loadedCursorStyleAssets[style];
+  if (!asset) {
+    throw new Error(`Missing cursor style asset for ${style}`);
+  }
+
+  return asset;
+}
+
+function getStatefulCursorAsset(style: Extract<CursorStyle, "tahoe" | "mono">, key: CursorAssetKey) {
+  const assetMap = style === "mono" ? loadedInvertedCursorAssets : loadedCursorAssets;
+  const asset = assetMap[key] ?? assetMap.arrow;
+  if (!asset) {
+    throw new Error(`Missing ${style} cursor asset for ${key}`);
+  }
+
+  return asset;
 }
 
 export async function preloadCursorAssets() {
@@ -283,6 +516,27 @@ export async function preloadCursorAssets() {
       loadedCursorAssets = Object.fromEntries(
         entries.filter(Boolean).map((entry) => entry!),
       ) as Partial<Record<CursorAssetKey, LoadedCursorAsset>>;
+
+      const invertedEntries = await Promise.all(
+        (Object.entries(loadedCursorAssets) as Array<[CursorAssetKey, LoadedCursorAsset]>).map(
+          async ([key, asset]) => [key, await createInvertedCursorAsset(asset)] as const,
+        ),
+      );
+
+      loadedInvertedCursorAssets = Object.fromEntries(
+        invertedEntries,
+      ) as Partial<Record<CursorAssetKey, LoadedCursorAsset>>;
+
+      const customStyleEntries = await Promise.all(
+        (["dot", "figma"] as const).map(async (style) => [
+          style,
+          await createCursorStyleAsset(style),
+        ] as const),
+      );
+
+      loadedCursorStyleAssets = Object.fromEntries(
+        customStyleEntries,
+      ) as Partial<Record<Exclude<CursorStyle, "tahoe">, LoadedCursorAsset>>;
 
       if (!loadedCursorAssets.arrow) {
         throw new Error("Failed to initialize the fallback arrow cursor asset");
@@ -580,6 +834,9 @@ function drawClickRing(
 export class PixiCursorOverlay {
   public readonly container: Container;
   private clickRingGraphics: Graphics;
+  private customCursorShadowSprite: Sprite;
+  private customCursorShadowFilter: BlurFilter;
+  private customCursorSprite: Sprite;
   private cursorShadowSprites: Partial<Record<CursorAssetKey, Sprite>>;
   private cursorShadowFilters: Partial<Record<CursorAssetKey, BlurFilter>>;
   private cursorSprites: Partial<Record<CursorAssetKey, Sprite>>;
@@ -599,6 +856,27 @@ export class PixiCursorOverlay {
     this.container.label = "cursor-overlay";
 
     this.clickRingGraphics = new Graphics();
+    const initialCustomAsset = getCursorStyleAsset("figma");
+    this.customCursorShadowSprite = new Sprite(initialCustomAsset.texture);
+    this.customCursorShadowSprite.anchor.set(
+      initialCustomAsset.anchorX,
+      initialCustomAsset.anchorY,
+    );
+    this.customCursorShadowSprite.visible = false;
+    this.customCursorShadowSprite.tint = CURSOR_SHADOW_COLOR;
+    this.customCursorShadowSprite.alpha = CURSOR_SHADOW_ALPHA;
+    this.customCursorShadowFilter = new BlurFilter();
+    this.customCursorShadowFilter.blur = CURSOR_SHADOW_BLUR;
+    this.customCursorShadowFilter.quality = 4;
+    this.customCursorShadowFilter.padding = CURSOR_SHADOW_PADDING;
+    this.customCursorShadowSprite.filters = [this.customCursorShadowFilter];
+
+    this.customCursorSprite = new Sprite(initialCustomAsset.texture);
+    this.customCursorSprite.anchor.set(
+      initialCustomAsset.anchorX,
+      initialCustomAsset.anchorY,
+    );
+    this.customCursorSprite.visible = false;
     this.cursorShadowSprites = {};
     this.cursorShadowFilters = {};
     this.cursorSprites = {};
@@ -628,10 +906,13 @@ export class PixiCursorOverlay {
 
     this.container.addChild(
       this.clickRingGraphics,
+      this.customCursorShadowSprite,
       ...Object.values(this.cursorShadowSprites),
+      this.customCursorSprite,
       ...Object.values(this.cursorSprites),
     );
     this.setMotionBlur(this.config.motionBlur);
+    this.setStyle(this.config.style);
   }
 
   setDotRadius(dotRadius: number) {
@@ -664,6 +945,32 @@ export class PixiCursorOverlay {
 
   setSway(sway: number) {
     this.config.sway = clamp(sway, 0, 2);
+  }
+
+  setStyle(style: CursorStyle) {
+    this.config.style = style;
+    if (style === "tahoe" || style === "mono") {
+      for (const key of getAvailableCursorKeys()) {
+        const asset = getStatefulCursorAsset(style, key);
+        const shadowSprite = this.cursorShadowSprites[key];
+        const sprite = this.cursorSprites[key];
+        shadowSprite?.anchor.set(asset.anchorX, asset.anchorY);
+        if (shadowSprite) {
+          shadowSprite.texture = asset.texture;
+        }
+        sprite?.anchor.set(asset.anchorX, asset.anchorY);
+        if (sprite) {
+          sprite.texture = asset.texture;
+        }
+      }
+      return;
+    }
+
+    const asset = getCursorStyleAsset(style);
+    this.customCursorShadowSprite.texture = asset.texture;
+    this.customCursorShadowSprite.anchor.set(asset.anchorX, asset.anchorY);
+    this.customCursorSprite.texture = asset.texture;
+    this.customCursorSprite.anchor.set(asset.anchorX, asset.anchorY);
   }
 
   update(
@@ -730,13 +1037,6 @@ export class PixiCursorOverlay {
     const h = this.config.dotRadius * getCursorViewportScale(viewport);
     const { cursorType, clickBounceProgress, clickProgress } =
       getCursorVisualState(samples, timeMs, this.config.clickBounceDuration);
-    const spriteKey = (
-      cursorType in this.cursorSprites ? cursorType : "arrow"
-    ) as CursorAssetKey;
-    const asset = getCursorAsset(spriteKey);
-    const shadowSprite =
-      this.cursorShadowSprites[spriteKey] ?? this.cursorShadowSprites.arrow!;
-    const sprite = this.cursorSprites[spriteKey] ?? this.cursorSprites.arrow!;
     const bounceScale = Math.max(
       0.72,
       1 -
@@ -754,34 +1054,76 @@ export class PixiCursorOverlay {
     this.clickRingGraphics.clear();
     drawClickRing(this.clickRingGraphics, px, py, h, clickProgress);
 
-    for (const [key, currentShadowSprite] of Object.entries(
-      this.cursorShadowSprites,
-    ) as Array<[CursorAssetKey, Sprite]>) {
-      currentShadowSprite.visible = key === spriteKey;
-    }
+    if (this.config.style === "tahoe" || this.config.style === "mono") {
+      this.customCursorShadowSprite.visible = false;
+      this.customCursorSprite.visible = false;
 
-    for (const [key, currentSprite] of Object.entries(
-      this.cursorSprites,
-    ) as Array<[CursorAssetKey, Sprite]>) {
-      currentSprite.visible = key === spriteKey;
-    }
+      const spriteKey = (
+        cursorType in this.cursorSprites ? cursorType : "arrow"
+      ) as CursorAssetKey;
+      const asset = getStatefulCursorAsset(this.config.style, spriteKey);
+      const shadowSprite =
+        this.cursorShadowSprites[spriteKey] ?? this.cursorShadowSprites.arrow!;
+      const sprite = this.cursorSprites[spriteKey] ?? this.cursorSprites.arrow!;
 
-    if (shadowSprite) {
-      shadowSprite.height = scaledH * bounceScale;
-      shadowSprite.width = scaledH * bounceScale * asset.aspectRatio;
-      shadowSprite.position.set(
-        px + CURSOR_SHADOW_OFFSET_X,
-        py + CURSOR_SHADOW_OFFSET_Y,
-      );
-      shadowSprite.rotation = swayRotation;
-    }
+      for (const [key, currentShadowSprite] of Object.entries(
+        this.cursorShadowSprites,
+      ) as Array<[CursorAssetKey, Sprite]>) {
+        currentShadowSprite.visible = key === spriteKey;
+      }
 
-    if (sprite) {
-      sprite.alpha = this.config.dotAlpha;
-      sprite.height = scaledH * bounceScale;
-      sprite.width = scaledH * bounceScale * asset.aspectRatio;
-      sprite.position.set(px, py);
-      sprite.rotation = swayRotation;
+      for (const [key, currentSprite] of Object.entries(
+        this.cursorSprites,
+      ) as Array<[CursorAssetKey, Sprite]>) {
+        currentSprite.visible = key === spriteKey;
+      }
+
+      if (shadowSprite) {
+        shadowSprite.height = scaledH * bounceScale;
+        shadowSprite.width = scaledH * bounceScale * asset.aspectRatio;
+        shadowSprite.position.set(
+          px + CURSOR_SHADOW_OFFSET_X,
+          py + CURSOR_SHADOW_OFFSET_Y,
+        );
+        shadowSprite.rotation = swayRotation;
+      }
+
+      if (sprite) {
+        sprite.alpha = this.config.dotAlpha;
+        sprite.height = scaledH * bounceScale;
+        sprite.width = scaledH * bounceScale * asset.aspectRatio;
+        sprite.position.set(px, py);
+        sprite.rotation = swayRotation;
+      }
+    } else {
+      for (const currentShadowSprite of Object.values(this.cursorShadowSprites)) {
+        currentShadowSprite.visible = false;
+      }
+
+      for (const currentSprite of Object.values(this.cursorSprites)) {
+        currentSprite.visible = false;
+      }
+
+      const asset = getCursorStyleAsset(this.config.style);
+      const showSeparateShadow = this.config.style !== "figma";
+      this.customCursorShadowSprite.visible = showSeparateShadow;
+      if (showSeparateShadow) {
+        this.customCursorShadowSprite.height = scaledH * bounceScale;
+        this.customCursorShadowSprite.width =
+          scaledH * bounceScale * asset.aspectRatio;
+        this.customCursorShadowSprite.position.set(
+          px + CURSOR_SHADOW_OFFSET_X,
+          py + CURSOR_SHADOW_OFFSET_Y,
+        );
+        this.customCursorShadowSprite.rotation = swayRotation;
+      }
+
+      this.customCursorSprite.visible = true;
+      this.customCursorSprite.alpha = this.config.dotAlpha;
+      this.customCursorSprite.height = scaledH * bounceScale;
+      this.customCursorSprite.width = scaledH * bounceScale * asset.aspectRatio;
+      this.customCursorSprite.position.set(px, py);
+      this.customCursorSprite.rotation = swayRotation;
     }
 
     this.applyCursorMotionBlur(px, py, timeMs, shouldFreezeCursorMotion);
@@ -868,10 +1210,14 @@ export class PixiCursorOverlay {
       shadowSprite.visible = false;
       shadowSprite.scale.set(1);
     }
+    this.customCursorShadowSprite.visible = false;
+    this.customCursorShadowSprite.scale.set(1);
     for (const sprite of Object.values(this.cursorSprites)) {
       sprite.visible = false;
       sprite.scale.set(1);
     }
+    this.customCursorSprite.visible = false;
+    this.customCursorSprite.scale.set(1);
     this.container.visible = false;
     this.lastRenderedPoint = null;
     this.lastRenderedTimeMs = null;
@@ -884,6 +1230,7 @@ export class PixiCursorOverlay {
 
   destroy(): void {
     this.clickRingGraphics.destroy();
+    this.customCursorShadowFilter.destroy();
     for (const shadowFilter of Object.values(this.cursorShadowFilters)) {
       shadowFilter.destroy();
     }
@@ -922,17 +1269,24 @@ export function drawCursorOnCanvas(
     timeMs,
     config.clickBounceDuration,
   );
-  const spriteKey = (
-    cursorType && loadedCursorAssets[cursorType] ? cursorType : "arrow"
-  ) as CursorAssetKey;
-  const asset = getCursorAsset(spriteKey);
+  const asset =
+    config.style === "tahoe" || config.style === "mono"
+      ? getStatefulCursorAsset(
+          config.style,
+          (
+            cursorType && loadedCursorAssets[cursorType] ? cursorType : "arrow"
+          ) as CursorAssetKey,
+        )
+      : getCursorStyleAsset(config.style);
   const bounceScale = Math.max(
     0.72,
     1 - Math.sin(clickBounceProgress * Math.PI) * (0.08 * config.clickBounce),
   );
 
   ctx.save();
-  ctx.filter = CURSOR_SVG_DROP_SHADOW_FILTER;
+  if (config.style !== "figma") {
+    ctx.filter = CURSOR_SVG_DROP_SHADOW_FILTER;
+  }
 
   const drawHeight = h * bounceScale;
   const drawWidth = drawHeight * asset.aspectRatio;
