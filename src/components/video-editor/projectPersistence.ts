@@ -2,9 +2,16 @@ import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@
 import { DEFAULT_WALLPAPER_PATH } from "@/lib/wallpapers";
 import { ASPECT_RATIOS, type AspectRatio, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
 import {
+	type AutoCaptionAnimation,
+	type AutoCaptionSettings,
+	type CaptionCue,
+	type CaptionCueWord,
 	type AnnotationRegion,
 	type AudioRegion,
 	type CropRegion,
+	type CursorStyle,
+	DEFAULT_AUTO_CAPTION_SETTINGS,
+	getDefaultCaptionFontFamily,
 	DEFAULT_ANNOTATION_POSITION,
 	DEFAULT_ANNOTATION_SIZE,
 	DEFAULT_ANNOTATION_STYLE,
@@ -13,8 +20,12 @@ import {
 	DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
 	DEFAULT_CURSOR_MOTION_BLUR,
 	DEFAULT_CURSOR_SIZE,
+	DEFAULT_CURSOR_STYLE,
 	DEFAULT_CURSOR_SMOOTHING,
 	DEFAULT_CURSOR_SWAY,
+	DEFAULT_CONNECTED_ZOOM_DURATION_MS,
+	DEFAULT_CONNECTED_ZOOM_EASING,
+	DEFAULT_CONNECTED_ZOOM_GAP_MS,
 	DEFAULT_WEBCAM_CORNER_RADIUS,
 	DEFAULT_WEBCAM_MARGIN,
 	DEFAULT_WEBCAM_OVERLAY,
@@ -27,10 +38,16 @@ import {
 	DEFAULT_FIGURE_DATA,
 	DEFAULT_PLAYBACK_SPEED,
 	DEFAULT_ZOOM_DEPTH,
+	DEFAULT_ZOOM_IN_DURATION_MS,
+	DEFAULT_ZOOM_IN_EASING,
+	DEFAULT_ZOOM_IN_OVERLAP_MS,
 	DEFAULT_ZOOM_MOTION_BLUR,
+	DEFAULT_ZOOM_OUT_DURATION_MS,
+	DEFAULT_ZOOM_OUT_EASING,
 	type SpeedRegion,
 	type TrimRegion,
 	type WebcamOverlaySettings,
+	type ZoomTransitionEasing,
 	type ZoomRegion,
 } from "./types";
 
@@ -42,8 +59,17 @@ export interface ProjectEditorState {
 	backgroundBlur: number;
 	zoomMotionBlur: number;
 	connectZooms: boolean;
+	zoomInDurationMs: number;
+	zoomInOverlapMs: number;
+	zoomOutDurationMs: number;
+	connectedZoomGapMs: number;
+	connectedZoomDurationMs: number;
+	zoomInEasing: ZoomTransitionEasing;
+	zoomOutEasing: ZoomTransitionEasing;
+	connectedZoomEasing: ZoomTransitionEasing;
 	showCursor: boolean;
 	loopCursor: boolean;
+	cursorStyle: CursorStyle;
 	cursorSize: number;
 	cursorSmoothing: number;
 	cursorMotionBlur: number;
@@ -58,6 +84,8 @@ export interface ProjectEditorState {
 	speedRegions: SpeedRegion[];
 	annotationRegions: AnnotationRegion[];
 	audioRegions: AudioRegion[];
+	autoCaptions: CaptionCue[];
+	autoCaptionSettings: AutoCaptionSettings;
 	webcam: WebcamOverlaySettings;
 	aspectRatio: AspectRatio;
 	exportQuality: ExportQuality;
@@ -79,6 +107,28 @@ function isFiniteNumber(value: unknown): value is number {
 
 function clamp(value: number, min: number, max: number) {
 	return Math.min(max, Math.max(min, value));
+}
+
+function normalizeZoomTransitionEasing(
+	value: unknown,
+	fallback: ZoomTransitionEasing,
+): ZoomTransitionEasing {
+	return value === "recordly" ||
+		value === "glide" ||
+		value === "smooth" ||
+		value === "snappy" ||
+		value === "linear"
+		? value
+		: fallback;
+}
+
+function normalizeAutoCaptionAnimation(
+	value: unknown,
+	fallback: AutoCaptionAnimation,
+): AutoCaptionAnimation {
+	return value === "none" || value === "fade" || value === "rise" || value === "pop"
+		? value
+		: fallback;
 }
 
 function isFileUrl(value: string): boolean {
@@ -187,6 +237,21 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		: legacyShowBlur
 			? 2
 			: 0;
+	const normalizedZoomInDurationMs = isFiniteNumber(editor.zoomInDurationMs)
+		? clamp(editor.zoomInDurationMs, 60, 4000)
+		: DEFAULT_ZOOM_IN_DURATION_MS;
+	const normalizedZoomInOverlapMs = isFiniteNumber(editor.zoomInOverlapMs)
+		? clamp(editor.zoomInOverlapMs, 0, normalizedZoomInDurationMs)
+		: DEFAULT_ZOOM_IN_OVERLAP_MS;
+	const normalizedZoomOutDurationMs = isFiniteNumber(editor.zoomOutDurationMs)
+		? clamp(editor.zoomOutDurationMs, 60, 4000)
+		: DEFAULT_ZOOM_OUT_DURATION_MS;
+	const normalizedConnectedZoomGapMs = isFiniteNumber(editor.connectedZoomGapMs)
+		? clamp(editor.connectedZoomGapMs, 0, 5000)
+		: DEFAULT_CONNECTED_ZOOM_GAP_MS;
+	const normalizedConnectedZoomDurationMs = isFiniteNumber(editor.connectedZoomDurationMs)
+		? clamp(editor.connectedZoomDurationMs, 60, 4000)
+		: DEFAULT_CONNECTED_ZOOM_DURATION_MS;
 
 	const normalizedZoomRegions: ZoomRegion[] = Array.isArray(editor.zoomRegions)
 		? editor.zoomRegions
@@ -342,6 +407,95 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				})
 		: [];
 
+	const normalizedAutoCaptions: CaptionCue[] = Array.isArray(
+		(editor as Partial<ProjectEditorState>).autoCaptions,
+	)
+		? ((editor as Partial<ProjectEditorState>).autoCaptions as CaptionCue[])
+				.filter((cue): cue is CaptionCue => Boolean(cue && typeof cue.id === "string"))
+				.map((cue) => {
+					const rawStart = isFiniteNumber(cue.startMs) ? Math.round(cue.startMs) : 0;
+					const rawEnd = isFiniteNumber(cue.endMs) ? Math.round(cue.endMs) : rawStart + 1000;
+					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
+					const endMs = Math.max(startMs + 1, rawEnd);
+					const words: CaptionCueWord[] | undefined = Array.isArray(cue.words)
+						? cue.words
+								.filter(
+									(word): word is CaptionCueWord => Boolean(word && typeof word.text === "string"),
+								)
+								.map((word) => {
+									const rawWordStart = isFiniteNumber(word.startMs) ? Math.round(word.startMs) : startMs;
+									const rawWordEnd = isFiniteNumber(word.endMs) ? Math.round(word.endMs) : rawWordStart + 1;
+									const normalizedWordStart = clamp(rawWordStart, startMs, endMs - 1);
+									const normalizedWordEnd = clamp(rawWordEnd, normalizedWordStart + 1, endMs);
+
+									return {
+										text: word.text.trim(),
+										startMs: normalizedWordStart,
+										endMs: normalizedWordEnd,
+										...(word.leadingSpace ? { leadingSpace: true } : {}),
+									};
+								})
+								.filter((word) => word.text.length > 0)
+						: undefined;
+
+					return {
+						id: cue.id,
+						startMs,
+						endMs,
+						text: typeof cue.text === "string" ? cue.text.trim() : "",
+						...(words && words.length > 0 ? { words } : {}),
+					};
+				})
+				.filter((cue) => cue.text.length > 0)
+		: [];
+
+	const rawAutoCaptionSettings: Partial<AutoCaptionSettings> =
+		editor.autoCaptionSettings && typeof editor.autoCaptionSettings === "object"
+			? (editor.autoCaptionSettings as Partial<AutoCaptionSettings>)
+			: {};
+	const normalizedAutoCaptionSettings: AutoCaptionSettings = {
+		enabled:
+			typeof rawAutoCaptionSettings.enabled === "boolean"
+				? rawAutoCaptionSettings.enabled
+				: DEFAULT_AUTO_CAPTION_SETTINGS.enabled,
+		language:
+			typeof rawAutoCaptionSettings.language === "string" && rawAutoCaptionSettings.language.trim()
+				? rawAutoCaptionSettings.language.trim()
+				: DEFAULT_AUTO_CAPTION_SETTINGS.language,
+		fontFamily:
+			getDefaultCaptionFontFamily(),
+		fontSize: isFiniteNumber(rawAutoCaptionSettings.fontSize)
+			? clamp(rawAutoCaptionSettings.fontSize, 16, 72)
+			: DEFAULT_AUTO_CAPTION_SETTINGS.fontSize,
+		bottomOffset: isFiniteNumber(rawAutoCaptionSettings.bottomOffset)
+			? clamp(rawAutoCaptionSettings.bottomOffset, 0, 30)
+			: DEFAULT_AUTO_CAPTION_SETTINGS.bottomOffset,
+		maxWidth: isFiniteNumber(rawAutoCaptionSettings.maxWidth)
+			? clamp(rawAutoCaptionSettings.maxWidth, 40, 95)
+			: DEFAULT_AUTO_CAPTION_SETTINGS.maxWidth,
+		maxRows: isFiniteNumber(rawAutoCaptionSettings.maxRows)
+			? clamp(Math.round(rawAutoCaptionSettings.maxRows), 1, 4)
+			: DEFAULT_AUTO_CAPTION_SETTINGS.maxRows,
+		animationStyle: normalizeAutoCaptionAnimation(
+			rawAutoCaptionSettings.animationStyle,
+			DEFAULT_AUTO_CAPTION_SETTINGS.animationStyle,
+		),
+		boxRadius: isFiniteNumber(rawAutoCaptionSettings.boxRadius)
+			? clamp(rawAutoCaptionSettings.boxRadius, 0, 40)
+			: DEFAULT_AUTO_CAPTION_SETTINGS.boxRadius,
+		textColor:
+			typeof rawAutoCaptionSettings.textColor === "string" && rawAutoCaptionSettings.textColor.trim()
+				? rawAutoCaptionSettings.textColor
+				: DEFAULT_AUTO_CAPTION_SETTINGS.textColor,
+		inactiveTextColor:
+			typeof rawAutoCaptionSettings.inactiveTextColor === "string" && rawAutoCaptionSettings.inactiveTextColor.trim()
+				? rawAutoCaptionSettings.inactiveTextColor
+				: DEFAULT_AUTO_CAPTION_SETTINGS.inactiveTextColor,
+		backgroundOpacity: isFiniteNumber(rawAutoCaptionSettings.backgroundOpacity)
+			? clamp(rawAutoCaptionSettings.backgroundOpacity, 0, 1)
+			: DEFAULT_AUTO_CAPTION_SETTINGS.backgroundOpacity,
+	};
+
 	const rawCropX = isFiniteNumber(editor.cropRegion?.x)
 		? editor.cropRegion.x
 		: DEFAULT_CROP_REGION.x;
@@ -374,8 +528,26 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		backgroundBlur: normalizedBackgroundBlur,
 		zoomMotionBlur: normalizedZoomMotionBlur,
 		connectZooms: typeof editor.connectZooms === "boolean" ? editor.connectZooms : true,
+		zoomInDurationMs: normalizedZoomInDurationMs,
+		zoomInOverlapMs: normalizedZoomInOverlapMs,
+		zoomOutDurationMs: normalizedZoomOutDurationMs,
+		connectedZoomGapMs: normalizedConnectedZoomGapMs,
+		connectedZoomDurationMs: normalizedConnectedZoomDurationMs,
+		zoomInEasing: normalizeZoomTransitionEasing(editor.zoomInEasing, DEFAULT_ZOOM_IN_EASING),
+		zoomOutEasing: normalizeZoomTransitionEasing(editor.zoomOutEasing, DEFAULT_ZOOM_OUT_EASING),
+		connectedZoomEasing: normalizeZoomTransitionEasing(
+			editor.connectedZoomEasing,
+			DEFAULT_CONNECTED_ZOOM_EASING,
+		),
 		showCursor: typeof editor.showCursor === "boolean" ? editor.showCursor : true,
 		loopCursor: typeof editor.loopCursor === "boolean" ? editor.loopCursor : false,
+		cursorStyle:
+			editor.cursorStyle === "dot" ||
+			editor.cursorStyle === "figma" ||
+			editor.cursorStyle === "mono" ||
+			editor.cursorStyle === "tahoe"
+				? editor.cursorStyle
+				: DEFAULT_CURSOR_STYLE,
 		cursorSize: isFiniteNumber(editor.cursorSize)
 			? clamp(editor.cursorSize, 0.5, 10)
 			: DEFAULT_CURSOR_SIZE,
@@ -395,7 +567,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			? clamp((editor as Partial<ProjectEditorState>).cursorSway as number, 0, 2)
 			: DEFAULT_CURSOR_SWAY,
 		borderRadius: typeof editor.borderRadius === "number" ? editor.borderRadius : 12.5,
-		padding: isFiniteNumber(editor.padding) ? clamp(editor.padding, 0, 100) : 50,
+		padding: isFiniteNumber(editor.padding) ? clamp(editor.padding, 0, 100) : 20,
 		cropRegion: {
 			x: cropX,
 			y: cropY,
@@ -407,6 +579,8 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		speedRegions: normalizedSpeedRegions,
 		annotationRegions: normalizedAnnotationRegions,
 		audioRegions: normalizedAudioRegions,
+		autoCaptions: normalizedAutoCaptions,
+		autoCaptionSettings: normalizedAutoCaptionSettings,
 		webcam: {
 			enabled:
 				typeof webcam.enabled === "boolean" ? webcam.enabled : DEFAULT_WEBCAM_OVERLAY.enabled,
