@@ -10,6 +10,7 @@ struct CaptureConfig: Codable {
 	let outputPath: String?
 	let capturesSystemAudio: Bool?
 	let capturesMicrophone: Bool?
+	let systemAudioOutputPath: String?
 	let microphoneDeviceId: String?
 	let microphoneLabel: String?
 	let microphoneOutputPath: String?
@@ -21,12 +22,13 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private let queue = DispatchQueue(label: "openscreen.screencapturekit.video")
 	private var assetWriter: AVAssetWriter?
 	private var videoInput: AVAssetWriterInput?
-	private var audioInput: AVAssetWriterInput?
+	private var systemAudioWriter: AVAssetWriter?
+	private var systemAudioInput: AVAssetWriterInput?
 	private var microphoneOnlyWriter: AVAssetWriter?
 	private var microphoneOnlyInput: AVAssetWriterInput?
 	private var stream: SCStream?
 	private var firstSampleTime: CMTime = .zero
-	private var firstPrimaryAudioSampleTime: CMTime?
+	private var firstSystemAudioSampleTime: CMTime?
 	private var firstMicrophoneSampleTime: CMTime?
 	private var lastSampleBuffer: CMSampleBuffer?
 	private var lastVideoPresentationTime: CMTime = .zero
@@ -44,16 +46,10 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private var windowValidationTask: Task<Void, Never>?
 	private var capturesSystemAudio = false
 	private var capturesMicrophone = false
+	private var writesSystemAudioToSeparateTrack = false
 	private var writesMicrophoneToSeparateTrack = false
 
-	private enum PrimaryAudioSource {
-		case system
-		case microphone
-	}
-
 	private let microphoneOutputTypeRawValue = 2
-
-	private var primaryAudioSource: PrimaryAudioSource?
 
 	func startCapture(configJSON: String) async throws {
 		guard !isRecording else {
@@ -76,8 +72,11 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				userInfo: [NSLocalizedDescriptionKey: "Native microphone capture is unavailable on this macOS/Xcode runtime"]
 			)
 		}
+		writesSystemAudioToSeparateTrack = capturesSystemAudio
 		writesMicrophoneToSeparateTrack = capturesSystemAudio && capturesMicrophone
-		primaryAudioSource = capturesSystemAudio ? .system : (capturesMicrophone ? .microphone : nil)
+		if capturesMicrophone && !capturesSystemAudio {
+			writesMicrophoneToSeparateTrack = true
+		}
 		let requestedFPS = max(targetCaptureFPS, config.fps ?? targetCaptureFPS)
 		streamConfig.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(requestedFPS))
 		streamConfig.queueDepth = 6
@@ -144,7 +143,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		let outputFileType: AVFileType = destinationURL.pathExtension.lowercased() == "mp4" ? .mp4 : .mov
 		assetWriter = try AVAssetWriter(url: destinationURL, fileType: outputFileType)
 		microphoneOutputURL = nil
-		firstPrimaryAudioSampleTime = nil
+		firstSystemAudioSampleTime = nil
 		firstMicrophoneSampleTime = nil
 
 		guard let assistant = AVOutputSettingsAssistant(preset: .preset3840x2160) else {
@@ -174,21 +173,34 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		assetWriter.add(videoInput)
 		self.videoInput = videoInput
 
-		if primaryAudioSource != nil {
-			let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: Self.audioOutputSettings(bitRate: 160_000))
-			audioInput.expectsMediaDataInRealTime = true
-
-			guard assetWriter.canAdd(audioInput) else {
-				throw NSError(domain: "RecordlyCapture", code: 11, userInfo: [NSLocalizedDescriptionKey: "Unable to add audio writer input"])
+		if writesSystemAudioToSeparateTrack {
+			guard let systemAudioOutputPath = config.systemAudioOutputPath, !systemAudioOutputPath.isEmpty else {
+				throw NSError(domain: "RecordlyCapture", code: 11, userInfo: [NSLocalizedDescriptionKey: "Missing system audio output path for audio capture"])
 			}
 
-			assetWriter.add(audioInput)
-			self.audioInput = audioInput
+			let systemAudioURL = URL(fileURLWithPath: systemAudioOutputPath)
+			let systemAudioWriter = try AVAssetWriter(url: systemAudioURL, fileType: .m4a)
+			let systemAudioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: Self.audioOutputSettings(bitRate: 160_000))
+			systemAudioInput.expectsMediaDataInRealTime = true
+
+			guard systemAudioWriter.canAdd(systemAudioInput) else {
+				throw NSError(domain: "RecordlyCapture", code: 12, userInfo: [NSLocalizedDescriptionKey: "Unable to add system audio writer input"])
+			}
+
+			systemAudioWriter.add(systemAudioInput)
+			self.systemAudioWriter = systemAudioWriter
+			self.systemAudioInput = systemAudioInput
+
+			guard systemAudioWriter.startWriting() else {
+				throw NSError(domain: "RecordlyCapture", code: 13, userInfo: [NSLocalizedDescriptionKey: systemAudioWriter.error?.localizedDescription ?? "Unable to start system audio writing"])
+			}
+
+			systemAudioWriter.startSession(atSourceTime: .zero)
 		}
 
 		if writesMicrophoneToSeparateTrack {
 			guard let microphoneOutputPath = config.microphoneOutputPath, !microphoneOutputPath.isEmpty else {
-				throw NSError(domain: "RecordlyCapture", code: 12, userInfo: [NSLocalizedDescriptionKey: "Missing microphone output path for dual-audio capture"])
+				throw NSError(domain: "RecordlyCapture", code: 14, userInfo: [NSLocalizedDescriptionKey: "Missing microphone output path for microphone capture"])
 			}
 
 			let microphoneURL = URL(fileURLWithPath: microphoneOutputPath)
@@ -198,7 +210,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			microphoneInput.expectsMediaDataInRealTime = true
 
 			guard microphoneWriter.canAdd(microphoneInput) else {
-				throw NSError(domain: "RecordlyCapture", code: 13, userInfo: [NSLocalizedDescriptionKey: "Unable to add microphone writer input"])
+				throw NSError(domain: "RecordlyCapture", code: 15, userInfo: [NSLocalizedDescriptionKey: "Unable to add microphone writer input"])
 			}
 
 			microphoneWriter.add(microphoneInput)
@@ -206,7 +218,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			self.microphoneOnlyInput = microphoneInput
 
 			guard microphoneWriter.startWriting() else {
-				throw NSError(domain: "RecordlyCapture", code: 14, userInfo: [NSLocalizedDescriptionKey: microphoneWriter.error?.localizedDescription ?? "Unable to start microphone audio writing"])
+				throw NSError(domain: "RecordlyCapture", code: 16, userInfo: [NSLocalizedDescriptionKey: microphoneWriter.error?.localizedDescription ?? "Unable to start microphone audio writing"])
 			}
 
 			microphoneWriter.startSession(atSourceTime: .zero)
@@ -222,7 +234,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			guard let microphoneOutputType = SCStreamOutputType(rawValue: microphoneOutputTypeRawValue) else {
 				throw NSError(
 					domain: "RecordlyCapture",
-					code: 15,
+					code: 17,
 					userInfo: [NSLocalizedDescriptionKey: "Microphone stream output type is unavailable"]
 				)
 			}
@@ -302,16 +314,14 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		}
 
 		if outputType == .audio {
-			guard primaryAudioSource == .system, let audioInput else { return }
-			appendAudioSampleBuffer(sampleBuffer, to: audioInput, firstSampleTime: &firstPrimaryAudioSampleTime, presentationTime: presentationTime)
+			guard let systemAudioInput else { return }
+			appendAudioSampleBuffer(sampleBuffer, to: systemAudioInput, firstSampleTime: &firstSystemAudioSampleTime, presentationTime: presentationTime)
 			return
 		}
 
 		if outputType.rawValue == microphoneOutputTypeRawValue {
-			if writesMicrophoneToSeparateTrack, let microphoneOnlyInput {
+			if let microphoneOnlyInput {
 				appendAudioSampleBuffer(sampleBuffer, to: microphoneOnlyInput, firstSampleTime: &firstMicrophoneSampleTime, presentationTime: presentationTime)
-			} else if primaryAudioSource == .microphone, let audioInput {
-				appendAudioSampleBuffer(sampleBuffer, to: audioInput, firstSampleTime: &firstPrimaryAudioSampleTime, presentationTime: presentationTime)
 			}
 			return
 		}
@@ -349,8 +359,10 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
 		assetWriter?.endSession(atSourceTime: lastSampleBuffer?.presentationTimeStamp ?? .zero)
 		videoInput?.markAsFinished()
-		audioInput?.markAsFinished()
 		await assetWriter?.finishWriting()
+
+		systemAudioInput?.markAsFinished()
+		await systemAudioWriter?.finishWriting()
 
 		microphoneOnlyInput?.markAsFinished()
 		await microphoneOnlyWriter?.finishWriting()
@@ -358,14 +370,15 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		let path = outputURL?.path ?? ""
 		assetWriter = nil
 		videoInput = nil
-		audioInput = nil
+		systemAudioWriter = nil
+		systemAudioInput = nil
 		microphoneOnlyWriter = nil
 		microphoneOnlyInput = nil
 		outputURL = nil
 		microphoneOutputURL = nil
 		sessionStarted = false
 		firstSampleTime = .zero
-		firstPrimaryAudioSampleTime = nil
+		firstSystemAudioSampleTime = nil
 		firstMicrophoneSampleTime = nil
 		lastSampleBuffer = nil
 		lastVideoPresentationTime = .zero
@@ -377,8 +390,8 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		accumulatedPausedDuration = .zero
 		capturesSystemAudio = false
 		capturesMicrophone = false
+		writesSystemAudioToSeparateTrack = false
 		writesMicrophoneToSeparateTrack = false
-		primaryAudioSource = nil
 		return path
 	}
 

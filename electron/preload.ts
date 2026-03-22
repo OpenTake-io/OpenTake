@@ -153,6 +153,39 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	openAudioFilePicker: () => {
 		return ipcRenderer.invoke("open-audio-file-picker");
 	},
+	openWhisperExecutablePicker: () => {
+		return ipcRenderer.invoke("open-whisper-executable-picker");
+	},
+	openWhisperModelPicker: () => {
+		return ipcRenderer.invoke("open-whisper-model-picker");
+	},
+	getWhisperSmallModelStatus: () => {
+		return ipcRenderer.invoke("get-whisper-small-model-status");
+	},
+	downloadWhisperSmallModel: () => {
+		return ipcRenderer.invoke("download-whisper-small-model");
+	},
+	deleteWhisperSmallModel: () => {
+		return ipcRenderer.invoke("delete-whisper-small-model");
+	},
+	onWhisperSmallModelDownloadProgress: (
+		callback: (state: { status: "idle" | "downloading" | "downloaded" | "error"; progress: number; path?: string | null; error?: string }) => void,
+	) => {
+		const listener = (
+			_event: Electron.IpcRendererEvent,
+			payload: { status: "idle" | "downloading" | "downloaded" | "error"; progress: number; path?: string | null; error?: string },
+		) => callback(payload);
+		ipcRenderer.on("whisper-small-model-download-progress", listener);
+		return () => ipcRenderer.removeListener("whisper-small-model-download-progress", listener);
+	},
+	generateAutoCaptions: (options: {
+		videoPath: string;
+		whisperExecutablePath?: string;
+		whisperModelPath: string;
+		language?: string;
+	}) => {
+		return ipcRenderer.invoke("generate-auto-captions", options);
+	},
 	setCurrentVideoPath: (path: string) => {
 		return ipcRenderer.invoke("set-current-video-path", path);
 	},

@@ -134,6 +134,50 @@ interface Window {
 		) => Promise<{ success: boolean; path?: string; message?: string; canceled?: boolean }>;
 		openVideoFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
 		openAudioFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
+		openWhisperExecutablePicker: () => Promise<{
+			success: boolean;
+			path?: string;
+			canceled?: boolean;
+			error?: string;
+		}>;
+		openWhisperModelPicker: () => Promise<{
+			success: boolean;
+			path?: string;
+			canceled?: boolean;
+			error?: string;
+		}>;
+		getWhisperSmallModelStatus: () => Promise<{
+			success: boolean;
+			exists: boolean;
+			path?: string | null;
+			error?: string;
+		}>;
+		downloadWhisperSmallModel: () => Promise<{
+			success: boolean;
+			path?: string;
+			alreadyDownloaded?: boolean;
+			error?: string;
+		}>;
+		deleteWhisperSmallModel: () => Promise<{ success: boolean; error?: string }>;
+		onWhisperSmallModelDownloadProgress: (
+			callback: (state: {
+				status: "idle" | "downloading" | "downloaded" | "error";
+				progress: number;
+				path?: string | null;
+				error?: string;
+			}) => void,
+		) => () => void;
+		generateAutoCaptions: (options: {
+			videoPath: string;
+			whisperExecutablePath?: string;
+			whisperModelPath: string;
+			language?: string;
+		}) => Promise<{
+			success: boolean;
+			cues?: AutoCaptionCue[];
+			message?: string;
+			error?: string;
+		}>;
 		setCurrentVideoPath: (path: string) => Promise<{ success: boolean }>;
 		setCurrentRecordingSession: (session: {
 			videoPath: string;
@@ -255,4 +299,17 @@ interface SystemCursorAsset {
 	hotspotY: number;
 	width: number;
 	height: number;
+}
+
+interface AutoCaptionCue {
+	id: string;
+	startMs: number;
+	endMs: number;
+	text: string;
+	words?: Array<{
+		text: string;
+		startMs: number;
+		endMs: number;
+		leadingSpace?: boolean;
+	}>;
 }
