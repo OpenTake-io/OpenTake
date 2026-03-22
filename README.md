@@ -354,8 +354,11 @@ Pull requests are welcome.
 [Donations](https://ko-fi.com/webadderall/goal?g=0)
 
 Thanks to everyone supporting the project and helping keep Recordly open source.
+Ranked in order of size of donation:
 
 - Tadees
+
+- erwan
 - Anonymous supporter
 - Anonymous supporter
 
