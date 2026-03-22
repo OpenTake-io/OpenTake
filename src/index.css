@@ -94,6 +94,23 @@
     will-change: transform;
     transition: left 33ms linear, right 33ms linear;
   }
+
+  .indeterminate-progress {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .indeterminate-progress::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 38%;
+    min-width: 3.5rem;
+    border-radius: inherit;
+    background: linear-gradient(90deg, rgba(37, 99, 235, 0) 0%, rgba(37, 99, 235, 0.35) 18%, rgba(96, 165, 250, 0.92) 52%, rgba(37, 99, 235, 0.3) 82%, rgba(37, 99, 235, 0) 100%);
+    animation: indeterminate-progress 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
   
   /* Hidden scrollbar - still scrollable but invisible */
   .custom-scrollbar {
@@ -155,5 +172,19 @@
 
   input[type="range"]::-moz-range-thumb:active {
     transform: scale(1.25);
+  }
+}
+
+@keyframes indeterminate-progress {
+  0% {
+    transform: translateX(-150%);
+  }
+
+  60% {
+    transform: translateX(270%);
+  }
+
+  100% {
+    transform: translateX(270%);
   }
 }
