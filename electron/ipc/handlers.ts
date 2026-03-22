@@ -43,6 +43,14 @@ function getScreen() {
   return nodeRequire('electron').screen as typeof import('electron').screen
 }
 
+function broadcastSelectedSourceChange() {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send('selected-source-changed', selectedSource)
+    }
+  }
+}
+
 type SelectedSource = {
   id?: string
   name: string
@@ -2575,6 +2583,7 @@ export function registerIpcHandlers(
 
   ipcMain.handle('select-source', (_, source: SelectedSource) => {
     selectedSource = source
+    broadcastSelectedSourceChange()
     stopWindowBoundsCapture()
     const sourceSelectorWin = getSourceSelectorWindow()
     if (sourceSelectorWin) {

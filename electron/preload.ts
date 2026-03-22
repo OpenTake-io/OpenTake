@@ -49,6 +49,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	getSelectedSource: () => {
 		return ipcRenderer.invoke("get-selected-source");
 	},
+	onSelectedSourceChanged: (callback: (source: any) => void) => {
+		const listener = (_event: Electron.IpcRendererEvent, payload: any) => callback(payload);
+		ipcRenderer.on("selected-source-changed", listener);
+		return () => ipcRenderer.removeListener("selected-source-changed", listener);
+	},
 	startNativeScreenRecording: (
 		source: any,
 		options?: {
