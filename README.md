@@ -365,7 +365,7 @@ For other inquiries, email `youngchen3442@gmail.com` or DM [@webadderall](https:
 
 # License
 
-Recordly is licensed under the **MIT License**.
+Recordly is licensed under the **AGPL 3.0**.
 
 ---
 
@@ -373,7 +373,7 @@ Recordly is licensed under the **MIT License**.
 
 ## Acknowledgements
 
-Recordly was originally built on top of the excellent [OpenScreen](https://github.com/siddharthvaddem/openscreen) project and has since been expanded with its own recording, editing, cursor, webcam, export, and packaging workflow.
+Recordly originally started as a fork of the excellent [OpenScreen](https://github.com/siddharthvaddem/openscreen) project and has since been significantly modified.
 
 Created by  
 [@webadderall](https://x.com/webadderall)
