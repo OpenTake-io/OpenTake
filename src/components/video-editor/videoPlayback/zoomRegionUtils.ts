@@ -1,5 +1,7 @@
 import type { ZoomFocus, ZoomRegion } from "../types";
-import { ZOOM_DEPTH_SCALES } from "../types";
+import {
+  ZOOM_DEPTH_SCALES,
+} from "../types";
 import { TRANSITION_WINDOW_MS, ZOOM_IN_TRANSITION_WINDOW_MS } from "./constants";
 import { clampFocusToScale } from "./focusUtils";
 import { clamp01, cubicBezier, easeOutScreenStudio } from "./mathUtils";
@@ -35,7 +37,10 @@ function easeConnectedPan(value: number) {
   return cubicBezier(0.1, 0.0, 0.2, 1.0, value);
 }
 
-export function computeRegionStrength(region: ZoomRegion, timeMs: number) {
+export function computeRegionStrength(
+  region: ZoomRegion,
+  timeMs: number,
+) {
   const zoomInEnd = region.startMs + ZOOM_IN_OVERLAP_MS;
   const leadInStart = zoomInEnd - ZOOM_IN_TRANSITION_WINDOW_MS;
   const leadOutEnd = region.endMs + TRANSITION_WINDOW_MS;
@@ -92,7 +97,11 @@ function getConnectedRegionPairs(regions: ZoomRegion[]) {
   return pairs;
 }
 
-function getActiveRegion(regions: ZoomRegion[], timeMs: number, connectedPairs: ConnectedRegionPair[]) {
+function getActiveRegion(
+  regions: ZoomRegion[],
+  timeMs: number,
+  connectedPairs: ConnectedRegionPair[],
+) {
   const activeRegions = regions
     .map((region) => {
       const outgoingPair = connectedPairs.find((pair) => pair.currentRegion.id === region.id);
@@ -198,7 +207,9 @@ export function findDominantRegion(regions: ZoomRegion[], timeMs: number, option
   blendedScale: number | null;
   transition: ConnectedPanTransition | null;
 } {
-  const connectedPairs = options.connectZooms ? getConnectedRegionPairs(regions) : [];
+  const connectedPairs = options.connectZooms
+    ? getConnectedRegionPairs(regions)
+    : [];
 
   if (options.connectZooms) {
     const connectedTransition = getConnectedRegionTransition(connectedPairs, timeMs);

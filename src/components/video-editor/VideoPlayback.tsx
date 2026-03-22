@@ -25,6 +25,8 @@ import {
 } from "pixi.js";
 import { MotionBlurFilter } from "pixi-filters/motion-blur";
 import {
+  type AutoCaptionSettings,
+  type CaptionCue,
   ZOOM_DEPTH_SCALES,
   type ZoomRegion,
   type ZoomFocus,
@@ -33,7 +35,9 @@ import {
   type SpeedRegion,
   type AnnotationRegion,
   type CursorTelemetryPoint,
+  type CursorStyle,
   type WebcamOverlaySettings,
+  type ZoomTransitionEasing,
 } from "./types";
 import {
   DEFAULT_FOCUS,
@@ -45,6 +49,18 @@ import {
   PixiCursorOverlay,
   preloadCursorAssets,
 } from "./videoPlayback/cursorRenderer";
+import {
+  buildActiveCaptionLayout,
+} from "./captionLayout";
+import {
+  CAPTION_FONT_WEIGHT,
+  CAPTION_LINE_HEIGHT,
+  getCaptionPadding,
+  getCaptionScaledRadius,
+  getCaptionScaledFontSize,
+  getCaptionTextMaxWidth,
+  getCaptionWordVisualState,
+} from "./captionStyle";
 import { clamp01 } from "./videoPlayback/mathUtils";
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
 import { clampFocusToStage as clampFocusToStageUtil } from "./videoPlayback/focusUtils";
@@ -70,10 +86,19 @@ import {
   DEFAULT_CURSOR_SIZE,
   DEFAULT_CURSOR_SMOOTHING,
   DEFAULT_CURSOR_SWAY,
+  DEFAULT_CONNECTED_ZOOM_DURATION_MS,
+  DEFAULT_CONNECTED_ZOOM_EASING,
+  DEFAULT_CONNECTED_ZOOM_GAP_MS,
   DEFAULT_WEBCAM_CORNER_RADIUS,
   DEFAULT_WEBCAM_REACT_TO_ZOOM,
   DEFAULT_WEBCAM_SHADOW,
   DEFAULT_WEBCAM_SIZE,
+  DEFAULT_ZOOM_IN_DURATION_MS,
+  DEFAULT_ZOOM_IN_EASING,
+  DEFAULT_ZOOM_IN_OVERLAP_MS,
+  DEFAULT_ZOOM_OUT_DURATION_MS,
+  DEFAULT_ZOOM_OUT_EASING,
+  getDefaultCaptionFontFamily,
 } from "./types";
 import { getWebcamOverlayPosition, getWebcamOverlaySizePx } from "./webcamOverlay";
 import { getSquircleSvgPath } from "@/lib/geometry/squircle";
@@ -100,6 +125,26 @@ function createPlaybackAnimationState(): PlaybackAnimationState {
   };
 }
 
+function getEffectiveNativeAspectRatio(
+  dimensions: { width: number; height: number } | null | undefined,
+  cropRegion?: import("./types").CropRegion,
+): number {
+  if (!dimensions || dimensions.height <= 0 || dimensions.width <= 0) {
+    return 16 / 9;
+  }
+
+  const cropWidth = cropRegion?.width ?? 1;
+  const cropHeight = cropRegion?.height ?? 1;
+  const effectiveWidth = dimensions.width * cropWidth;
+  const effectiveHeight = dimensions.height * cropHeight;
+
+  if (effectiveWidth <= 0 || effectiveHeight <= 0) {
+    return dimensions.width / dimensions.height;
+  }
+
+  return effectiveWidth / effectiveHeight;
+}
+
 interface VideoPlaybackProps {
   videoPath: string;
   onDurationChange: (duration: number) => void;
@@ -118,6 +163,14 @@ interface VideoPlaybackProps {
   backgroundBlur?: number;
   zoomMotionBlur?: number;
   connectZooms?: boolean;
+  zoomInDurationMs?: number;
+  zoomInOverlapMs?: number;
+  zoomOutDurationMs?: number;
+  connectedZoomGapMs?: number;
+  connectedZoomDurationMs?: number;
+  zoomInEasing?: ZoomTransitionEasing;
+  zoomOutEasing?: ZoomTransitionEasing;
+  connectedZoomEasing?: ZoomTransitionEasing;
   borderRadius?: number;
   padding?: number;
   cropRegion?: import("./types").CropRegion;
@@ -127,6 +180,8 @@ interface VideoPlaybackProps {
   speedRegions?: SpeedRegion[];
   aspectRatio: AspectRatio;
   annotationRegions?: AnnotationRegion[];
+  autoCaptions?: CaptionCue[];
+  autoCaptionSettings?: AutoCaptionSettings;
   selectedAnnotationId?: string | null;
   onSelectAnnotation?: (id: string | null) => void;
   onAnnotationPositionChange?: (
@@ -139,6 +194,7 @@ interface VideoPlaybackProps {
   ) => void;
   cursorTelemetry?: CursorTelemetryPoint[];
   showCursor?: boolean;
+  cursorStyle?: CursorStyle;
   cursorSize?: number;
   cursorSmoothing?: number;
   cursorMotionBlur?: number;
@@ -179,6 +235,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       backgroundBlur = 0,
       zoomMotionBlur = 0,
       connectZooms = true,
+      zoomInDurationMs = DEFAULT_ZOOM_IN_DURATION_MS,
+      zoomInOverlapMs = DEFAULT_ZOOM_IN_OVERLAP_MS,
+      zoomOutDurationMs = DEFAULT_ZOOM_OUT_DURATION_MS,
+      connectedZoomGapMs = DEFAULT_CONNECTED_ZOOM_GAP_MS,
+      connectedZoomDurationMs = DEFAULT_CONNECTED_ZOOM_DURATION_MS,
+      zoomInEasing = DEFAULT_ZOOM_IN_EASING,
+      zoomOutEasing = DEFAULT_ZOOM_OUT_EASING,
+      connectedZoomEasing = DEFAULT_CONNECTED_ZOOM_EASING,
       borderRadius = 0,
       padding = 50,
       cropRegion,
@@ -188,12 +252,15 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       speedRegions = [],
       aspectRatio,
       annotationRegions = [],
+      autoCaptions = [],
+      autoCaptionSettings,
       selectedAnnotationId,
       onSelectAnnotation,
       onAnnotationPositionChange,
       onAnnotationSizeChange,
       cursorTelemetry = [],
       showCursor = false,
+      cursorStyle = "tahoe",
       cursorSize = DEFAULT_CURSOR_SIZE,
       cursorSmoothing = DEFAULT_CURSOR_SMOOTHING,
       cursorMotionBlur = DEFAULT_CURSOR_MOTION_BLUR,
@@ -219,6 +286,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
     const webcamBubbleRef = useRef<HTMLDivElement | null>(null);
     const webcamBubbleInnerRef = useRef<HTMLDivElement | null>(null);
+    const captionBoxRef = useRef<HTMLDivElement | null>(null);
     const currentTimeRef = useRef(0);
     const zoomRegionsRef = useRef<ZoomRegion[]>([]);
     const selectedZoomIdRef = useRef<string | null>(null);
@@ -259,16 +327,95 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const lastWebcamSyncTimeRef = useRef<number | null>(null);
     const zoomMotionBlurRef = useRef(zoomMotionBlur);
     const connectZoomsRef = useRef(connectZooms);
+    const zoomInDurationMsRef = useRef(zoomInDurationMs);
+    const zoomInOverlapMsRef = useRef(zoomInOverlapMs);
+    const zoomOutDurationMsRef = useRef(zoomOutDurationMs);
+    const connectedZoomGapMsRef = useRef(connectedZoomGapMs);
+    const connectedZoomDurationMsRef = useRef(connectedZoomDurationMs);
+    const zoomInEasingRef = useRef(zoomInEasing);
+    const zoomOutEasingRef = useRef(zoomOutEasing);
+    const connectedZoomEasingRef = useRef(connectedZoomEasing);
     const videoReadyRafRef = useRef<number | null>(null);
     const cursorOverlayRef = useRef<PixiCursorOverlay | null>(null);
     const cursorTelemetryRef = useRef<CursorTelemetryPoint[]>([]);
     const showCursorRef = useRef(showCursor);
     const cursorSizeRef = useRef(cursorSize);
+    const cursorStyleRef = useRef(cursorStyle);
     const cursorSmoothingRef = useRef(cursorSmoothing);
     const cursorMotionBlurRef = useRef(cursorMotionBlur);
     const cursorClickBounceRef = useRef(cursorClickBounce);
     const cursorClickBounceDurationRef = useRef(cursorClickBounceDuration);
     const cursorSwayRef = useRef(cursorSway);
+
+    const activeCaptionLayout = useMemo(() => {
+      if (!autoCaptionSettings?.enabled || autoCaptions.length === 0 || typeof document === "undefined") {
+        return null;
+      }
+
+      const overlayWidth = overlayRef.current?.clientWidth || 960;
+      const fontSize = getCaptionScaledFontSize(
+        autoCaptionSettings.fontSize,
+        overlayWidth,
+        autoCaptionSettings.maxWidth,
+      );
+      const maxTextWidthPx = getCaptionTextMaxWidth(
+        overlayWidth,
+        autoCaptionSettings.maxWidth,
+        fontSize,
+      );
+      const measurementCanvas = document.createElement("canvas");
+      const measurementContext = measurementCanvas.getContext("2d");
+      if (!measurementContext) {
+        return null;
+      }
+
+      measurementContext.font = `${CAPTION_FONT_WEIGHT} ${fontSize}px ${getDefaultCaptionFontFamily()}`;
+
+      return buildActiveCaptionLayout({
+        cues: autoCaptions,
+        timeMs: Math.round(currentTime * 1000),
+        settings: autoCaptionSettings,
+        maxWidthPx: maxTextWidthPx,
+        measureText: (text) => measurementContext.measureText(text).width,
+      });
+    }, [autoCaptionSettings, autoCaptions, currentTime]);
+
+    useEffect(() => {
+      const captionBox = captionBoxRef.current;
+      if (!captionBox || !activeCaptionLayout || !autoCaptionSettings) {
+        if (captionBox) {
+          captionBox.style.clipPath = "";
+          captionBox.style.removeProperty("-webkit-clip-path");
+        }
+        return;
+      }
+
+      const frame = requestAnimationFrame(() => {
+        const width = captionBox.offsetWidth;
+        const height = captionBox.offsetHeight;
+        if (width <= 0 || height <= 0) {
+          return;
+        }
+
+        const fontSize = getCaptionScaledFontSize(
+          autoCaptionSettings.fontSize,
+          overlayRef.current?.clientWidth || 960,
+          autoCaptionSettings.maxWidth,
+        );
+
+        const squirclePath = getSquircleSvgPath({
+          x: 0,
+          y: 0,
+          width,
+          height,
+          radius: getCaptionScaledRadius(autoCaptionSettings.boxRadius, fontSize),
+        });
+        captionBox.style.clipPath = `path('${squirclePath}')`;
+        captionBox.style.setProperty("-webkit-clip-path", `path('${squirclePath}')`);
+      });
+
+      return () => cancelAnimationFrame(frame);
+    }, [activeCaptionLayout, autoCaptionSettings]);
     const motionBlurStateRef = useRef<MotionBlurState>(createMotionBlurState());
 
     const applyWebcamBubbleLayout = useCallback((zoomScale: number) => {
@@ -621,12 +768,48 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     }, [connectZooms]);
 
     useEffect(() => {
+      zoomInDurationMsRef.current = zoomInDurationMs;
+    }, [zoomInDurationMs]);
+
+    useEffect(() => {
+      zoomInOverlapMsRef.current = zoomInOverlapMs;
+    }, [zoomInOverlapMs]);
+
+    useEffect(() => {
+      zoomOutDurationMsRef.current = zoomOutDurationMs;
+    }, [zoomOutDurationMs]);
+
+    useEffect(() => {
+      connectedZoomGapMsRef.current = connectedZoomGapMs;
+    }, [connectedZoomGapMs]);
+
+    useEffect(() => {
+      connectedZoomDurationMsRef.current = connectedZoomDurationMs;
+    }, [connectedZoomDurationMs]);
+
+    useEffect(() => {
+      zoomInEasingRef.current = zoomInEasing;
+    }, [zoomInEasing]);
+
+    useEffect(() => {
+      zoomOutEasingRef.current = zoomOutEasing;
+    }, [zoomOutEasing]);
+
+    useEffect(() => {
+      connectedZoomEasingRef.current = connectedZoomEasing;
+    }, [connectedZoomEasing]);
+
+    useEffect(() => {
       cursorTelemetryRef.current = cursorTelemetry;
     }, [cursorTelemetry]);
 
     useEffect(() => {
       showCursorRef.current = showCursor;
     }, [showCursor]);
+
+    useEffect(() => {
+      cursorStyleRef.current = cursorStyle;
+    }, [cursorStyle]);
 
     useEffect(() => {
       cursorSizeRef.current = cursorSize;
@@ -877,6 +1060,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         if (cursorOverlayEnabled) {
           const cursorOverlay = new PixiCursorOverlay({
             dotRadius: DEFAULT_CURSOR_CONFIG.dotRadius * cursorSizeRef.current,
+            style: cursorStyleRef.current,
             smoothingFactor: cursorSmoothingRef.current,
             motionBlur: cursorMotionBlurRef.current,
             clickBounce: cursorClickBounceRef.current,
@@ -1228,6 +1412,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       }
 
       overlay.setDotRadius(DEFAULT_CURSOR_CONFIG.dotRadius * cursorSize);
+      overlay.setStyle(cursorStyle);
       overlay.setSmoothingFactor(cursorSmoothing);
       overlay.setMotionBlur(cursorMotionBlur);
       overlay.setClickBounce(cursorClickBounce);
@@ -1235,6 +1420,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       overlay.setSway(cursorSway);
       overlay.reset();
     }, [
+      cursorStyle,
       cursorSize,
       cursorSmoothing,
       cursorMotionBlur,
@@ -1352,12 +1538,18 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
     const nativeAspectRatio = (() => {
       const locked = lockedVideoDimensionsRef.current;
-      if (locked && locked.height > 0) {
-        return locked.width / locked.height;
+      if (locked) {
+        return getEffectiveNativeAspectRatio(locked, cropRegion);
       }
       const video = videoRef.current;
-      if (video && video.videoHeight > 0) {
-        return video.videoWidth / video.videoHeight;
+      if (video && video.videoHeight > 0 && video.videoWidth > 0) {
+        return getEffectiveNativeAspectRatio(
+          {
+            width: video.videoWidth,
+            height: video.videoHeight,
+          },
+          cropRegion,
+        );
       }
       return 16 / 9;
     })();
@@ -1426,6 +1618,97 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
                     preload="auto"
                     style={{ transform: webcam.mirror ? "scaleX(-1)" : undefined }}
                   />
+                </div>
+              </div>
+            ) : null}
+            {activeCaptionLayout && autoCaptionSettings ? (
+              <div
+                className="pointer-events-none absolute inset-x-0 flex justify-center"
+                style={{
+                  bottom: `${autoCaptionSettings.bottomOffset}%`,
+                }}
+              >
+                <div
+                  style={{
+                    maxWidth: `${autoCaptionSettings.maxWidth}%`,
+                    opacity: activeCaptionLayout.opacity,
+                    transform: `translateY(${activeCaptionLayout.translateY}px) scale(${activeCaptionLayout.scale})`,
+                    transformOrigin: "center bottom",
+                    filter: "drop-shadow(0 12px 30px rgba(0, 0, 0, 0.28))",
+                  }}
+                >
+                  <div
+                    ref={captionBoxRef}
+                    style={{
+                      backgroundColor: `rgba(0, 0, 0, ${autoCaptionSettings.backgroundOpacity})`,
+                      fontFamily: getDefaultCaptionFontFamily(),
+                      fontSize: `${getCaptionScaledFontSize(
+                        autoCaptionSettings.fontSize,
+                        overlayRef.current?.clientWidth || 960,
+                        autoCaptionSettings.maxWidth,
+                      )}px`,
+                      lineHeight: CAPTION_LINE_HEIGHT,
+                      textAlign: "center",
+                      fontWeight: CAPTION_FONT_WEIGHT,
+                      padding: `${getCaptionPadding(
+                        getCaptionScaledFontSize(
+                          autoCaptionSettings.fontSize,
+                          overlayRef.current?.clientWidth || 960,
+                          autoCaptionSettings.maxWidth,
+                        ),
+                      ).y}px ${getCaptionPadding(
+                        getCaptionScaledFontSize(
+                          autoCaptionSettings.fontSize,
+                          overlayRef.current?.clientWidth || 960,
+                          autoCaptionSettings.maxWidth,
+                        ),
+                      ).x}px`,
+                      borderRadius: `${getCaptionScaledRadius(
+                        autoCaptionSettings.boxRadius,
+                        getCaptionScaledFontSize(
+                          autoCaptionSettings.fontSize,
+                          overlayRef.current?.clientWidth || 960,
+                          autoCaptionSettings.maxWidth,
+                        ),
+                      )}px`,
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    {activeCaptionLayout.visibleLines.map((line) => (
+                      <div
+                        key={`${activeCaptionLayout.blockKey}-${line.startWordIndex}`}
+                        style={{
+                          display: "flex",
+                          justifyContent: "center",
+                          flexWrap: "nowrap",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {line.words.map((word) => {
+                          const visualState = getCaptionWordVisualState(
+                            activeCaptionLayout.hasWordTimings,
+                            word.state,
+                          );
+
+                          return (
+                            <span
+                              key={`${activeCaptionLayout.blockKey}-${word.index}`}
+                              style={{
+                                display: "inline-block",
+                                whiteSpace: "pre",
+                                color: visualState.isInactive
+                                  ? autoCaptionSettings.inactiveTextColor
+                                  : autoCaptionSettings.textColor,
+                                opacity: visualState.opacity,
+                              }}
+                            >
+                              {`${word.leadingSpace ? " " : ""}${word.text}`}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             ) : null}
