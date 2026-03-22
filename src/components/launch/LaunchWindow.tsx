@@ -297,20 +297,35 @@ export function LaunchWindow() {
 	};
 
 	useEffect(() => {
-		const checkSelectedSource = async () => {
-			if (!window.electronAPI) return;
-			const source = await window.electronAPI.getSelectedSource();
-			if (source) {
+		let mounted = true;
+
+		const applySelectedSource = (source: { name?: string } | null | undefined) => {
+			if (!mounted) {
+				return;
+			}
+
+			if (source?.name) {
 				setSelectedSource(source.name);
 				setHasSelectedSource(true);
-			} else {
-				setSelectedSource("Screen");
-				setHasSelectedSource(false);
+				return;
 			}
+
+			setSelectedSource("Screen");
+			setHasSelectedSource(false);
 		};
-		void checkSelectedSource();
-		const interval = setInterval(checkSelectedSource, 500);
-		return () => clearInterval(interval);
+
+		void window.electronAPI.getSelectedSource().then((source) => {
+			applySelectedSource(source);
+		});
+
+		const cleanup = window.electronAPI.onSelectedSourceChanged((source) => {
+			applySelectedSource(source);
+		});
+
+		return () => {
+			mounted = false;
+			cleanup?.();
+		};
 	}, []);
 
 	useEffect(() => {

@@ -39,6 +39,7 @@ interface Window {
 		selectSource: (source: any) => Promise<any>;
 		showSourceHighlight: (source: any) => Promise<{ success: boolean }>;
 		getSelectedSource: () => Promise<any>;
+		onSelectedSourceChanged: (callback: (source: any) => void) => () => void;
 		startNativeScreenRecording: (
 			source: any,
 			options?: {

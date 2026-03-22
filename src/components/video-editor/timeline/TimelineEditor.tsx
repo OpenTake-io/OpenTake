@@ -1179,9 +1179,11 @@ export default function TimelineEditor({
       return;
     }
 
+      const audioPath = result.path;
+
     // Load the audio file to get its full duration
     const audioDurationMs = await new Promise<number>((resolve) => {
-      const audio = new Audio(toFileUrl(result.path));
+        const audio = new Audio(toFileUrl(audioPath));
       audio.addEventListener('loadedmetadata', () => {
         resolve(Math.round(audio.duration * 1000));
       });
