@@ -11,7 +11,8 @@ Version 3, 19 November 2007
 - You CANNOT use the "Recordly" name or branding for your own project.
 
 Copyright (C) 2026 webadderall
-Recordly is an independent application that was originally a fork of the OpenScreen project, authored by Siddharth Vaddem (2025).
+
+Recordly is an independent application that started as a fork of the OpenScreen project, authored by Siddharth Vaddem (2025).
 
 ---
 PART 1: THE AGPLv3 LICENSE 
