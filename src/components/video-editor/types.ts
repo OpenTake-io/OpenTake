@@ -43,7 +43,18 @@ export interface CursorVisualSettings {
   clickBounce: number;
   clickBounceDuration: number;
   sway: number;
+  style: CursorStyle;
 }
+
+export type CursorStyle = "tahoe" | "dot" | "figma" | "mono";
+export const DEFAULT_CURSOR_STYLE: CursorStyle = "tahoe";
+
+export type ZoomTransitionEasing =
+  | "recordly"
+  | "glide"
+  | "smooth"
+  | "snappy"
+  | "linear";
 
 export type WebcamCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 export type WebcamPositionPreset =
@@ -72,11 +83,19 @@ export interface WebcamOverlaySettings {
 
 export const DEFAULT_CURSOR_SIZE = 3.0;
 export const DEFAULT_CURSOR_SMOOTHING = 0.67;
-export const DEFAULT_CURSOR_MOTION_BLUR = 0.5;
+export const DEFAULT_CURSOR_MOTION_BLUR = 0.4;
 export const DEFAULT_CURSOR_CLICK_BOUNCE = 2.5;
 export const DEFAULT_CURSOR_CLICK_BOUNCE_DURATION = 350;
 export const DEFAULT_CURSOR_SWAY = 0.25;
 export const DEFAULT_ZOOM_MOTION_BLUR = 0.35;
+export const DEFAULT_ZOOM_IN_DURATION_MS = 1522.575;
+export const DEFAULT_ZOOM_IN_OVERLAP_MS = 500;
+export const DEFAULT_ZOOM_OUT_DURATION_MS = 1015.05;
+export const DEFAULT_CONNECTED_ZOOM_GAP_MS = 1500;
+export const DEFAULT_CONNECTED_ZOOM_DURATION_MS = 1000;
+export const DEFAULT_ZOOM_IN_EASING: ZoomTransitionEasing = "recordly";
+export const DEFAULT_ZOOM_OUT_EASING: ZoomTransitionEasing = "recordly";
+export const DEFAULT_CONNECTED_ZOOM_EASING: ZoomTransitionEasing = "glide";
 export const DEFAULT_WEBCAM_SIZE = 40;
 export const DEFAULT_WEBCAM_REACT_TO_ZOOM = true;
 export const DEFAULT_WEBCAM_CORNER_RADIUS = 90;
@@ -154,6 +173,14 @@ function getDefaultAnnotationFontFamily() {
   return "Inter, system-ui, sans-serif";
 }
 
+export function getDefaultCaptionFontFamily() {
+  if (typeof navigator !== "undefined" && /mac/i.test(navigator.platform)) {
+    return '"SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif';
+  }
+
+  return '"Helvetica Neue", Helvetica, Arial, sans-serif';
+}
+
 export interface AnnotationRegion {
   id: string;
   startMs: number;
@@ -217,6 +244,53 @@ export interface AudioRegion {
   audioPath: string;
   volume: number;
 }
+
+export interface CaptionCue {
+  id: string;
+  startMs: number;
+  endMs: number;
+  text: string;
+  words?: CaptionCueWord[];
+}
+
+export interface CaptionCueWord {
+  text: string;
+  startMs: number;
+  endMs: number;
+  leadingSpace?: boolean;
+}
+
+export type AutoCaptionAnimation = "none" | "fade" | "rise" | "pop";
+
+export interface AutoCaptionSettings {
+  enabled: boolean;
+  language: string;
+  fontFamily: string;
+  fontSize: number;
+  bottomOffset: number;
+  maxWidth: number;
+  maxRows: number;
+  animationStyle: AutoCaptionAnimation;
+  boxRadius: number;
+  textColor: string;
+  inactiveTextColor: string;
+  backgroundOpacity: number;
+}
+
+export const DEFAULT_AUTO_CAPTION_SETTINGS: AutoCaptionSettings = {
+  enabled: false,
+  language: "auto",
+  fontFamily: getDefaultCaptionFontFamily(),
+  fontSize: 30,
+  bottomOffset: 3,
+  maxWidth: 62,
+  maxRows: 1,
+  animationStyle: "fade",
+  boxRadius: 17.5,
+  textColor: "#FFFFFF",
+  inactiveTextColor: "#A3A3A3",
+  backgroundOpacity: 0.9,
+};
 
 export type PlaybackSpeed = 0.25 | 0.5 | 0.75 | 1.25 | 1.5 | 1.75 | 2;
 

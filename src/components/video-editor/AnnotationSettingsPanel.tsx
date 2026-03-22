@@ -24,7 +24,7 @@ interface AnnotationSettingsPanelProps {
   onDelete: () => void;
 }
 
-const FONT_FAMILY_VALUES = [
+export const FONT_FAMILY_VALUES = [
   { value: 'system-ui, -apple-system, sans-serif', labelKey: 'fontStyles.classic' },
   { value: 'Georgia, serif', labelKey: 'fontStyles.editor' },
   { value: 'Impact, Arial Black, sans-serif', labelKey: 'fontStyles.strong' },
@@ -35,7 +35,7 @@ const FONT_FAMILY_VALUES = [
   { value: 'Trebuchet MS, sans-serif', labelKey: 'fontStyles.clean' },
 ];
 
-const FONT_SIZES = [12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80, 96, 128];
+export const FONT_SIZES = [12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80, 96, 128];
 
 export function AnnotationSettingsPanel({
   annotation,
