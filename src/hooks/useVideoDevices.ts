@@ -6,6 +6,8 @@ export interface VideoDevice {
   groupId: string
 }
 
+let hasRequestedVideoLabels = false
+
 export function useVideoDevices(enabled: boolean = true) {
   const [devices, setDevices] = useState<VideoDevice[]>([])
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('default')
@@ -20,13 +22,14 @@ export function useVideoDevices(enabled: boolean = true) {
     let mounted = true
 
     const loadDevices = async () => {
+      let permissionStream: MediaStream | null = null
+
       try {
         setIsLoading(true)
         setError(null)
 
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-        const allDevices = await navigator.mediaDevices.enumerateDevices()
-        const videoInputs = allDevices
+        let allDevices = await navigator.mediaDevices.enumerateDevices()
+        let videoInputs = allDevices
           .filter((device) => device.kind === 'videoinput')
           .map((device, index) => ({
             deviceId: device.deviceId,
@@ -34,13 +37,38 @@ export function useVideoDevices(enabled: boolean = true) {
             groupId: device.groupId,
           }))
 
-        stream.getTracks().forEach((track) => track.stop())
+        const needsLabelPermission =
+          videoInputs.length > 0 && videoInputs.every((device) => !device.label.trim())
+
+        if (needsLabelPermission && !hasRequestedVideoLabels) {
+          hasRequestedVideoLabels = true
+          permissionStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+          allDevices = await navigator.mediaDevices.enumerateDevices()
+          videoInputs = allDevices
+            .filter((device) => device.kind === 'videoinput')
+            .map((device, index) => ({
+              deviceId: device.deviceId,
+              label: device.label || `Camera ${index + 1}`,
+              groupId: device.groupId,
+            }))
+        }
 
         if (mounted) {
           setDevices(videoInputs)
-          if (selectedDeviceId === 'default' && videoInputs.length > 0) {
-            setSelectedDeviceId(videoInputs[0].deviceId)
-          }
+          setSelectedDeviceId((currentDeviceId) => {
+            if (currentDeviceId === 'default' && videoInputs.length > 0) {
+              return videoInputs[0].deviceId
+            }
+
+            if (
+              currentDeviceId !== 'default' &&
+              videoInputs.some((device) => device.deviceId === currentDeviceId)
+            ) {
+              return currentDeviceId
+            }
+
+            return videoInputs[0]?.deviceId ?? 'default'
+          })
           setIsLoading(false)
         }
       } catch (error) {
@@ -50,6 +78,8 @@ export function useVideoDevices(enabled: boolean = true) {
           setIsLoading(false)
           console.error('Error loading video devices:', error)
         }
+      } finally {
+        permissionStream?.getTracks().forEach((track) => track.stop())
       }
     }
 
@@ -65,7 +95,7 @@ export function useVideoDevices(enabled: boolean = true) {
       mounted = false
       navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange)
     }
-  }, [enabled, selectedDeviceId])
+  }, [enabled])
 
   return {
     devices,
