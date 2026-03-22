@@ -4,12 +4,8 @@ Thank you for considering contributing to this project! By contributing, you hel
 
 Areas where help is especially valuable:
 
+- Export optimisations
 - Native screen recording for Linux
-- UI/UX design improvements
-- German localisation
-- Code optimisation/refactoring
-- Auto-zoom suggestion logic improvements
-- Regular updating of Chinese Readme
 - Wallpaper submissions
 
 ## How to Contribute
