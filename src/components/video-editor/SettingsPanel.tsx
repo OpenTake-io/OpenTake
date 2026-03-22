@@ -1,4 +1,6 @@
 import { LayoutGroup } from "motion/react";
+import minimalCursorUrl from "../../../Minimal Cursor.svg";
+import tahoeCursorUrl from "../../assets/cursors/Cursor=Default.svg";
 import {
 	Palette,
 	Trash2,
@@ -9,7 +11,15 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
 import { cn } from "@/lib/utils";
 import { BUILT_IN_WALLPAPERS, getAvailableWallpapers } from "@/lib/wallpapers";
@@ -20,16 +30,22 @@ import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
 import { SliderControl } from "./SliderControl";
 import type {
+	AutoCaptionAnimation,
+	AutoCaptionSettings,
+	CaptionCue,
 	AnnotationRegion,
 	AnnotationType,
 	CropRegion,
+	CursorStyle,
 	FigureData,
 	PlaybackSpeed,
 	WebcamPositionPreset,
 	WebcamOverlaySettings,
 	ZoomDepth,
+	ZoomTransitionEasing,
 } from "./types";
 import {
+	DEFAULT_AUTO_CAPTION_SETTINGS,
 	DEFAULT_WEBCAM_CORNER_RADIUS,
 	DEFAULT_WEBCAM_MARGIN,
 	DEFAULT_WEBCAM_POSITION_PRESET,
@@ -43,6 +59,7 @@ import {
 	DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
 	DEFAULT_CURSOR_MOTION_BLUR,
 	DEFAULT_CURSOR_SIZE,
+	DEFAULT_CURSOR_STYLE,
 	DEFAULT_CURSOR_SMOOTHING,
 	DEFAULT_CURSOR_SWAY,
 	DEFAULT_ZOOM_MOTION_BLUR,
@@ -50,6 +67,7 @@ import {
 } from "./types";
 import { getWebcamPositionForPreset, resolveWebcamCorner } from "./webcamOverlay";
 import { fromCursorSwaySliderValue, toCursorSwaySliderValue } from "./videoPlayback/cursorSway";
+import { uploadedCursorAssets, UPLOADED_CURSOR_SAMPLE_SIZE } from "./videoPlayback/uploadedCursorAssets";
 
 const GRADIENTS = [
 	"linear-gradient( 111.6deg,  rgba(114,167,232,1) 9.4%, rgba(253,129,82,1) 43.9%, rgba(253,129,82,1) 54.8%, rgba(249,202,86,1) 86.3% )",
@@ -78,8 +96,15 @@ const GRADIENTS = [
 	"linear-gradient(to right, #0acffe 0%, #495aff 100%)",
 ];
 
+const CAPTION_ANIMATION_OPTIONS: Array<{ value: AutoCaptionAnimation; label: string }> = [
+	{ value: "none", label: "Off" },
+	{ value: "fade", label: "Fade" },
+	{ value: "rise", label: "Rise" },
+	{ value: "pop", label: "Pop" },
+];
+
 type BackgroundTab = "image" | "color" | "gradient";
-export type EditorEffectSection = "scene" | "cursor" | "webcam" | "zoom" | "frame" | "crop";
+export type EditorEffectSection = "scene" | "cursor" | "captions" | "webcam" | "zoom" | "frame" | "crop";
 
 function isHexWallpaper(value: string): boolean {
 	return /^#(?:[0-9a-f]{3}){1,2}$/i.test(value);
@@ -124,10 +149,28 @@ interface SettingsPanelProps {
 	onZoomMotionBlurChange?: (amount: number) => void;
 	connectZooms?: boolean;
 	onConnectZoomsChange?: (enabled: boolean) => void;
+	zoomInDurationMs?: number;
+	onZoomInDurationMsChange?: (duration: number) => void;
+	zoomInOverlapMs?: number;
+	onZoomInOverlapMsChange?: (duration: number) => void;
+	zoomOutDurationMs?: number;
+	onZoomOutDurationMsChange?: (duration: number) => void;
+	connectedZoomGapMs?: number;
+	onConnectedZoomGapMsChange?: (duration: number) => void;
+	connectedZoomDurationMs?: number;
+	onConnectedZoomDurationMsChange?: (duration: number) => void;
+	zoomInEasing?: ZoomTransitionEasing;
+	onZoomInEasingChange?: (easing: ZoomTransitionEasing) => void;
+	zoomOutEasing?: ZoomTransitionEasing;
+	onZoomOutEasingChange?: (easing: ZoomTransitionEasing) => void;
+	connectedZoomEasing?: ZoomTransitionEasing;
+	onConnectedZoomEasingChange?: (easing: ZoomTransitionEasing) => void;
 	showCursor?: boolean;
 	onShowCursorChange?: (enabled: boolean) => void;
 	loopCursor?: boolean;
 	onLoopCursorChange?: (enabled: boolean) => void;
+	cursorStyle?: CursorStyle;
+	onCursorStyleChange?: (style: CursorStyle) => void;
 	cursorSize?: number;
 	onCursorSizeChange?: (size: number) => void;
 	cursorSmoothing?: number;
@@ -159,6 +202,19 @@ interface SettingsPanelProps {
 	onAnnotationStyleChange?: (id: string, style: Partial<AnnotationRegion["style"]>) => void;
 	onAnnotationFigureDataChange?: (id: string, figureData: FigureData) => void;
 	onAnnotationDelete?: (id: string) => void;
+	autoCaptions?: CaptionCue[];
+	autoCaptionSettings?: AutoCaptionSettings;
+	whisperExecutablePath?: string | null;
+	whisperModelPath?: string | null;
+	whisperModelDownloadStatus?: "idle" | "downloading" | "downloaded" | "error";
+	whisperModelDownloadProgress?: number;
+	isGeneratingCaptions?: boolean;
+	onAutoCaptionSettingsChange?: (settings: AutoCaptionSettings) => void;
+	onPickWhisperExecutable?: () => void;
+	onGenerateAutoCaptions?: () => void;
+	onClearAutoCaptions?: () => void;
+	onDownloadWhisperSmallModel?: () => void;
+	onDeleteWhisperSmallModel?: () => void;
 	selectedSpeedId?: string | null;
 	selectedSpeedValue?: PlaybackSpeed | null;
 	onSpeedChange?: (speed: PlaybackSpeed) => void;
@@ -191,6 +247,199 @@ const WEBCAM_POSITION_PRESETS: Array<{
 	{ preset: "bottom-right", label: "↘" },
 ];
 
+const CURSOR_STYLE_OPTIONS: Array<{ value: CursorStyle; label: string }> = [
+	{ value: "tahoe", label: "Tahoe" },
+	{ value: "dot", label: "Dot" },
+	{ value: "figma", label: "Minimal" },
+	{ value: "mono", label: "Inverted" },
+];
+
+const CAPTION_LANGUAGE_OPTIONS = [
+	{ value: "auto", label: "Auto Detect" },
+	{ value: "en", label: "English" },
+	{ value: "es", label: "Spanish" },
+	{ value: "fr", label: "French" },
+	{ value: "de", label: "German" },
+	{ value: "it", label: "Italian" },
+	{ value: "pt", label: "Portuguese" },
+	{ value: "zh", label: "Chinese" },
+	{ value: "ja", label: "Japanese" },
+	{ value: "ko", label: "Korean" },
+] as const;
+
+function loadPreviewImage(url: string) {
+	return new Promise<HTMLImageElement>((resolve, reject) => {
+		const image = new Image();
+		image.onload = () => resolve(image);
+		image.onerror = () => reject(new Error(`Failed to load preview asset: ${url}`));
+		image.src = url;
+	});
+}
+
+function trimCanvasToAlpha(
+	canvas: HTMLCanvasElement,
+	hotspot?: { x: number; y: number },
+) {
+	const ctx = canvas.getContext("2d");
+	if (!ctx) {
+		return {
+			dataUrl: canvas.toDataURL("image/png"),
+			width: canvas.width,
+			height: canvas.height,
+			hotspot,
+		};
+	}
+
+	const { width, height } = canvas;
+	const imageData = ctx.getImageData(0, 0, width, height);
+	const { data } = imageData;
+	let minX = width;
+	let minY = height;
+	let maxX = -1;
+	let maxY = -1;
+
+	for (let y = 0; y < height; y += 1) {
+		for (let x = 0; x < width; x += 1) {
+			const alpha = data[(y * width + x) * 4 + 3];
+			if (alpha === 0) {
+				continue;
+			}
+
+			minX = Math.min(minX, x);
+			minY = Math.min(minY, y);
+			maxX = Math.max(maxX, x);
+			maxY = Math.max(maxY, y);
+		}
+	}
+
+	if (maxX < minX || maxY < minY) {
+		return {
+			dataUrl: canvas.toDataURL("image/png"),
+			width,
+			height,
+			hotspot,
+		};
+	}
+
+	const croppedWidth = maxX - minX + 1;
+	const croppedHeight = maxY - minY + 1;
+	const croppedCanvas = document.createElement("canvas");
+	croppedCanvas.width = croppedWidth;
+	croppedCanvas.height = croppedHeight;
+	const croppedCtx = croppedCanvas.getContext("2d")!;
+	croppedCtx.drawImage(canvas, minX, minY, croppedWidth, croppedHeight, 0, 0, croppedWidth, croppedHeight);
+
+	return {
+		dataUrl: croppedCanvas.toDataURL("image/png"),
+		width: croppedWidth,
+		height: croppedHeight,
+		hotspot: hotspot
+			? {
+				x: hotspot.x - minX,
+				y: hotspot.y - minY,
+			  }
+			: undefined,
+	};
+}
+
+async function createTrimmedSvgPreview(
+	url: string,
+	sampleSize: number,
+	trim?: { x: number; y: number; width: number; height: number },
+) {
+	const image = await loadPreviewImage(url);
+	const sourceCanvas = document.createElement("canvas");
+	sourceCanvas.width = sampleSize;
+	sourceCanvas.height = sampleSize;
+	const sourceCtx = sourceCanvas.getContext("2d")!;
+	sourceCtx.drawImage(image, 0, 0, sampleSize, sampleSize);
+
+	if (trim) {
+		const croppedCanvas = document.createElement("canvas");
+		croppedCanvas.width = trim.width;
+		croppedCanvas.height = trim.height;
+		const croppedCtx = croppedCanvas.getContext("2d")!;
+		croppedCtx.drawImage(
+			sourceCanvas,
+			trim.x,
+			trim.y,
+			trim.width,
+			trim.height,
+			0,
+			0,
+			trim.width,
+			trim.height,
+		);
+		return croppedCanvas.toDataURL("image/png");
+	}
+
+	return trimCanvasToAlpha(sourceCanvas).dataUrl;
+}
+
+async function createInvertedPreview(url: string) {
+	const image = await loadPreviewImage(url);
+	const canvas = document.createElement("canvas");
+	canvas.width = image.naturalWidth;
+	canvas.height = image.naturalHeight;
+	const ctx = canvas.getContext("2d")!;
+	ctx.drawImage(image, 0, 0);
+	const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+	const { data } = imageData;
+	for (let index = 0; index < data.length; index += 4) {
+		if (data[index + 3] === 0) {
+			continue;
+		}
+		data[index] = 255 - data[index];
+		data[index + 1] = 255 - data[index + 1];
+		data[index + 2] = 255 - data[index + 2];
+	}
+	ctx.putImageData(imageData, 0, 0);
+	return canvas.toDataURL("image/png");
+}
+
+function CursorStylePreview({
+	style,
+	previewUrls,
+}: {
+	style: CursorStyle;
+	previewUrls: Partial<Record<"tahoe" | "figma" | "mono", string>>;
+}) {
+	if (style === "tahoe") {
+		return (
+			<img
+				src={previewUrls.tahoe ?? tahoeCursorUrl}
+				alt=""
+				className="h-7 w-7 object-contain drop-shadow-[0_8px_12px_rgba(15,23,42,0.18)]"
+				draggable={false}
+			/>
+		);
+	}
+
+	if (style === "figma") {
+		return (
+			<img
+				src={previewUrls.figma ?? minimalCursorUrl}
+				alt=""
+				className="h-7 w-7 object-contain"
+				draggable={false}
+			/>
+		);
+	}
+
+	if (style === "dot") {
+		return <span className="h-[14px] w-[14px] rounded-full border-[2.5px] border-slate-900 bg-white shadow-[0_8px_12px_rgba(15,23,42,0.16)]" />;
+	}
+
+	return (
+		<img
+			src={previewUrls.mono ?? tahoeCursorUrl}
+			alt=""
+			className="h-7 w-7 object-contain"
+			draggable={false}
+		/>
+	);
+}
+
 export function SettingsPanel({
 	panelMode = "editor",
 	activeEffectSection: activeEffectSectionProp,
@@ -208,12 +457,12 @@ export function SettingsPanel({
 	onBackgroundBlurChange,
 	zoomMotionBlur = 0,
 	onZoomMotionBlurChange,
-	connectZooms = true,
-	onConnectZoomsChange,
 	showCursor = false,
 	onShowCursorChange,
 	loopCursor = false,
 	onLoopCursorChange,
+	cursorStyle = DEFAULT_CURSOR_STYLE,
+	onCursorStyleChange,
 	cursorSize = 5,
 	onCursorSizeChange,
 	cursorSmoothing = 2,
@@ -245,6 +494,17 @@ export function SettingsPanel({
 	onAnnotationStyleChange,
 	onAnnotationFigureDataChange,
 	onAnnotationDelete,
+	autoCaptions = [],
+	autoCaptionSettings = DEFAULT_AUTO_CAPTION_SETTINGS,
+	whisperModelPath,
+	whisperModelDownloadStatus = "idle",
+	whisperModelDownloadProgress = 0,
+	isGeneratingCaptions = false,
+	onAutoCaptionSettingsChange,
+	onGenerateAutoCaptions,
+	onClearAutoCaptions,
+	onDownloadWhisperSmallModel,
+	onDeleteWhisperSmallModel,
 	selectedSpeedId,
 	selectedSpeedValue,
 	onSpeedChange,
@@ -270,6 +530,13 @@ export function SettingsPanel({
 		() => builtInWallpapers.map((wallpaper) => wallpaper.publicPath),
 		[builtInWallpapers],
 	);
+	const captionCueCount = autoCaptions.length;
+	const updateAutoCaptionSettings = (partial: Partial<AutoCaptionSettings>) => {
+		onAutoCaptionSettingsChange?.({
+			...autoCaptionSettings,
+			...partial,
+		});
+	};
 
 	useEffect(() => {
 		let mounted = true;
@@ -329,6 +596,46 @@ export function SettingsPanel({
 	const defaultWebcam = initialEditorPreferences.webcam;
 	const [internalActiveEffectSection] = useState<EditorEffectSection>("scene");
 	const activeEffectSection = activeEffectSectionProp ?? internalActiveEffectSection;
+	const [cursorPreviewUrls, setCursorPreviewUrls] = useState<Partial<Record<"tahoe" | "figma" | "mono", string>>>({});
+
+	useEffect(() => {
+		let cancelled = false;
+
+		void (async () => {
+			try {
+				const tahoeAsset = uploadedCursorAssets.arrow;
+				const tahoePreview = tahoeAsset
+					? await createTrimmedSvgPreview(
+						tahoeAsset.url,
+						UPLOADED_CURSOR_SAMPLE_SIZE,
+						tahoeAsset.trim,
+					  )
+					: tahoeCursorUrl;
+				const minimalPreview = await createTrimmedSvgPreview(minimalCursorUrl, 512);
+				const invertedPreview = await createInvertedPreview(tahoePreview);
+
+				if (!cancelled) {
+					setCursorPreviewUrls({
+						tahoe: tahoePreview,
+						figma: minimalPreview,
+						mono: invertedPreview,
+					});
+				}
+			} catch {
+				if (!cancelled) {
+					setCursorPreviewUrls({
+						tahoe: tahoeCursorUrl,
+						figma: minimalCursorUrl,
+						mono: tahoeCursorUrl,
+					});
+				}
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	useEffect(() => {
 		setBackgroundTab(getBackgroundTabForWallpaper(selected));
@@ -494,12 +801,12 @@ export function SettingsPanel({
 
 	const resetZoomSection = () => {
 		onZoomMotionBlurChange?.(initialEditorPreferences.zoomMotionBlur);
-		onConnectZoomsChange?.(initialEditorPreferences.connectZooms);
 	};
 
 	const resetCursorSection = () => {
 		onShowCursorChange?.(initialEditorPreferences.showCursor);
 		onLoopCursorChange?.(initialEditorPreferences.loopCursor);
+		onCursorStyleChange?.(initialEditorPreferences.cursorStyle);
 		onCursorSizeChange?.(initialEditorPreferences.cursorSize);
 		onCursorSmoothingChange?.(initialEditorPreferences.cursorSmoothing);
 		onCursorMotionBlurChange?.(initialEditorPreferences.cursorMotionBlur);
@@ -828,7 +1135,7 @@ export function SettingsPanel({
 		<section className="flex flex-col gap-2">
 			<div className="flex items-center justify-between gap-3">
 				<div className="flex items-center gap-3">
-					<SectionLabel>Zoom</SectionLabel>
+					<SectionLabel>{tSettings("sections.zoom", "Zoom")}</SectionLabel>
 					<button
 						type="button"
 						onClick={resetZoomSection}
@@ -836,14 +1143,6 @@ export function SettingsPanel({
 					>
 						{t("common.actions.reset", "Reset")}
 					</button>
-				</div>
-				<div className="flex items-center gap-2 text-[10px] text-slate-400">
-					<span>{tSettings("effects.connectZooms")}</span>
-					<Switch
-						checked={connectZooms}
-						onCheckedChange={onConnectZoomsChange}
-						className="data-[state=checked]:bg-[#2563EB] scale-75"
-					/>
 				</div>
 			</div>
 			<SliderControl
@@ -893,20 +1192,142 @@ export function SettingsPanel({
 		</section>
 	);
 
+	const captionsSectionContent = (
+		<section className="flex flex-col gap-2">
+			<div className="flex items-center justify-between gap-3">
+				<div className="flex items-center gap-3">
+					<SectionLabel>{tSettings("sections.captions", "Captions")}</SectionLabel>
+					<button
+						type="button"
+						onClick={() => onAutoCaptionSettingsChange?.(DEFAULT_AUTO_CAPTION_SETTINGS)}
+						className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80"
+					>
+						{t("common.actions.reset", "Reset")}
+					</button>
+				</div>
+				<div className="flex items-center gap-2 text-[10px] text-slate-400">
+					<span>{tSettings("captions.enabled", "Show")}</span>
+					<Switch
+						checked={autoCaptionSettings.enabled}
+						onCheckedChange={(enabled) => updateAutoCaptionSettings({ enabled })}
+						className="data-[state=checked]:bg-[#2563EB] scale-75"
+					/>
+				</div>
+			</div>
+
+			<div className="rounded-lg bg-white/[0.03] px-2.5 py-2 space-y-3">
+				<div className="flex items-center justify-between gap-3">
+					<div className="text-sm font-medium text-slate-200">{tSettings("captions.language", "Language")}</div>
+					<Select value={autoCaptionSettings.language || "auto"} onValueChange={(value) => updateAutoCaptionSettings({ language: value })}>
+						<SelectTrigger className="h-10 w-[180px] rounded-xl border-white/10 bg-white/5 text-sm text-slate-200 hover:bg-white/10">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent className="border-white/10 bg-[#1a1a1f] text-slate-200">
+							{CAPTION_LANGUAGE_OPTIONS.map((option) => (
+								<SelectItem key={option.value} value={option.value}>
+									{option.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</div>
+				<div className="flex flex-wrap items-center gap-2">
+					<div className="grid w-full grid-cols-2 gap-2">
+						{whisperModelDownloadStatus === "downloading" ? (
+							<Button type="button" disabled className="h-10 w-full rounded-xl bg-white/10 px-4 text-sm font-medium text-slate-200 hover:bg-white/10">
+								{tSettings("captions.downloading", "Downloading...")} {Math.round(whisperModelDownloadProgress)}%
+							</Button>
+						) : whisperModelPath ? (
+							<Button type="button" variant="outline" onClick={onDeleteWhisperSmallModel} className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white">
+								{tSettings("captions.clearModel", "Clear Model")}
+							</Button>
+						) : (
+							<Button type="button" onClick={onDownloadWhisperSmallModel} className="h-10 w-full rounded-xl bg-[#2563EB] px-4 text-sm font-medium text-white hover:bg-[#2563EB]/90">
+								{tSettings("captions.downloadModel", "Download Model")}
+							</Button>
+						)}
+						<Button type="button" variant="outline" onClick={onClearAutoCaptions} disabled={captionCueCount === 0} className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white disabled:opacity-50">
+							{tSettings("captions.clearFull", "Clear Captions")}
+						</Button>
+					</div>
+				</div>
+				<div className="flex flex-col gap-2">
+					<Button type="button" onClick={onGenerateAutoCaptions} disabled={isGeneratingCaptions || !whisperModelPath} className="h-10 w-full rounded-xl bg-[#2563EB] px-4 text-sm font-medium text-white hover:bg-[#2563EB]/90 disabled:opacity-60">
+						{isGeneratingCaptions ? tSettings("captions.generating", "Generating...") : captionCueCount > 0 ? tSettings("captions.regenerateFull", "Regenerate Captions") : tSettings("captions.generateFull", "Generate Captions")}
+					</Button>
+					{isGeneratingCaptions ? (
+						<div className="space-y-1">
+							<div className="text-xs text-slate-400">
+								{tSettings("captions.generatingStatus", "Generating captions. This can take a moment.")}
+							</div>
+							<div className="indeterminate-progress h-2 rounded-full bg-white/5" />
+						</div>
+					) : null}
+				</div>
+				{whisperModelDownloadStatus === "downloading" ? (
+					<div className="h-2 overflow-hidden rounded-full bg-white/5">
+						<div className="h-full rounded-full bg-[#2196f3] transition-all" style={{ width: `${whisperModelDownloadProgress}%` }} />
+					</div>
+				) : null}
+			</div>
+
+			<div className="flex flex-col gap-1.5">
+				<div className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.03] px-2.5 py-2">
+					<div className="text-[10px] text-slate-400">{tSettings("captions.animation", "Animation")}</div>
+					<Select value={autoCaptionSettings.animationStyle} onValueChange={(value) => updateAutoCaptionSettings({ animationStyle: value as AutoCaptionAnimation })}>
+						<SelectTrigger className="h-9 w-[160px] rounded-xl border-white/10 bg-white/5 text-sm text-slate-200 hover:bg-white/10">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent className="border-white/10 bg-[#1a1a1f] text-slate-200">
+							{CAPTION_ANIMATION_OPTIONS.map((option) => (
+								<SelectItem key={option.value} value={option.value}>
+									{option.label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</div>
+				<label className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-2">
+					<span className="text-[10px] text-slate-400">{tSettings("captions.textColor", "Text color")}</span>
+					<input
+						type="color"
+						value={autoCaptionSettings.textColor}
+						onChange={(event) => updateAutoCaptionSettings({ textColor: event.target.value })}
+						className="h-7 w-10 rounded border border-white/10 bg-transparent"
+					/>
+				</label>
+				<div className="mb-1 text-sm font-medium text-slate-200">{tSettings("captions.fontSettings", "Font Settings")}</div>
+				<SliderControl label={tSettings("captions.fontSize", "Font size")} value={autoCaptionSettings.fontSize} defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.fontSize} min={16} max={72} step={1} onChange={(value) => updateAutoCaptionSettings({ fontSize: value })} formatValue={(value) => `${Math.round(value)}px`} parseInput={(text) => parseFloat(text.replace(/px$/, ""))} />
+				<SliderControl label={tSettings("captions.rowCount", "Rows")} value={autoCaptionSettings.maxRows} defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.maxRows} min={1} max={4} step={1} onChange={(value) => updateAutoCaptionSettings({ maxRows: Math.round(value) })} formatValue={(value) => `${Math.round(value)}`} parseInput={(text) => parseFloat(text)} />
+				<SliderControl label={tSettings("captions.bottomOffset", "Bottom offset")} value={autoCaptionSettings.bottomOffset} defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.bottomOffset} min={0} max={30} step={1} onChange={(value) => updateAutoCaptionSettings({ bottomOffset: value })} formatValue={(value) => `${Math.round(value)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
+				<SliderControl label={tSettings("captions.maxWidth", "Max width")} value={autoCaptionSettings.maxWidth} defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.maxWidth} min={40} max={95} step={1} onChange={(value) => updateAutoCaptionSettings({ maxWidth: value })} formatValue={(value) => `${Math.round(value)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
+				<SliderControl label={tSettings("captions.boxRadius", "Box radius")} value={autoCaptionSettings.boxRadius} defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.boxRadius} min={0} max={40} step={0.5} onChange={(value) => updateAutoCaptionSettings({ boxRadius: value })} formatValue={(value) => `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}px`} parseInput={(text) => parseFloat(text.replace(/px$/, ""))} />
+				<SliderControl label={tSettings("captions.backgroundOpacity", "Background opacity")} value={autoCaptionSettings.backgroundOpacity} defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.backgroundOpacity} min={0} max={1} step={0.01} onChange={(value) => updateAutoCaptionSettings({ backgroundOpacity: value })} formatValue={(value) => `${Math.round(value * 100)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100} />
+			</div>
+		</section>
+	);
+
 	const effectSectionContent = (() => {
+		const sceneSectionContent = (
+			<div className="space-y-4">
+				{backgroundSettingsContent}
+				{zoomSectionContent}
+				{frameSectionContent}
+				{cropSectionContent}
+			</div>
+		);
+
 		switch (activeEffectSection) {
 			case "scene":
+				return sceneSectionContent;
 			case "zoom":
+				return sceneSectionContent;
 			case "frame":
+				return sceneSectionContent;
 			case "crop":
-				return (
-					<div className="space-y-5">
-						{backgroundSettingsContent}
-						{zoomSectionContent}
-						{frameSectionContent}
-						{cropSectionContent}
-					</div>
-				);
+				return sceneSectionContent;
+				case "captions":
+					return captionsSectionContent;
 			case "cursor":
 				return (
 					<section className="flex flex-col gap-2">
@@ -941,6 +1362,36 @@ export function SettingsPanel({
 							</div>
 						</div>
 						<div className="flex flex-col gap-1.5">
+							<div className="space-y-1.5">
+								<ToggleGroup
+									type="single"
+									value={cursorStyle}
+									onValueChange={(value) => {
+										if (value) {
+											onCursorStyleChange?.(value as CursorStyle);
+										}
+									}}
+									className="grid grid-cols-4 gap-2"
+									aria-label={tSettings("effects.cursorStyle", "Cursor Style")}
+								>
+									{CURSOR_STYLE_OPTIONS.map((option) => (
+										<ToggleGroupItem
+											key={option.value}
+											value={option.value}
+											className={cn(
+												"group aspect-square h-auto min-w-0 rounded-[10px] border border-white/10 bg-white/[0.03] p-3 text-left text-slate-200 shadow-none transition-all hover:border-white/20 hover:bg-white/[0.06]",
+												"data-[state=on]:border-[#2563EB]/70 data-[state=on]:bg-[#2563EB]/12 data-[state=on]:text-white",
+											)}
+										>
+											<div className="flex h-full flex-col items-center justify-between gap-3">
+												<div className="flex min-h-0 flex-1 items-center justify-center rounded-lg px-2 py-1.5">
+													<CursorStylePreview style={option.value} previewUrls={cursorPreviewUrls} />
+												</div>
+											</div>
+										</ToggleGroupItem>
+									))}
+								</ToggleGroup>
+							</div>
 							<SliderControl label={tSettings("effects.cursorSize")} value={cursorSize} defaultValue={DEFAULT_CURSOR_SIZE} min={0.5} max={10} step={0.05} onChange={(v) => onCursorSizeChange?.(v)} formatValue={(v) => `${v.toFixed(2)}×`} parseInput={(text) => parseFloat(text.replace(/×$/, ""))} />
 							<SliderControl label={tSettings("effects.cursorSmoothing")} value={cursorSmoothing} defaultValue={DEFAULT_CURSOR_SMOOTHING} min={0} max={2} step={0.01} onChange={(v) => onCursorSmoothingChange?.(v)} formatValue={(v) => (v <= 0 ? tSettings("effects.off") : v.toFixed(2))} parseInput={(text) => parseFloat(text)} />
 							<SliderControl label={tSettings("effects.cursorMotionBlur")} value={cursorMotionBlur} defaultValue={DEFAULT_CURSOR_MOTION_BLUR} min={0} max={2} step={0.05} onChange={(v) => onCursorMotionBlurChange?.(v)} formatValue={(v) => `${v.toFixed(2)}×`} parseInput={(text) => parseFloat(text.replace(/×$/, ""))} />
