@@ -5,15 +5,20 @@ import {
   Graphics,
   BlurFilter,
   Texture,
+  TextureSource,
 } from "pixi.js";
 import { MotionBlurFilter } from "pixi-filters/motion-blur";
 import type {
+  AutoCaptionSettings,
+  CaptionCue,
   ZoomRegion,
   CropRegion,
   AnnotationRegion,
   SpeedRegion,
+  CursorStyle,
   CursorTelemetryPoint,
   WebcamOverlaySettings,
+  ZoomTransitionEasing,
 } from "@/components/video-editor/types";
 import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
 import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
@@ -31,6 +36,7 @@ import {
   ZOOM_TRANSLATION_DEADZONE_PX,
 } from "@/components/video-editor/videoPlayback/constants";
 import { renderAnnotations } from "./annotationRenderer";
+import { renderCaptions } from "./captionRenderer";
 import {
   PixiCursorOverlay,
   DEFAULT_CURSOR_CONFIG,
@@ -52,6 +58,14 @@ interface FrameRenderConfig {
   backgroundBlur: number;
   zoomMotionBlur?: number;
   connectZooms?: boolean;
+  zoomInDurationMs?: number;
+  zoomInOverlapMs?: number;
+  zoomOutDurationMs?: number;
+  connectedZoomGapMs?: number;
+  connectedZoomDurationMs?: number;
+  zoomInEasing?: ZoomTransitionEasing;
+  zoomOutEasing?: ZoomTransitionEasing;
+  connectedZoomEasing?: ZoomTransitionEasing;
   borderRadius?: number;
   padding?: number;
   cropRegion: CropRegion;
@@ -60,11 +74,14 @@ interface FrameRenderConfig {
   videoWidth: number;
   videoHeight: number;
   annotationRegions?: AnnotationRegion[];
+  autoCaptions?: CaptionCue[];
+  autoCaptionSettings?: AutoCaptionSettings;
   speedRegions?: SpeedRegion[];
   previewWidth?: number;
   previewHeight?: number;
   cursorTelemetry?: CursorTelemetryPoint[];
   showCursor?: boolean;
+  cursorStyle?: CursorStyle;
   cursorSize?: number;
   cursorSmoothing?: number;
   cursorMotionBlur?: number;
@@ -103,6 +120,7 @@ export class FrameRenderer {
   private videoContainer: Container | null = null;
   private cursorContainer: Container | null = null;
   private videoSprite: Sprite | null = null;
+  private videoTextureSource: TextureSource<any> | null = null;
   private backgroundSprite: Sprite | null = null;
   private maskGraphics: Graphics | null = null;
   private blurFilter: BlurFilter | null = null;
@@ -190,6 +208,7 @@ export class FrameRenderer {
       this.cursorOverlay = new PixiCursorOverlay({
         dotRadius:
           DEFAULT_CURSOR_CONFIG.dotRadius * (this.config.cursorSize ?? 1.4),
+        style: this.config.cursorStyle ?? "tahoe",
         smoothingFactor:
           this.config.cursorSmoothing ?? DEFAULT_CURSOR_CONFIG.smoothingFactor,
         motionBlur: this.config.cursorMotionBlur ?? 0,
@@ -693,6 +712,7 @@ export class FrameRenderer {
     if (!this.videoSprite) {
       const texture = Texture.from(videoFrame as any);
       this.videoSprite = new Sprite(texture);
+      this.videoTextureSource = texture.source as TextureSource<any>;
       this.videoContainer.addChild(this.videoSprite);
       if (this.cursorOverlay && this.cursorContainer) {
         this.cursorContainer.addChild(this.cursorOverlay.container);
@@ -701,11 +721,9 @@ export class FrameRenderer {
         this.videoContainer.addChild(this.maskGraphics);
       }
     } else {
-      // Destroy old texture to avoid memory leaks, then create new one
-      const oldTexture = this.videoSprite.texture;
-      const newTexture = Texture.from(videoFrame as any);
-      this.videoSprite.texture = newTexture;
-      oldTexture.destroy(true);
+      this.videoTextureSource ??= this.videoSprite.texture.source as TextureSource<any>;
+      this.videoTextureSource.resource = videoFrame as any;
+      this.videoTextureSource.update();
     }
 
     // Apply layout
@@ -783,6 +801,22 @@ export class FrameRenderer {
         scaleFactor,
       );
     }
+
+    if (
+    this.config.autoCaptions &&
+    this.config.autoCaptions.length > 0 &&
+    this.config.autoCaptionSettings &&
+    this.compositeCtx
+  ) {
+    renderCaptions(
+    this.compositeCtx,
+    this.config.autoCaptions,
+    this.config.autoCaptionSettings,
+    this.config.width,
+    this.config.height,
+    timeMs,
+    );
+  }
   }
 
   private updateLayout(): void {
@@ -1220,6 +1254,7 @@ export class FrameRenderer {
       this.videoSprite.destroy({ texture: false, textureSource: false });
       videoTexture?.destroy(true);
       this.videoSprite = null;
+      this.videoTextureSource = null;
     }
     this.backgroundSprite = null;
     if (this.app) {
