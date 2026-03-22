@@ -6,6 +6,8 @@ export interface MicrophoneDevice {
   groupId: string
 }
 
+let hasRequestedMicrophoneLabels = false
+
 export function useMicrophoneDevices(enabled: boolean = true) {
   const [devices, setDevices] = useState<MicrophoneDevice[]>([])
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('default')
@@ -20,13 +22,14 @@ export function useMicrophoneDevices(enabled: boolean = true) {
     let mounted = true
 
     const loadDevices = async () => {
+      let permissionStream: MediaStream | null = null
+
       try {
         setIsLoading(true)
         setError(null)
 
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        const allDevices = await navigator.mediaDevices.enumerateDevices()
-        const audioInputs = allDevices
+        let allDevices = await navigator.mediaDevices.enumerateDevices()
+        let audioInputs = allDevices
           .filter((device) => device.kind === 'audioinput')
           .map((device) => ({
             deviceId: device.deviceId,
@@ -34,13 +37,38 @@ export function useMicrophoneDevices(enabled: boolean = true) {
             groupId: device.groupId,
           }))
 
-        stream.getTracks().forEach((track) => track.stop())
+        const needsLabelPermission =
+          audioInputs.length > 0 && audioInputs.every((device) => !device.label.trim())
+
+        if (needsLabelPermission && !hasRequestedMicrophoneLabels) {
+          hasRequestedMicrophoneLabels = true
+          permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          allDevices = await navigator.mediaDevices.enumerateDevices()
+          audioInputs = allDevices
+            .filter((device) => device.kind === 'audioinput')
+            .map((device) => ({
+              deviceId: device.deviceId,
+              label: device.label || `Microphone ${device.deviceId.slice(0, 8)}`,
+              groupId: device.groupId,
+            }))
+        }
 
         if (mounted) {
           setDevices(audioInputs)
-          if (selectedDeviceId === 'default' && audioInputs.length > 0) {
-            setSelectedDeviceId(audioInputs[0].deviceId)
-          }
+          setSelectedDeviceId((currentDeviceId) => {
+            if (currentDeviceId === 'default' && audioInputs.length > 0) {
+              return audioInputs[0].deviceId
+            }
+
+            if (
+              currentDeviceId !== 'default' &&
+              audioInputs.some((device) => device.deviceId === currentDeviceId)
+            ) {
+              return currentDeviceId
+            }
+
+            return audioInputs[0]?.deviceId ?? 'default'
+          })
           setIsLoading(false)
         }
       } catch (error) {
@@ -50,6 +78,8 @@ export function useMicrophoneDevices(enabled: boolean = true) {
           setIsLoading(false)
           console.error('Error loading microphone devices:', error)
         }
+      } finally {
+        permissionStream?.getTracks().forEach((track) => track.stop())
       }
     }
 
@@ -65,7 +95,7 @@ export function useMicrophoneDevices(enabled: boolean = true) {
       mounted = false
       navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange)
     }
-  }, [enabled, selectedDeviceId])
+  }, [enabled])
 
   return {
     devices,
