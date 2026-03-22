@@ -28,6 +28,9 @@ release/**
 # npx electron-builder --mac --win
 .tmp/
 .history/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
 
 # Native capture build artifacts
 electron/native/wgc-capture/build/
