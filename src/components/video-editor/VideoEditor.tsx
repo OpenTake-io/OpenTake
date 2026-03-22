@@ -39,6 +39,7 @@ import { CropControl } from "./CropControl";
 import {
 	createProjectData,
 	deriveNextId,
+	type EditorProjectData,
 	fromFileUrl,
 	normalizeProjectEditor,
 	toFileUrl,
@@ -114,6 +115,52 @@ type PendingExportSave = {
 };
 
 const MP4_EXPORT_FRAME_RATE = 60;
+
+function cloneStructured<T>(value: T): T {
+	return globalThis.structuredClone(value);
+}
+
+function isComparableObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function areDeepEqual(left: unknown, right: unknown): boolean {
+	if (Object.is(left, right)) {
+		return true;
+	}
+
+	if (Array.isArray(left) || Array.isArray(right)) {
+		if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+			return false;
+		}
+
+		for (let index = 0; index < left.length; index += 1) {
+			if (!areDeepEqual(left[index], right[index])) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	if (!isComparableObject(left) || !isComparableObject(right)) {
+		return false;
+	}
+
+	const leftKeys = Object.keys(left);
+	const rightKeys = Object.keys(right);
+	if (leftKeys.length !== rightKeys.length) {
+		return false;
+	}
+
+	for (const key of leftKeys) {
+		if (!(key in right) || !areDeepEqual(left[key], right[key])) {
+			return false;
+		}
+	}
+
+	return true;
+}
 
 function calculateMp4SourceDimensions(
 	sourceWidth: number,
@@ -344,7 +391,7 @@ export default function VideoEditor() {
 	);
 	const [exportedFilePath, setExportedFilePath] = useState<string | undefined>(undefined);
 	const [hasPendingExportSave, setHasPendingExportSave] = useState(false);
-	const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string | null>(null);
+	const [lastSavedSnapshot, setLastSavedSnapshot] = useState<EditorProjectData | null>(null);
 	const [showCropModal, setShowCropModal] = useState(false);
 	const [previewVersion, setPreviewVersion] = useState(0);
 
@@ -407,19 +454,7 @@ export default function VideoEditor() {
 	void historyVersion;
 
 	const cloneSnapshot = useCallback((snapshot: EditorHistorySnapshot): EditorHistorySnapshot => {
-		return {
-			zoomRegions: JSON.parse(JSON.stringify(snapshot.zoomRegions)),
-			trimRegions: JSON.parse(JSON.stringify(snapshot.trimRegions)),
-			speedRegions: JSON.parse(JSON.stringify(snapshot.speedRegions)),
-			annotationRegions: JSON.parse(JSON.stringify(snapshot.annotationRegions)),
-			audioRegions: JSON.parse(JSON.stringify(snapshot.audioRegions)),
-			autoCaptions: JSON.parse(JSON.stringify(snapshot.autoCaptions)),
-			selectedZoomId: snapshot.selectedZoomId,
-			selectedTrimId: snapshot.selectedTrimId,
-			selectedSpeedId: snapshot.selectedSpeedId,
-			selectedAnnotationId: snapshot.selectedAnnotationId,
-			selectedAudioId: snapshot.selectedAudioId,
-		};
+		return cloneStructured(snapshot);
 	}, []);
 
 	const gifOutputDimensions = useMemo(
@@ -600,6 +635,96 @@ export default function VideoEditor() {
 			return persistedEditor;
 		},
 		[],
+	);
+
+	const currentSourcePath = useMemo(
+		() => videoSourcePath ?? (videoPath ? fromFileUrl(videoPath) : null),
+		[videoPath, videoSourcePath],
+	);
+
+	const currentPersistedEditorState = useMemo(
+		() =>
+			buildPersistedEditorState({
+				wallpaper,
+				shadowIntensity,
+				backgroundBlur,
+				zoomMotionBlur,
+				connectZooms,
+				zoomInDurationMs,
+				zoomInOverlapMs,
+				zoomOutDurationMs,
+				connectedZoomGapMs,
+				connectedZoomDurationMs,
+				zoomInEasing,
+				zoomOutEasing,
+				connectedZoomEasing,
+				showCursor,
+				loopCursor,
+				cursorStyle,
+				cursorSize,
+				cursorSmoothing,
+				cursorMotionBlur,
+				cursorClickBounce,
+				cursorClickBounceDuration,
+				cursorSway,
+				borderRadius,
+				padding,
+				webcam,
+				zoomRegions,
+				trimRegions,
+				speedRegions,
+				annotationRegions,
+				audioRegions,
+				autoCaptions,
+				autoCaptionSettings,
+				aspectRatio,
+				exportQuality,
+				exportFormat,
+				gifFrameRate,
+				gifLoop,
+				gifSizePreset,
+			}),
+		[
+			buildPersistedEditorState,
+			wallpaper,
+			shadowIntensity,
+			backgroundBlur,
+			zoomMotionBlur,
+			connectZooms,
+			zoomInDurationMs,
+			zoomInOverlapMs,
+			zoomOutDurationMs,
+			connectedZoomGapMs,
+			connectedZoomDurationMs,
+			zoomInEasing,
+			zoomOutEasing,
+			connectedZoomEasing,
+			showCursor,
+			loopCursor,
+			cursorStyle,
+			cursorSize,
+			cursorSmoothing,
+			cursorMotionBlur,
+			cursorClickBounce,
+			cursorClickBounceDuration,
+			cursorSway,
+			borderRadius,
+			padding,
+			webcam,
+			zoomRegions,
+			trimRegions,
+			speedRegions,
+			annotationRegions,
+			audioRegions,
+			autoCaptions,
+			autoCaptionSettings,
+			aspectRatio,
+			exportQuality,
+			exportFormat,
+			gifFrameRate,
+			gifLoop,
+			gifSizePreset,
+		],
 	);
 
 	const buildHistorySnapshot = useCallback((): EditorHistorySnapshot => {
@@ -806,119 +931,30 @@ export default function VideoEditor() {
 		syncHistoryButtons();
 
 		setLastSavedSnapshot(
-			JSON.stringify(createProjectData(sourcePath, buildPersistedEditorState(normalizedEditor))),
+			cloneStructured(createProjectData(sourcePath, buildPersistedEditorState(normalizedEditor))),
 		);
 		return true;
 	}, [buildPersistedEditorState, syncHistoryButtons]);
 
 	const currentProjectSnapshot = useMemo(() => {
-		const sourcePath = videoSourcePath ?? (videoPath ? fromFileUrl(videoPath) : null);
-		if (!sourcePath) {
+		if (!currentSourcePath) {
 			return null;
 		}
-		return JSON.stringify(
-			createProjectData(
-				sourcePath,
-				buildPersistedEditorState({
-					wallpaper,
-					shadowIntensity,
-					backgroundBlur,
-					zoomMotionBlur,
-					connectZooms,
-					zoomInDurationMs,
-					zoomInOverlapMs,
-					zoomOutDurationMs,
-					connectedZoomGapMs,
-					connectedZoomDurationMs,
-					zoomInEasing,
-					zoomOutEasing,
-					connectedZoomEasing,
-					showCursor,
-					loopCursor,
-					cursorStyle,
-					cursorSize,
-					cursorSmoothing,
-					cursorMotionBlur,
-					cursorClickBounce,
-					cursorClickBounceDuration,
-					cursorSway,
-					borderRadius,
-					padding,
-					cropRegion,
-					webcam,
-					zoomRegions,
-					trimRegions,
-					speedRegions,
-					annotationRegions,
-					audioRegions,
-					autoCaptions,
-					autoCaptionSettings,
-					aspectRatio,
-					exportQuality,
-					exportFormat,
-					gifFrameRate,
-					gifLoop,
-					gifSizePreset,
-				}),
-			),
-		);
-	}, [
-		videoPath,
-		videoSourcePath,
-		buildPersistedEditorState,
-		wallpaper,
-		shadowIntensity,
-		backgroundBlur,
-		zoomMotionBlur,
-		connectZooms,
-		zoomInDurationMs,
-		zoomInOverlapMs,
-		zoomOutDurationMs,
-		connectedZoomGapMs,
-		connectedZoomDurationMs,
-		zoomInEasing,
-		zoomOutEasing,
-		connectedZoomEasing,
-		showCursor,
-		loopCursor,
-		cursorStyle,
-		cursorSize,
-		cursorSmoothing,
-		cursorMotionBlur,
-		cursorClickBounce,
-		cursorClickBounceDuration,
-		cursorSway,
-		borderRadius,
-		padding,
-		cropRegion,
-		webcam,
-		zoomRegions,
-		trimRegions,
-		speedRegions,
-		audioRegions,
-		annotationRegions,
-		aspectRatio,
-		exportQuality,
-		exportFormat,
-		gifFrameRate,
-		gifLoop,
-		gifSizePreset,
-		buildPersistedEditorState,
-	]);
+		return createProjectData(currentSourcePath, currentPersistedEditorState);
+	}, [currentPersistedEditorState, currentSourcePath]);
 
 	const syncRecordingSessionWebcam = useCallback(
 		async (webcamPath: string | null) => {
-			const sourcePath = videoSourcePath ?? (videoPath ? fromFileUrl(videoPath) : null);
-			if (!sourcePath || !window.electronAPI.setCurrentRecordingSession) {
+			if (!currentSourcePath || !window.electronAPI.setCurrentRecordingSession) {
 				return;
 			}
 
 			await window.electronAPI.setCurrentRecordingSession({
-				videoPath: sourcePath,
+				videoPath: currentSourcePath,
 				webcamPath,
 			});
 		},
-		[videoPath, videoSourcePath],
+		[currentSourcePath],
 	);
 
 	const syncActiveVideoSource = useCallback(
@@ -964,24 +1000,22 @@ export default function VideoEditor() {
 	}, [syncRecordingSessionWebcam, t]);
 
 	useEffect(() => {
-		const snapshot = cloneSnapshot(buildHistorySnapshot());
+		const snapshot = buildHistorySnapshot();
 
 		if (!historyCurrentRef.current) {
-			historyCurrentRef.current = snapshot;
+			historyCurrentRef.current = cloneSnapshot(snapshot);
 			syncHistoryButtons();
 			return;
 		}
 
 		if (applyingHistoryRef.current) {
-			historyCurrentRef.current = snapshot;
+			historyCurrentRef.current = cloneSnapshot(snapshot);
 			applyingHistoryRef.current = false;
 			syncHistoryButtons();
 			return;
 		}
 
-		const currentSerialized = JSON.stringify(historyCurrentRef.current);
-		const nextSerialized = JSON.stringify(snapshot);
-		if (currentSerialized === nextSerialized) {
+		if (areDeepEqual(historyCurrentRef.current, snapshot)) {
 			return;
 		}
 
@@ -989,16 +1023,20 @@ export default function VideoEditor() {
 		if (historyPastRef.current.length > 100) {
 			historyPastRef.current.shift();
 		}
-		historyCurrentRef.current = snapshot;
+		historyCurrentRef.current = cloneSnapshot(snapshot);
 		historyFutureRef.current = [];
 		syncHistoryButtons();
 	}, [buildHistorySnapshot, cloneSnapshot, syncHistoryButtons]);
 
-	const hasUnsavedChanges = Boolean(
-		currentProjectPath &&
-			currentProjectSnapshot &&
-			lastSavedSnapshot &&
-			currentProjectSnapshot !== lastSavedSnapshot,
+	const hasUnsavedChanges = useMemo(
+		() =>
+			Boolean(
+				currentProjectPath &&
+					currentProjectSnapshot &&
+					lastSavedSnapshot &&
+					!areDeepEqual(currentProjectSnapshot, lastSavedSnapshot),
+			),
+		[currentProjectPath, currentProjectSnapshot, lastSavedSnapshot],
 	);
 
 	useEffect(() => {
@@ -1279,68 +1317,21 @@ export default function VideoEditor() {
 
 	const saveProject = useCallback(
 		async (forceSaveAs: boolean) => {
-			if (!videoPath) {
+			if (!currentSourcePath) {
 				toast.error("No video loaded");
 				return false;
 			}
 
-			const sourcePath = videoSourcePath ?? fromFileUrl(videoPath);
-			if (!sourcePath) {
-				toast.error("Unable to determine source video path");
-				return false;
-			}
-
-			const projectData = createProjectData(
-				sourcePath,
-				buildPersistedEditorState({
-					wallpaper,
-					shadowIntensity,
-					backgroundBlur,
-					zoomMotionBlur,
-					connectZooms,
-					zoomInDurationMs,
-					zoomInOverlapMs,
-					zoomOutDurationMs,
-					connectedZoomGapMs,
-					connectedZoomDurationMs,
-					zoomInEasing,
-					zoomOutEasing,
-					connectedZoomEasing,
-					showCursor,
-					loopCursor,
-					cursorStyle,
-					cursorSize,
-					cursorSmoothing,
-					cursorMotionBlur,
-					cursorClickBounce,
-					cursorClickBounceDuration,
-					cursorSway,
-					borderRadius,
-					padding,
-					cropRegion,
-					webcam,
-					zoomRegions,
-					trimRegions,
-					speedRegions,
-					annotationRegions,
-					audioRegions,
-					autoCaptions,
-					autoCaptionSettings,
-					aspectRatio,
-					exportQuality,
-					exportFormat,
-					gifFrameRate,
-					gifLoop,
-					gifSizePreset,
-				}),
-			);
+			const projectData =
+				currentProjectSnapshot?.videoPath === currentSourcePath
+					? currentProjectSnapshot
+					: createProjectData(currentSourcePath, currentPersistedEditorState);
 
 			const fileNameBase =
-				sourcePath
+				currentSourcePath
 					.split(/[\\/]/)
 					.pop()
 					?.replace(/\.[^.]+$/, "") || `project-${Date.now()}`;
-			const projectSnapshot = JSON.stringify(projectData);
 			let targetProjectPath = forceSaveAs ? undefined : (currentProjectPath ?? undefined);
 
 			if (!forceSaveAs && !targetProjectPath) {
@@ -1370,56 +1361,16 @@ export default function VideoEditor() {
 			if (result.path) {
 				setCurrentProjectPath(result.path);
 			}
-			setLastSavedSnapshot(projectSnapshot);
+			setLastSavedSnapshot(cloneStructured(projectData));
 
 			toast.success(`Project saved to ${result.path}`);
 			return true;
 		},
 		[
-			videoPath,
-			videoSourcePath,
+			currentSourcePath,
 			currentProjectPath,
-			wallpaper,
-			shadowIntensity,
-			backgroundBlur,
-			zoomMotionBlur,
-			connectZooms,
-			zoomInDurationMs,
-			zoomInOverlapMs,
-			zoomOutDurationMs,
-			connectedZoomGapMs,
-			connectedZoomDurationMs,
-			zoomInEasing,
-			zoomOutEasing,
-			connectedZoomEasing,
-			showCursor,
-			loopCursor,
-			cursorSize,
-			cursorSmoothing,
-			cursorMotionBlur,
-			cursorClickBounce,
-			cursorClickBounceDuration,
-			cursorSway,
-			borderRadius,
-			padding,
-			cropRegion,
-			webcam,
-			zoomRegions,
-			trimRegions,
-			speedRegions,
-			annotationRegions,
-			audioRegions,
-			autoCaptions,
-			autoCaptionSettings,
-			autoCaptions,
-			autoCaptionSettings,
-			aspectRatio,
-			exportQuality,
-			exportFormat,
-			gifFrameRate,
-			gifLoop,
-			gifSizePreset,
-			buildPersistedEditorState,
+			currentProjectSnapshot,
+			currentPersistedEditorState,
 		],
 	);
 
