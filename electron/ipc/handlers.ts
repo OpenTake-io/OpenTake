@@ -4,7 +4,8 @@ import { execFile, spawn, spawnSync } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 
 import fs from 'node:fs/promises'
-import { constants as fsConstants } from 'node:fs'
+import { constants as fsConstants, createWriteStream } from 'node:fs'
+import { get as httpsGet } from 'node:https'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -26,6 +27,9 @@ const AUTO_RECORDING_RETENTION_COUNT = 20
 const AUTO_RECORDING_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000
 const ALLOW_RECORDLY_WINDOW_CAPTURE = Boolean(process.env['VITE_DEV_SERVER_URL'])
 const RECORDING_SESSION_MANIFEST_SUFFIX = '.recordly-session.json'
+const WHISPER_MODEL_DOWNLOAD_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin'
+const WHISPER_MODEL_DIR = path.join(app.getPath('userData'), 'whisper')
+const WHISPER_SMALL_MODEL_PATH = path.join(WHISPER_MODEL_DIR, 'ggml-small.bin')
 
 function getAssetRootPath() {
   if (app.isPackaged) {
@@ -83,6 +87,7 @@ let nativeCaptureProcess: ChildProcessWithoutNullStreams | null = null
 let nativeCaptureOutputBuffer = ''
 let nativeCaptureTargetPath: string | null = null
 let nativeCaptureStopRequested = false
+let nativeCaptureSystemAudioPath: string | null = null
 let nativeCaptureMicrophonePath: string | null = null
 let nativeCapturePaused = false
 let nativeCursorMonitorProcess: ChildProcessWithoutNullStreams | null = null
@@ -234,6 +239,70 @@ function normalizeVideoSourcePath(videoPath?: string | null): string | null {
   }
 
   return trimmed
+}
+
+async function resolveProjectMediaSources(project: unknown): Promise<
+  | {
+      success: true
+      videoPath: string
+      webcamPath: string | null
+    }
+  | {
+      success: false
+      message: string
+    }
+> {
+  if (!project || typeof project !== 'object') {
+    return { success: false, message: 'Invalid project file format' }
+  }
+
+  const rawVideoPath = (project as { videoPath?: unknown }).videoPath
+  if (typeof rawVideoPath !== 'string') {
+    return { success: false, message: 'Project file is missing a video path' }
+  }
+
+  const normalizedVideoPath = normalizeVideoSourcePath(rawVideoPath)
+  if (!normalizedVideoPath) {
+    return { success: false, message: 'Project file is missing a valid video path' }
+  }
+
+  try {
+    await fs.access(normalizedVideoPath, fsConstants.F_OK)
+  } catch {
+    return {
+      success: false,
+      message: `Project video file not found: ${normalizedVideoPath}`,
+    }
+  }
+
+  const rawWebcamPath =
+    typeof (project as { editor?: { webcam?: { sourcePath?: unknown } } }).editor?.webcam?.sourcePath === 'string'
+      ? ((project as { editor?: { webcam?: { sourcePath?: string } } }).editor?.webcam?.sourcePath ?? null)
+      : null
+  const normalizedWebcamPath = normalizeVideoSourcePath(rawWebcamPath)
+
+  if (!normalizedWebcamPath) {
+    return {
+      success: true,
+      videoPath: normalizedVideoPath,
+      webcamPath: null,
+    }
+  }
+
+  try {
+    await fs.access(normalizedWebcamPath, fsConstants.F_OK)
+    return {
+      success: true,
+      videoPath: normalizedVideoPath,
+      webcamPath: normalizedWebcamPath,
+    }
+  } catch {
+    return {
+      success: true,
+      videoPath: normalizedVideoPath,
+      webcamPath: null,
+    }
+  }
 }
 
 function getRecordingSessionManifestPath(videoPath: string) {
@@ -438,11 +507,31 @@ function getNativeCaptureHelperSourcePath() {
 }
 
 function getNativeArchTag() {
-  return process.arch === 'arm64' ? 'darwin-arm64' : 'darwin-x64'
+  if (process.platform === 'darwin') {
+    return process.arch === 'arm64' ? 'darwin-arm64' : 'darwin-x64'
+  }
+
+  if (process.platform === 'win32') {
+    return process.arch === 'arm64' ? 'win32-arm64' : 'win32-x64'
+  }
+
+  if (process.platform === 'linux') {
+    return process.arch === 'arm64' ? 'linux-arm64' : 'linux-x64'
+  }
+
+  return `${process.platform}-${process.arch}`
 }
 
 function getPrebundledNativeHelperPath(binaryName: string) {
   return resolveUnpackedAppPath('electron', 'native', 'bin', getNativeArchTag(), binaryName)
+}
+
+function getBundledWhisperExecutableCandidates() {
+  const binaryNames = process.platform === 'win32'
+    ? ['whisper-cli.exe', 'whisper-cpp.exe', 'whisper.exe', 'main.exe']
+    : ['whisper-cli', 'whisper-cpp', 'whisper', 'main']
+
+  return binaryNames.map((binaryName) => getPrebundledNativeHelperPath(binaryName))
 }
 
 function getNativeCaptureHelperBinaryPath() {
@@ -675,6 +764,544 @@ function getFfmpegBinaryPath() {
   }
 
   return ffmpegStatic
+}
+
+function sendWhisperModelDownloadProgress(
+  webContents: Electron.WebContents,
+  payload: { status: 'idle' | 'downloading' | 'downloaded' | 'error'; progress: number; path?: string | null; error?: string },
+) {
+  webContents.send('whisper-small-model-download-progress', payload)
+}
+
+async function getWhisperSmallModelStatus() {
+  try {
+    await fs.access(WHISPER_SMALL_MODEL_PATH, fsConstants.R_OK)
+    return {
+      success: true,
+      exists: true,
+      path: WHISPER_SMALL_MODEL_PATH,
+    }
+  } catch {
+    return {
+      success: true,
+      exists: false,
+      path: null,
+    }
+  }
+}
+
+function downloadFileWithProgress(
+  url: string,
+  destinationPath: string,
+  onProgress: (progress: number) => void,
+): Promise<void> {
+  const request = (currentUrl: string, redirectCount = 0): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const req = httpsGet(currentUrl, (response) => {
+        const statusCode = response.statusCode ?? 0
+        const location = response.headers.location
+
+        if (statusCode >= 300 && statusCode < 400 && location) {
+          response.resume()
+          if (redirectCount >= 5) {
+            reject(new Error('Too many redirects while downloading Whisper model.'))
+            return
+          }
+
+          const nextUrl = new URL(location, currentUrl).toString()
+          void request(nextUrl, redirectCount + 1).then(resolve).catch(reject)
+          return
+        }
+
+        if (statusCode < 200 || statusCode >= 300) {
+          response.resume()
+          reject(new Error(`Whisper model download failed with status ${statusCode}.`))
+          return
+        }
+
+        const totalBytes = Number.parseInt(String(response.headers['content-length'] ?? '0'), 10)
+        let downloadedBytes = 0
+        const fileStream = createWriteStream(destinationPath)
+
+        response.on('data', (chunk: Buffer) => {
+          downloadedBytes += chunk.length
+          if (Number.isFinite(totalBytes) && totalBytes > 0) {
+            onProgress(Math.min(100, Math.round((downloadedBytes / totalBytes) * 100)))
+          }
+        })
+
+        response.on('error', (error) => {
+          fileStream.destroy(error)
+        })
+
+        fileStream.on('error', (error) => {
+          response.destroy(error)
+          reject(error)
+        })
+
+        fileStream.on('finish', () => {
+          onProgress(100)
+          resolve()
+        })
+
+        response.pipe(fileStream)
+      })
+
+      req.on('error', reject)
+    })
+  }
+
+  return request(url)
+}
+
+async function downloadWhisperSmallModel(webContents: Electron.WebContents) {
+  await fs.mkdir(WHISPER_MODEL_DIR, { recursive: true })
+  const tempPath = `${WHISPER_SMALL_MODEL_PATH}.download`
+
+  sendWhisperModelDownloadProgress(webContents, {
+    status: 'downloading',
+    progress: 0,
+    path: null,
+  })
+
+  try {
+    await fs.rm(tempPath, { force: true })
+    await downloadFileWithProgress(WHISPER_MODEL_DOWNLOAD_URL, tempPath, (progress) => {
+      sendWhisperModelDownloadProgress(webContents, {
+        status: 'downloading',
+        progress,
+        path: null,
+      })
+    })
+    await fs.rename(tempPath, WHISPER_SMALL_MODEL_PATH)
+    sendWhisperModelDownloadProgress(webContents, {
+      status: 'downloaded',
+      progress: 100,
+      path: WHISPER_SMALL_MODEL_PATH,
+    })
+    return WHISPER_SMALL_MODEL_PATH
+  } catch (error) {
+    await fs.rm(tempPath, { force: true }).catch(() => undefined)
+    sendWhisperModelDownloadProgress(webContents, {
+      status: 'error',
+      progress: 0,
+      path: null,
+      error: String(error),
+    })
+    throw error
+  }
+}
+
+async function deleteWhisperSmallModel() {
+  await fs.rm(WHISPER_SMALL_MODEL_PATH, { force: true })
+}
+
+function parseSrtTimestamp(value: string) {
+  const match = value.trim().match(/^(\d{2}):(\d{2}):(\d{2}),(\d{3})$/)
+  if (!match) {
+    return null
+  }
+
+  const [, hours, minutes, seconds, milliseconds] = match
+  return (
+    Number(hours) * 60 * 60 * 1000
+    + Number(minutes) * 60 * 1000
+    + Number(seconds) * 1000
+    + Number(milliseconds)
+  )
+}
+
+type CaptionWordPayload = {
+  text: string
+  startMs: number
+  endMs: number
+  leadingSpace?: boolean
+}
+
+type CaptionCuePayload = {
+  id: string
+  startMs: number
+  endMs: number
+  text: string
+  words?: CaptionWordPayload[]
+}
+
+type WhisperJsonToken = {
+  text?: unknown
+  offsets?: {
+    from?: unknown
+    to?: unknown
+  }
+}
+
+type WhisperJsonSegment = {
+  text?: unknown
+  offsets?: {
+    from?: unknown
+    to?: unknown
+  }
+  tokens?: unknown
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function buildCaptionTextFromWords(words: CaptionWordPayload[]) {
+  return words
+    .map((word, index) => `${index > 0 && word.leadingSpace ? ' ' : ''}${word.text}`)
+    .join('')
+    .trim()
+}
+
+function parseWhisperJsonWords(tokens: unknown) {
+  if (!Array.isArray(tokens)) {
+    return []
+  }
+
+  const words: CaptionWordPayload[] = []
+  let nextLeadingSpace = false
+
+  for (const token of tokens) {
+    if (!token || typeof token !== 'object') {
+      continue
+    }
+
+    const tokenData = token as WhisperJsonToken
+    const tokenText = typeof tokenData.text === 'string' ? tokenData.text : ''
+    if (!tokenText) {
+      continue
+    }
+
+    const tokenStartMs = isFiniteNumber(tokenData.offsets?.from) ? Math.round(tokenData.offsets.from) : null
+    const tokenEndMs = isFiniteNumber(tokenData.offsets?.to) ? Math.round(tokenData.offsets.to) : null
+    const parts = tokenText.match(/\s+|[^\s]+/g) ?? []
+
+    for (const part of parts) {
+      if (/^\s+$/.test(part)) {
+        nextLeadingSpace = words.length > 0
+        continue
+      }
+
+      if (tokenStartMs == null || tokenEndMs == null || tokenEndMs <= tokenStartMs) {
+        return []
+      }
+
+      const previousWord = words.length > 0 ? words[words.length - 1] : null
+      if (!previousWord || nextLeadingSpace) {
+        words.push({
+          text: part,
+          startMs: tokenStartMs,
+          endMs: tokenEndMs,
+          ...(words.length > 0 && nextLeadingSpace ? { leadingSpace: true } : {}),
+        })
+      } else {
+        previousWord.text += part
+        previousWord.endMs = Math.max(previousWord.endMs, tokenEndMs)
+      }
+
+      nextLeadingSpace = false
+    }
+  }
+
+  return words.filter((word) => word.text.trim().length > 0)
+}
+
+function parseWhisperJsonCues(content: string) {
+  try {
+    const parsed = JSON.parse(content) as {
+      transcription?: unknown
+    }
+
+    if (!Array.isArray(parsed.transcription)) {
+      return []
+    }
+
+    return parsed.transcription
+      .map((segment, index) => {
+        if (!segment || typeof segment !== 'object') {
+          return null
+        }
+
+        const segmentData = segment as WhisperJsonSegment
+        const startMs = isFiniteNumber(segmentData.offsets?.from) ? Math.round(segmentData.offsets.from) : null
+        const endMs = isFiniteNumber(segmentData.offsets?.to) ? Math.round(segmentData.offsets.to) : null
+        const segmentText = typeof segmentData.text === 'string' ? segmentData.text.trim() : ''
+
+        if (startMs == null || endMs == null || endMs <= startMs) {
+          return null
+        }
+
+        const words = parseWhisperJsonWords(segmentData.tokens)
+        const text = words.length > 0 ? buildCaptionTextFromWords(words) : segmentText
+
+        if (!text) {
+          return null
+        }
+
+        return {
+          id: `caption-${index + 1}`,
+          startMs,
+          endMs,
+          text,
+          ...(words.length > 0 ? { words } : {}),
+        }
+      })
+      .filter((cue): cue is CaptionCuePayload => cue != null)
+  } catch (error) {
+    console.warn('[auto-captions] Failed to parse Whisper JSON output:', error)
+    return []
+  }
+}
+
+function parseSrtCues(content: string) {
+  return content
+    .split(/\r?\n\r?\n/)
+    .map((block, index) => {
+      const lines = block.split(/\r?\n/).map((line) => line.trim())
+      const timingLine = lines.find((line) => line.includes('-->'))
+      if (!timingLine) {
+        return null
+      }
+
+      const [rawStart, rawEnd] = timingLine.split('-->').map((part) => part.trim())
+      const startMs = parseSrtTimestamp(rawStart)
+      const endMs = parseSrtTimestamp(rawEnd)
+      if (startMs == null || endMs == null || endMs <= startMs) {
+        return null
+      }
+
+      const text = lines
+        .slice(lines.indexOf(timingLine) + 1)
+        .filter((line) => line.length > 0)
+        .join('\n')
+        .trim()
+
+      if (!text) {
+        return null
+      }
+
+      return {
+        id: `caption-${index + 1}`,
+        startMs,
+        endMs,
+        text,
+      }
+    })
+    .filter((cue): cue is CaptionCuePayload => cue != null)
+}
+
+function shouldRetryWhisperWithoutJson(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /unknown argument|output-json-full|output-json|ojf|\boj\b/i.test(message)
+}
+
+async function ensureReadableFile(filePath: string, description: string) {
+  await fs.access(filePath, fsConstants.R_OK)
+  if (description === 'whisper executable') {
+    try {
+      await fs.access(filePath, fsConstants.X_OK)
+    } catch {
+      throw new Error('The selected Whisper executable is not marked as executable.')
+    }
+  }
+}
+
+async function isExecutableFile(filePath: string) {
+  try {
+    await fs.access(filePath, fsConstants.R_OK | fsConstants.X_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function resolveWhisperExecutablePath(preferredPath?: string | null) {
+  const candidatePaths = [
+    preferredPath?.trim() || null,
+    ...getBundledWhisperExecutableCandidates(),
+    process.env['WHISPER_CPP_PATH']?.trim() || null,
+    process.platform === 'darwin' ? '/opt/homebrew/bin/whisper-cli' : null,
+    process.platform === 'darwin' ? '/usr/local/bin/whisper-cli' : null,
+    process.platform === 'darwin' ? '/opt/homebrew/bin/whisper-cpp' : null,
+    process.platform === 'darwin' ? '/usr/local/bin/whisper-cpp' : null,
+  ].filter((value): value is string => Boolean(value))
+
+  for (const candidate of candidatePaths) {
+    const normalized = path.resolve(candidate)
+    if (await isExecutableFile(normalized)) {
+      return normalized
+    }
+  }
+
+  const pathCommand = process.platform === 'win32' ? 'where' : 'which'
+  const binaryNames = process.platform === 'win32'
+    ? ['whisper-cli.exe', 'whisper.exe', 'main.exe']
+    : ['whisper-cli', 'whisper-cpp', 'whisper', 'main']
+
+  for (const binaryName of binaryNames) {
+    const result = spawnSync(pathCommand, [binaryName], { encoding: 'utf-8' })
+    if (result.status === 0) {
+      const resolvedPath = result.stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find(Boolean)
+
+      if (resolvedPath && await isExecutableFile(resolvedPath)) {
+        return resolvedPath
+      }
+    }
+  }
+
+  throw new Error('No Whisper runtime was found. Recordly looked for a bundled binary first, then checked common system install locations.')
+}
+
+async function resolveCaptionAudioCandidates(videoPath: string) {
+  const candidates: Array<{ path: string; label: string }> = []
+  const seenPaths = new Set<string>()
+
+  const pushCandidate = (candidatePath: string | null | undefined, label: string) => {
+    const normalizedCandidatePath = normalizeVideoSourcePath(candidatePath)
+    if (!normalizedCandidatePath || seenPaths.has(normalizedCandidatePath)) {
+      return
+    }
+
+    seenPaths.add(normalizedCandidatePath)
+    candidates.push({ path: normalizedCandidatePath, label })
+  }
+
+  pushCandidate(videoPath, 'recording')
+
+  const requestedRecordingSession = await resolveRecordingSession(videoPath)
+  pushCandidate(requestedRecordingSession?.webcamPath, 'linked webcam recording')
+
+  pushCandidate(currentRecordingSession?.videoPath, 'current recording')
+  pushCandidate(currentRecordingSession?.webcamPath, 'current linked webcam recording')
+  pushCandidate(currentVideoPath, 'current video')
+
+  return candidates
+}
+
+async function extractCaptionAudioSource(options: {
+  videoPath: string
+  ffmpegPath: string
+  wavPath: string
+}) {
+  const candidates = await resolveCaptionAudioCandidates(options.videoPath)
+  const attemptedCandidates: Array<{
+    path: string
+    label: string
+    readable: boolean
+    extractedAudio: boolean
+    error?: string
+  }> = []
+
+  for (const candidate of candidates) {
+    try {
+      await ensureReadableFile(candidate.path, 'video file')
+      await execFileAsync(
+        options.ffmpegPath,
+        ['-y', '-i', candidate.path, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', options.wavPath],
+        { timeout: 5 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 },
+      )
+      attemptedCandidates.push({ ...candidate, readable: true, extractedAudio: true })
+      return candidate
+    } catch (error) {
+      attemptedCandidates.push({
+        ...candidate,
+        readable: true,
+        extractedAudio: false,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      // Try the next candidate instead of failing on stale editor state.
+    }
+  }
+
+  console.warn('[auto-captions] No audio source candidate could be extracted:', attemptedCandidates)
+
+  throw new Error('No audio was found to transcribe in the saved recording file. Captions need an audio track. If this recording should have contained sound, the recording was saved without an audio stream.')
+}
+
+async function generateAutoCaptionsFromVideo(options: {
+  videoPath: string
+  whisperExecutablePath?: string
+  whisperModelPath: string
+  language?: string
+}) {
+  const ffmpegPath = getFfmpegBinaryPath()
+  const normalizedVideoPath = normalizeVideoSourcePath(options.videoPath)
+  if (!normalizedVideoPath) {
+    throw new Error('Missing source video path.')
+  }
+
+  const whisperExecutablePath = await resolveWhisperExecutablePath(options.whisperExecutablePath)
+  const whisperModelPath = path.resolve(options.whisperModelPath)
+  await ensureReadableFile(whisperExecutablePath, 'whisper executable')
+  await ensureReadableFile(whisperModelPath, 'whisper model')
+
+  const tempBase = path.join(app.getPath('temp'), `recordly-captions-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
+  const wavPath = `${tempBase}.wav`
+  const outputBase = `${tempBase}-whisper`
+  const srtPath = `${outputBase}.srt`
+  const jsonPath = `${outputBase}.json`
+
+  try {
+    const audioSource = await extractCaptionAudioSource({
+      videoPath: normalizedVideoPath,
+      ffmpegPath,
+      wavPath,
+    })
+
+    const language = options.language && options.language.trim() ? options.language.trim() : 'auto'
+    const whisperBaseArgs = [
+      '-m', whisperModelPath,
+      '-f', wavPath,
+      '-osrt',
+      '-of', outputBase,
+      '-l', language,
+      '-np',
+    ]
+
+    let jsonEnabled = true
+    try {
+      await execFileAsync(whisperExecutablePath, [...whisperBaseArgs, '-ojf'], {
+        timeout: 30 * 60 * 1000,
+        maxBuffer: 20 * 1024 * 1024,
+      })
+    } catch (error) {
+      if (!shouldRetryWhisperWithoutJson(error)) {
+        throw error
+      }
+
+      jsonEnabled = false
+      console.warn('[auto-captions] Whisper runtime does not support JSON full output, retrying with SRT only:', error)
+      await execFileAsync(whisperExecutablePath, whisperBaseArgs, {
+        timeout: 30 * 60 * 1000,
+        maxBuffer: 20 * 1024 * 1024,
+      })
+    }
+
+    const timedCues = jsonEnabled
+      ? parseWhisperJsonCues(await fs.readFile(jsonPath, 'utf-8'))
+      : []
+    const cues = timedCues.length > 0
+      ? timedCues
+      : parseSrtCues(await fs.readFile(srtPath, 'utf-8'))
+    if (cues.length === 0) {
+      throw new Error('Whisper completed, but no caption cues were produced.')
+    }
+
+    return {
+      cues,
+      audioSourceLabel: audioSource.label,
+    }
+  } finally {
+    await Promise.allSettled([
+      fs.rm(wavPath, { force: true }),
+      fs.rm(srtPath, { force: true }),
+      fs.rm(jsonPath, { force: true }),
+    ])
+  }
 }
 
 function waitForFfmpegCaptureStart(process: ChildProcessWithoutNullStreams) {
@@ -1122,39 +1749,46 @@ function waitForNativeCaptureStop(process: ChildProcessWithoutNullStreams) {
   })
 }
 
-async function fileHasAudioStream(filePath: string) {
+async function muxNativeMacRecordingWithAudio(
+  videoPath: string,
+  systemAudioPath?: string | null,
+  microphonePath?: string | null,
+) {
   const ffmpegPath = getFfmpegBinaryPath()
+  const mixedOutputPath = `${videoPath}.mixed.mp4`
 
-  try {
-    await execFileAsync(
-      ffmpegPath,
-      ['-i', filePath],
-      { timeout: 30000, maxBuffer: 10 * 1024 * 1024 },
-    )
-  } catch (error) {
-    const stderr = typeof error === 'object' && error !== null && 'stderr' in error
-      ? String((error as { stderr?: unknown }).stderr ?? '')
-      : ''
+  const inputs = ['-i', videoPath]
+  const availableAudioInputs: string[] = []
 
-    if (stderr) {
-      return /Audio:/i.test(stderr)
+  if (systemAudioPath) {
+    try {
+      await fs.access(systemAudioPath)
+      inputs.push('-i', systemAudioPath)
+      availableAudioInputs.push('system')
+    } catch {
+      // system audio file not available
     }
   }
 
-  return false
-}
+  if (microphonePath) {
+    try {
+      await fs.access(microphonePath)
+      inputs.push('-i', microphonePath)
+      availableAudioInputs.push('microphone')
+    } catch {
+      // microphone audio file not available
+    }
+  }
 
-async function mixNativeMacAudioTracks(videoPath: string, microphonePath: string) {
-  const ffmpegPath = getFfmpegBinaryPath()
-  const mixedOutputPath = `${videoPath}.mixed.mp4`
-  const videoHasAudio = await fileHasAudioStream(videoPath)
+  if (availableAudioInputs.length === 0) {
+    return
+  }
 
-  const args = videoHasAudio
+  const args = availableAudioInputs.length === 2
     ? [
         '-y',
-        '-i', videoPath,
-        '-i', microphonePath,
-        '-filter_complex', '[0:a][1:a]amix=inputs=2:duration=longest:normalize=0[aout]',
+        ...inputs,
+        '-filter_complex', '[1:a][2:a]amix=inputs=2:duration=longest:normalize=0[aout]',
         '-map', '0:v:0',
         '-map', '[aout]',
         '-c:v', 'copy',
@@ -1165,8 +1799,7 @@ async function mixNativeMacAudioTracks(videoPath: string, microphonePath: string
       ]
     : [
         '-y',
-        '-i', videoPath,
-        '-i', microphonePath,
+        ...inputs,
         '-map', '0:v:0',
         '-map', '1:a:0',
         '-c:v', 'copy',
@@ -1183,7 +1816,12 @@ async function mixNativeMacAudioTracks(videoPath: string, microphonePath: string
   )
 
   await moveFileWithOverwrite(mixedOutputPath, videoPath)
-  await fs.rm(microphonePath, { force: true })
+
+  for (const audioPath of [systemAudioPath, microphonePath]) {
+    if (audioPath) {
+      await fs.rm(audioPath, { force: true }).catch(() => {})
+    }
+  }
 }
 
 function emitRecordingInterrupted(reason: string, message: string) {
@@ -1227,6 +1865,8 @@ function attachNativeCaptureLifecycle(process: ChildProcessWithoutNullStreams) {
     nativeScreenRecordingActive = false
     nativeCaptureTargetPath = null
     nativeCaptureStopRequested = false
+    nativeCaptureSystemAudioPath = null
+    nativeCaptureMicrophonePath = null
 
     const sourceName = selectedSource?.name ?? 'Screen'
     BrowserWindow.getAllWindows().forEach((window) => {
@@ -2259,7 +2899,10 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       const outputPath = path.join(recordingsDir, `recording-${Date.now()}.mp4`)
       const capturesSystemAudio = Boolean(options?.capturesSystemAudio)
       const capturesMicrophone = Boolean(options?.capturesMicrophone)
-      const microphoneOutputPath = capturesSystemAudio && capturesMicrophone
+      const systemAudioOutputPath = capturesSystemAudio
+        ? path.join(recordingsDir, `recording-${Date.now()}.system.m4a`)
+        : null
+      const microphoneOutputPath = capturesMicrophone
         ? path.join(recordingsDir, `recording-${Date.now()}.mic.m4a`)
         : null
       const config: Record<string, unknown> = {
@@ -2275,6 +2918,10 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
       if (options?.microphoneLabel) {
         config.microphoneLabel = options.microphoneLabel
+      }
+
+      if (systemAudioOutputPath) {
+        config.systemAudioOutputPath = systemAudioOutputPath
       }
 
       if (microphoneOutputPath) {
@@ -2294,6 +2941,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
       nativeCaptureOutputBuffer = ''
       nativeCaptureTargetPath = outputPath
+      nativeCaptureSystemAudioPath = systemAudioOutputPath
       nativeCaptureMicrophonePath = microphoneOutputPath
       nativeCaptureStopRequested = false
       nativeCapturePaused = false
@@ -2323,6 +2971,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       nativeScreenRecordingActive = false
       nativeCaptureProcess = null
       nativeCaptureTargetPath = null
+      nativeCaptureSystemAudioPath = null
       nativeCaptureMicrophonePath = null
       nativeCaptureStopRequested = false
       nativeCapturePaused = false
@@ -2407,6 +3056,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
       const process = nativeCaptureProcess
       const preferredVideoPath = nativeCaptureTargetPath
+      const preferredSystemAudioPath = nativeCaptureSystemAudioPath
       const preferredMicrophonePath = nativeCaptureMicrophonePath
       nativeCaptureStopRequested = true
       process.stdin.write('stop\n')
@@ -2414,6 +3064,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       nativeCaptureProcess = null
       nativeScreenRecordingActive = false
       nativeCaptureTargetPath = null
+      nativeCaptureSystemAudioPath = null
       nativeCaptureMicrophonePath = null
       nativeCaptureStopRequested = false
       nativeCapturePaused = false
@@ -2423,12 +3074,11 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         await moveFileWithOverwrite(tempVideoPath, finalVideoPath)
       }
 
-      if (preferredMicrophonePath) {
+      if (preferredSystemAudioPath || preferredMicrophonePath) {
         try {
-          await fs.access(preferredMicrophonePath)
-          await mixNativeMacAudioTracks(finalVideoPath, preferredMicrophonePath)
+          await muxNativeMacRecordingWithAudio(finalVideoPath, preferredSystemAudioPath, preferredMicrophonePath)
         } catch (error) {
-          console.warn('Failed to mix native macOS microphone audio into capture:', error)
+          console.warn('Failed to mux native macOS audio into capture:', error)
         }
       }
 
@@ -2439,6 +3089,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       nativeScreenRecordingActive = false
       nativeCaptureProcess = null
       nativeCaptureTargetPath = null
+      nativeCaptureSystemAudioPath = null
       nativeCaptureMicrophonePath = null
       nativeCaptureStopRequested = false
       nativeCapturePaused = false
@@ -3025,6 +3676,118 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
   });
 
+  ipcMain.handle('open-whisper-executable-picker', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: 'Select Whisper Executable',
+        filters: [
+          { name: 'Executables', extensions: process.platform === 'win32' ? ['exe', 'cmd', 'bat'] : ['*'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+        properties: ['openFile'],
+      })
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true }
+      }
+
+      return { success: true, path: result.filePaths[0] }
+    } catch (error) {
+      console.error('Failed to open Whisper executable picker:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  ipcMain.handle('open-whisper-model-picker', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: 'Select Whisper Model',
+        filters: [
+          { name: 'Whisper Models', extensions: ['bin'] },
+          { name: 'All Files', extensions: ['*'] },
+        ],
+        properties: ['openFile'],
+      })
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true }
+      }
+
+      return { success: true, path: result.filePaths[0] }
+    } catch (error) {
+      console.error('Failed to open Whisper model picker:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  ipcMain.handle('get-whisper-small-model-status', async () => {
+    try {
+      return await getWhisperSmallModelStatus()
+    } catch (error) {
+      return { success: false, exists: false, path: null, error: String(error) }
+    }
+  })
+
+  ipcMain.handle('download-whisper-small-model', async (event) => {
+    try {
+      const existing = await getWhisperSmallModelStatus()
+      if (existing.exists) {
+        sendWhisperModelDownloadProgress(event.sender, {
+          status: 'downloaded',
+          progress: 100,
+          path: existing.path,
+        })
+        return { success: true, path: existing.path, alreadyDownloaded: true }
+      }
+
+      const modelPath = await downloadWhisperSmallModel(event.sender)
+      return { success: true, path: modelPath }
+    } catch (error) {
+      console.error('Failed to download Whisper small model:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  ipcMain.handle('delete-whisper-small-model', async (event) => {
+    try {
+      await deleteWhisperSmallModel()
+      sendWhisperModelDownloadProgress(event.sender, {
+        status: 'idle',
+        progress: 0,
+        path: null,
+      })
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to delete Whisper small model:', error)
+      return { success: false, error: String(error) }
+    }
+  })
+
+  ipcMain.handle('generate-auto-captions', async (_, options: {
+    videoPath: string
+    whisperExecutablePath: string
+    whisperModelPath: string
+    language?: string
+  }) => {
+    try {
+      const result = await generateAutoCaptionsFromVideo(options)
+      return {
+        success: true,
+        cues: result.cues,
+        message: result.audioSourceLabel === 'recording'
+          ? `Generated ${result.cues.length} caption cues.`
+          : `Generated ${result.cues.length} caption cues from the ${result.audioSourceLabel}.`,
+      }
+    } catch (error) {
+      console.error('Failed to generate auto captions:', error)
+      return {
+        success: false,
+        error: String(error),
+        message: 'Failed to generate auto captions',
+      }
+    }
+  })
+
   ipcMain.handle('reveal-in-folder', async (_, filePath: string) => {
     try {
       // shell.showItemInFolder doesn't return a value, it throws on error
@@ -3185,20 +3948,21 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       const filePath = result.filePaths[0]
       const content = await fs.readFile(filePath, 'utf-8')
       const project = JSON.parse(content)
-      currentProjectPath = filePath
-      if (project && typeof project === 'object' && typeof project.videoPath === 'string') {
-        const normalizedVideoPath = normalizeVideoSourcePath(project.videoPath) ?? project.videoPath
-        currentVideoPath = normalizedVideoPath
-        const webcamPath =
-          typeof (project as { editor?: { webcam?: { sourcePath?: unknown } } }).editor?.webcam
-            ?.sourcePath === 'string'
-            ? ((project as { editor?: { webcam?: { sourcePath?: string } } }).editor?.webcam
-                ?.sourcePath ?? null)
-            : null
-        currentRecordingSession = {
-          videoPath: normalizedVideoPath,
-          webcamPath,
+      const mediaSources = await resolveProjectMediaSources(project)
+
+      if (!mediaSources.success) {
+        return {
+          success: false,
+          canceled: false,
+          message: mediaSources.message,
         }
+      }
+
+      currentProjectPath = filePath
+      currentVideoPath = mediaSources.videoPath
+      currentRecordingSession = {
+        videoPath: mediaSources.videoPath,
+        webcamPath: mediaSources.webcamPath,
       }
 
       return {
@@ -3224,20 +3988,21 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
       const content = await fs.readFile(currentProjectPath, 'utf-8')
       const project = JSON.parse(content)
-      if (project && typeof project === 'object' && typeof project.videoPath === 'string') {
-        const normalizedVideoPath = normalizeVideoSourcePath(project.videoPath) ?? project.videoPath
-        currentVideoPath = normalizedVideoPath
-        const webcamPath =
-          typeof (project as { editor?: { webcam?: { sourcePath?: unknown } } }).editor?.webcam
-            ?.sourcePath === 'string'
-            ? ((project as { editor?: { webcam?: { sourcePath?: string } } }).editor?.webcam
-                ?.sourcePath ?? null)
-            : null
-        currentRecordingSession = {
-          videoPath: normalizedVideoPath,
-          webcamPath,
+      const mediaSources = await resolveProjectMediaSources(project)
+
+      if (!mediaSources.success) {
+        return {
+          success: false,
+          message: mediaSources.message,
         }
       }
+
+      currentVideoPath = mediaSources.videoPath
+      currentRecordingSession = {
+        videoPath: mediaSources.videoPath,
+        webcamPath: mediaSources.webcamPath,
+      }
+
       return {
         success: true,
         path: currentProjectPath,
