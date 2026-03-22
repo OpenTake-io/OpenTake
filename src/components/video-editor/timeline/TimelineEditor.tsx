@@ -454,6 +454,8 @@ function Timeline({
   selectedAnnotationId,
   selectedSpeedId,
   selectedAudioId,
+  selectAllBlocksActive = false,
+  onClearBlockSelection,
   keyframes = [],
 }: {
   items: TimelineRenderItem[];
@@ -470,6 +472,8 @@ function Timeline({
   selectedAnnotationId?: string | null;
   selectedSpeedId?: string | null;
   selectedAudioId?: string | null;
+  selectAllBlocksActive?: boolean;
+  onClearBlockSelection?: () => void;
   keyframes?: { id: string; time: number }[];
 }) {
 	const { setTimelineRef, style, sidebarWidth, range, pixelsToValue } = useTimelineContext();
@@ -494,6 +498,7 @@ function Timeline({
     onSelectAnnotation?.(null);
     onSelectSpeed?.(null);
     onSelectAudio?.(null);
+    onClearBlockSelection?.();
 
 			const rect = e.currentTarget.getBoundingClientRect();
 			const clickX = e.clientX - rect.left - sidebarWidth;
@@ -538,7 +543,7 @@ function Timeline({
               key={item.id}
               rowId={item.rowId}
               span={item.span}
-              isSelected={item.id === selectedZoomId}
+              isSelected={selectAllBlocksActive || item.id === selectedZoomId}
               onSelect={() => onSelectZoom?.(item.id)}
               zoomDepth={item.zoomDepth}
               variant="zoom"
@@ -555,7 +560,7 @@ function Timeline({
               key={item.id}
               rowId={item.rowId}
               span={item.span}
-              isSelected={item.id === selectedTrimId}
+              isSelected={selectAllBlocksActive || item.id === selectedTrimId}
               onSelect={() => onSelectTrim?.(item.id)}
               variant="trim"
             >
@@ -575,7 +580,7 @@ function Timeline({
               key={item.id}
               rowId={item.rowId}
               span={item.span}
-              isSelected={item.id === selectedAnnotationId}
+              isSelected={selectAllBlocksActive || item.id === selectedAnnotationId}
               onSelect={() => onSelectAnnotation?.(item.id)}
               variant="annotation"
             >
@@ -591,7 +596,7 @@ function Timeline({
               key={item.id}
               rowId={item.rowId}
               span={item.span}
-              isSelected={item.id === selectedSpeedId}
+              isSelected={selectAllBlocksActive || item.id === selectedSpeedId}
               onSelect={() => onSelectSpeed?.(item.id)}
               variant="speed"
               speedValue={item.speedValue}
@@ -608,7 +613,7 @@ function Timeline({
               key={item.id}
               rowId={item.rowId}
               span={item.span}
-              isSelected={item.id === selectedAudioId}
+              isSelected={selectAllBlocksActive || item.id === selectedAudioId}
               onSelect={() => onSelectAudio?.(item.id)}
               variant="audio"
             >
@@ -676,12 +681,14 @@ export default function TimelineEditor({
   const [range, setRange] = useState<Range>(() => createInitialRange(totalMs));
   const [keyframes, setKeyframes] = useState<{ id: string; time: number }[]>([]);
   const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null);
+  const [selectAllBlocksActive, setSelectAllBlocksActive] = useState(false);
   const [customAspectWidth, setCustomAspectWidth] = useState(initialEditorPreferences.customAspectWidth);
   const [customAspectHeight, setCustomAspectHeight] = useState(initialEditorPreferences.customAspectHeight);
   const [scrollLabels, setScrollLabels] = useState({
     pan: 'Shift + Ctrl + Scroll',
     zoom: 'Ctrl + Scroll'
   });
+  const isTimelineFocusedRef = useRef(false);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
   const { shortcuts: keyShortcuts, isMac } = useShortcuts();
 
@@ -785,6 +792,76 @@ export default function TimelineEditor({
     onAudioDelete(selectedAudioId);
     onSelectAudio(null);
   }, [selectedAudioId, onAudioDelete, onSelectAudio]);
+
+  const clearSelectedBlocks = useCallback(() => {
+    onSelectZoom(null);
+    onSelectTrim?.(null);
+    onSelectAnnotation?.(null);
+    onSelectSpeed?.(null);
+    onSelectAudio?.(null);
+    setSelectAllBlocksActive(false);
+  }, [onSelectAnnotation, onSelectAudio, onSelectSpeed, onSelectTrim, onSelectZoom]);
+
+  const hasAnyTimelineBlocks =
+    zoomRegions.length > 0 ||
+    trimRegions.length > 0 ||
+    annotationRegions.length > 0 ||
+    speedRegions.length > 0 ||
+    audioRegions.length > 0;
+
+  const deleteAllBlocks = useCallback(() => {
+    const zoomIds = zoomRegions.map((region) => region.id);
+    const trimIds = trimRegions.map((region) => region.id);
+    const annotationIds = annotationRegions.map((region) => region.id);
+    const speedIds = speedRegions.map((region) => region.id);
+    const audioIds = audioRegions.map((region) => region.id);
+
+    zoomIds.forEach((id) => onZoomDelete(id));
+    trimIds.forEach((id) => onTrimDelete?.(id));
+    annotationIds.forEach((id) => onAnnotationDelete?.(id));
+    speedIds.forEach((id) => onSpeedDelete?.(id));
+    audioIds.forEach((id) => onAudioDelete?.(id));
+
+    clearSelectedBlocks();
+    setSelectedKeyframeId(null);
+  }, [
+    annotationRegions,
+    audioRegions,
+    clearSelectedBlocks,
+    onAnnotationDelete,
+    onAudioDelete,
+    onSpeedDelete,
+    onTrimDelete,
+    onZoomDelete,
+    speedRegions,
+    trimRegions,
+    zoomRegions,
+  ]);
+
+  const handleSelectZoom = useCallback((id: string | null) => {
+    setSelectAllBlocksActive(false);
+    onSelectZoom(id);
+  }, [onSelectZoom]);
+
+  const handleSelectTrim = useCallback((id: string | null) => {
+    setSelectAllBlocksActive(false);
+    onSelectTrim?.(id);
+  }, [onSelectTrim]);
+
+  const handleSelectAnnotation = useCallback((id: string | null) => {
+    setSelectAllBlocksActive(false);
+    onSelectAnnotation?.(id);
+  }, [onSelectAnnotation]);
+
+  const handleSelectSpeed = useCallback((id: string | null) => {
+    setSelectAllBlocksActive(false);
+    onSelectSpeed?.(id);
+  }, [onSelectSpeed]);
+
+  const handleSelectAudio = useCallback((id: string | null) => {
+    setSelectAllBlocksActive(false);
+    onSelectAudio?.(id);
+  }, [onSelectAudio]);
 
   useEffect(() => {
     setRange(createInitialRange(totalMs));
@@ -1161,6 +1238,17 @@ export default function TimelineEditor({
         return;
       }
 
+      if (matchesShortcut(e, { key: 'a', ctrl: true }, isMac)) {
+        if (!hasAnyTimelineBlocks || !isTimelineFocusedRef.current) {
+          return;
+        }
+
+        e.preventDefault();
+        setSelectedKeyframeId(null);
+        setSelectAllBlocksActive(true);
+        return;
+      }
+
       if (matchesShortcut(e, keyShortcuts.addKeyframe, isMac)) {
         addKeyframe();
       }
@@ -1201,7 +1289,10 @@ export default function TimelineEditor({
       }
       // Delete key or Ctrl+D / Cmd+D
       if (e.key === 'Delete' || e.key === 'Backspace' || matchesShortcut(e, keyShortcuts.deleteSelected, isMac)) {
-        if (selectedKeyframeId) {
+        if (selectAllBlocksActive) {
+          e.preventDefault();
+          deleteAllBlocks();
+        } else if (selectedKeyframeId) {
           deleteSelectedKeyframe();
         } else if (selectedZoomId) {
           deleteSelectedZoom();
@@ -1218,7 +1309,7 @@ export default function TimelineEditor({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [addKeyframe, handleAddZoom, handleAddTrim, handleAddAnnotation, handleAddSpeed, deleteSelectedKeyframe, deleteSelectedZoom, deleteSelectedTrim, deleteSelectedAnnotation, deleteSelectedSpeed, deleteSelectedAudio, selectedKeyframeId, selectedZoomId, selectedTrimId, selectedAnnotationId, selectedSpeedId, selectedAudioId, annotationRegions, currentTime, onSelectAnnotation, keyShortcuts, isMac]);
+  }, [addKeyframe, handleAddZoom, handleAddTrim, handleAddAnnotation, handleAddSpeed, deleteAllBlocks, deleteSelectedKeyframe, deleteSelectedZoom, deleteSelectedTrim, deleteSelectedAnnotation, deleteSelectedSpeed, deleteSelectedAudio, selectedKeyframeId, selectedZoomId, selectedTrimId, selectedAnnotationId, selectedSpeedId, selectedAudioId, annotationRegions, currentTime, hasAnyTimelineBlocks, onSelectAnnotation, keyShortcuts, isMac, selectAllBlocksActive]);
 
   const clampedRange = useMemo<Range>(() => {
     if (totalMs === 0) {
@@ -1527,7 +1618,21 @@ export default function TimelineEditor({
       <div
         ref={timelineContainerRef}
         className="flex-1 min-h-0 overflow-auto bg-[#17171a] relative"
-        onClick={() => setSelectedKeyframeId(null)}
+        tabIndex={0}
+        onFocus={() => {
+          isTimelineFocusedRef.current = true;
+        }}
+        onBlur={() => {
+          isTimelineFocusedRef.current = false;
+        }}
+        onMouseDown={() => {
+          timelineContainerRef.current?.focus();
+          isTimelineFocusedRef.current = true;
+        }}
+        onClick={() => {
+          setSelectedKeyframeId(null);
+          setSelectAllBlocksActive(false);
+        }}
         onWheel={handleTimelineWheel}
       >
         <TimelineWrapper
@@ -1553,16 +1658,18 @@ export default function TimelineEditor({
             videoDurationMs={totalMs}
             currentTimeMs={currentTimeMs}
             onSeek={onSeek}
-            onSelectZoom={onSelectZoom}
-            onSelectTrim={onSelectTrim}
-            onSelectAnnotation={onSelectAnnotation}
-            onSelectSpeed={onSelectSpeed}
-            onSelectAudio={onSelectAudio}
+            onSelectZoom={handleSelectZoom}
+            onSelectTrim={handleSelectTrim}
+            onSelectAnnotation={handleSelectAnnotation}
+            onSelectSpeed={handleSelectSpeed}
+            onSelectAudio={handleSelectAudio}
             selectedZoomId={selectedZoomId}
             selectedTrimId={selectedTrimId}
             selectedAnnotationId={selectedAnnotationId}
             selectedSpeedId={selectedSpeedId}
             selectedAudioId={selectedAudioId}
+            selectAllBlocksActive={selectAllBlocksActive}
+            onClearBlockSelection={clearSelectedBlocks}
             keyframes={keyframes}
           />
         </TimelineWrapper>
