@@ -86,5 +86,12 @@ export class VideoMuxer {
     
     return new Blob([buffer], { type: 'video/mp4' });
   }
+
+  destroy(): void {
+    this.output = null;
+    this.videoSource = null;
+    this.audioSource = null;
+    this.target = null;
+  }
 }
 

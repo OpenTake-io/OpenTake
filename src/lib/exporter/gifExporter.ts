@@ -9,13 +9,17 @@ import type {
 import { StreamingVideoDecoder } from "./streamingDecoder";
 import { FrameRenderer } from "./frameRenderer";
 import type {
+  AutoCaptionSettings,
   ZoomRegion,
   CropRegion,
   TrimRegion,
   AnnotationRegion,
+  CaptionCue,
   SpeedRegion,
+  CursorStyle,
   CursorTelemetryPoint,
   WebcamOverlaySettings,
+  ZoomTransitionEasing,
 } from "@/components/video-editor/types";
 
 const GIF_WORKER_URL = new URL(
@@ -39,6 +43,14 @@ interface GifExporterConfig {
   backgroundBlur: number;
   zoomMotionBlur?: number;
   connectZooms?: boolean;
+  zoomInDurationMs?: number;
+  zoomInOverlapMs?: number;
+  zoomOutDurationMs?: number;
+  connectedZoomGapMs?: number;
+  connectedZoomDurationMs?: number;
+  zoomInEasing?: ZoomTransitionEasing;
+  zoomOutEasing?: ZoomTransitionEasing;
+  connectedZoomEasing?: ZoomTransitionEasing;
   borderRadius?: number;
   padding?: number;
   videoPadding?: number;
@@ -46,8 +58,11 @@ interface GifExporterConfig {
   webcam?: WebcamOverlaySettings;
   webcamUrl?: string | null;
   annotationRegions?: AnnotationRegion[];
+  autoCaptions?: CaptionCue[];
+  autoCaptionSettings?: AutoCaptionSettings;
   cursorTelemetry?: CursorTelemetryPoint[];
   showCursor?: boolean;
+  cursorStyle?: CursorStyle;
   cursorSize?: number;
   cursorSmoothing?: number;
   cursorMotionBlur?: number;
@@ -126,6 +141,14 @@ export class GifExporter {
         backgroundBlur: this.config.backgroundBlur,
         zoomMotionBlur: this.config.zoomMotionBlur,
         connectZooms: this.config.connectZooms,
+        zoomInDurationMs: this.config.zoomInDurationMs,
+        zoomInOverlapMs: this.config.zoomInOverlapMs,
+        zoomOutDurationMs: this.config.zoomOutDurationMs,
+    		connectedZoomGapMs: this.config.connectedZoomGapMs,
+    		connectedZoomDurationMs: this.config.connectedZoomDurationMs,
+    		zoomInEasing: this.config.zoomInEasing,
+    		zoomOutEasing: this.config.zoomOutEasing,
+    		connectedZoomEasing: this.config.connectedZoomEasing,
         borderRadius: this.config.borderRadius,
         padding: this.config.padding,
         cropRegion: this.config.cropRegion,
@@ -134,11 +157,14 @@ export class GifExporter {
         videoWidth: videoInfo.width,
         videoHeight: videoInfo.height,
         annotationRegions: this.config.annotationRegions,
+        autoCaptions: this.config.autoCaptions,
+        autoCaptionSettings: this.config.autoCaptionSettings,
         speedRegions: this.config.speedRegions,
         previewWidth: this.config.previewWidth,
         previewHeight: this.config.previewHeight,
         cursorTelemetry: this.config.cursorTelemetry,
         showCursor: this.config.showCursor,
+        cursorStyle: this.config.cursorStyle,
         cursorSize: this.config.cursorSize,
         cursorSmoothing: this.config.cursorSmoothing,
         cursorMotionBlur: this.config.cursorMotionBlur,

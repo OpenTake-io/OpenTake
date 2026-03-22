@@ -1,11 +1,15 @@
 import type {
+	AutoCaptionSettings,
 	AnnotationRegion,
 	AudioRegion,
+	CaptionCue,
 	CropRegion,
+	CursorStyle,
 	CursorTelemetryPoint,
 	SpeedRegion,
 	TrimRegion,
 	WebcamOverlaySettings,
+	ZoomTransitionEasing,
 	ZoomRegion,
 } from "@/components/video-editor/types";
 import { AudioProcessor } from "./audioEncoder";
@@ -25,6 +29,14 @@ interface VideoExporterConfig extends ExportConfig {
 	backgroundBlur: number;
 	zoomMotionBlur?: number;
 	connectZooms?: boolean;
+	zoomInDurationMs?: number;
+	zoomInOverlapMs?: number;
+	zoomOutDurationMs?: number;
+	connectedZoomGapMs?: number;
+	connectedZoomDurationMs?: number;
+	zoomInEasing?: ZoomTransitionEasing;
+	zoomOutEasing?: ZoomTransitionEasing;
+	connectedZoomEasing?: ZoomTransitionEasing;
 	borderRadius?: number;
 	padding?: number;
 	videoPadding?: number;
@@ -32,8 +44,11 @@ interface VideoExporterConfig extends ExportConfig {
 	webcam?: WebcamOverlaySettings;
 	webcamUrl?: string | null;
 	annotationRegions?: AnnotationRegion[];
+	autoCaptions?: CaptionCue[];
+	autoCaptionSettings?: AutoCaptionSettings;
 	cursorTelemetry?: CursorTelemetryPoint[];
 	showCursor?: boolean;
+	cursorStyle?: CursorStyle;
 	cursorSize?: number;
 	cursorSmoothing?: number;
 	cursorMotionBlur?: number;
@@ -87,6 +102,14 @@ export class VideoExporter {
 				backgroundBlur: this.config.backgroundBlur,
 				zoomMotionBlur: this.config.zoomMotionBlur,
 				connectZooms: this.config.connectZooms,
+				zoomInDurationMs: this.config.zoomInDurationMs,
+				zoomInOverlapMs: this.config.zoomInOverlapMs,
+				zoomOutDurationMs: this.config.zoomOutDurationMs,
+				connectedZoomGapMs: this.config.connectedZoomGapMs,
+				connectedZoomDurationMs: this.config.connectedZoomDurationMs,
+				zoomInEasing: this.config.zoomInEasing,
+				zoomOutEasing: this.config.zoomOutEasing,
+				connectedZoomEasing: this.config.connectedZoomEasing,
 				borderRadius: this.config.borderRadius,
 				padding: this.config.padding,
 				cropRegion: this.config.cropRegion,
@@ -95,11 +118,14 @@ export class VideoExporter {
 				videoWidth: videoInfo.width,
 				videoHeight: videoInfo.height,
 				annotationRegions: this.config.annotationRegions,
+				autoCaptions: this.config.autoCaptions,
+				autoCaptionSettings: this.config.autoCaptionSettings,
 				speedRegions: this.config.speedRegions,
 				previewWidth: this.config.previewWidth,
 				previewHeight: this.config.previewHeight,
 				cursorTelemetry: this.config.cursorTelemetry,
 				showCursor: this.config.showCursor,
+				cursorStyle: this.config.cursorStyle,
 				cursorSize: this.config.cursorSize,
 				cursorSmoothing: this.config.cursorSmoothing,
 				cursorMotionBlur: this.config.cursorMotionBlur,
@@ -438,6 +464,14 @@ export class VideoExporter {
 				console.warn("Error destroying renderer:", e);
 			}
 			this.renderer = null;
+		}
+
+		if (this.muxer) {
+			try {
+				this.muxer.destroy();
+			} catch (e) {
+				console.warn("Error destroying muxer:", e);
+			}
 		}
 
 		this.muxer = null;
