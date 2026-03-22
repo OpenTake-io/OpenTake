@@ -13,9 +13,9 @@ Version 3, 19 November 2007
 Copyright (C) 2026 webadderall
 Recordly is an independent application that was originally a fork of the OpenScreen project, authored by Siddharth Vaddem (2025).
 
-=======================================================================
+---
 PART 1: THE AGPLv3 LICENSE 
-=======================================================================
+---
 (The following is the full text of the AGPLv3. This license governs the 
 entirety of this project from 2026 onwards.)
 
