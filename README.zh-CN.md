@@ -356,7 +356,9 @@ https://github.com/webadderall/Recordly/issues
 感谢所有支持者，帮助 Recordly 持续保持开源并继续开发。
 
 - Tadees
+
 - Anonymous supporter
+- erwan
 - Anonymous supporter
 
 其他事项可发送邮件至 `youngchen3442@gmail.com`，或通过 [@webadderall](https://x.com/webadderall) 私信联系。
