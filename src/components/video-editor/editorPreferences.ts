@@ -7,8 +7,17 @@ type PersistedEditorControls = Pick<
 	| "backgroundBlur"
 	| "zoomMotionBlur"
 	| "connectZooms"
+	| "zoomInDurationMs"
+	| "zoomInOverlapMs"
+	| "zoomOutDurationMs"
+	| "connectedZoomGapMs"
+	| "connectedZoomDurationMs"
+	| "zoomInEasing"
+	| "zoomOutEasing"
+	| "connectedZoomEasing"
 	| "showCursor"
 	| "loopCursor"
+	| "cursorStyle"
 	| "cursorSize"
 	| "cursorSmoothing"
 	| "cursorMotionBlur"
@@ -32,6 +41,8 @@ export interface EditorPreferences extends PersistedEditorControls {
 	customAspectWidth: string;
 	customAspectHeight: string;
 	customWallpapers: string[];
+	whisperExecutablePath: string | null;
+	whisperModelPath: string | null;
 }
 
 export const EDITOR_PREFERENCES_STORAGE_KEY = "recordly.editor.preferences";
@@ -44,8 +55,17 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
 	backgroundBlur: DEFAULT_EDITOR_CONTROLS.backgroundBlur,
 	zoomMotionBlur: DEFAULT_EDITOR_CONTROLS.zoomMotionBlur,
 	connectZooms: DEFAULT_EDITOR_CONTROLS.connectZooms,
+	zoomInDurationMs: DEFAULT_EDITOR_CONTROLS.zoomInDurationMs,
+	zoomInOverlapMs: DEFAULT_EDITOR_CONTROLS.zoomInOverlapMs,
+	zoomOutDurationMs: DEFAULT_EDITOR_CONTROLS.zoomOutDurationMs,
+	connectedZoomGapMs: DEFAULT_EDITOR_CONTROLS.connectedZoomGapMs,
+	connectedZoomDurationMs: DEFAULT_EDITOR_CONTROLS.connectedZoomDurationMs,
+	zoomInEasing: DEFAULT_EDITOR_CONTROLS.zoomInEasing,
+	zoomOutEasing: DEFAULT_EDITOR_CONTROLS.zoomOutEasing,
+	connectedZoomEasing: DEFAULT_EDITOR_CONTROLS.connectedZoomEasing,
 	showCursor: DEFAULT_EDITOR_CONTROLS.showCursor,
 	loopCursor: DEFAULT_EDITOR_CONTROLS.loopCursor,
+	cursorStyle: DEFAULT_EDITOR_CONTROLS.cursorStyle,
 	cursorSize: DEFAULT_EDITOR_CONTROLS.cursorSize,
 	cursorSmoothing: DEFAULT_EDITOR_CONTROLS.cursorSmoothing,
 	cursorMotionBlur: DEFAULT_EDITOR_CONTROLS.cursorMotionBlur,
@@ -64,6 +84,8 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
 	customAspectWidth: "16",
 	customAspectHeight: "9",
 	customWallpapers: [],
+	whisperExecutablePath: null,
+	whisperModelPath: null,
 };
 
 function normalizePositiveIntegerString(value: unknown, fallback: string): string {
@@ -89,6 +111,15 @@ function normalizeCustomWallpapers(value: unknown, fallback: string[]): string[]
 	);
 }
 
+function normalizeNullablePath(value: unknown): string | null {
+	if (typeof value !== "string") {
+		return null;
+	}
+
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed : null;
+}
+
 function normalizeEditorControls(
 	raw: Partial<EditorPreferences>,
 	fallback: EditorPreferences,
@@ -99,8 +130,19 @@ function normalizeEditorControls(
 		backgroundBlur: raw.backgroundBlur ?? fallback.backgroundBlur,
 		zoomMotionBlur: raw.zoomMotionBlur ?? fallback.zoomMotionBlur,
 		connectZooms: raw.connectZooms ?? fallback.connectZooms,
+		zoomInDurationMs: raw.zoomInDurationMs ?? fallback.zoomInDurationMs,
+		zoomInOverlapMs: raw.zoomInOverlapMs ?? fallback.zoomInOverlapMs,
+		zoomOutDurationMs: raw.zoomOutDurationMs ?? fallback.zoomOutDurationMs,
+		connectedZoomGapMs: raw.connectedZoomGapMs ?? fallback.connectedZoomGapMs,
+		connectedZoomDurationMs:
+			raw.connectedZoomDurationMs ?? fallback.connectedZoomDurationMs,
+		zoomInEasing: raw.zoomInEasing ?? fallback.zoomInEasing,
+		zoomOutEasing: raw.zoomOutEasing ?? fallback.zoomOutEasing,
+		connectedZoomEasing:
+			raw.connectedZoomEasing ?? fallback.connectedZoomEasing,
 		showCursor: raw.showCursor ?? fallback.showCursor,
 		loopCursor: raw.loopCursor ?? fallback.loopCursor,
+		cursorStyle: raw.cursorStyle ?? fallback.cursorStyle,
 		cursorSize: raw.cursorSize ?? fallback.cursorSize,
 		cursorSmoothing: raw.cursorSmoothing ?? fallback.cursorSmoothing,
 		cursorMotionBlur: raw.cursorMotionBlur ?? fallback.cursorMotionBlur,
@@ -127,8 +169,17 @@ function normalizeEditorControls(
 		backgroundBlur: normalized.backgroundBlur,
 		zoomMotionBlur: normalized.zoomMotionBlur,
 		connectZooms: normalized.connectZooms,
+		zoomInDurationMs: normalized.zoomInDurationMs,
+		zoomInOverlapMs: normalized.zoomInOverlapMs,
+		zoomOutDurationMs: normalized.zoomOutDurationMs,
+		connectedZoomGapMs: normalized.connectedZoomGapMs,
+		connectedZoomDurationMs: normalized.connectedZoomDurationMs,
+		zoomInEasing: normalized.zoomInEasing,
+		zoomOutEasing: normalized.zoomOutEasing,
+		connectedZoomEasing: normalized.connectedZoomEasing,
 		showCursor: normalized.showCursor,
 		loopCursor: normalized.loopCursor,
+		cursorStyle: normalized.cursorStyle,
 		cursorSize: normalized.cursorSize,
 		cursorSmoothing: normalized.cursorSmoothing,
 		cursorMotionBlur: normalized.cursorMotionBlur,
@@ -165,6 +216,10 @@ export function normalizeEditorPreferences(
 			fallback.customAspectHeight,
 		),
 		customWallpapers: normalizeCustomWallpapers(raw.customWallpapers, fallback.customWallpapers),
+		whisperExecutablePath:
+			normalizeNullablePath(raw.whisperExecutablePath) ?? fallback.whisperExecutablePath,
+		whisperModelPath:
+			normalizeNullablePath(raw.whisperModelPath) ?? fallback.whisperModelPath,
 	};
 }
 
