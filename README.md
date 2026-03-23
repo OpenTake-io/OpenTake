@@ -65,6 +65,18 @@ Use drag-and-drop timeline tools for zooms, trims, speed regions, annotations, e
   <img src="./feature3.png" width="450" alt="Recordly timeline editor screenshot">
 </p>
 
+---
+# Sponsor Wall
+
+Recordly is fully open-source and maintained by a solo developer.  
+If you find it useful, consider supporting its development:
+
+[![Github-sponsors](https://img.shields.io/badge/sponsor-30363D?style=for-the-badge&logo=GitHub-Sponsors&logoColor=%23EA4AAA)](https://github.com/sponsors/webadderall)
+[![Ko-Fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/webadderall)
+
+
+---
+
 ## All Features
 
 ### Recording
@@ -142,7 +154,6 @@ Use drag-and-drop timeline tools for zooms, trims, speed regions, annotations, e
 - Feedback and issue links from the editor
 - Project persistence for editor preferences
 - Faster preview recovery after export
-
 ---
 
 # Screenshots
@@ -349,21 +360,12 @@ Pull requests are welcome.
 
 ---
 
-# Donations & Sponsors
+# Hall of Supporters ($100+ donors)
 
-[Donations](https://ko-fi.com/webadderall/goal?g=0)
-
-Thanks to everyone supporting the project and helping keep Recordly open source.
-Ranked in order of size of donation:
+[![Ko-Fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/webadderall)
+[![Github-sponsors](https://img.shields.io/badge/sponsor-30363D?style=for-the-badge&logo=GitHub-Sponsors&logoColor=%23EA4AAA)](https://github.com/sponsors/webadderall)
 
 - Tadees
-
-- Anonymous supporter
-- erwan
-- Anonymous supporter
-
-For other inquiries, email `youngchen3442@gmail.com` or DM [@webadderall](https://x.com/webadderall).
-
 ---
 
 # License
