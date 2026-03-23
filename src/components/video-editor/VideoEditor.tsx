@@ -418,6 +418,8 @@ export default function VideoEditor() {
 	const [previewVersion, setPreviewVersion] = useState(0);
 
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
+	const projectBrowserTriggerRef = useRef<HTMLButtonElement | null>(null);
+	const projectBrowserFallbackTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const nextZoomIdRef = useRef(1);
 	const nextTrimIdRef = useRef(1);
 	const nextSpeedIdRef = useRef(1);
@@ -1682,9 +1684,14 @@ export default function VideoEditor() {
 	);
 
 	const handleOpenProjectBrowser = useCallback(async () => {
+		if (projectBrowserOpen) {
+			setProjectBrowserOpen(false);
+			return;
+		}
+
 		await refreshProjectLibrary();
 		setProjectBrowserOpen(true);
-	}, [refreshProjectLibrary]);
+	}, [projectBrowserOpen, refreshProjectLibrary]);
 
 	useEffect(() => {
 		const removeLoadListener = window.electronAPI.onMenuLoadProject(() => {
@@ -2888,26 +2895,43 @@ export default function VideoEditor() {
 					})
 		: t("editor.exportStatus.preparing", "Preparing export...");
 
+	const projectBrowser = (
+		<ProjectBrowserDialog
+			open={projectBrowserOpen}
+			onOpenChange={setProjectBrowserOpen}
+			entries={projectLibraryEntries}
+			anchorRef={error ? projectBrowserFallbackTriggerRef : projectBrowserTriggerRef}
+			onOpenProject={(projectPath) => {
+				void handleOpenProjectFromLibrary(projectPath);
+			}}
+		/>
+	);
+
 	if (loading) {
 		return (
-			<div className="flex items-center justify-center h-screen bg-background">
+			<div className="flex h-screen items-center justify-center bg-background">
 				<div className="text-foreground">Loading video...</div>
+				{projectBrowser}
+				<Toaster theme="dark" className="pointer-events-auto" />
 			</div>
 		);
 	}
 	if (error) {
 		return (
-			<div className="flex items-center justify-center h-screen bg-background">
+			<div className="flex h-screen items-center justify-center bg-background">
 				<div className="flex flex-col items-center gap-3">
 					<div className="text-destructive">{error}</div>
 					<button
+						ref={projectBrowserFallbackTriggerRef}
 						type="button"
 						onClick={handleOpenProjectBrowser}
-						className="px-3 py-1.5 rounded-md bg-[#2563EB] text-white text-sm hover:bg-[#2563EB]/90"
+						className="rounded-[5px] bg-white px-3 py-1.5 text-sm font-semibold text-black shadow-[0_14px_32px_rgba(0,0,0,0.18)] transition-colors hover:bg-white/92"
 					>
 						Open Projects
 					</button>
 				</div>
+				{projectBrowser}
+				<Toaster theme="dark" className="pointer-events-auto" />
 			</div>
 		);
 	}
@@ -2972,9 +2996,10 @@ export default function VideoEditor() {
 					</Button>
 					<div className="mx-1 h-5 w-px bg-white/10" />
 					<Button
+						ref={projectBrowserTriggerRef}
 						type="button"
 						onClick={handleOpenProjectBrowser}
-						className="inline-flex h-8 min-w-[96px] items-center justify-center gap-1.5 rounded-[5px] bg-white px-4 text-black transition-colors hover:bg-white/92"
+						className="inline-flex h-8 min-w-[96px] items-center justify-center gap-1.5 rounded-[5px] bg-white px-4 text-black shadow-[0_14px_32px_rgba(0,0,0,0.18)] transition-colors hover:bg-white/92"
 					>
 						<FolderOpen className="h-4 w-4" />
 						<span className="text-sm font-semibold tracking-tight">
@@ -3481,14 +3506,7 @@ export default function VideoEditor() {
 				</>
 			) : null}
 
-			<ProjectBrowserDialog
-				open={projectBrowserOpen}
-				onOpenChange={setProjectBrowserOpen}
-				entries={projectLibraryEntries}
-				onOpenProject={(projectPath) => {
-					void handleOpenProjectFromLibrary(projectPath);
-				}}
-			/>
+			{projectBrowser}
 
 			<Toaster theme="dark" className="pointer-events-auto" />
 		</div>
