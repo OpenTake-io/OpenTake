@@ -30,7 +30,6 @@ function formatUpdatedAt(updatedAt: number) {
 		return new Date(updatedAt).toLocaleString();
 	}
 }
-
 export default function ProjectBrowserDialog({
 	open,
 	onOpenChange,
@@ -57,9 +56,9 @@ export default function ProjectBrowserDialog({
 										key={entry.path}
 										type="button"
 										onClick={() => onOpenProject(entry.path)}
-										className="group flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#1a1a1f] text-left outline-none transition hover:border-white/20 hover:bg-[#202028] focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+										className="group flex flex-col gap-2 bg-transparent text-left outline-none transition focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
 									>
-										<div className="relative aspect-[16/10] w-full overflow-hidden bg-[#0d0d11]">
+										<div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl bg-[#0d0d11]">
 											{thumbnailSrc ? (
 												<img
 													src={thumbnailSrc}
@@ -72,23 +71,19 @@ export default function ProjectBrowserDialog({
 													No preview yet
 												</div>
 											)}
-											<div className="absolute inset-x-0 top-0 flex items-center justify-between px-3 py-3">
-												<span className="rounded-full bg-black/45 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-200 backdrop-blur">
-													{entry.isInProjectsDirectory ? "Library" : "Recent"}
-												</span>
-												{entry.isCurrent ? (
-													<span className="rounded-full bg-[#2563EB]/90 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-white">
+											{entry.isCurrent ? (
+												<div className="absolute right-3 top-3">
+													<span className="rounded-full bg-[#2563EB]/92 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[0_8px_20px_rgba(37,99,235,0.28)]">
 														Current
 													</span>
-												) : null}
-											</div>
+												</div>
+											) : null}
 										</div>
-										<div className="flex flex-1 flex-col gap-1 px-3 py-3">
+										<div className="flex flex-1 flex-col gap-1 px-1 py-1">
 											<div className="truncate text-[15px] font-semibold tracking-tight text-white">
 												{entry.name}
 											</div>
-											<div className="truncate text-[11px] text-slate-500">{entry.path}</div>
-											<div className="pt-1 text-[11px] text-slate-400">
+											<div className="text-[11px] text-slate-400">
 												Updated {formatUpdatedAt(entry.updatedAt)}
 											</div>
 										</div>
