@@ -286,6 +286,8 @@ interface Window {
 			message?: string;
 			error?: string;
 		}>;
+		/** Returns the app version from package.json */
+		getAppVersion: () => Promise<string>;
 		/** Hide the OS cursor before browser capture starts. */
 		hideOsCursor: () => Promise<{ success: boolean }>;
 		/** Countdown timer before recording */

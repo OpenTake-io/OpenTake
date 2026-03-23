@@ -4474,5 +4474,9 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       seconds: countdownInProgress ? countdownRemaining : null,
     }
   })
+
+  ipcMain.handle('app:getVersion', () => {
+    return app.getVersion()
+  })
 }
 

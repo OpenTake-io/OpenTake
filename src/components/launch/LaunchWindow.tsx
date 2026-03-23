@@ -188,6 +188,7 @@ export function LaunchWindow() {
 	const [sourcesLoading, setSourcesLoading] = useState(false);
 	const [hideHudFromCapture, setHideHudFromCapture] = useState(true);
 	const [platform, setPlatform] = useState<string | null>(null);
+	const [appVersion, setAppVersion] = useState<string | null>(null);
 	const dropdownRef = useRef<HTMLDivElement>(null);
 	const hudContentRef = useRef<HTMLDivElement>(null);
 	const hudBarRef = useRef<HTMLDivElement>(null);
@@ -367,6 +368,22 @@ export function LaunchWindow() {
 			}
 		};
 		void loadPlatform();
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	useEffect(() => {
+		let cancelled = false;
+		const loadVersion = async () => {
+			try {
+				const version = await window.electronAPI.getAppVersion();
+				if (!cancelled) setAppVersion(version);
+			} catch (error) {
+				console.error("Failed to load app version:", error);
+			}
+		};
+		void loadVersion();
 		return () => {
 			cancelled = true;
 		};
@@ -1006,6 +1023,20 @@ export function LaunchWindow() {
 											{LOCALE_LABELS[code] ?? code}
 										</DropdownItem>
 									))}
+									{appVersion && (
+										<div
+											style={{
+												marginTop: 8,
+												padding: "4px 12px",
+												fontSize: 11,
+												color: "#6b6b78",
+												textAlign: "center",
+												userSelect: "text",
+											}}
+										>
+											v{appVersion}
+										</div>
+									)}
 								</>
 							)}
 						</div>
