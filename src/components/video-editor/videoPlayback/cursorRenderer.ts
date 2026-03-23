@@ -322,30 +322,6 @@ function getNormalizedAnchor(
 	};
 }
 
-function getPlatformCursorAnchor(uploadedAsset: {
-	fallbackAnchor: { x: number; y: number };
-	platformAnchors?: Partial<Record<"darwin" | "win32" | "linux", { x: number; y: number }>>;
-}) {
-	if (typeof navigator === "undefined") {
-		return uploadedAsset.fallbackAnchor;
-	}
-
-	const platform = navigator.platform.toLowerCase();
-	if (platform.includes("win")) {
-		return uploadedAsset.platformAnchors?.win32 ?? uploadedAsset.fallbackAnchor;
-	}
-
-	if (platform.includes("mac")) {
-		return uploadedAsset.platformAnchors?.darwin ?? uploadedAsset.fallbackAnchor;
-	}
-
-	if (platform.includes("linux")) {
-		return uploadedAsset.platformAnchors?.linux ?? uploadedAsset.fallbackAnchor;
-	}
-
-	return uploadedAsset.fallbackAnchor;
-}
-
 /**
  * Loads an SVG at `sampleSize × sampleSize`, crops the trim region out of it,
  * and returns a PNG data-URL of the cropped result. This is required because
@@ -455,7 +431,6 @@ export async function preloadCursorAssets() {
 
 						if (uploadedAsset) {
 							const { trim } = uploadedAsset;
-							const fallbackAnchor = getPlatformCursorAnchor(uploadedAsset);
 							const rasterized = await rasterizeAndCropSvg(
 								assetUrl,
 								UPLOADED_CURSOR_SAMPLE_SIZE,
@@ -468,8 +443,8 @@ export async function preloadCursorAssets() {
 							width = rasterized.width;
 							height = rasterized.height;
 							normalizedAnchor = {
-								x: clamp((fallbackAnchor.x * trim.width) / width, 0, 1),
-								y: clamp((fallbackAnchor.y * trim.height) / height, 0, 1),
+								x: clamp((uploadedAsset.fallbackAnchor.x * trim.width) / width, 0, 1),
+								y: clamp((uploadedAsset.fallbackAnchor.y * trim.height) / height, 0, 1),
 							};
 						} else {
 							finalUrl = assetUrl;

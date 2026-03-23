@@ -22,7 +22,6 @@ export type UploadedCursorAsset = {
 		x: number;
 		y: number;
 	};
-	platformAnchors?: Partial<Record<"darwin" | "win32" | "linux", { x: number; y: number }>>;
 };
 
 export const UPLOADED_CURSOR_SAMPLE_SIZE = 1024;
@@ -32,9 +31,6 @@ export const uploadedCursorAssets: Partial<Record<CursorAssetKey, UploadedCursor
 		url: arrowUrl,
 		trim: { x: 480, y: 435, width: 333, height: 553 },
 		fallbackAnchor: { x: 0.18, y: 0.1 },
-		platformAnchors: {
-			win32: { x: 0.095, y: 0.056 },
-		},
 	},
 	text: {
 		url: textUrl,
@@ -45,9 +41,6 @@ export const uploadedCursorAssets: Partial<Record<CursorAssetKey, UploadedCursor
 		url: pointerUrl,
 		trim: { x: 352, y: 441, width: 466, height: 583 },
 		fallbackAnchor: { x: 0.37, y: 0.08 },
-		platformAnchors: {
-			win32: { x: 0.29, y: 0.07 },
-		},
 	},
 	crosshair: {
 		url: crosshairUrl,
@@ -58,17 +51,11 @@ export const uploadedCursorAssets: Partial<Record<CursorAssetKey, UploadedCursor
 		url: openHandUrl,
 		trim: { x: 288, y: 188, width: 512, height: 580 },
 		fallbackAnchor: { x: 0.5, y: 0.28 },
-		platformAnchors: {
-			win32: { x: 0.46, y: 0.2 },
-		},
 	},
 	"closed-hand": {
 		url: closedHandUrl,
 		trim: { x: 344, y: 365, width: 432, height: 403 },
 		fallbackAnchor: { x: 0.5, y: 0.28 },
-		platformAnchors: {
-			win32: { x: 0.47, y: 0.22 },
-		},
 	},
 	"resize-ew": {
 		url: resizeEwUrl,
