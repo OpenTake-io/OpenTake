@@ -1,18 +1,17 @@
-import { ipcMain, desktopCapturer, BrowserWindow, shell, app, dialog, systemPreferences } from 'electron'
-import type { SaveDialogOptions } from 'electron'
-import { execFile, spawn, spawnSync } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
-
+import { execFile, spawn, spawnSync } from 'node:child_process'
+import { createWriteStream, constants as fsConstants } from 'node:fs'
 import fs from 'node:fs/promises'
-import { constants as fsConstants, createWriteStream } from 'node:fs'
 import { get as httpsGet } from 'node:https'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
-import { RECORDINGS_DIR } from '../main'
+import type { SaveDialogOptions } from 'electron'
+import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, shell, systemPreferences } from 'electron'
 import { hideCursor, showCursor } from '../cursorHider'
-import { createCountdownWindow, getCountdownWindow, closeCountdownWindow } from '../windows'
+import { RECORDINGS_DIR } from '../main'
+import { closeCountdownWindow, createCountdownWindow, getCountdownWindow } from '../windows'
 
 const execFileAsync = promisify(execFile)
 const nodeRequire = createRequire(import.meta.url)
@@ -2449,17 +2448,39 @@ export function registerIpcHandlers(
         .map((name) => normalizeDesktopSourceName(name))
         .filter(Boolean)
     )
-      const ownAppName = normalizeDesktopSourceName(app.getName())
+    const ownAppName = normalizeDesktopSourceName(app.getName())
 
-    const screenSources = electronSources
-      .filter((source) => source.id.startsWith('screen:'))
-      .map((source) => ({
-        id: source.id,
-        name: source.name,
-        display_id: source.display_id,
-        thumbnail: source.thumbnail ? source.thumbnail.toDataURL() : null,
-        appIcon: source.appIcon ? source.appIcon.toDataURL() : null,
-      }))
+    const displays = includeScreens
+      ? [...getScreen().getAllDisplays()].sort((left, right) => (
+          left.bounds.x - right.bounds.x
+          || left.bounds.y - right.bounds.y
+          || left.id - right.id
+        ))
+      : []
+    const primaryDisplayId = includeScreens ? String(getScreen().getPrimaryDisplay().id) : ''
+    const electronScreenSourcesByDisplayId = new Map(
+      electronSources
+        .filter((source) => source.id.startsWith('screen:'))
+        .map((source) => [String(source.display_id ?? ''), source] as const)
+    )
+
+    const screenSources = displays.map((display, index) => {
+      const displayId = String(display.id)
+      const matchedSource = electronScreenSourcesByDisplayId.get(displayId)
+      const displayName = displayId === primaryDisplayId
+        ? `Screen ${index + 1} (Primary)`
+        : `Screen ${index + 1}`
+
+      return {
+        id: matchedSource?.id ?? `screen:fallback:${displayId}`,
+        name: displayName,
+        originalName: matchedSource?.name ?? displayName,
+        display_id: displayId,
+        thumbnail: matchedSource?.thumbnail ? matchedSource.thumbnail.toDataURL() : null,
+        appIcon: matchedSource?.appIcon ? matchedSource.appIcon.toDataURL() : null,
+        sourceType: 'screen' as const,
+      }
+    })
 
     if (process.platform !== 'darwin' || !includeWindows) {
       const windowSources = electronSources
@@ -2487,9 +2508,11 @@ export function registerIpcHandlers(
         .map((source) => ({
           id: source.id,
           name: source.name,
+          originalName: source.name,
           display_id: source.display_id,
           thumbnail: source.thumbnail ? source.thumbnail.toDataURL() : null,
           appIcon: source.appIcon ? source.appIcon.toDataURL() : null,
+          sourceType: 'window' as const,
         }))
 
       return [...screenSources, ...windowSources]
@@ -2534,11 +2557,13 @@ export function registerIpcHandlers(
           return {
             id: source.id,
             name: source.name,
+            originalName: source.name,
             display_id: source.display_id ?? electronWindowSource?.display_id ?? '',
             thumbnail: electronWindowSource?.thumbnail ? electronWindowSource.thumbnail.toDataURL() : null,
             appIcon: source.appIcon ?? (electronWindowSource?.appIcon ? electronWindowSource.appIcon.toDataURL() : null),
             appName: source.appName,
             windowTitle: source.windowTitle,
+            sourceType: 'window' as const,
           }
         })
         .filter((source) => Boolean(source.thumbnail))
@@ -2572,9 +2597,11 @@ export function registerIpcHandlers(
         .map((source) => ({
           id: source.id,
           name: source.name,
+          originalName: source.name,
           display_id: source.display_id,
           thumbnail: source.thumbnail ? source.thumbnail.toDataURL() : null,
           appIcon: source.appIcon ? source.appIcon.toDataURL() : null,
+          sourceType: 'window' as const,
         }))
 
       return [...screenSources, ...windowSources]
