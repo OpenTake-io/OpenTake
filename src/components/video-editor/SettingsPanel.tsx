@@ -1,13 +1,5 @@
-import { LayoutGroup } from "motion/react";
-import minimalCursorUrl from "../../../Minimal Cursor.svg";
-import tahoeCursorUrl from "../../assets/cursors/Cursor=Default.svg";
-import {
-	Palette,
-	Trash2,
-	Upload,
-	X,
-} from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { Palette, Trash2, Upload, X } from "lucide-react";
+import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -22,30 +14,40 @@ import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
 import { cn } from "@/lib/utils";
-import { BUILT_IN_WALLPAPERS, getAvailableWallpapers } from "@/lib/wallpapers";
 import type { BuiltInWallpaper } from "@/lib/wallpapers";
+import { BUILT_IN_WALLPAPERS, getAvailableWallpapers } from "@/lib/wallpapers";
 import { type AspectRatio } from "@/utils/aspectRatioUtils";
+import minimalCursorUrl from "../../../Minimal Cursor.svg";
+import tahoeCursorUrl from "../../assets/cursors/Cursor=Default.svg";
 import { useI18n, useScopedT } from "../../contexts/I18nContext";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
 import { SliderControl } from "./SliderControl";
 import type {
+	AnnotationRegion,
+	AnnotationType,
 	AutoCaptionAnimation,
 	AutoCaptionSettings,
 	CaptionCue,
-	AnnotationRegion,
-	AnnotationType,
 	CropRegion,
 	CursorStyle,
 	FigureData,
 	PlaybackSpeed,
-	WebcamPositionPreset,
 	WebcamOverlaySettings,
+	WebcamPositionPreset,
 	ZoomDepth,
 	ZoomTransitionEasing,
 } from "./types";
 import {
 	DEFAULT_AUTO_CAPTION_SETTINGS,
+	DEFAULT_CROP_REGION,
+	DEFAULT_CURSOR_CLICK_BOUNCE,
+	DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
+	DEFAULT_CURSOR_MOTION_BLUR,
+	DEFAULT_CURSOR_SIZE,
+	DEFAULT_CURSOR_SMOOTHING,
+	DEFAULT_CURSOR_STYLE,
+	DEFAULT_CURSOR_SWAY,
 	DEFAULT_WEBCAM_CORNER_RADIUS,
 	DEFAULT_WEBCAM_MARGIN,
 	DEFAULT_WEBCAM_POSITION_PRESET,
@@ -54,20 +56,15 @@ import {
 	DEFAULT_WEBCAM_REACT_TO_ZOOM,
 	DEFAULT_WEBCAM_SHADOW,
 	DEFAULT_WEBCAM_SIZE,
-	DEFAULT_CROP_REGION,
-	DEFAULT_CURSOR_CLICK_BOUNCE,
-	DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
-	DEFAULT_CURSOR_MOTION_BLUR,
-	DEFAULT_CURSOR_SIZE,
-	DEFAULT_CURSOR_STYLE,
-	DEFAULT_CURSOR_SMOOTHING,
-	DEFAULT_CURSOR_SWAY,
 	DEFAULT_ZOOM_MOTION_BLUR,
 	SPEED_OPTIONS,
 } from "./types";
-import { getWebcamPositionForPreset, resolveWebcamCorner } from "./webcamOverlay";
 import { fromCursorSwaySliderValue, toCursorSwaySliderValue } from "./videoPlayback/cursorSway";
-import { uploadedCursorAssets, UPLOADED_CURSOR_SAMPLE_SIZE } from "./videoPlayback/uploadedCursorAssets";
+import {
+	UPLOADED_CURSOR_SAMPLE_SIZE,
+	uploadedCursorAssets,
+} from "./videoPlayback/uploadedCursorAssets";
+import { getWebcamPositionForPreset, resolveWebcamCorner } from "./webcamOverlay";
 
 const GRADIENTS = [
 	"linear-gradient( 111.6deg,  rgba(114,167,232,1) 9.4%, rgba(253,129,82,1) 43.9%, rgba(253,129,82,1) 54.8%, rgba(249,202,86,1) 86.3% )",
@@ -104,7 +101,14 @@ const CAPTION_ANIMATION_OPTIONS: Array<{ value: AutoCaptionAnimation; label: str
 ];
 
 type BackgroundTab = "image" | "color" | "gradient";
-export type EditorEffectSection = "scene" | "cursor" | "captions" | "webcam" | "zoom" | "frame" | "crop";
+export type EditorEffectSection =
+	| "scene"
+	| "cursor"
+	| "captions"
+	| "webcam"
+	| "zoom"
+	| "frame"
+	| "crop";
 
 function isHexWallpaper(value: string): boolean {
 	return /^#(?:[0-9a-f]{3}){1,2}$/i.test(value);
@@ -124,9 +128,7 @@ function getBackgroundTabForWallpaper(value: string): BackgroundTab {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
 	return (
-		<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-			{children}
-		</p>
+		<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{children}</p>
 	);
 }
 
@@ -211,6 +213,7 @@ interface SettingsPanelProps {
 	isGeneratingCaptions?: boolean;
 	onAutoCaptionSettingsChange?: (settings: AutoCaptionSettings) => void;
 	onPickWhisperExecutable?: () => void;
+	onPickWhisperModel?: () => void;
 	onGenerateAutoCaptions?: () => void;
 	onClearAutoCaptions?: () => void;
 	onDownloadWhisperSmallModel?: () => void;
@@ -276,10 +279,7 @@ function loadPreviewImage(url: string) {
 	});
 }
 
-function trimCanvasToAlpha(
-	canvas: HTMLCanvasElement,
-	hotspot?: { x: number; y: number },
-) {
+function trimCanvasToAlpha(canvas: HTMLCanvasElement, hotspot?: { x: number; y: number }) {
 	const ctx = canvas.getContext("2d");
 	if (!ctx) {
 		return {
@@ -327,7 +327,17 @@ function trimCanvasToAlpha(
 	croppedCanvas.width = croppedWidth;
 	croppedCanvas.height = croppedHeight;
 	const croppedCtx = croppedCanvas.getContext("2d")!;
-	croppedCtx.drawImage(canvas, minX, minY, croppedWidth, croppedHeight, 0, 0, croppedWidth, croppedHeight);
+	croppedCtx.drawImage(
+		canvas,
+		minX,
+		minY,
+		croppedWidth,
+		croppedHeight,
+		0,
+		0,
+		croppedWidth,
+		croppedHeight,
+	);
 
 	return {
 		dataUrl: croppedCanvas.toDataURL("image/png"),
@@ -335,9 +345,9 @@ function trimCanvasToAlpha(
 		height: croppedHeight,
 		hotspot: hotspot
 			? {
-				x: hotspot.x - minX,
-				y: hotspot.y - minY,
-			  }
+					x: hotspot.x - minX,
+					y: hotspot.y - minY,
+				}
 			: undefined,
 	};
 }
@@ -427,7 +437,9 @@ function CursorStylePreview({
 	}
 
 	if (style === "dot") {
-		return <span className="h-[14px] w-[14px] rounded-full border-[2.5px] border-slate-900 bg-white shadow-[0_8px_12px_rgba(15,23,42,0.16)]" />;
+		return (
+			<span className="h-[14px] w-[14px] rounded-full border-[2.5px] border-slate-900 bg-white shadow-[0_8px_12px_rgba(15,23,42,0.16)]" />
+		);
 	}
 
 	return (
@@ -496,11 +508,14 @@ export function SettingsPanel({
 	onAnnotationDelete,
 	autoCaptions = [],
 	autoCaptionSettings = DEFAULT_AUTO_CAPTION_SETTINGS,
+	whisperExecutablePath,
 	whisperModelPath,
 	whisperModelDownloadStatus = "idle",
 	whisperModelDownloadProgress = 0,
 	isGeneratingCaptions = false,
 	onAutoCaptionSettingsChange,
+	onPickWhisperExecutable,
+	onPickWhisperModel,
 	onGenerateAutoCaptions,
 	onClearAutoCaptions,
 	onDownloadWhisperSmallModel,
@@ -514,9 +529,8 @@ export function SettingsPanel({
 	const { t } = useI18n();
 	const isBackgroundPanel = panelMode === "background";
 	const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
-	const [builtInWallpapers, setBuiltInWallpapers] = useState<BuiltInWallpaper[]>(
-		BUILT_IN_WALLPAPERS,
-	);
+	const [builtInWallpapers, setBuiltInWallpapers] =
+		useState<BuiltInWallpaper[]>(BUILT_IN_WALLPAPERS);
 	const [wallpaperPreviewPaths, setWallpaperPreviewPaths] = useState<string[]>([]);
 	const [customImages, setCustomImages] = useState<string[]>(
 		initialEditorPreferences.customWallpapers,
@@ -531,6 +545,16 @@ export function SettingsPanel({
 		[builtInWallpapers],
 	);
 	const captionCueCount = autoCaptions.length;
+	const getPathDisplayName = (value?: string | null) => {
+		if (!value) {
+			return null;
+		}
+
+		const parts = value.split(/[\\/]/);
+		return parts[parts.length - 1] || value;
+	};
+	const whisperRuntimeLabel = getPathDisplayName(whisperExecutablePath);
+	const whisperModelLabel = getPathDisplayName(whisperModelPath);
 	const updateAutoCaptionSettings = (partial: Partial<AutoCaptionSettings>) => {
 		onAutoCaptionSettingsChange?.({
 			...autoCaptionSettings,
@@ -596,7 +620,9 @@ export function SettingsPanel({
 	const defaultWebcam = initialEditorPreferences.webcam;
 	const [internalActiveEffectSection] = useState<EditorEffectSection>("scene");
 	const activeEffectSection = activeEffectSectionProp ?? internalActiveEffectSection;
-	const [cursorPreviewUrls, setCursorPreviewUrls] = useState<Partial<Record<"tahoe" | "figma" | "mono", string>>>({});
+	const [cursorPreviewUrls, setCursorPreviewUrls] = useState<
+		Partial<Record<"tahoe" | "figma" | "mono", string>>
+	>({});
 
 	useEffect(() => {
 		let cancelled = false;
@@ -606,10 +632,10 @@ export function SettingsPanel({
 				const tahoeAsset = uploadedCursorAssets.arrow;
 				const tahoePreview = tahoeAsset
 					? await createTrimmedSvgPreview(
-						tahoeAsset.url,
-						UPLOADED_CURSOR_SAMPLE_SIZE,
-						tahoeAsset.trim,
-					  )
+							tahoeAsset.url,
+							UPLOADED_CURSOR_SAMPLE_SIZE,
+							tahoeAsset.trim,
+						)
 					: tahoeCursorUrl;
 				const minimalPreview = await createTrimmedSvgPreview(minimalCursorUrl, 512);
 				const invertedPreview = await createInvertedPreview(tahoePreview);
@@ -935,11 +961,13 @@ export function SettingsPanel({
 			<div className="w-full">
 				<LayoutGroup id="background-picker-switcher">
 					<div className="grid h-8 w-full grid-cols-3 rounded-xl border border-white/10 bg-white/[0.04] p-1">
-						{([
-							{ value: "image", label: tSettings("background.image") },
-							{ value: "color", label: tSettings("background.color") },
-							{ value: "gradient", label: tSettings("background.gradient") },
-						] as const).map((option) => {
+						{(
+							[
+								{ value: "image", label: tSettings("background.image") },
+								{ value: "color", label: tSettings("background.color") },
+								{ value: "gradient", label: tSettings("background.gradient") },
+							] as const
+						).map((option) => {
 							const isActive = backgroundTab === option.value;
 							return (
 								<button
@@ -955,7 +983,14 @@ export function SettingsPanel({
 											transition={{ type: "spring", stiffness: 420, damping: 34 }}
 										/>
 									) : null}
-									<span className={cn("relative z-10", isActive ? "text-white" : "text-slate-400 hover:text-slate-200")}>{option.label}</span>
+									<span
+										className={cn(
+											"relative z-10",
+											isActive ? "text-white" : "text-slate-400 hover:text-slate-200",
+										)}
+									>
+										{option.label}
+									</span>
 								</button>
 							);
 						})}
@@ -1011,7 +1046,8 @@ export function SettingsPanel({
 											: builtInWallpaperPaths
 										).map((previewPath, index) => {
 											const wallpaper = builtInWallpapers[index] ?? BUILT_IN_WALLPAPERS[index];
-											const wallpaperValue = wallpaper?.publicPath ?? builtInWallpaperPaths[index] ?? previewPath;
+											const wallpaperValue =
+												wallpaper?.publicPath ?? builtInWallpaperPaths[index] ?? previewPath;
 											const isSelected = getWallpaperTileState(wallpaperValue, previewPath);
 											return renderWallpaperImageTile(previewPath, isSelected, {
 												key: wallpaperValue,
@@ -1054,7 +1090,12 @@ export function SettingsPanel({
 										<button
 											type="button"
 											onClick={() => customColorInputRef.current?.click()}
-											className={wallpaperTileClass(isHexWallpaper(selected) && !visibleColorPalette.some((color) => color.toLowerCase() === selected.toLowerCase()))}
+											className={wallpaperTileClass(
+												isHexWallpaper(selected) &&
+													!visibleColorPalette.some(
+														(color) => color.toLowerCase() === selected.toLowerCase(),
+													),
+											)}
 											style={{
 												background: `linear-gradient(135deg, ${selectedColor} 0%, ${selectedColor} 58%, rgba(255,255,255,0.92) 58%, rgba(255,255,255,0.92) 100%)`,
 											}}
@@ -1163,15 +1204,57 @@ export function SettingsPanel({
 		<section className="flex flex-col gap-2">
 			<div className="flex items-center justify-between gap-3">
 				<SectionLabel>{tSettings("sections.frame", "Frame")}</SectionLabel>
-				<button type="button" onClick={resetFrameSection} className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80">{t("common.actions.reset", "Reset")}</button>
+				<button
+					type="button"
+					onClick={resetFrameSection}
+					className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80"
+				>
+					{t("common.actions.reset", "Reset")}
+				</button>
 			</div>
 			<div className="flex flex-col gap-1.5">
-				<SliderControl label={tSettings("effects.shadow")} value={shadowIntensity} defaultValue={initialEditorPreferences.shadowIntensity} min={0} max={1} step={0.01} onChange={(v) => onShadowChange?.(v)} formatValue={(v) => `${Math.round(v * 100)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100} />
-				<SliderControl label={tSettings("effects.radius", "Radius")} value={borderRadius} defaultValue={initialEditorPreferences.borderRadius} min={0} max={50} step={0.5} onChange={(v) => onBorderRadiusChange?.(v)} formatValue={(v) => `${v}px`} parseInput={(text) => parseFloat(text.replace(/px$/, ""))} />
-				<SliderControl label={tSettings("effects.padding")} value={padding} defaultValue={initialEditorPreferences.padding} min={0} max={100} step={1} onChange={(v) => onPaddingChange?.(v)} formatValue={(v) => `${v}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
+				<SliderControl
+					label={tSettings("effects.shadow")}
+					value={shadowIntensity}
+					defaultValue={initialEditorPreferences.shadowIntensity}
+					min={0}
+					max={1}
+					step={0.01}
+					onChange={(v) => onShadowChange?.(v)}
+					formatValue={(v) => `${Math.round(v * 100)}%`}
+					parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100}
+				/>
+				<SliderControl
+					label={tSettings("effects.radius", "Radius")}
+					value={borderRadius}
+					defaultValue={initialEditorPreferences.borderRadius}
+					min={0}
+					max={50}
+					step={0.5}
+					onChange={(v) => onBorderRadiusChange?.(v)}
+					formatValue={(v) => `${v}px`}
+					parseInput={(text) => parseFloat(text.replace(/px$/, ""))}
+				/>
+				<SliderControl
+					label={tSettings("effects.padding")}
+					value={padding}
+					defaultValue={initialEditorPreferences.padding}
+					min={0}
+					max={100}
+					step={1}
+					onChange={(v) => onPaddingChange?.(v)}
+					formatValue={(v) => `${v}%`}
+					parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
+				/>
 				<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-					<span className="text-[10px] text-slate-400">{tSettings("effects.removeBackground")}</span>
-					<Switch checked={removeBackgroundEnabled} onCheckedChange={handleRemoveBackgroundToggle} className="data-[state=checked]:bg-[#2563EB] scale-75" />
+					<span className="text-[10px] text-slate-400">
+						{tSettings("effects.removeBackground")}
+					</span>
+					<Switch
+						checked={removeBackgroundEnabled}
+						onCheckedChange={handleRemoveBackgroundToggle}
+						className="data-[state=checked]:bg-[#2563EB] scale-75"
+					/>
 				</div>
 			</div>
 		</section>
@@ -1181,13 +1264,61 @@ export function SettingsPanel({
 		<section className="flex flex-col gap-2">
 			<div className="flex items-center justify-between gap-3">
 				<SectionLabel>{tSettings("sections.crop", "Crop")}</SectionLabel>
-				{isCropped ? <button type="button" onClick={resetCropSection} className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80">{t("common.actions.reset", "Reset")}</button> : null}
+				{isCropped ? (
+					<button
+						type="button"
+						onClick={resetCropSection}
+						className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80"
+					>
+						{t("common.actions.reset", "Reset")}
+					</button>
+				) : null}
 			</div>
 			<div className="flex flex-col gap-1.5">
-				<SliderControl label={tSettings("crop.top", "Top")} value={cropTop} defaultValue={0} min={0} max={50} step={1} onChange={(v) => setCropInset("top", v)} formatValue={(v) => `${Math.round(v)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
-				<SliderControl label={tSettings("crop.bottom", "Bottom")} value={cropBottom} defaultValue={0} min={0} max={50} step={1} onChange={(v) => setCropInset("bottom", v)} formatValue={(v) => `${Math.round(v)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
-				<SliderControl label={tSettings("crop.left", "Left")} value={cropLeft} defaultValue={0} min={0} max={50} step={1} onChange={(v) => setCropInset("left", v)} formatValue={(v) => `${Math.round(v)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
-				<SliderControl label={tSettings("crop.right", "Right")} value={cropRight} defaultValue={0} min={0} max={50} step={1} onChange={(v) => setCropInset("right", v)} formatValue={(v) => `${Math.round(v)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
+				<SliderControl
+					label={tSettings("crop.top", "Top")}
+					value={cropTop}
+					defaultValue={0}
+					min={0}
+					max={50}
+					step={1}
+					onChange={(v) => setCropInset("top", v)}
+					formatValue={(v) => `${Math.round(v)}%`}
+					parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
+				/>
+				<SliderControl
+					label={tSettings("crop.bottom", "Bottom")}
+					value={cropBottom}
+					defaultValue={0}
+					min={0}
+					max={50}
+					step={1}
+					onChange={(v) => setCropInset("bottom", v)}
+					formatValue={(v) => `${Math.round(v)}%`}
+					parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
+				/>
+				<SliderControl
+					label={tSettings("crop.left", "Left")}
+					value={cropLeft}
+					defaultValue={0}
+					min={0}
+					max={50}
+					step={1}
+					onChange={(v) => setCropInset("left", v)}
+					formatValue={(v) => `${Math.round(v)}%`}
+					parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
+				/>
+				<SliderControl
+					label={tSettings("crop.right", "Right")}
+					value={cropRight}
+					defaultValue={0}
+					min={0}
+					max={50}
+					step={1}
+					onChange={(v) => setCropInset("right", v)}
+					formatValue={(v) => `${Math.round(v)}%`}
+					parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
+				/>
 			</div>
 		</section>
 	);
@@ -1216,9 +1347,43 @@ export function SettingsPanel({
 			</div>
 
 			<div className="rounded-lg bg-white/[0.03] px-2.5 py-2 space-y-3">
+				<div className="grid w-full grid-cols-2 gap-2">
+					<Button
+						type="button"
+						variant="outline"
+						onClick={onPickWhisperExecutable}
+						className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
+					>
+						{tSettings("captions.selectRuntime", "Select Runtime")}
+					</Button>
+					<Button
+						type="button"
+						variant="outline"
+						onClick={onPickWhisperModel}
+						className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
+					>
+						{tSettings("captions.selectModel", "Select Model")}
+					</Button>
+				</div>
+				<div className="space-y-1 text-xs text-slate-400">
+					<div>
+						{tSettings("captions.runtimeStatus", "Runtime")}:{" "}
+						{whisperRuntimeLabel ??
+							tSettings("captions.runtimeAuto", "Bundled or system auto-detect")}
+					</div>
+					<div>
+						{tSettings("captions.modelStatus", "Model")}:{" "}
+						{whisperModelLabel ?? tSettings("captions.modelMissing", "No model selected")}
+					</div>
+				</div>
 				<div className="flex items-center justify-between gap-3">
-					<div className="text-sm font-medium text-slate-200">{tSettings("captions.language", "Language")}</div>
-					<Select value={autoCaptionSettings.language || "auto"} onValueChange={(value) => updateAutoCaptionSettings({ language: value })}>
+					<div className="text-sm font-medium text-slate-200">
+						{tSettings("captions.language", "Language")}
+					</div>
+					<Select
+						value={autoCaptionSettings.language || "auto"}
+						onValueChange={(value) => updateAutoCaptionSettings({ language: value })}
+					>
 						<SelectTrigger className="h-10 w-[180px] rounded-xl border-white/10 bg-white/5 text-sm text-slate-200 hover:bg-white/10">
 							<SelectValue />
 						</SelectTrigger>
@@ -1232,33 +1397,73 @@ export function SettingsPanel({
 					</Select>
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
-					<div className="grid w-full grid-cols-2 gap-2">
+					<div className="grid w-full grid-cols-3 gap-2">
 						{whisperModelDownloadStatus === "downloading" ? (
-							<Button type="button" disabled className="h-10 w-full rounded-xl bg-white/10 px-4 text-sm font-medium text-slate-200 hover:bg-white/10">
-								{tSettings("captions.downloading", "Downloading...")} {Math.round(whisperModelDownloadProgress)}%
+							<Button
+								type="button"
+								disabled
+								className="h-10 w-full rounded-xl bg-white/10 px-4 text-sm font-medium text-slate-200 hover:bg-white/10"
+							>
+								{tSettings("captions.downloading", "Downloading...")}{" "}
+								{Math.round(whisperModelDownloadProgress)}%
 							</Button>
 						) : whisperModelPath ? (
-							<Button type="button" variant="outline" onClick={onDeleteWhisperSmallModel} className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white">
+							<Button
+								type="button"
+								variant="outline"
+								onClick={onDeleteWhisperSmallModel}
+								className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
+							>
 								{tSettings("captions.clearModel", "Clear Model")}
 							</Button>
 						) : (
-							<Button type="button" onClick={onDownloadWhisperSmallModel} className="h-10 w-full rounded-xl bg-[#2563EB] px-4 text-sm font-medium text-white hover:bg-[#2563EB]/90">
+							<Button
+								type="button"
+								onClick={onDownloadWhisperSmallModel}
+								className="h-10 w-full rounded-xl bg-[#2563EB] px-4 text-sm font-medium text-white hover:bg-[#2563EB]/90"
+							>
 								{tSettings("captions.downloadModel", "Download Model")}
 							</Button>
 						)}
-						<Button type="button" variant="outline" onClick={onClearAutoCaptions} disabled={captionCueCount === 0} className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white disabled:opacity-50">
+						<Button
+							type="button"
+							variant="outline"
+							onClick={onPickWhisperModel}
+							className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
+						>
+							{tSettings("captions.browseModel", "Browse Model")}
+						</Button>
+						<Button
+							type="button"
+							variant="outline"
+							onClick={onClearAutoCaptions}
+							disabled={captionCueCount === 0}
+							className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white disabled:opacity-50"
+						>
 							{tSettings("captions.clearFull", "Clear Captions")}
 						</Button>
 					</div>
 				</div>
 				<div className="flex flex-col gap-2">
-					<Button type="button" onClick={onGenerateAutoCaptions} disabled={isGeneratingCaptions || !whisperModelPath} className="h-10 w-full rounded-xl bg-[#2563EB] px-4 text-sm font-medium text-white hover:bg-[#2563EB]/90 disabled:opacity-60">
-						{isGeneratingCaptions ? tSettings("captions.generating", "Generating...") : captionCueCount > 0 ? tSettings("captions.regenerateFull", "Regenerate Captions") : tSettings("captions.generateFull", "Generate Captions")}
+					<Button
+						type="button"
+						onClick={onGenerateAutoCaptions}
+						disabled={isGeneratingCaptions || !whisperModelPath}
+						className="h-10 w-full rounded-xl bg-[#2563EB] px-4 text-sm font-medium text-white hover:bg-[#2563EB]/90 disabled:opacity-60"
+					>
+						{isGeneratingCaptions
+							? tSettings("captions.generating", "Generating...")
+							: captionCueCount > 0
+								? tSettings("captions.regenerateFull", "Regenerate Captions")
+								: tSettings("captions.generateFull", "Generate Captions")}
 					</Button>
 					{isGeneratingCaptions ? (
 						<div className="space-y-1">
 							<div className="text-xs text-slate-400">
-								{tSettings("captions.generatingStatus", "Generating captions. This can take a moment.")}
+								{tSettings(
+									"captions.generatingStatus",
+									"Generating captions. This can take a moment.",
+								)}
 							</div>
 							<div className="indeterminate-progress h-2 rounded-full bg-white/5" />
 						</div>
@@ -1266,15 +1471,25 @@ export function SettingsPanel({
 				</div>
 				{whisperModelDownloadStatus === "downloading" ? (
 					<div className="h-2 overflow-hidden rounded-full bg-white/5">
-						<div className="h-full rounded-full bg-[#2196f3] transition-all" style={{ width: `${whisperModelDownloadProgress}%` }} />
+						<div
+							className="h-full rounded-full bg-[#2196f3] transition-all"
+							style={{ width: `${whisperModelDownloadProgress}%` }}
+						/>
 					</div>
 				) : null}
 			</div>
 
 			<div className="flex flex-col gap-1.5">
 				<div className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.03] px-2.5 py-2">
-					<div className="text-[10px] text-slate-400">{tSettings("captions.animation", "Animation")}</div>
-					<Select value={autoCaptionSettings.animationStyle} onValueChange={(value) => updateAutoCaptionSettings({ animationStyle: value as AutoCaptionAnimation })}>
+					<div className="text-[10px] text-slate-400">
+						{tSettings("captions.animation", "Animation")}
+					</div>
+					<Select
+						value={autoCaptionSettings.animationStyle}
+						onValueChange={(value) =>
+							updateAutoCaptionSettings({ animationStyle: value as AutoCaptionAnimation })
+						}
+					>
 						<SelectTrigger className="h-9 w-[160px] rounded-xl border-white/10 bg-white/5 text-sm text-slate-200 hover:bg-white/10">
 							<SelectValue />
 						</SelectTrigger>
@@ -1288,7 +1503,9 @@ export function SettingsPanel({
 					</Select>
 				</div>
 				<label className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-2">
-					<span className="text-[10px] text-slate-400">{tSettings("captions.textColor", "Text color")}</span>
+					<span className="text-[10px] text-slate-400">
+						{tSettings("captions.textColor", "Text color")}
+					</span>
 					<input
 						type="color"
 						value={autoCaptionSettings.textColor}
@@ -1296,13 +1513,77 @@ export function SettingsPanel({
 						className="h-7 w-10 rounded border border-white/10 bg-transparent"
 					/>
 				</label>
-				<div className="mb-1 text-sm font-medium text-slate-200">{tSettings("captions.fontSettings", "Font Settings")}</div>
-				<SliderControl label={tSettings("captions.fontSize", "Font size")} value={autoCaptionSettings.fontSize} defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.fontSize} min={16} max={72} step={1} onChange={(value) => updateAutoCaptionSettings({ fontSize: value })} formatValue={(value) => `${Math.round(value)}px`} parseInput={(text) => parseFloat(text.replace(/px$/, ""))} />
-				<SliderControl label={tSettings("captions.rowCount", "Rows")} value={autoCaptionSettings.maxRows} defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.maxRows} min={1} max={4} step={1} onChange={(value) => updateAutoCaptionSettings({ maxRows: Math.round(value) })} formatValue={(value) => `${Math.round(value)}`} parseInput={(text) => parseFloat(text)} />
-				<SliderControl label={tSettings("captions.bottomOffset", "Bottom offset")} value={autoCaptionSettings.bottomOffset} defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.bottomOffset} min={0} max={30} step={1} onChange={(value) => updateAutoCaptionSettings({ bottomOffset: value })} formatValue={(value) => `${Math.round(value)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
-				<SliderControl label={tSettings("captions.maxWidth", "Max width")} value={autoCaptionSettings.maxWidth} defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.maxWidth} min={40} max={95} step={1} onChange={(value) => updateAutoCaptionSettings({ maxWidth: value })} formatValue={(value) => `${Math.round(value)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
-				<SliderControl label={tSettings("captions.boxRadius", "Box radius")} value={autoCaptionSettings.boxRadius} defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.boxRadius} min={0} max={40} step={0.5} onChange={(value) => updateAutoCaptionSettings({ boxRadius: value })} formatValue={(value) => `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}px`} parseInput={(text) => parseFloat(text.replace(/px$/, ""))} />
-				<SliderControl label={tSettings("captions.backgroundOpacity", "Background opacity")} value={autoCaptionSettings.backgroundOpacity} defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.backgroundOpacity} min={0} max={1} step={0.01} onChange={(value) => updateAutoCaptionSettings({ backgroundOpacity: value })} formatValue={(value) => `${Math.round(value * 100)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100} />
+				<div className="mb-1 text-sm font-medium text-slate-200">
+					{tSettings("captions.fontSettings", "Font Settings")}
+				</div>
+				<SliderControl
+					label={tSettings("captions.fontSize", "Font size")}
+					value={autoCaptionSettings.fontSize}
+					defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.fontSize}
+					min={16}
+					max={72}
+					step={1}
+					onChange={(value) => updateAutoCaptionSettings({ fontSize: value })}
+					formatValue={(value) => `${Math.round(value)}px`}
+					parseInput={(text) => parseFloat(text.replace(/px$/, ""))}
+				/>
+				<SliderControl
+					label={tSettings("captions.rowCount", "Rows")}
+					value={autoCaptionSettings.maxRows}
+					defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.maxRows}
+					min={1}
+					max={4}
+					step={1}
+					onChange={(value) => updateAutoCaptionSettings({ maxRows: Math.round(value) })}
+					formatValue={(value) => `${Math.round(value)}`}
+					parseInput={(text) => parseFloat(text)}
+				/>
+				<SliderControl
+					label={tSettings("captions.bottomOffset", "Bottom offset")}
+					value={autoCaptionSettings.bottomOffset}
+					defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.bottomOffset}
+					min={0}
+					max={30}
+					step={1}
+					onChange={(value) => updateAutoCaptionSettings({ bottomOffset: value })}
+					formatValue={(value) => `${Math.round(value)}%`}
+					parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
+				/>
+				<SliderControl
+					label={tSettings("captions.maxWidth", "Max width")}
+					value={autoCaptionSettings.maxWidth}
+					defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.maxWidth}
+					min={40}
+					max={95}
+					step={1}
+					onChange={(value) => updateAutoCaptionSettings({ maxWidth: value })}
+					formatValue={(value) => `${Math.round(value)}%`}
+					parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
+				/>
+				<SliderControl
+					label={tSettings("captions.boxRadius", "Box radius")}
+					value={autoCaptionSettings.boxRadius}
+					defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.boxRadius}
+					min={0}
+					max={40}
+					step={0.5}
+					onChange={(value) => updateAutoCaptionSettings({ boxRadius: value })}
+					formatValue={(value) =>
+						`${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}px`
+					}
+					parseInput={(text) => parseFloat(text.replace(/px$/, ""))}
+				/>
+				<SliderControl
+					label={tSettings("captions.backgroundOpacity", "Background opacity")}
+					value={autoCaptionSettings.backgroundOpacity}
+					defaultValue={DEFAULT_AUTO_CAPTION_SETTINGS.backgroundOpacity}
+					min={0}
+					max={1}
+					step={0.01}
+					onChange={(value) => updateAutoCaptionSettings({ backgroundOpacity: value })}
+					formatValue={(value) => `${Math.round(value * 100)}%`}
+					parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100}
+				/>
 			</div>
 		</section>
 	);
@@ -1326,8 +1607,8 @@ export function SettingsPanel({
 				return sceneSectionContent;
 			case "crop":
 				return sceneSectionContent;
-				case "captions":
-					return captionsSectionContent;
+			case "captions":
+				return captionsSectionContent;
 			case "cursor":
 				return (
 					<section className="flex flex-col gap-2">
@@ -1385,18 +1666,71 @@ export function SettingsPanel({
 										>
 											<div className="flex h-full flex-col items-center justify-between gap-3">
 												<div className="flex min-h-0 flex-1 items-center justify-center rounded-lg px-2 py-1.5">
-													<CursorStylePreview style={option.value} previewUrls={cursorPreviewUrls} />
+													<CursorStylePreview
+														style={option.value}
+														previewUrls={cursorPreviewUrls}
+													/>
 												</div>
 											</div>
 										</ToggleGroupItem>
 									))}
 								</ToggleGroup>
 							</div>
-							<SliderControl label={tSettings("effects.cursorSize")} value={cursorSize} defaultValue={DEFAULT_CURSOR_SIZE} min={0.5} max={10} step={0.05} onChange={(v) => onCursorSizeChange?.(v)} formatValue={(v) => `${v.toFixed(2)}×`} parseInput={(text) => parseFloat(text.replace(/×$/, ""))} />
-							<SliderControl label={tSettings("effects.cursorSmoothing")} value={cursorSmoothing} defaultValue={DEFAULT_CURSOR_SMOOTHING} min={0} max={2} step={0.01} onChange={(v) => onCursorSmoothingChange?.(v)} formatValue={(v) => (v <= 0 ? tSettings("effects.off") : v.toFixed(2))} parseInput={(text) => parseFloat(text)} />
-							<SliderControl label={tSettings("effects.cursorMotionBlur")} value={cursorMotionBlur} defaultValue={DEFAULT_CURSOR_MOTION_BLUR} min={0} max={2} step={0.05} onChange={(v) => onCursorMotionBlurChange?.(v)} formatValue={(v) => `${v.toFixed(2)}×`} parseInput={(text) => parseFloat(text.replace(/×$/, ""))} />
-							<SliderControl label={tSettings("effects.cursorClickBounce")} value={cursorClickBounce} defaultValue={DEFAULT_CURSOR_CLICK_BOUNCE} min={0} max={5} step={0.05} onChange={(v) => onCursorClickBounceChange?.(v)} formatValue={(v) => `${v.toFixed(2)}×`} parseInput={(text) => parseFloat(text.replace(/×$/, ""))} />
-							<SliderControl label={tSettings("effects.cursorClickBounceDuration", "Bounce Speed")} value={cursorClickBounceDuration} defaultValue={DEFAULT_CURSOR_CLICK_BOUNCE_DURATION} min={60} max={500} step={5} onChange={(v) => onCursorClickBounceDurationChange?.(v)} formatValue={(v) => `${Math.round(v)} ms`} parseInput={(text) => parseFloat(text.replace(/ms$/i, "").trim())} />
+							<SliderControl
+								label={tSettings("effects.cursorSize")}
+								value={cursorSize}
+								defaultValue={DEFAULT_CURSOR_SIZE}
+								min={0.5}
+								max={10}
+								step={0.05}
+								onChange={(v) => onCursorSizeChange?.(v)}
+								formatValue={(v) => `${v.toFixed(2)}×`}
+								parseInput={(text) => parseFloat(text.replace(/×$/, ""))}
+							/>
+							<SliderControl
+								label={tSettings("effects.cursorSmoothing")}
+								value={cursorSmoothing}
+								defaultValue={DEFAULT_CURSOR_SMOOTHING}
+								min={0}
+								max={2}
+								step={0.01}
+								onChange={(v) => onCursorSmoothingChange?.(v)}
+								formatValue={(v) => (v <= 0 ? tSettings("effects.off") : v.toFixed(2))}
+								parseInput={(text) => parseFloat(text)}
+							/>
+							<SliderControl
+								label={tSettings("effects.cursorMotionBlur")}
+								value={cursorMotionBlur}
+								defaultValue={DEFAULT_CURSOR_MOTION_BLUR}
+								min={0}
+								max={2}
+								step={0.05}
+								onChange={(v) => onCursorMotionBlurChange?.(v)}
+								formatValue={(v) => `${v.toFixed(2)}×`}
+								parseInput={(text) => parseFloat(text.replace(/×$/, ""))}
+							/>
+							<SliderControl
+								label={tSettings("effects.cursorClickBounce")}
+								value={cursorClickBounce}
+								defaultValue={DEFAULT_CURSOR_CLICK_BOUNCE}
+								min={0}
+								max={5}
+								step={0.05}
+								onChange={(v) => onCursorClickBounceChange?.(v)}
+								formatValue={(v) => `${v.toFixed(2)}×`}
+								parseInput={(text) => parseFloat(text.replace(/×$/, ""))}
+							/>
+							<SliderControl
+								label={tSettings("effects.cursorClickBounceDuration", "Bounce Speed")}
+								value={cursorClickBounceDuration}
+								defaultValue={DEFAULT_CURSOR_CLICK_BOUNCE_DURATION}
+								min={60}
+								max={500}
+								step={5}
+								onChange={(v) => onCursorClickBounceDurationChange?.(v)}
+								formatValue={(v) => `${Math.round(v)} ms`}
+								parseInput={(text) => parseFloat(text.replace(/ms$/i, "").trim())}
+							/>
 							<SliderControl
 								label={tSettings("effects.cursorSway")}
 								value={toCursorSwaySliderValue(cursorSway)}
@@ -1420,14 +1754,50 @@ export function SettingsPanel({
 					<section className="flex flex-col gap-2">
 						<div className="flex items-center justify-between gap-3">
 							<SectionLabel>{tSettings("sections.webcam", "Webcam")}</SectionLabel>
-							<button type="button" onClick={resetWebcamSection} className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80">{t("common.actions.reset", "Reset")}</button>
+							<button
+								type="button"
+								onClick={resetWebcamSection}
+								className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80"
+							>
+								{t("common.actions.reset", "Reset")}
+							</button>
 						</div>
 						<div className="flex flex-col gap-1.5">
-							<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5"><span className="text-[10px] text-slate-400">{tSettings("effects.show", "Show")}</span><Switch checked={webcam?.enabled ?? false} onCheckedChange={(enabled) => updateWebcam({ enabled })} className="data-[state=checked]:bg-[#2563EB] scale-75" /></div>
-							<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5"><span className="text-[10px] text-slate-400">{tSettings("effects.webcamReactToZoom")}</span><Switch checked={webcam?.reactToZoom ?? DEFAULT_WEBCAM_REACT_TO_ZOOM} onCheckedChange={(reactToZoom) => updateWebcam({ reactToZoom })} className="data-[state=checked]:bg-[#2563EB] scale-75" /></div>
-							<SliderControl label={tSettings("effects.webcamSize")} value={webcam?.size ?? DEFAULT_WEBCAM_SIZE} defaultValue={DEFAULT_WEBCAM_SIZE} min={10} max={100} step={1} onChange={(v) => updateWebcam({ size: v })} formatValue={(v) => `${Math.round(v)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
+							<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
+								<span className="text-[10px] text-slate-400">
+									{tSettings("effects.show", "Show")}
+								</span>
+								<Switch
+									checked={webcam?.enabled ?? false}
+									onCheckedChange={(enabled) => updateWebcam({ enabled })}
+									className="data-[state=checked]:bg-[#2563EB] scale-75"
+								/>
+							</div>
+							<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
+								<span className="text-[10px] text-slate-400">
+									{tSettings("effects.webcamReactToZoom")}
+								</span>
+								<Switch
+									checked={webcam?.reactToZoom ?? DEFAULT_WEBCAM_REACT_TO_ZOOM}
+									onCheckedChange={(reactToZoom) => updateWebcam({ reactToZoom })}
+									className="data-[state=checked]:bg-[#2563EB] scale-75"
+								/>
+							</div>
+							<SliderControl
+								label={tSettings("effects.webcamSize")}
+								value={webcam?.size ?? DEFAULT_WEBCAM_SIZE}
+								defaultValue={DEFAULT_WEBCAM_SIZE}
+								min={10}
+								max={100}
+								step={1}
+								onChange={(v) => updateWebcam({ size: v })}
+								formatValue={(v) => `${Math.round(v)}%`}
+								parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
+							/>
 							<div className="rounded-lg bg-white/[0.03] px-2.5 py-2">
-								<div className="mb-2 text-[10px] text-slate-400">{tSettings("effects.webcamPosition", "Position")}</div>
+								<div className="mb-2 text-[10px] text-slate-400">
+									{tSettings("effects.webcamPosition", "Position")}
+								</div>
 								<div className="grid grid-cols-3 gap-1.5">
 									{WEBCAM_POSITION_PRESETS.map((option) => {
 										const isActive = webcamPositionPreset === option.preset;
@@ -1449,28 +1819,110 @@ export function SettingsPanel({
 									})}
 								</div>
 								<div className="mt-2 flex items-center justify-between rounded-lg bg-black/10 px-2.5 py-1.5">
-									<span className="text-[10px] text-slate-400">{tSettings("effects.webcamCustomPosition", "Custom position")}</span>
-									<Switch checked={webcamPositionPreset === "custom"} onCheckedChange={(checked) => applyWebcamPositionPreset(checked ? "custom" : DEFAULT_WEBCAM_POSITION_PRESET)} className="data-[state=checked]:bg-[#2563EB] scale-75" />
+									<span className="text-[10px] text-slate-400">
+										{tSettings("effects.webcamCustomPosition", "Custom position")}
+									</span>
+									<Switch
+										checked={webcamPositionPreset === "custom"}
+										onCheckedChange={(checked) =>
+											applyWebcamPositionPreset(checked ? "custom" : DEFAULT_WEBCAM_POSITION_PRESET)
+										}
+										className="data-[state=checked]:bg-[#2563EB] scale-75"
+									/>
 								</div>
 							</div>
 							{webcamPositionPreset === "custom" ? (
 								<>
-									<SliderControl label={tSettings("effects.webcamHorizontal", "Horizontal")} value={webcamPositionX * 100} defaultValue={DEFAULT_WEBCAM_POSITION_X * 100} min={0} max={100} step={1} onChange={(v) => updateWebcam({ positionPreset: "custom", positionX: v / 100 })} formatValue={(v) => `${Math.round(v)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
-									<SliderControl label={tSettings("effects.webcamVertical", "Vertical")} value={webcamPositionY * 100} defaultValue={DEFAULT_WEBCAM_POSITION_Y * 100} min={0} max={100} step={1} onChange={(v) => updateWebcam({ positionPreset: "custom", positionY: v / 100 })} formatValue={(v) => `${Math.round(v)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, ""))} />
+									<SliderControl
+										label={tSettings("effects.webcamHorizontal", "Horizontal")}
+										value={webcamPositionX * 100}
+										defaultValue={DEFAULT_WEBCAM_POSITION_X * 100}
+										min={0}
+										max={100}
+										step={1}
+										onChange={(v) => updateWebcam({ positionPreset: "custom", positionX: v / 100 })}
+										formatValue={(v) => `${Math.round(v)}%`}
+										parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
+									/>
+									<SliderControl
+										label={tSettings("effects.webcamVertical", "Vertical")}
+										value={webcamPositionY * 100}
+										defaultValue={DEFAULT_WEBCAM_POSITION_Y * 100}
+										min={0}
+										max={100}
+										step={1}
+										onChange={(v) => updateWebcam({ positionPreset: "custom", positionY: v / 100 })}
+										formatValue={(v) => `${Math.round(v)}%`}
+										parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
+									/>
 								</>
 							) : null}
-							<SliderControl label={tSettings("effects.webcamMargin", "Margin")} value={webcam?.margin ?? DEFAULT_WEBCAM_MARGIN} defaultValue={DEFAULT_WEBCAM_MARGIN} min={0} max={96} step={1} onChange={(v) => updateWebcam({ margin: v })} formatValue={(v) => `${Math.round(v)}px`} parseInput={(text) => parseFloat(text.replace(/px$/, ""))} />
-							<SliderControl label={tSettings("effects.webcamRoundness")} value={webcam?.cornerRadius ?? DEFAULT_WEBCAM_CORNER_RADIUS} defaultValue={DEFAULT_WEBCAM_CORNER_RADIUS} min={0} max={160} step={1} onChange={(v) => updateWebcam({ cornerRadius: v })} formatValue={(v) => `${Math.round(v)}px`} parseInput={(text) => parseFloat(text.replace(/px$/, ""))} />
-							<SliderControl label={tSettings("effects.webcamShadow")} value={webcam?.shadow ?? DEFAULT_WEBCAM_SHADOW} defaultValue={DEFAULT_WEBCAM_SHADOW} min={0} max={1} step={0.01} onChange={(v) => updateWebcam({ shadow: v })} formatValue={(v) => `${Math.round(v * 100)}%`} parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100} />
+							<SliderControl
+								label={tSettings("effects.webcamMargin", "Margin")}
+								value={webcam?.margin ?? DEFAULT_WEBCAM_MARGIN}
+								defaultValue={DEFAULT_WEBCAM_MARGIN}
+								min={0}
+								max={96}
+								step={1}
+								onChange={(v) => updateWebcam({ margin: v })}
+								formatValue={(v) => `${Math.round(v)}px`}
+								parseInput={(text) => parseFloat(text.replace(/px$/, ""))}
+							/>
+							<SliderControl
+								label={tSettings("effects.webcamRoundness")}
+								value={webcam?.cornerRadius ?? DEFAULT_WEBCAM_CORNER_RADIUS}
+								defaultValue={DEFAULT_WEBCAM_CORNER_RADIUS}
+								min={0}
+								max={160}
+								step={1}
+								onChange={(v) => updateWebcam({ cornerRadius: v })}
+								formatValue={(v) => `${Math.round(v)}px`}
+								parseInput={(text) => parseFloat(text.replace(/px$/, ""))}
+							/>
+							<SliderControl
+								label={tSettings("effects.webcamShadow")}
+								value={webcam?.shadow ?? DEFAULT_WEBCAM_SHADOW}
+								defaultValue={DEFAULT_WEBCAM_SHADOW}
+								min={0}
+								max={1}
+								step={0.01}
+								onChange={(v) => updateWebcam({ shadow: v })}
+								formatValue={(v) => `${Math.round(v * 100)}%`}
+								parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100}
+							/>
 							<div className="rounded-lg bg-white/[0.03] px-2.5 py-2">
 								<div className="flex items-center justify-between gap-2">
 									<div>
-										<div className="text-[10px] text-slate-300">{tSettings("effects.webcamFootage")}</div>
-										<div className="mt-0.5 text-[10px] text-slate-500">{webcamFileName ?? tSettings("effects.webcamFootageDescription")}</div>
+										<div className="text-[10px] text-slate-300">
+											{tSettings("effects.webcamFootage")}
+										</div>
+										<div className="mt-0.5 text-[10px] text-slate-500">
+											{webcamFileName ?? tSettings("effects.webcamFootageDescription")}
+										</div>
 									</div>
 									<div className="flex items-center gap-1.5">
-										<Button type="button" variant="outline" onClick={onUploadWebcam} className="h-7 gap-1.5 border-white/10 bg-white/5 px-2 text-[10px] text-slate-200 hover:bg-white/10 hover:text-white"><Upload className="h-3 w-3" />{webcam?.sourcePath ? tSettings("effects.replaceWebcamFootage") : tSettings("effects.uploadWebcamFootage")}</Button>
-										{webcam?.sourcePath ? <Button type="button" variant="outline" onClick={onClearWebcam} className="h-7 gap-1.5 border-white/10 bg-white/5 px-2 text-[10px] text-slate-200 hover:bg-white/10 hover:text-white"><Trash2 className="h-3 w-3" />{tSettings("effects.removeWebcamFootage")}</Button> : null}
+										<Button
+											type="button"
+											variant="outline"
+											onClick={onUploadWebcam}
+											className="h-7 gap-1.5 border-white/10 bg-white/5 px-2 text-[10px] text-slate-200 hover:bg-white/10 hover:text-white"
+										>
+											<Upload className="h-3 w-3" />
+											{webcam?.sourcePath
+												? tSettings("effects.replaceWebcamFootage")
+												: tSettings("effects.uploadWebcamFootage")}
+										</Button>
+										{webcam?.sourcePath ? (
+											<Button
+												type="button"
+												variant="outline"
+												onClick={onClearWebcam}
+												className="h-7 gap-1.5 border-white/10 bg-white/5 px-2 text-[10px] text-slate-200 hover:bg-white/10 hover:text-white"
+											>
+												<Trash2 className="h-3 w-3" />
+												{tSettings("effects.removeWebcamFootage")}
+											</Button>
+										) : null}
 									</div>
 								</div>
 							</div>
@@ -1483,17 +1935,17 @@ export function SettingsPanel({
 	return (
 		<div className="flex-[2] min-w-[280px] max-w-[332px] bg-[#161619] border border-white/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
 			<div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pb-0">
-					<AnimatePresence mode="wait" initial={false}>
-						<motion.div
-							key={activeEffectSection}
-							initial={{ opacity: 0, y: 8 }}
-							animate={{ opacity: 1, y: 0 }}
-							exit={{ opacity: 0, y: -8 }}
-							transition={{ duration: 0.18, ease: "easeOut" }}
-						>
-							{effectSectionContent}
-						</motion.div>
-					</AnimatePresence>
+				<AnimatePresence mode="wait" initial={false}>
+					<motion.div
+						key={activeEffectSection}
+						initial={{ opacity: 0, y: 8 }}
+						animate={{ opacity: 1, y: 0 }}
+						exit={{ opacity: 0, y: -8 }}
+						transition={{ duration: 0.18, ease: "easeOut" }}
+					>
+						{effectSectionContent}
+					</motion.div>
+				</AnimatePresence>
 			</div>
 
 			<div className="flex-shrink-0 border-t border-white/10 bg-[#151518] p-4 pt-3">
@@ -1530,15 +1982,29 @@ export function SettingsPanel({
 							);
 						})}
 					</div>
-					{!zoomEnabled && <p className="mt-2 text-center text-[10px] text-slate-500">{tSettings("zoom.selectRegion")}</p>}
+					{!zoomEnabled && (
+						<p className="mt-2 text-center text-[10px] text-slate-500">
+							{tSettings("zoom.selectRegion")}
+						</p>
+					)}
 					{zoomEnabled && (
-						<Button onClick={handleDeleteClick} variant="destructive" size="sm" className="mt-2 h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20">
+						<Button
+							onClick={handleDeleteClick}
+							variant="destructive"
+							size="sm"
+							className="mt-2 h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
+						>
 							<Trash2 className="h-3 w-3" />
 							{tSettings("zoom.deleteZoom")}
 						</Button>
 					)}
 					{trimEnabled && (
-						<Button onClick={handleTrimDeleteClick} variant="destructive" size="sm" className="mt-2 h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20">
+						<Button
+							onClick={handleTrimDeleteClick}
+							variant="destructive"
+							size="sm"
+							className="mt-2 h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
+						>
 							<Trash2 className="h-3 w-3" />
 							{tSettings("trim.deleteRegion")}
 						</Button>
@@ -1547,10 +2013,13 @@ export function SettingsPanel({
 
 				<div>
 					<div className="mb-3 flex items-center justify-between">
-						<span className="text-sm font-medium text-slate-200">{tSettings("speed.playbackSpeed")}</span>
+						<span className="text-sm font-medium text-slate-200">
+							{tSettings("speed.playbackSpeed")}
+						</span>
 						{selectedSpeedId && selectedSpeedValue && (
 							<span className="rounded-full bg-[#d97706]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#d97706]">
-								{SPEED_OPTIONS.find((o) => o.speed === selectedSpeedValue)?.label ?? `${selectedSpeedValue}×`}
+								{SPEED_OPTIONS.find((o) => o.speed === selectedSpeedValue)?.label ??
+									`${selectedSpeedValue}×`}
 							</span>
 						)}
 					</div>
@@ -1565,7 +2034,9 @@ export function SettingsPanel({
 									onClick={() => onSpeedChange?.(option.speed)}
 									className={cn(
 										"h-auto w-full rounded-lg border px-1 py-2 text-center shadow-sm transition-all duration-200 ease-out",
-										selectedSpeedId ? "opacity-100 cursor-pointer" : "opacity-40 cursor-not-allowed",
+										selectedSpeedId
+											? "opacity-100 cursor-pointer"
+											: "opacity-40 cursor-not-allowed",
 										isActive
 											? "border-[#d97706] bg-[#d97706] text-white"
 											: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
@@ -1576,9 +2047,18 @@ export function SettingsPanel({
 							);
 						})}
 					</div>
-					{!selectedSpeedId && <p className="mt-2 text-center text-[10px] text-slate-500">{tSettings("speed.selectRegion")}</p>}
+					{!selectedSpeedId && (
+						<p className="mt-2 text-center text-[10px] text-slate-500">
+							{tSettings("speed.selectRegion")}
+						</p>
+					)}
 					{selectedSpeedId && (
-						<Button onClick={() => selectedSpeedId && onSpeedDelete?.(selectedSpeedId)} variant="destructive" size="sm" className="mt-2 h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20">
+						<Button
+							onClick={() => selectedSpeedId && onSpeedDelete?.(selectedSpeedId)}
+							variant="destructive"
+							size="sm"
+							className="mt-2 h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
+						>
 							<Trash2 className="h-3 w-3" />
 							{tSettings("speed.deleteRegion")}
 						</Button>

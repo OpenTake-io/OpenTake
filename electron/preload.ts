@@ -209,14 +209,37 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	deleteRecordingFile: (filePath: string) => {
 		return ipcRenderer.invoke("delete-recording-file", filePath);
 	},
-	saveProjectFile: (projectData: unknown, suggestedName?: string, existingProjectPath?: string) => {
-		return ipcRenderer.invoke("save-project-file", projectData, suggestedName, existingProjectPath);
+	saveProjectFile: (
+		projectData: unknown,
+		suggestedName?: string,
+		existingProjectPath?: string,
+		thumbnailDataUrl?: string | null,
+	) => {
+		return ipcRenderer.invoke(
+			"save-project-file",
+			projectData,
+			suggestedName,
+			existingProjectPath,
+			thumbnailDataUrl,
+		);
 	},
 	loadProjectFile: () => {
 		return ipcRenderer.invoke("load-project-file");
 	},
 	loadCurrentProjectFile: () => {
 		return ipcRenderer.invoke("load-current-project-file");
+	},
+	getProjectsDirectory: () => {
+		return ipcRenderer.invoke("get-projects-directory");
+	},
+	listProjectFiles: () => {
+		return ipcRenderer.invoke("list-project-files");
+	},
+	openProjectFileAtPath: (filePath: string) => {
+		return ipcRenderer.invoke("open-project-file-at-path", filePath);
+	},
+	openProjectsDirectory: () => {
+		return ipcRenderer.invoke("open-projects-directory");
 	},
 	onMenuLoadProject: (callback: () => void) => {
 		const listener = () => callback();

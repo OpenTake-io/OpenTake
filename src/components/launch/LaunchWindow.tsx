@@ -1,40 +1,43 @@
-import type { ReactNode } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
 import {
-	Monitor,
-	Mic,
-	MicOff,
-	ChevronUp,
-	Pause,
-	Square,
-	X,
-	Play,
-	Minus,
-	MoreVertical,
-	FolderOpen,
-	VideoIcon,
-	Languages,
-	Volume2,
-	VolumeX,
 	AppWindow,
+	ChevronUp,
 	Eye,
 	EyeOff,
+	FolderOpen,
+	Languages,
+	Mic,
+	MicOff,
+	Minus,
+	Monitor,
+	MoreVertical,
+	Pause,
+	Play,
+	Square,
 	Timer,
 	Video,
+	VideoIcon,
 	VideoOff,
+	Volume2,
+	VolumeX,
+	X,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RxDragHandleDots2 } from "react-icons/rx";
+import { useI18n } from "@/contexts/I18nContext";
+import type { AppLocale } from "@/i18n/config";
+import { SUPPORTED_LOCALES } from "@/i18n/config";
+import { useScopedT } from "../../contexts/I18nContext";
 import { useAudioLevelMeter } from "../../hooks/useAudioLevelMeter";
 import { useMicrophoneDevices } from "../../hooks/useMicrophoneDevices";
 import { useScreenRecorder } from "../../hooks/useScreenRecorder";
-import { useScopedT } from "../../contexts/I18nContext";
 import { useVideoDevices } from "../../hooks/useVideoDevices";
 import { AudioLevelMeter } from "../ui/audio-level-meter";
 import { ContentClamp } from "../ui/content-clamp";
-import { useI18n } from "@/contexts/I18nContext";
-import { SUPPORTED_LOCALES } from "@/i18n/config";
-import type { AppLocale } from "@/i18n/config";
+import ProjectBrowserDialog, {
+	type ProjectLibraryEntry,
+} from "../video-editor/ProjectBrowserDialog";
 import styles from "./LaunchWindow.module.css";
 
 interface DesktopSource {
@@ -60,15 +63,18 @@ function IconButton({
 	onClick,
 	title,
 	className = "",
+	buttonRef,
 	children,
 }: {
 	onClick?: () => void;
 	title?: string;
 	className?: string;
+	buttonRef?: React.Ref<HTMLButtonElement>;
 	children: ReactNode;
 }) {
 	return (
 		<button
+			ref={buttonRef}
 			type="button"
 			className={`${styles.ib} ${styles.electronNoDrag} ${className}`}
 			onClick={onClick}
@@ -169,7 +175,11 @@ export function LaunchWindow() {
 	const [selectedSource, setSelectedSource] = useState("Screen");
 	const [hasSelectedSource, setHasSelectedSource] = useState(false);
 	const [, setRecordingsDirectory] = useState<string | null>(null);
-	const [activeDropdown, setActiveDropdown] = useState<"none" | "sources" | "more" | "mic" | "countdown" | "webcam">("none");
+	const [activeDropdown, setActiveDropdown] = useState<
+		"none" | "sources" | "more" | "mic" | "countdown" | "webcam"
+	>("none");
+	const [projectLibraryEntries, setProjectLibraryEntries] = useState<ProjectLibraryEntry[]>([]);
+	const [projectBrowserOpen, setProjectBrowserOpen] = useState(false);
 	const [sources, setSources] = useState<DesktopSource[]>([]);
 	const [sourcesLoading, setSourcesLoading] = useState(false);
 	const [hideHudFromCapture, setHideHudFromCapture] = useState(true);
@@ -177,13 +187,15 @@ export function LaunchWindow() {
 	const dropdownRef = useRef<HTMLDivElement>(null);
 	const hudContentRef = useRef<HTMLDivElement>(null);
 	const hudBarRef = useRef<HTMLDivElement>(null);
+	const moreButtonRef = useRef<HTMLButtonElement | null>(null);
 	const webcamPreviewRef = useRef<HTMLVideoElement | null>(null);
 
 	const micDropdownOpen = activeDropdown === "mic";
 	const webcamDropdownOpen = activeDropdown === "webcam";
 	const showWebcamControls = webcamEnabled && !recording;
-	const { devices, selectedDeviceId, setSelectedDeviceId } =
-		useMicrophoneDevices(microphoneEnabled || micDropdownOpen);
+	const { devices, selectedDeviceId, setSelectedDeviceId } = useMicrophoneDevices(
+		microphoneEnabled || micDropdownOpen,
+	);
 	const {
 		devices: videoDevices,
 		selectedDeviceId: selectedVideoDeviceId,
@@ -238,7 +250,9 @@ export function LaunchWindow() {
 				webcamPreviewRef.current.srcObject = previewStream;
 				const playPromise = webcamPreviewRef.current.play();
 				if (playPromise) {
-					playPromise.catch(() => {});
+					playPromise.catch(() => {
+						// Ignore autoplay interruptions while the preview element mounts.
+					});
 				}
 			} catch (error) {
 				console.warn("Failed to start live webcam preview:", error);
@@ -291,7 +305,9 @@ export function LaunchWindow() {
 	}, [recording, recordingStart, paused, pausedAt, pausedTotal]);
 
 	const formatTime = (seconds: number) => {
-		const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+		const m = Math.floor(seconds / 60)
+			.toString()
+			.padStart(2, "0");
 		const s = (seconds % 60).toString().padStart(2, "0");
 		return `${m}:${s}`;
 	};
@@ -347,7 +363,9 @@ export function LaunchWindow() {
 			}
 		};
 		void loadPlatform();
-		return () => { cancelled = true; };
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
 	useEffect(() => {
@@ -363,17 +381,19 @@ export function LaunchWindow() {
 			}
 		};
 		void loadHudCaptureProtection();
-		return () => { cancelled = true; };
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
 	useEffect(() => {
-		const expanded = activeDropdown !== "none";
+		const expanded = activeDropdown !== "none" || projectBrowserOpen;
 		window.electronAPI.setHudOverlayExpanded(expanded);
 
 		return () => {
 			window.electronAPI.setHudOverlayExpanded(false);
 		};
-	}, [activeDropdown]);
+	}, [activeDropdown, projectBrowserOpen]);
 
 	useEffect(() => {
 		const hudContent = hudContentRef.current;
@@ -399,7 +419,7 @@ export function LaunchWindow() {
 			window.electronAPI.setHudOverlayCompactWidth(measuredWidth);
 			window.electronAPI.setHudOverlayMeasuredHeight(
 				measuredHeight,
-				activeDropdown !== "none",
+				activeDropdown !== "none" || projectBrowserOpen,
 			);
 		};
 
@@ -424,12 +444,13 @@ export function LaunchWindow() {
 				cancelAnimationFrame(frameId);
 			}
 		};
-	}, [selectedSource, recording, paused, activeDropdown]);
+	}, [activeDropdown, projectBrowserOpen]);
 
 	useEffect(() => {
 		const handleClick = (e: MouseEvent) => {
 			if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
 				setActiveDropdown("none");
+				setProjectBrowserOpen(false);
 			}
 		};
 		document.addEventListener("mousedown", handleClick);
@@ -478,6 +499,7 @@ export function LaunchWindow() {
 	}, []);
 
 	const toggleDropdown = (which: "sources" | "more" | "mic" | "countdown" | "webcam") => {
+		setProjectBrowserOpen(false);
 		setActiveDropdown(activeDropdown === which ? "none" : which);
 		if (activeDropdown !== which && which === "sources") fetchSources();
 	};
@@ -504,12 +526,41 @@ export function LaunchWindow() {
 		}
 	};
 
-	const openProjectFile = async () => {
+	const refreshProjectLibrary = useCallback(async () => {
+		try {
+			const result = await window.electronAPI.listProjectFiles();
+			if (!result.success) return;
+
+			setProjectLibraryEntries(result.entries);
+		} catch (error) {
+			console.error("Failed to load project library:", error);
+		}
+	}, []);
+
+	const openProjectBrowser = useCallback(async () => {
+		if (projectBrowserOpen) {
+			setProjectBrowserOpen(false);
+			return;
+		}
+
 		setActiveDropdown("none");
-		const result = await window.electronAPI.loadProjectFile();
-		if (result.canceled || !result.success) return;
-		await window.electronAPI.switchToEditor();
-	};
+		await refreshProjectLibrary();
+		setProjectBrowserOpen(true);
+	}, [projectBrowserOpen, refreshProjectLibrary]);
+
+	const openProjectFromLibrary = useCallback(async (projectPath: string) => {
+		try {
+			const result = await window.electronAPI.openProjectFileAtPath(projectPath);
+			if (result.canceled || !result.success) {
+				return;
+			}
+
+			setProjectBrowserOpen(false);
+			await window.electronAPI.switchToEditor();
+		} catch (error) {
+			console.error("Failed to open project from library:", error);
+		}
+	}, []);
 
 	const chooseRecordingsDirectory = async () => {
 		setActiveDropdown("none");
@@ -551,25 +602,40 @@ export function LaunchWindow() {
 	const recordingControls = (
 		<>
 			<div className="flex items-center gap-[5px]">
-				<div className={`w-[7px] h-[7px] rounded-full ${paused ? "bg-[#fbbf24]" : `bg-[#f43f5e] ${styles.recDotBlink}`}`} />
-				<span className={`text-[10px] font-bold tracking-[0.06em] ${paused ? "text-[#fbbf24]" : "text-[#f43f5e]"}`}>
+				<div
+					className={`w-[7px] h-[7px] rounded-full ${paused ? "bg-[#fbbf24]" : `bg-[#f43f5e] ${styles.recDotBlink}`}`}
+				/>
+				<span
+					className={`text-[10px] font-bold tracking-[0.06em] ${paused ? "text-[#fbbf24]" : "text-[#f43f5e]"}`}
+				>
 					{paused ? t("recording.paused") : t("recording.rec")}
 				</span>
 			</div>
 
-			<span className={`font-mono text-xs font-semibold min-w-[52px] text-center tracking-[0.02em] ${paused ? "text-[#fbbf24]" : "text-[#eeeef2]"}`}>
+			<span
+				className={`font-mono text-xs font-semibold min-w-[52px] text-center tracking-[0.02em] ${paused ? "text-[#fbbf24]" : "text-[#eeeef2]"}`}
+			>
 				{formatTime(elapsed)}
 			</span>
 
 			<Separator />
 
-			<IconButton title={microphoneEnabled ? t("recording.disableMicrophone") : t("recording.enableMicrophone")} className={microphoneEnabled ? styles.ibActive : ""}>
+			<IconButton
+				title={
+					microphoneEnabled ? t("recording.disableMicrophone") : t("recording.enableMicrophone")
+				}
+				className={microphoneEnabled ? styles.ibActive : ""}
+			>
 				{microphoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
 			</IconButton>
 
 			<Separator />
 
-			<IconButton onClick={paused ? resumeRecording : pauseRecording} title={paused ? t("recording.resume") : t("recording.pause")} className={paused ? styles.ibGreen : ""}>
+			<IconButton
+				onClick={paused ? resumeRecording : pauseRecording}
+				title={paused ? t("recording.resume") : t("recording.pause")}
+				className={paused ? styles.ibGreen : ""}
+			>
 				{paused ? <Play size={18} fill="currentColor" strokeWidth={0} /> : <Pause size={18} />}
 			</IconButton>
 
@@ -577,7 +643,10 @@ export function LaunchWindow() {
 				<Square size={16} fill="currentColor" strokeWidth={0} />
 			</IconButton>
 
-			<IconButton onClick={() => window.electronAPI?.hudOverlayHide?.()} title={t("recording.hideHud")}>
+			<IconButton
+				onClick={() => window.electronAPI?.hudOverlayHide?.()}
+				title={t("recording.hideHud")}
+			>
 				<Minus size={16} />
 			</IconButton>
 
@@ -599,14 +668,19 @@ export function LaunchWindow() {
 				<ContentClamp className={styles.sourceLabel} truncateLength={36}>
 					{selectedSource}
 				</ContentClamp>
-				<ChevronUp size={10} className={`text-[#6b6b78] ml-0.5 transition-transform duration-200 ${activeDropdown === "sources" ? "" : "rotate-180"}`} />
+				<ChevronUp
+					size={10}
+					className={`text-[#6b6b78] ml-0.5 transition-transform duration-200 ${activeDropdown === "sources" ? "" : "rotate-180"}`}
+				/>
 			</button>
 
 			<Separator />
 
 			<IconButton
 				onClick={toggleMicrophone}
-				title={microphoneEnabled ? t("recording.disableMicrophone") : t("recording.enableMicrophone")}
+				title={
+					microphoneEnabled ? t("recording.disableMicrophone") : t("recording.enableMicrophone")
+				}
 				className={microphoneEnabled ? styles.ibActive : ""}
 			>
 				{microphoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
@@ -642,15 +716,25 @@ export function LaunchWindow() {
 
 			<Separator />
 
-			<IconButton onClick={() => toggleDropdown("more")} title={t("recording.more")}>
+			<IconButton
+				buttonRef={moreButtonRef}
+				onClick={() => toggleDropdown("more")}
+				title={t("recording.more")}
+			>
 				<MoreVertical size={18} />
 			</IconButton>
 
-			<IconButton onClick={() => window.electronAPI?.hudOverlayHide?.()} title={t("recording.hideHud")}>
+			<IconButton
+				onClick={() => window.electronAPI?.hudOverlayHide?.()}
+				title={t("recording.hideHud")}
+			>
 				<Minus size={16} />
 			</IconButton>
 
-			<IconButton onClick={() => window.electronAPI?.hudOverlayClose?.()} title={t("recording.closeApp")}>
+			<IconButton
+				onClick={() => window.electronAPI?.hudOverlayClose?.()}
+				title={t("recording.closeApp")}
+			>
 				<X size={16} />
 			</IconButton>
 		</>
@@ -662,214 +746,264 @@ export function LaunchWindow() {
 			style={{ height: "100vh" }}
 			ref={dropdownRef}
 		>
-			<div
-				ref={hudContentRef}
-				className="flex flex-col items-center overflow-visible"
-			>
+			<div ref={hudContentRef} className="flex flex-col items-center overflow-visible">
 				{/* Only the visible HUD content should become interactive. */}
 				<div className={styles.menuArea}>
+					{projectBrowserOpen ? (
+						<div className={styles.electronNoDrag}>
+							<ProjectBrowserDialog
+								open={projectBrowserOpen}
+								onOpenChange={setProjectBrowserOpen}
+								entries={projectLibraryEntries}
+								renderMode="inline"
+								onOpenProject={(projectPath) => {
+									void openProjectFromLibrary(projectPath);
+								}}
+							/>
+						</div>
+					) : null}
 					{activeDropdown !== "none" && (
 						<div className={`${styles.menuCard} ${styles.electronNoDrag}`}>
-						{activeDropdown === "sources" && (
-							<>
-								{sourcesLoading ? (
-									<div className="flex items-center justify-center py-6">
-										<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#6b6b78]" />
-									</div>
-								) : (
-									<>
-										{screenSources.length > 0 && (
-											<>
-												<div className={styles.ddLabel}>{t("recording.screens")}</div>
-												{screenSources.map((source) => (
-													<DropdownItem
-														key={source.id}
-														icon={<Monitor size={16} />}
-														selected={selectedSource === source.name}
-														onClick={() => handleSourceSelect(source)}
-													>
-														{source.name}
-													</DropdownItem>
-												))}
-											</>
-										)}
-										{windowSources.length > 0 && (
-											<>
-												<div className={styles.ddLabel} style={screenSources.length > 0 ? { marginTop: 4 } : undefined}>
-													{t("recording.windows")}
-												</div>
-												{windowSources.map((source) => (
-													<DropdownItem
-														key={source.id}
-														icon={<AppWindow size={16} />}
-														selected={selectedSource === source.name}
-														onClick={() => handleSourceSelect(source)}
-													>
-														{source.appName && source.appName !== source.name
-															? `${source.appName} — ${source.name}`
-															: source.name}
-													</DropdownItem>
-												))}
-											</>
-										)}
-										{screenSources.length === 0 && windowSources.length === 0 && (
-											<div className="text-center text-xs text-[#6b6b78] py-4">
-												{t("recording.noSourcesFound")}
-											</div>
-										)}
-									</>
-								)}
-							</>
-						)}
-
-						{activeDropdown === "mic" && (
-							<>
-								<div className={styles.ddLabel}>{t("recording.microphone")}</div>
-								<DropdownItem
-									icon={systemAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-									selected={systemAudioEnabled}
-									onClick={() => {
-										setSystemAudioEnabled(!systemAudioEnabled);
-									}}
-								>
-									{systemAudioEnabled ? t("recording.disableSystemAudio") : t("recording.enableSystemAudio")}
-								</DropdownItem>
-								<Separator />
-								{microphoneEnabled && (
-									<DropdownItem
-										icon={<MicOff size={16} />}
-										onClick={() => { setMicrophoneEnabled(false); setActiveDropdown("none"); }}
-									>
-										{t("recording.turnOffMicrophone")}
-									</DropdownItem>
-								)}
-								{!microphoneEnabled && (
-									<div className="px-3 py-2 text-xs text-[#6b6b78]">
-										{t("recording.selectMicToEnable")}
-									</div>
-								)}
-								{devices.map((device) => (
-									<MicDeviceRow
-										key={device.deviceId}
-										device={device}
-										selected={microphoneEnabled && (microphoneDeviceId === device.deviceId || selectedDeviceId === device.deviceId)}
-										onSelect={() => {
-											setMicrophoneEnabled(true);
-											setSelectedDeviceId(device.deviceId);
-											setMicrophoneDeviceId(device.deviceId);
-										}}
-									/>
-								))}
-								{devices.length === 0 && (
-									<div className="text-center text-xs text-[#6b6b78] py-4">
-										{t("recording.noMicrophonesFound")}
-									</div>
-								)}
-							</>
-						)}
-
-						{activeDropdown === "webcam" && (
-							<>
-								<div className={styles.ddLabel}>{t("recording.webcam")}</div>
-								{webcamEnabled && (
-									<DropdownItem
-										icon={<VideoOff size={16} />}
-										onClick={() => { setWebcamEnabled(false); setActiveDropdown("none"); }}
-									>
-										{t("recording.turnOffWebcam")}
-									</DropdownItem>
-								)}
-								{!webcamEnabled && (
-									<div className="px-3 py-2 text-xs text-[#6b6b78]">
-										{t("recording.selectWebcamToEnable")}
-									</div>
-								)}
-								{showWebcamControls && (
-									<div className="flex justify-center px-3 py-2">
-										<div className="h-24 w-24 overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/10">
-											<video
-												ref={webcamPreviewRef}
-												className="h-full w-full object-cover"
-												muted
-												playsInline
-												style={{ transform: "scaleX(-1)" }}
-											/>
+							{activeDropdown === "sources" && (
+								<>
+									{sourcesLoading ? (
+										<div className="flex items-center justify-center py-6">
+											<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#6b6b78]" />
 										</div>
-									</div>
-								)}
-								{videoDevices.map((device) => (
+									) : (
+										<>
+											{screenSources.length > 0 && (
+												<>
+													<div className={styles.ddLabel}>{t("recording.screens")}</div>
+													{screenSources.map((source) => (
+														<DropdownItem
+															key={source.id}
+															icon={<Monitor size={16} />}
+															selected={selectedSource === source.name}
+															onClick={() => handleSourceSelect(source)}
+														>
+															{source.name}
+														</DropdownItem>
+													))}
+												</>
+											)}
+											{windowSources.length > 0 && (
+												<>
+													<div
+														className={styles.ddLabel}
+														style={screenSources.length > 0 ? { marginTop: 4 } : undefined}
+													>
+														{t("recording.windows")}
+													</div>
+													{windowSources.map((source) => (
+														<DropdownItem
+															key={source.id}
+															icon={<AppWindow size={16} />}
+															selected={selectedSource === source.name}
+															onClick={() => handleSourceSelect(source)}
+														>
+															{source.appName && source.appName !== source.name
+																? `${source.appName} — ${source.name}`
+																: source.name}
+														</DropdownItem>
+													))}
+												</>
+											)}
+											{screenSources.length === 0 && windowSources.length === 0 && (
+												<div className="text-center text-xs text-[#6b6b78] py-4">
+													{t("recording.noSourcesFound")}
+												</div>
+											)}
+										</>
+									)}
+								</>
+							)}
+
+							{activeDropdown === "mic" && (
+								<>
+									<div className={styles.ddLabel}>{t("recording.microphone")}</div>
 									<DropdownItem
-										key={device.deviceId}
-										icon={webcamEnabled && (webcamDeviceId === device.deviceId || selectedVideoDeviceId === device.deviceId) ? <Video size={16} /> : <VideoOff size={16} />}
-										selected={webcamEnabled && (webcamDeviceId === device.deviceId || selectedVideoDeviceId === device.deviceId)}
+										icon={systemAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+										selected={systemAudioEnabled}
 										onClick={() => {
-											setWebcamEnabled(true);
-											setSelectedVideoDeviceId(device.deviceId);
-											setWebcamDeviceId(device.deviceId);
+											setSystemAudioEnabled(!systemAudioEnabled);
 										}}
 									>
-										{device.label}
+										{systemAudioEnabled
+											? t("recording.disableSystemAudio")
+											: t("recording.enableSystemAudio")}
 									</DropdownItem>
-								))}
-								{videoDevices.length === 0 && (
-									<div className="text-center text-xs text-[#6b6b78] py-4">
-										{t("recording.noWebcamsFound")}
+									<Separator />
+									{microphoneEnabled && (
+										<DropdownItem
+											icon={<MicOff size={16} />}
+											onClick={() => {
+												setMicrophoneEnabled(false);
+												setActiveDropdown("none");
+											}}
+										>
+											{t("recording.turnOffMicrophone")}
+										</DropdownItem>
+									)}
+									{!microphoneEnabled && (
+										<div className="px-3 py-2 text-xs text-[#6b6b78]">
+											{t("recording.selectMicToEnable")}
+										</div>
+									)}
+									{devices.map((device) => (
+										<MicDeviceRow
+											key={device.deviceId}
+											device={device}
+											selected={
+												microphoneEnabled &&
+												(microphoneDeviceId === device.deviceId ||
+													selectedDeviceId === device.deviceId)
+											}
+											onSelect={() => {
+												setMicrophoneEnabled(true);
+												setSelectedDeviceId(device.deviceId);
+												setMicrophoneDeviceId(device.deviceId);
+											}}
+										/>
+									))}
+									{devices.length === 0 && (
+										<div className="text-center text-xs text-[#6b6b78] py-4">
+											{t("recording.noMicrophonesFound")}
+										</div>
+									)}
+								</>
+							)}
+
+							{activeDropdown === "webcam" && (
+								<>
+									<div className={styles.ddLabel}>{t("recording.webcam")}</div>
+									{webcamEnabled && (
+										<DropdownItem
+											icon={<VideoOff size={16} />}
+											onClick={() => {
+												setWebcamEnabled(false);
+												setActiveDropdown("none");
+											}}
+										>
+											{t("recording.turnOffWebcam")}
+										</DropdownItem>
+									)}
+									{!webcamEnabled && (
+										<div className="px-3 py-2 text-xs text-[#6b6b78]">
+											{t("recording.selectWebcamToEnable")}
+										</div>
+									)}
+									{showWebcamControls && (
+										<div className="flex justify-center px-3 py-2">
+											<div className="h-24 w-24 overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/10">
+												<video
+													ref={webcamPreviewRef}
+													className="h-full w-full object-cover"
+													muted
+													playsInline
+													style={{ transform: "scaleX(-1)" }}
+												/>
+											</div>
+										</div>
+									)}
+									{videoDevices.map((device) => (
+										<DropdownItem
+											key={device.deviceId}
+											icon={
+												webcamEnabled &&
+												(webcamDeviceId === device.deviceId ||
+													selectedVideoDeviceId === device.deviceId) ? (
+													<Video size={16} />
+												) : (
+													<VideoOff size={16} />
+												)
+											}
+											selected={
+												webcamEnabled &&
+												(webcamDeviceId === device.deviceId ||
+													selectedVideoDeviceId === device.deviceId)
+											}
+											onClick={() => {
+												setWebcamEnabled(true);
+												setSelectedVideoDeviceId(device.deviceId);
+												setWebcamDeviceId(device.deviceId);
+											}}
+										>
+											{device.label}
+										</DropdownItem>
+									))}
+									{videoDevices.length === 0 && (
+										<div className="text-center text-xs text-[#6b6b78] py-4">
+											{t("recording.noWebcamsFound")}
+										</div>
+									)}
+								</>
+							)}
+
+							{activeDropdown === "countdown" && (
+								<>
+									<div className={styles.ddLabel}>{t("recording.countdownDelay")}</div>
+									{COUNTDOWN_OPTIONS.map((delay) => (
+										<DropdownItem
+											key={delay}
+											icon={<Timer size={16} />}
+											selected={countdownDelay === delay}
+											onClick={() => {
+												setCountdownDelay(delay);
+												setActiveDropdown("none");
+											}}
+										>
+											{delay === 0 ? t("recording.noDelay") : `${delay}s`}
+										</DropdownItem>
+									))}
+								</>
+							)}
+
+							{activeDropdown === "more" && (
+								<>
+									{supportsHudCaptureProtection && (
+										<DropdownItem
+											icon={hideHudFromCapture ? <EyeOff size={16} /> : <Eye size={16} />}
+											selected={hideHudFromCapture}
+											onClick={() => {
+												void toggleHudCaptureProtection();
+											}}
+										>
+											{hideHudFromCapture
+												? t("recording.hideHudFromVideo")
+												: t("recording.showHudInVideo")}
+										</DropdownItem>
+									)}
+									<DropdownItem icon={<FolderOpen size={16} />} onClick={chooseRecordingsDirectory}>
+										{t("recording.recordingsFolder")}
+									</DropdownItem>
+									<DropdownItem icon={<VideoIcon size={16} />} onClick={openVideoFile}>
+										{t("recording.openVideoFile")}
+									</DropdownItem>
+									<DropdownItem
+										icon={<FolderOpen size={16} />}
+										onClick={() => void openProjectBrowser()}
+									>
+										{t("recording.openProject")}
+									</DropdownItem>
+									<div className={styles.ddLabel} style={{ marginTop: 4 }}>
+										{t("recording.language")}
 									</div>
-								)}
-							</>
-						)}
-
-						{activeDropdown === "countdown" && (
-							<>
-								<div className={styles.ddLabel}>{t("recording.countdownDelay")}</div>
-								{COUNTDOWN_OPTIONS.map((delay) => (
-									<DropdownItem
-										key={delay}
-										icon={<Timer size={16} />}
-										selected={countdownDelay === delay}
-										onClick={() => { setCountdownDelay(delay); setActiveDropdown("none"); }}
-									>
-										{delay === 0 ? t("recording.noDelay") : `${delay}s`}
-									</DropdownItem>
-								))}
-							</>
-						)}
-
-						{activeDropdown === "more" && (
-							<>
-								{supportsHudCaptureProtection && (
-									<DropdownItem
-										icon={hideHudFromCapture ? <EyeOff size={16} /> : <Eye size={16} />}
-										selected={hideHudFromCapture}
-										onClick={() => {
-											void toggleHudCaptureProtection();
-										}}
-									>
-										{hideHudFromCapture ? t("recording.hideHudFromVideo") : t("recording.showHudInVideo")}
-									</DropdownItem>
-								)}
-								<DropdownItem icon={<FolderOpen size={16} />} onClick={chooseRecordingsDirectory}>
-									{t("recording.recordingsFolder")}
-								</DropdownItem>
-								<DropdownItem icon={<VideoIcon size={16} />} onClick={openVideoFile}>
-									{t("recording.openVideoFile")}
-								</DropdownItem>
-								<DropdownItem icon={<FolderOpen size={16} />} onClick={openProjectFile}>
-									{t("recording.openProject")}
-								</DropdownItem>
-								<div className={styles.ddLabel} style={{ marginTop: 4 }}>{t("recording.language")}</div>
-								{SUPPORTED_LOCALES.map((code) => (
-									<DropdownItem
-										key={code}
-										icon={<Languages size={16} />}
-										selected={locale === code}
-										onClick={() => { setLocale(code as AppLocale); setActiveDropdown("none"); }}
-									>
-										{LOCALE_LABELS[code] ?? code}
-									</DropdownItem>
-								))}
-							</>
-						)}
+									{SUPPORTED_LOCALES.map((code) => (
+										<DropdownItem
+											key={code}
+											icon={<Languages size={16} />}
+											selected={locale === code}
+											onClick={() => {
+												setLocale(code as AppLocale);
+												setActiveDropdown("none");
+											}}
+										>
+											{LOCALE_LABELS[code] ?? code}
+										</DropdownItem>
+									))}
+								</>
+							)}
 						</div>
 					)}
 				</div>
