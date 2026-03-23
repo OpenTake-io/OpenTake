@@ -34,6 +34,7 @@ import {
 	type ExportProgress,
 	type ExportQuality,
 	type ExportSettings,
+	FrameRenderer,
 	GIF_SIZE_PRESETS,
 	GifExporter,
 	type GifFrameRate,
@@ -483,8 +484,8 @@ export default function VideoEditor() {
 		}
 
 		const canvas = document.createElement("canvas");
-		const targetWidth = 360;
-		const targetHeight = 203;
+		const targetWidth = 320;
+		const targetHeight = 180;
 		canvas.width = targetWidth;
 		canvas.height = targetHeight;
 
@@ -494,15 +495,76 @@ export default function VideoEditor() {
 		}
 		context.imageSmoothingEnabled = true;
 		context.imageSmoothingQuality = "high";
-
 		context.fillStyle = "#111113";
 		context.fillRect(0, 0, targetWidth, targetHeight);
 
+		const previewWidth = previewHandle?.containerRef.current?.clientWidth || 1920;
+		const previewHeight = previewHandle?.containerRef.current?.clientHeight || 1080;
+		const frameTimestampUs = Math.max(0, Math.round(currentTime * 1_000_000));
+
+		if (previewVideo && previewVideo.videoWidth > 0 && previewVideo.videoHeight > 0) {
+			let videoFrame: VideoFrame | null = null;
+			let frameRenderer: FrameRenderer | null = null;
+
+			try {
+				videoFrame = new VideoFrame(previewVideo, { timestamp: frameTimestampUs });
+				frameRenderer = new FrameRenderer({
+					width: targetWidth,
+					height: targetHeight,
+					wallpaper,
+					zoomRegions,
+					showShadow: shadowIntensity > 0,
+					shadowIntensity,
+					backgroundBlur,
+					zoomMotionBlur,
+					connectZooms,
+					zoomInDurationMs,
+					zoomInOverlapMs,
+					zoomOutDurationMs,
+					connectedZoomGapMs,
+					connectedZoomDurationMs,
+					zoomInEasing,
+					zoomOutEasing,
+					connectedZoomEasing,
+					borderRadius,
+					padding,
+					cropRegion,
+					webcam,
+					webcamUrl: webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null,
+					videoWidth: previewVideo.videoWidth,
+					videoHeight: previewVideo.videoHeight,
+					annotationRegions,
+					autoCaptions,
+					autoCaptionSettings,
+					speedRegions,
+					previewWidth,
+					previewHeight,
+					cursorTelemetry,
+					showCursor,
+					cursorStyle,
+					cursorSize,
+					cursorSmoothing,
+					cursorMotionBlur,
+					cursorClickBounce,
+					cursorClickBounceDuration,
+					cursorSway,
+				});
+				await frameRenderer.initialize();
+				await frameRenderer.renderFrame(videoFrame, frameTimestampUs);
+				return frameRenderer.getCanvas().toDataURL("image/png");
+			} catch (thumbnailRenderError) {
+				console.warn("Unable to render thumbnail from composed frame:", thumbnailRenderError);
+			} finally {
+				videoFrame?.close();
+				frameRenderer?.destroy();
+			}
+		}
+
 		const drawableSource =
-			previewVideo && previewVideo.videoWidth > 0 && previewVideo.videoHeight > 0
-				? previewVideo
-				: previewCanvas && previewCanvas.width > 0 && previewCanvas.height > 0
-					? previewCanvas
+			previewCanvas && previewCanvas.width > 0 && previewCanvas.height > 0
+				? previewCanvas
+				: previewVideo && previewVideo.videoWidth > 0 && previewVideo.videoHeight > 0
+					? previewVideo
 					: null;
 
 		if (!drawableSource) {
@@ -533,7 +595,40 @@ export default function VideoEditor() {
 			console.warn("Unable to capture project thumbnail:", thumbnailError);
 			return null;
 		}
-	}, []);
+	}, [
+		annotationRegions,
+		autoCaptionSettings,
+		autoCaptions,
+		backgroundBlur,
+		borderRadius,
+		connectZooms,
+		connectedZoomDurationMs,
+		connectedZoomEasing,
+		connectedZoomGapMs,
+		cropRegion,
+		currentTime,
+		cursorClickBounce,
+		cursorClickBounceDuration,
+		cursorMotionBlur,
+		cursorSize,
+		cursorSmoothing,
+		cursorStyle,
+		cursorSway,
+		cursorTelemetry,
+		padding,
+		shadowIntensity,
+		showCursor,
+		speedRegions,
+		wallpaper,
+		webcam,
+		zoomInDurationMs,
+		zoomInEasing,
+		zoomInOverlapMs,
+		zoomMotionBlur,
+		zoomOutDurationMs,
+		zoomOutEasing,
+		zoomRegions,
+	]);
 
 	const markExportAsSaving = useCallback(() => {
 		setExportProgress((previous) => ({
