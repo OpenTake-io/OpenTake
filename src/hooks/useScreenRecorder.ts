@@ -221,6 +221,46 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     }
   }, []);
 
+  const resolveBrowserCaptureSource = useCallback(async (source: any) => {
+    if (!source?.id?.startsWith("screen:")) {
+      return source;
+    }
+
+    try {
+      const liveSources = await window.electronAPI.getSources({
+        types: ["screen"],
+        thumbnailSize: { width: 1, height: 1 },
+        fetchWindowIcons: false,
+      });
+
+      const exactMatch = liveSources.find((candidate) => candidate.id === source.id);
+      if (exactMatch) {
+        return {
+          ...source,
+          id: exactMatch.id,
+          name: exactMatch.name ?? source.name,
+          display_id: exactMatch.display_id ?? source.display_id,
+        };
+      }
+
+      const displayMatch = liveSources.find(
+        (candidate) => String(candidate.display_id ?? "") === String(source.display_id ?? ""),
+      );
+      if (displayMatch) {
+        return {
+          ...source,
+          id: displayMatch.id,
+          name: displayMatch.name ?? source.name,
+          display_id: displayMatch.display_id ?? source.display_id,
+        };
+      }
+    } catch (error) {
+      console.warn("Failed to resolve browser capture source:", error);
+    }
+
+    return source;
+  }, []);
+
   const finalizeRecordingSession = useCallback(async (videoPath: string, webcamPath: string | null) => {
     if (webcamPath) {
       await window.electronAPI.setCurrentRecordingSession({
@@ -562,6 +602,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       }
 
       const wantsAudioCapture = microphoneEnabled || systemAudioEnabled;
+      const browserCaptureSource = await resolveBrowserCaptureSource(selectedSource);
+
+      if (
+        browserCaptureSource?.id?.startsWith("screen:fallback:") ||
+        browserCaptureSource?.id?.startsWith("window:fallback:")
+      ) {
+        throw new Error("Selected display is not available for browser capture on this system.");
+      }
 
       try {
         await window.electronAPI.hideOsCursor?.();
@@ -574,7 +622,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       const browserScreenVideoConstraints = {
         mandatory: {
           chromeMediaSource: CHROME_MEDIA_SOURCE,
-          chromeMediaSourceId: selectedSource.id,
+          chromeMediaSourceId: browserCaptureSource.id,
           maxWidth: TARGET_WIDTH,
           maxHeight: TARGET_HEIGHT,
           maxFrameRate: TARGET_FRAME_RATE,
@@ -593,7 +641,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
               audio: {
                 mandatory: {
                   chromeMediaSource: CHROME_MEDIA_SOURCE,
-                  chromeMediaSourceId: selectedSource.id,
+                  chromeMediaSourceId: browserCaptureSource.id,
                 },
               },
                 video: browserScreenVideoConstraints,
