@@ -305,7 +305,6 @@ export default function VideoEditor() {
 	const [videoSourcePath, setVideoSourcePath] = useState<string | null>(null);
 	const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(null);
 	const [projectLibraryEntries, setProjectLibraryEntries] = useState<ProjectLibraryEntry[]>([]);
-	const [projectsDirectoryPath, setProjectsDirectoryPath] = useState<string | null>(null);
 	const [projectBrowserOpen, setProjectBrowserOpen] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -460,7 +459,6 @@ export default function VideoEditor() {
 				throw new Error(result.error || "Failed to load project library");
 			}
 
-			setProjectsDirectoryPath(result.projectsDir ?? null);
 			setProjectLibraryEntries(result.entries);
 		} catch (projectLibraryError) {
 			console.warn("Unable to refresh project library:", projectLibraryError);
@@ -469,12 +467,13 @@ export default function VideoEditor() {
 
 	const captureProjectThumbnail = useCallback(async () => {
 		const previewHandle = videoPlaybackRef.current;
-		const previewCanvas = previewHandle?.app?.canvas ?? null;
 		const previewVideo = previewHandle?.video ?? null;
+		const previewCanvas = previewHandle?.app?.canvas ?? null;
 
 		if (previewHandle && previewVideo && previewVideo.paused) {
 			try {
 				await previewHandle.refreshFrame();
+				await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
 			} catch (thumbnailRefreshError) {
 				console.warn(
 					"Unable to refresh preview frame before thumbnail capture:",
@@ -484,8 +483,8 @@ export default function VideoEditor() {
 		}
 
 		const canvas = document.createElement("canvas");
-		const targetWidth = 1280;
-		const targetHeight = 720;
+		const targetWidth = 360;
+		const targetHeight = 203;
 		canvas.width = targetWidth;
 		canvas.height = targetHeight;
 
@@ -493,15 +492,17 @@ export default function VideoEditor() {
 		if (!context) {
 			return null;
 		}
+		context.imageSmoothingEnabled = true;
+		context.imageSmoothingQuality = "high";
 
 		context.fillStyle = "#111113";
 		context.fillRect(0, 0, targetWidth, targetHeight);
 
 		const drawableSource =
-			previewCanvas && previewCanvas.width > 0 && previewCanvas.height > 0
-				? previewCanvas
-				: previewVideo && previewVideo.videoWidth > 0 && previewVideo.videoHeight > 0
-					? previewVideo
+			previewVideo && previewVideo.videoWidth > 0 && previewVideo.videoHeight > 0
+				? previewVideo
+				: previewCanvas && previewCanvas.width > 0 && previewCanvas.height > 0
+					? previewCanvas
 					: null;
 
 		if (!drawableSource) {
@@ -1559,30 +1560,6 @@ export default function VideoEditor() {
 		}
 	}, [saveProject]);
 
-	const handleLoadProject = useCallback(async () => {
-		const result = await window.electronAPI.loadProjectFile();
-
-		if (result.canceled) {
-			return;
-		}
-
-		if (!result.success) {
-			toast.error(result.message || "Failed to load project");
-			return;
-		}
-
-		const restored = await applyLoadedProject(result.project, result.path ?? null);
-		if (!restored) {
-			toast.error("Invalid project file format");
-			return;
-		}
-
-		setProjectBrowserOpen(false);
-		await refreshProjectLibrary();
-
-		toast.success(`Project loaded from ${result.path}`);
-	}, [applyLoadedProject, refreshProjectLibrary]);
-
 	const handleOpenProjectFromLibrary = useCallback(
 		async (projectPath: string) => {
 			const result = await window.electronAPI.openProjectFileAtPath(projectPath);
@@ -1609,20 +1586,15 @@ export default function VideoEditor() {
 		[applyLoadedProject, refreshProjectLibrary],
 	);
 
-	const handleOpenProjectsFolder = useCallback(async () => {
-		const result = await window.electronAPI.openProjectsDirectory();
-		if (!result.success) {
-			toast.error(result.message || result.error || "Failed to open projects folder");
-		}
-	}, []);
-
 	const handleOpenProjectBrowser = useCallback(async () => {
 		await refreshProjectLibrary();
 		setProjectBrowserOpen(true);
 	}, [refreshProjectLibrary]);
 
 	useEffect(() => {
-		const removeLoadListener = window.electronAPI.onMenuLoadProject(handleLoadProject);
+		const removeLoadListener = window.electronAPI.onMenuLoadProject(() => {
+			void handleOpenProjectBrowser();
+		});
 		const removeSaveListener = window.electronAPI.onMenuSaveProject(handleSaveProject);
 		const removeSaveAsListener = window.electronAPI.onMenuSaveProjectAs(handleSaveProjectAs);
 
@@ -1631,7 +1603,7 @@ export default function VideoEditor() {
 			removeSaveListener?.();
 			removeSaveAsListener?.();
 		};
-	}, [handleLoadProject, handleSaveProject, handleSaveProjectAs]);
+	}, [handleOpenProjectBrowser, handleSaveProject, handleSaveProjectAs]);
 
 	useEffect(() => {
 		let mounted = true;
@@ -3418,18 +3390,8 @@ export default function VideoEditor() {
 				open={projectBrowserOpen}
 				onOpenChange={setProjectBrowserOpen}
 				entries={projectLibraryEntries}
-				projectsDirectoryPath={projectsDirectoryPath}
 				onOpenProject={(projectPath) => {
 					void handleOpenProjectFromLibrary(projectPath);
-				}}
-				onBrowseProjectFiles={() => {
-					void handleLoadProject();
-				}}
-				onOpenProjectsFolder={() => {
-					void handleOpenProjectsFolder();
-				}}
-				onSaveProjectAs={() => {
-					void handleSaveProjectAs();
 				}}
 			/>
 
