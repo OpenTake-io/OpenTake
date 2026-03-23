@@ -197,6 +197,7 @@ interface Window {
 			projectData: unknown,
 			suggestedName?: string,
 			existingProjectPath?: string,
+			thumbnailDataUrl?: string | null,
 		) => Promise<{
 			success: boolean;
 			path?: string;
@@ -218,6 +219,38 @@ interface Window {
 			project?: unknown;
 			message?: string;
 			canceled?: boolean;
+			error?: string;
+		}>;
+		getProjectsDirectory: () => Promise<{
+			success: boolean;
+			path?: string;
+			error?: string;
+		}>;
+		listProjectFiles: () => Promise<{
+			success: boolean;
+			projectsDir?: string | null;
+			entries: Array<{
+				path: string;
+				name: string;
+				updatedAt: number;
+				thumbnailPath: string | null;
+				isCurrent: boolean;
+				isInProjectsDirectory: boolean;
+			}>;
+			error?: string;
+		}>;
+		openProjectFileAtPath: (filePath: string) => Promise<{
+			success: boolean;
+			path?: string;
+			project?: unknown;
+			message?: string;
+			canceled?: boolean;
+			error?: string;
+		}>;
+		openProjectsDirectory: () => Promise<{
+			success: boolean;
+			path?: string;
+			message?: string;
 			error?: string;
 		}>;
 		onMenuLoadProject: (callback: () => void) => () => void;
