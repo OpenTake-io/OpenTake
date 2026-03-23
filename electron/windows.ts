@@ -101,10 +101,7 @@ function getHudOverlayBounds(expanded: boolean) {
 	const windowBottom = Math.min(preferredBottom, maximumSafeBottom);
 
 	const x = Math.floor(workArea.x + (workArea.width - windowWidth) / 2);
-	const y = Math.max(
-		workArea.y + HUD_EDGE_MARGIN_DIP,
-		Math.floor(windowBottom - windowHeight),
-	);
+	const y = Math.max(workArea.y + HUD_EDGE_MARGIN_DIP, Math.floor(windowBottom - windowHeight));
 
 	return {
 		x,
@@ -222,7 +219,10 @@ export function createHudOverlayWindow(): BrowserWindow {
 		height: initialBounds.height,
 		minWidth: HUD_MIN_WINDOW_WIDTH,
 		minHeight: HUD_COMPACT_HEIGHT,
-		maxHeight: Math.max(HUD_COMPACT_HEIGHT, getScreen().getPrimaryDisplay().workArea.height - HUD_EDGE_MARGIN_DIP * 2),
+		maxHeight: Math.max(
+			HUD_COMPACT_HEIGHT,
+			getScreen().getPrimaryDisplay().workArea.height - HUD_EDGE_MARGIN_DIP * 2,
+		),
 		x: initialBounds.x,
 		y: initialBounds.y,
 		frame: false,
@@ -236,6 +236,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 			preload: path.join(__dirname, "preload.mjs"),
 			nodeIntegration: false,
 			contextIsolation: true,
+			webSecurity: false,
 			backgroundThrottling: false,
 		},
 	});
