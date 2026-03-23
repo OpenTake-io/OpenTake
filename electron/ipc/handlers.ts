@@ -18,6 +18,10 @@ const nodeRequire = createRequire(import.meta.url)
 
 const PROJECT_FILE_EXTENSION = 'recordly'
 const LEGACY_PROJECT_FILE_EXTENSIONS = ['openscreen']
+const PROJECTS_DIRECTORY_NAME = 'Projects'
+const PROJECT_THUMBNAIL_SUFFIX = '.preview.png'
+const RECENT_PROJECTS_FILE = path.join(app.getPath('userData'), 'recent-projects.json')
+const MAX_RECENT_PROJECTS = 16
 const SHORTCUTS_FILE = path.join(app.getPath('userData'), 'shortcuts.json')
 const RECORDINGS_SETTINGS_FILE = path.join(app.getPath('userData'), 'recordings-settings.json')
 const COUNTDOWN_SETTINGS_FILE = path.join(app.getPath('userData'), 'countdown-settings.json')
@@ -83,6 +87,15 @@ type RecordingSessionManifest = {
   version: 1
   videoFileName: string
   webcamFileName?: string | null
+}
+
+type ProjectLibraryEntry = {
+  path: string
+  name: string
+  updatedAt: number
+  thumbnailPath: string | null
+  isCurrent: boolean
+  isInProjectsDirectory: boolean
 }
 
 let selectedSource: SelectedSource | null = null
@@ -217,6 +230,12 @@ async function getRecordingsDir() {
   return targetDir
 }
 
+async function getProjectsDir() {
+  const projectsDir = path.join(await getRecordingsDir(), PROJECTS_DIRECTORY_NAME)
+  await fs.mkdir(projectsDir, { recursive: true })
+  return projectsDir
+}
+
 async function persistRecordingsDirectorySetting(nextDir: string) {
   customRecordingsDir = path.resolve(nextDir)
   recordingsDirLoaded = true
@@ -225,6 +244,154 @@ async function persistRecordingsDirectorySetting(nextDir: string) {
     JSON.stringify({ recordingsDir: customRecordingsDir }, null, 2),
     'utf-8',
   )
+}
+
+function hasProjectFileExtension(filePath: string) {
+  const extension = path.extname(filePath).replace(/^\./, '').toLowerCase()
+  return [PROJECT_FILE_EXTENSION, ...LEGACY_PROJECT_FILE_EXTENSIONS].includes(extension)
+}
+
+function getProjectThumbnailPath(projectPath: string) {
+  return `${projectPath}${PROJECT_THUMBNAIL_SUFFIX}`
+}
+
+async function saveProjectThumbnail(projectPath: string, thumbnailDataUrl?: string | null) {
+  const thumbnailPath = getProjectThumbnailPath(projectPath)
+  if (!thumbnailDataUrl) {
+    await fs.rm(thumbnailPath, { force: true }).catch(() => undefined)
+    return null
+  }
+
+  const match = thumbnailDataUrl.match(/^data:image\/png;base64,(.+)$/)
+  if (!match) {
+    throw new Error('Project thumbnail must be a PNG data URL.')
+  }
+
+  await fs.writeFile(thumbnailPath, Buffer.from(match[1], 'base64'))
+  return thumbnailPath
+}
+
+async function loadRecentProjectPaths() {
+  try {
+    const content = await fs.readFile(RECENT_PROJECTS_FILE, 'utf-8')
+    const parsed = JSON.parse(content) as { paths?: unknown }
+    return Array.isArray(parsed.paths)
+      ? parsed.paths.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      : []
+  } catch {
+    return []
+  }
+}
+
+async function saveRecentProjectPaths(paths: string[]) {
+  const normalizedPaths = Array.from(new Set(paths.map((value) => normalizePath(value)))).slice(0, MAX_RECENT_PROJECTS)
+  await fs.writeFile(
+    RECENT_PROJECTS_FILE,
+    JSON.stringify({ paths: normalizedPaths }, null, 2),
+    'utf-8',
+  )
+}
+
+async function rememberRecentProject(projectPath: string) {
+  if (!hasProjectFileExtension(projectPath)) {
+    return
+  }
+
+  const existingPaths = await loadRecentProjectPaths()
+  await saveRecentProjectPaths([projectPath, ...existingPaths])
+}
+
+async function buildProjectLibraryEntry(projectPath: string, projectsDir: string): Promise<ProjectLibraryEntry | null> {
+  try {
+    const normalizedPath = normalizePath(projectPath)
+    if (!hasProjectFileExtension(normalizedPath)) {
+      return null
+    }
+
+    const stats = await fs.stat(normalizedPath)
+    if (!stats.isFile()) {
+      return null
+    }
+
+    const thumbnailPath = getProjectThumbnailPath(normalizedPath)
+    const thumbnailExists = await fs.access(thumbnailPath, fsConstants.R_OK)
+      .then(() => true)
+      .catch(() => false)
+
+    return {
+      path: normalizedPath,
+      name: path.basename(normalizedPath).replace(/\.(recordly|openscreen)$/i, ''),
+      updatedAt: stats.mtimeMs,
+      thumbnailPath: thumbnailExists ? thumbnailPath : null,
+      isCurrent: Boolean(currentProjectPath && normalizePath(currentProjectPath) === normalizedPath),
+      isInProjectsDirectory: path.dirname(normalizedPath) === normalizePath(projectsDir),
+    }
+  } catch {
+    return null
+  }
+}
+
+async function listProjectLibraryEntries() {
+  const projectsDir = await getProjectsDir()
+  const projectPaths: string[] = []
+
+  try {
+    const entries = await fs.readdir(projectsDir, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isFile()) {
+        continue
+      }
+
+      const entryPath = path.join(projectsDir, entry.name)
+      if (hasProjectFileExtension(entryPath)) {
+        projectPaths.push(entryPath)
+      }
+    }
+  } catch {
+    // Ignore directory read failures and fall back to recent files.
+  }
+
+  const recentProjectPaths = await loadRecentProjectPaths()
+  const candidatePaths = Array.from(new Set([...projectPaths, ...recentProjectPaths]))
+  const entries = (await Promise.all(candidatePaths.map((candidatePath) => buildProjectLibraryEntry(candidatePath, projectsDir))))
+    .filter((entry): entry is ProjectLibraryEntry => entry != null)
+    .sort((left, right) => right.updatedAt - left.updatedAt)
+
+  await saveRecentProjectPaths(entries.map((entry) => entry.path))
+
+  return {
+    projectsDir,
+    entries,
+  }
+}
+
+async function loadProjectFromPath(projectPath: string) {
+  const normalizedPath = normalizePath(projectPath)
+  const content = await fs.readFile(normalizedPath, 'utf-8')
+  const project = JSON.parse(content)
+  const mediaSources = await resolveProjectMediaSources(project)
+
+  if (!mediaSources.success) {
+    return {
+      success: false,
+      canceled: false,
+      message: mediaSources.message,
+    }
+  }
+
+  currentProjectPath = normalizedPath
+  currentVideoPath = mediaSources.videoPath
+  currentRecordingSession = {
+    videoPath: mediaSources.videoPath,
+    webcamPath: mediaSources.webcamPath,
+  }
+  await rememberRecentProject(normalizedPath)
+
+  return {
+    success: true,
+    path: normalizedPath,
+    project,
+  }
 }
 
 function normalizeVideoSourcePath(videoPath?: string | null): string | null {
@@ -1181,10 +1348,6 @@ async function resolveCaptionAudioCandidates(videoPath: string) {
 
   const requestedRecordingSession = await resolveRecordingSession(videoPath)
   pushCandidate(requestedRecordingSession?.webcamPath, 'linked webcam recording')
-
-  pushCandidate(currentRecordingSession?.videoPath, 'current recording')
-  pushCandidate(currentRecordingSession?.webcamPath, 'current linked webcam recording')
-  pushCandidate(currentVideoPath, 'current video')
 
   return candidates
 }
@@ -3905,9 +4068,9 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
   })
 
-  ipcMain.handle('save-project-file', async (_, projectData: unknown, suggestedName?: string, existingProjectPath?: string) => {
+  ipcMain.handle('save-project-file', async (_, projectData: unknown, suggestedName?: string, existingProjectPath?: string, thumbnailDataUrl?: string | null) => {
     try {
-      const recordingsDir = await getRecordingsDir()
+      const projectsDir = await getProjectsDir()
       const trustedExistingProjectPath = isTrustedProjectPath(existingProjectPath)
         ? existingProjectPath
         : null
@@ -3915,6 +4078,8 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       if (trustedExistingProjectPath) {
         await fs.writeFile(trustedExistingProjectPath, JSON.stringify(projectData, null, 2), 'utf-8')
         currentProjectPath = trustedExistingProjectPath
+        await saveProjectThumbnail(trustedExistingProjectPath, thumbnailDataUrl)
+        await rememberRecentProject(trustedExistingProjectPath)
         return {
           success: true,
           path: trustedExistingProjectPath,
@@ -3929,7 +4094,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
       const result = await dialog.showSaveDialog({
         title: 'Save Recordly Project',
-        defaultPath: path.join(recordingsDir, defaultName),
+        defaultPath: path.join(projectsDir, defaultName),
         filters: [
           { name: 'Recordly Project', extensions: [PROJECT_FILE_EXTENSION] },
           { name: 'JSON', extensions: ['json'] }
@@ -3947,6 +4112,8 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
       await fs.writeFile(result.filePath, JSON.stringify(projectData, null, 2), 'utf-8')
       currentProjectPath = result.filePath
+      await saveProjectThumbnail(result.filePath, thumbnailDataUrl)
+      await rememberRecentProject(result.filePath)
 
       return {
         success: true,
@@ -3965,10 +4132,10 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
   ipcMain.handle('load-project-file', async () => {
     try {
-      const recordingsDir = await getRecordingsDir()
+      const projectsDir = await getProjectsDir()
       const result = await dialog.showOpenDialog({
         title: 'Open Recordly Project',
-        defaultPath: recordingsDir,
+        defaultPath: projectsDir,
         filters: [
           { name: 'Recordly Project', extensions: [PROJECT_FILE_EXTENSION, ...LEGACY_PROJECT_FILE_EXTENSIONS] },
           { name: 'JSON', extensions: ['json'] },
@@ -3981,31 +4148,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         return { success: false, canceled: true, message: 'Open project canceled' }
       }
 
-      const filePath = result.filePaths[0]
-      const content = await fs.readFile(filePath, 'utf-8')
-      const project = JSON.parse(content)
-      const mediaSources = await resolveProjectMediaSources(project)
-
-      if (!mediaSources.success) {
-        return {
-          success: false,
-          canceled: false,
-          message: mediaSources.message,
-        }
-      }
-
-      currentProjectPath = filePath
-      currentVideoPath = mediaSources.videoPath
-      currentRecordingSession = {
-        videoPath: mediaSources.videoPath,
-        webcamPath: mediaSources.webcamPath,
-      }
-
-      return {
-        success: true,
-        path: filePath,
-        project
-      }
+      return await loadProjectFromPath(result.filePaths[0])
     } catch (error) {
       console.error('Failed to load project file:', error)
       return {
@@ -4022,28 +4165,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         return { success: false, message: 'No active project' }
       }
 
-      const content = await fs.readFile(currentProjectPath, 'utf-8')
-      const project = JSON.parse(content)
-      const mediaSources = await resolveProjectMediaSources(project)
-
-      if (!mediaSources.success) {
-        return {
-          success: false,
-          message: mediaSources.message,
-        }
-      }
-
-      currentVideoPath = mediaSources.videoPath
-      currentRecordingSession = {
-        videoPath: mediaSources.videoPath,
-        webcamPath: mediaSources.webcamPath,
-      }
-
-      return {
-        success: true,
-        path: currentProjectPath,
-        project,
-      }
+      return await loadProjectFromPath(currentProjectPath)
     } catch (error) {
       console.error('Failed to load current project file:', error)
       return {
@@ -4051,6 +4173,66 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         message: 'Failed to load current project file',
         error: String(error),
       }
+    }
+  })
+
+  ipcMain.handle('get-projects-directory', async () => {
+    try {
+      return {
+        success: true,
+        path: await getProjectsDir(),
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: String(error),
+      }
+    }
+  })
+
+  ipcMain.handle('list-project-files', async () => {
+    try {
+      const library = await listProjectLibraryEntries()
+      return {
+        success: true,
+        projectsDir: library.projectsDir,
+        entries: library.entries,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        projectsDir: null,
+        entries: [],
+        error: String(error),
+      }
+    }
+  })
+
+  ipcMain.handle('open-project-file-at-path', async (_, filePath: string) => {
+    try {
+      return await loadProjectFromPath(filePath)
+    } catch (error) {
+      console.error('Failed to open project file at path:', error)
+      return {
+        success: false,
+        message: 'Failed to open project file',
+        error: String(error),
+      }
+    }
+  })
+
+  ipcMain.handle('open-projects-directory', async () => {
+    try {
+      const projectsDir = await getProjectsDir()
+      const openPathResult = await shell.openPath(projectsDir)
+      if (openPathResult) {
+        return { success: false, error: openPathResult, message: 'Failed to open projects folder.' }
+      }
+
+      return { success: true, path: projectsDir }
+    } catch (error) {
+      console.error('Failed to open projects folder:', error)
+      return { success: false, error: String(error), message: 'Failed to open projects folder.' }
     }
   })
   ipcMain.handle('set-current-video-path', async (_, path: string) => {
