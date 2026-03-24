@@ -19,6 +19,7 @@ import {
 	killWindowsCaptureProcess,
 	registerIpcHandlers,
 } from "./ipc/handlers";
+import { checkForAppUpdates, setupAutoUpdates } from "./updater";
 import { createEditorWindow, createHudOverlayWindow, createSourceSelectorWindow } from "./windows";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -217,6 +218,17 @@ function setupApplicationMenu() {
 			submenu: isMac
 				? [{ role: "minimize" }, { role: "zoom" }, { type: "separator" }, { role: "front" }]
 				: [{ role: "minimize" }, { role: "close" }],
+		},
+		{
+			label: "Help",
+			submenu: [
+				{
+					label: "Check for Updates…",
+					click: () => {
+						void checkForAppUpdates(() => mainWindow, { manual: true });
+					},
+				},
+			],
 		},
 	);
 
@@ -417,6 +429,8 @@ app.whenReady().then(async () => {
 			}
 		},
 	);
+
+	setupAutoUpdates(() => mainWindow);
 
 	// Register the display media handler so that renderer's getDisplayMedia()
 	// calls land on the pre-selected source without showing a system picker.
