@@ -168,11 +168,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
   const selectMimeType = () => {
     const preferred = [
-      "video/webm;codecs=av1",
-      "video/webm;codecs=h264",
       "video/webm;codecs=vp9",
       "video/webm;codecs=vp8",
       "video/webm",
+      "video/webm;codecs=av1",
     ];
 
     return preferred.find((type) => MediaRecorder.isTypeSupported(type)) ?? "video/webm";
@@ -402,7 +401,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
         if (isNativeWindows) {
           const muxResult = await window.electronAPI.muxNativeWindowsRecording();
-          finalPath = muxResult?.path ?? result.path;
+          if (!muxResult?.success || !muxResult.path) {
+            console.error("Failed to finalize native Windows recording:", muxResult?.error ?? muxResult?.message);
+            alert("Recording could not be finalized because the captured video file is invalid.");
+            return;
+          }
+
+          finalPath = muxResult.path;
         }
 
         await finalizeRecordingSession(finalPath, webcamPath);

@@ -112,7 +112,7 @@ function DropdownItem({
 }
 
 function Separator() {
-	return <div className={styles.sep} />;
+	return <div className={styles.ddSeparator} />;
 }
 
 function MicDeviceRow({
