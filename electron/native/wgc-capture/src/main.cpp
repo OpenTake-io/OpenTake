@@ -226,6 +226,7 @@ int main(int argc, char* argv[]) {
 
     // Set up frame callback
     std::atomic<int64_t> frameCount{0};
+    std::atomic<bool> frameWriteFailed{false};
     session.setFrameCallback([&](ID3D11Texture2D* texture, int64_t timestampHns) {
         g_lastFrameTimestampHns = timestampHns;
         if (g_stopRequested) return;
@@ -247,7 +248,12 @@ int main(int argc, char* argv[]) {
 
         if (encoder.writeFrame(texture, adjustedTimestampHns)) {
             frameCount++;
+            return;
         }
+
+        frameWriteFailed = true;
+        g_stopRequested = true;
+        g_stopCv.notify_all();
     });
 
     // Start stdin listener
@@ -310,7 +316,20 @@ int main(int argc, char* argv[]) {
     session.stopCapture();
     if (audioActive) loopback.stop();
     if (micActive) micCapture.stop();
-    encoder.finalize();
+    if (frameWriteFailed.load()) {
+        std::cerr << "ERROR: Failed to encode one or more video frames" << std::endl;
+        return 1;
+    }
+
+    if (frameCount.load() <= 0) {
+        std::cerr << "ERROR: No video frames were written" << std::endl;
+        return 1;
+    }
+
+    if (!encoder.finalize()) {
+        std::cerr << "ERROR: Failed to finalize Media Foundation encoder" << std::endl;
+        return 1;
+    }
 
     std::cout << "Recording stopped. Output path: " << config.outputPath << std::endl;
     if (audioActive) {

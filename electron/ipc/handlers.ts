@@ -1722,10 +1722,6 @@ function waitForWindowsCaptureStop(proc: ChildProcessWithoutNullStreams) {
         resolve(match[1].trim())
         return
       }
-      if (code === 0 && windowsCaptureTargetPath) {
-        resolve(windowsCaptureTargetPath)
-        return
-      }
       reject(new Error(windowsCaptureOutputBuffer.trim() || `Native Windows capture exited with code ${code ?? 'unknown'}`))
     }
 
@@ -1844,6 +1840,43 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
     if (audioPath) {
       await fs.rm(audioPath, { force: true }).catch(() => {})
     }
+  }
+}
+
+async function probeRecordedMediaStream(videoPath: string, streamType: 'video' | 'audio') {
+  const ffmpegPath = getFfmpegBinaryPath()
+  const args = streamType === 'video'
+    ? ['-v', 'error', '-i', videoPath, '-map', '0:v:0', '-frames:v', '1', '-f', 'null', '-']
+    : ['-v', 'error', '-i', videoPath, '-map', '0:a:0', '-frames:a', '1', '-f', 'null', '-']
+
+  await execFileAsync(ffmpegPath, args, {
+    timeout: 30000,
+    maxBuffer: 4 * 1024 * 1024,
+  })
+}
+
+async function validateRecordedVideoFile(videoPath: string, options?: { requiresAudio?: boolean }) {
+  await fs.access(videoPath, fsConstants.R_OK)
+
+  const stats = await fs.stat(videoPath)
+  if (stats.size <= 0) {
+    throw new Error('Recorded video file is empty')
+  }
+
+  try {
+    await probeRecordedMediaStream(videoPath, 'video')
+  } catch (error) {
+    throw new Error(`Recorded video file is unreadable or missing a video stream: ${String(error)}`)
+  }
+
+  if (!options?.requiresAudio) {
+    return
+  }
+
+  try {
+    await probeRecordedMediaStream(videoPath, 'audio')
+  } catch (error) {
+    throw new Error(`Recorded video is missing the requested audio track: ${String(error)}`)
   }
 }
 
@@ -2445,6 +2478,7 @@ function snapshotCursorTelemetryForPersistence() {
 }
 
 async function finalizeStoredVideo(videoPath: string) {
+  await validateRecordedVideoFile(videoPath)
   snapshotCursorTelemetryForPersistence()
   currentVideoPath = videoPath
   currentProjectPath = null
@@ -3207,6 +3241,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           await moveFileWithOverwrite(tempVideoPath, finalVideoPath)
         }
 
+        await validateRecordedVideoFile(finalVideoPath)
         windowsPendingVideoPath = finalVideoPath
         return { success: true, path: finalVideoPath }
       } catch (error) {
@@ -3273,14 +3308,13 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         await moveFileWithOverwrite(tempVideoPath, finalVideoPath)
       }
 
-      if (preferredSystemAudioPath || preferredMicrophonePath) {
-        try {
-          await muxNativeMacRecordingWithAudio(finalVideoPath, preferredSystemAudioPath, preferredMicrophonePath)
-        } catch (error) {
-          console.warn('Failed to mux native macOS audio into capture:', error)
-        }
+      const requiresAudio = Boolean(preferredSystemAudioPath || preferredMicrophonePath)
+
+      if (requiresAudio) {
+        await muxNativeMacRecordingWithAudio(finalVideoPath, preferredSystemAudioPath, preferredMicrophonePath)
       }
 
+      await validateRecordedVideoFile(finalVideoPath, { requiresAudio })
       return await finalizeStoredVideo(finalVideoPath)
     } catch (error) {
       console.error('Failed to stop native ScreenCaptureKit recording:', error)
@@ -3414,22 +3448,21 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
 
     try {
-      if (windowsSystemAudioPath || windowsMicAudioPath) {
+      const requiresAudio = Boolean(windowsSystemAudioPath || windowsMicAudioPath)
+
+      if (requiresAudio) {
         await muxNativeWindowsVideoWithAudio(videoPath, windowsSystemAudioPath, windowsMicAudioPath)
         windowsSystemAudioPath = null
         windowsMicAudioPath = null
       }
 
+      await validateRecordedVideoFile(videoPath, { requiresAudio })
       return await finalizeStoredVideo(videoPath)
     } catch (error) {
       console.error('Failed to mux native Windows recording:', error)
       windowsSystemAudioPath = null
       windowsMicAudioPath = null
-      try {
-        return await finalizeStoredVideo(videoPath)
-      } catch {
-        return { success: false, message: 'Failed to mux native Windows recording', error: String(error) }
-      }
+      return { success: false, message: 'Failed to mux native Windows recording', error: String(error) }
     }
   })
 
