@@ -3,6 +3,11 @@ name: Release Builds
 on:
   workflow_dispatch:
     inputs:
+      source_ref:
+        description: Branch, tag, or commit to build from
+        required: true
+        default: main
+        type: string
       tag_name:
         description: Release tag to create or update
         required: true
@@ -25,14 +30,42 @@ permissions:
   contents: write
 
 jobs:
+  validate-release:
+    name: Validate release input
+    runs-on: ubuntu-latest
+    outputs:
+      package_version: ${{ steps.version.outputs.package_version }}
+    steps:
+      - name: Checkout source ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.source_ref }}
+
+      - name: Validate tag matches package version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${{ github.event.inputs.tag_name }}"
+          TAG_VERSION="${TAG_VERSION#v}"
+
+          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+            echo "Release tag version ($TAG_VERSION) does not match package.json version ($PACKAGE_VERSION)."
+            exit 1
+          fi
+
+          echo "package_version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+
   build-macos-x64:
     name: Build macOS x64
+    needs: validate-release
     runs-on: macos-15-intel
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag_name }}
+          ref: ${{ github.event.inputs.source_ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -70,12 +103,13 @@ jobs:
 
   build-macos-arm64:
     name: Build macOS arm64
+    needs: validate-release
     runs-on: macos-14
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag_name }}
+          ref: ${{ github.event.inputs.source_ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -113,12 +147,13 @@ jobs:
 
   build-windows-x64:
     name: Build Windows x64
+    needs: validate-release
     runs-on: windows-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag_name }}
+          ref: ${{ github.event.inputs.source_ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -155,12 +190,13 @@ jobs:
 
   build-linux-x64:
     name: Build Linux x64
+    needs: validate-release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag_name }}
+          ref: ${{ github.event.inputs.source_ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -196,6 +232,7 @@ jobs:
   publish-release:
     name: Publish release
     needs:
+      - validate-release
       - build-macos-x64
       - build-macos-arm64
       - build-windows-x64
@@ -230,6 +267,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.event.inputs.tag_name }}
+          commit: ${{ github.event.inputs.source_ref }}
           name: ${{ github.event.inputs.release_name }}
           body: ${{ github.event.inputs.release_notes }}
           makeLatest: ${{ github.event.inputs.make_latest }}
