@@ -1,6 +1,16 @@
 import { Assets, BlurFilter, Container, Graphics, Sprite, Texture } from "pixi.js";
 import { MotionBlurFilter } from "pixi-filters/motion-blur";
 import minimalCursorUrl from "../../../../Minimal Cursor.svg";
+import amongusDefaultCursorUrl from "../../../assets/cursors/amongus/default.png";
+import amongusPointerCursorUrl from "../../../assets/cursors/amongus/pointer.png";
+import chooperDefaultCursorUrl from "../../../assets/cursors/chooper/default.png";
+import chooperPointerCursorUrl from "../../../assets/cursors/chooper/pointer.png";
+import lavenderDefaultCursorUrl from "../../../assets/cursors/lavender/default.png";
+import lavenderPointerCursorUrl from "../../../assets/cursors/lavender/pointer.png";
+import parchedDefaultCursorUrl from "../../../assets/cursors/parched/default.png";
+import parchedPointerCursorUrl from "../../../assets/cursors/parched/pointer.png";
+import turtleDefaultCursorUrl from "../../../assets/cursors/turtle/default.png";
+import turtlePointerCursorUrl from "../../../assets/cursors/turtle/pointer.png";
 import {
 	type CursorStyle,
 	type CursorTelemetryPoint,
@@ -18,6 +28,10 @@ import {
 import { UPLOADED_CURSOR_SAMPLE_SIZE, uploadedCursorAssets } from "./uploadedCursorAssets";
 
 type CursorAssetKey = NonNullable<CursorTelemetryPoint["cursorType"]>;
+type StatefulCursorStyle = Extract<CursorStyle, "tahoe" | "mono">;
+type SingleCursorStyle = Extract<CursorStyle, "dot" | "figma">;
+type CursorPackStyle = Exclude<CursorStyle, StatefulCursorStyle | SingleCursorStyle>;
+type CursorPackVariant = "default" | "pointer";
 
 type LoadedCursorAsset = {
 	texture: Texture;
@@ -25,6 +39,15 @@ type LoadedCursorAsset = {
 	aspectRatio: number;
 	anchorX: number;
 	anchorY: number;
+};
+
+type LoadedCursorPackAssets = Record<CursorPackVariant, LoadedCursorAsset>;
+
+type CursorPackSource = {
+	defaultUrl: string;
+	pointerUrl: string;
+	defaultAnchor: { x: number; y: number };
+	pointerAnchor: { x: number; y: number };
 };
 
 /**
@@ -84,7 +107,9 @@ const CURSOR_SHADOW_PADDING = 12;
 let cursorAssetsPromise: Promise<void> | null = null;
 let loadedCursorAssets: Partial<Record<CursorAssetKey, LoadedCursorAsset>> = {};
 let loadedInvertedCursorAssets: Partial<Record<CursorAssetKey, LoadedCursorAsset>> = {};
-let loadedCursorStyleAssets: Partial<Record<Exclude<CursorStyle, "tahoe">, LoadedCursorAsset>> = {};
+let loadedCursorStyleAssets: Partial<Record<SingleCursorStyle, LoadedCursorAsset>> = {};
+let loadedCursorPackAssets: Partial<Record<CursorPackStyle, LoadedCursorPackAssets>> = {};
+const warnedMissingCursorPackStyles = new Set<CursorPackStyle>();
 const SUPPORTED_CURSOR_KEYS: CursorAssetKey[] = [
 	"arrow",
 	"text",
@@ -97,26 +122,56 @@ const SUPPORTED_CURSOR_KEYS: CursorAssetKey[] = [
 	"not-allowed",
 ];
 
-const CUSTOM_CURSOR_ARROW_WIDTH = 150;
-const CUSTOM_CURSOR_ARROW_HEIGHT = 214;
-const CUSTOM_CURSOR_ARROW_TIP_X = 14;
-const CUSTOM_CURSOR_ARROW_TIP_Y = 12;
+const DEFAULT_CURSOR_PACK_ANCHOR = { x: 0.08, y: 0.08 } as const;
+const POINTER_CURSOR_PACK_ANCHOR = { x: 0.48, y: 0.1 } as const;
+const CENTERED_CURSOR_PACK_ANCHOR = { x: 0.5, y: 0.5 } as const;
+const CURSOR_PACK_POINTER_TYPES = new Set<CursorAssetKey>(["pointer", "open-hand", "closed-hand"]);
+const CURSOR_PACK_SOURCES: Record<CursorPackStyle, CursorPackSource> = {
+	lavender: {
+		defaultUrl: lavenderDefaultCursorUrl,
+		pointerUrl: lavenderPointerCursorUrl,
+		defaultAnchor: DEFAULT_CURSOR_PACK_ANCHOR,
+		pointerAnchor: POINTER_CURSOR_PACK_ANCHOR,
+	},
+	parched: {
+		defaultUrl: parchedDefaultCursorUrl,
+		pointerUrl: parchedPointerCursorUrl,
+		defaultAnchor: DEFAULT_CURSOR_PACK_ANCHOR,
+		pointerAnchor: POINTER_CURSOR_PACK_ANCHOR,
+	},
+	chooper: {
+		defaultUrl: chooperDefaultCursorUrl,
+		pointerUrl: chooperPointerCursorUrl,
+		defaultAnchor: DEFAULT_CURSOR_PACK_ANCHOR,
+		pointerAnchor: POINTER_CURSOR_PACK_ANCHOR,
+	},
+	amongus: {
+		defaultUrl: amongusDefaultCursorUrl,
+		pointerUrl: amongusPointerCursorUrl,
+		defaultAnchor: CENTERED_CURSOR_PACK_ANCHOR,
+		pointerAnchor: CENTERED_CURSOR_PACK_ANCHOR,
+	},
+	turtle: {
+		defaultUrl: turtleDefaultCursorUrl,
+		pointerUrl: turtlePointerCursorUrl,
+		defaultAnchor: CENTERED_CURSOR_PACK_ANCHOR,
+		pointerAnchor: CENTERED_CURSOR_PACK_ANCHOR,
+	},
+};
 
-function drawArrowCursorPath(ctx: CanvasRenderingContext2D, width: number, height: number) {
-	ctx.beginPath();
-	ctx.moveTo(width * 0.093, height * 0.056);
-	ctx.lineTo(width * 0.136, height * 0.78);
-	ctx.lineTo(width * 0.34, height * 0.618);
-	ctx.lineTo(width * 0.453, height * 0.967);
-	ctx.lineTo(width * 0.62, height * 0.906);
-	ctx.lineTo(width * 0.501, height * 0.57);
-	ctx.lineTo(width * 0.933, height * 0.57);
-	ctx.closePath();
+function isStatefulCursorStyle(style: CursorStyle): style is StatefulCursorStyle {
+	return style === "tahoe" || style === "mono";
 }
 
-async function createCursorStyleAsset(
-	style: Exclude<CursorStyle, "tahoe">,
-): Promise<LoadedCursorAsset> {
+function isSingleCursorStyle(style: CursorStyle): style is SingleCursorStyle {
+	return style === "dot" || style === "figma";
+}
+
+function resolveCursorPackVariant(cursorType: CursorAssetKey): CursorPackVariant {
+	return CURSOR_PACK_POINTER_TYPES.has(cursorType) ? "pointer" : "default";
+}
+
+async function createCursorStyleAsset(style: SingleCursorStyle): Promise<LoadedCursorAsset> {
 	if (style === "figma") {
 		const image = await loadImage(minimalCursorUrl);
 		const sourceCanvas = document.createElement("canvas");
@@ -139,40 +194,19 @@ async function createCursorStyleAsset(
 	}
 
 	const canvas = document.createElement("canvas");
-	let anchorX = 0.5;
-	let anchorY = 0.5;
-
-	if (style === "dot") {
-		canvas.width = 112;
-		canvas.height = 112;
-		anchorX = 0.5;
-		anchorY = 0.5;
-		const ctx = canvas.getContext("2d")!;
-		const cx = canvas.width / 2;
-		const cy = canvas.height / 2;
-		const radius = 26;
-		ctx.fillStyle = "#ffffff";
-		ctx.strokeStyle = "rgba(15, 23, 42, 0.88)";
-		ctx.lineWidth = 10;
-		ctx.beginPath();
-		ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-		ctx.fill();
-		ctx.stroke();
-	} else {
-		canvas.width = CUSTOM_CURSOR_ARROW_WIDTH;
-		canvas.height = CUSTOM_CURSOR_ARROW_HEIGHT;
-		anchorX = CUSTOM_CURSOR_ARROW_TIP_X / CUSTOM_CURSOR_ARROW_WIDTH;
-		anchorY = CUSTOM_CURSOR_ARROW_TIP_Y / CUSTOM_CURSOR_ARROW_HEIGHT;
-		const ctx = canvas.getContext("2d")!;
-		ctx.fillStyle = "#ffffff";
-		ctx.strokeStyle = "#111111";
-		ctx.lineWidth = 11;
-		ctx.lineJoin = "round";
-		ctx.lineCap = "round";
-		drawArrowCursorPath(ctx, canvas.width, canvas.height);
-		ctx.fill();
-		ctx.stroke();
-	}
+	canvas.width = 112;
+	canvas.height = 112;
+	const ctx = canvas.getContext("2d")!;
+	const cx = canvas.width / 2;
+	const cy = canvas.height / 2;
+	const radius = 26;
+	ctx.fillStyle = "#ffffff";
+	ctx.strokeStyle = "rgba(15, 23, 42, 0.88)";
+	ctx.lineWidth = 10;
+	ctx.beginPath();
+	ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+	ctx.fill();
+	ctx.stroke();
 
 	const dataUrl = canvas.toDataURL("image/png");
 	await Assets.load(dataUrl);
@@ -183,8 +217,25 @@ async function createCursorStyleAsset(
 		texture,
 		image,
 		aspectRatio: canvas.height > 0 ? canvas.width / canvas.height : 1,
-		anchorX,
-		anchorY,
+		anchorX: 0.5,
+		anchorY: 0.5,
+	};
+}
+
+async function createCursorPackAsset(
+	url: string,
+	anchor: { x: number; y: number },
+): Promise<LoadedCursorAsset> {
+	await Assets.load(url);
+	const image = await loadImage(url);
+	const texture = Texture.from(url);
+
+	return {
+		texture,
+		image,
+		aspectRatio: image.naturalHeight > 0 ? image.naturalWidth / image.naturalHeight : 1,
+		anchorX: clamp(anchor.x, 0, 1),
+		anchorY: clamp(anchor.y, 0, 1),
 	};
 }
 
@@ -373,7 +424,7 @@ function getAvailableCursorKeys(): CursorAssetKey[] {
 	return loadedKeys.length > 0 ? loadedKeys : ["arrow"];
 }
 
-function getCursorStyleAsset(style: Exclude<CursorStyle, "tahoe">) {
+function getCursorStyleAsset(style: SingleCursorStyle) {
 	const asset = loadedCursorStyleAssets[style];
 	if (!asset) {
 		throw new Error(`Missing cursor style asset for ${style}`);
@@ -382,10 +433,23 @@ function getCursorStyleAsset(style: Exclude<CursorStyle, "tahoe">) {
 	return asset;
 }
 
-function getStatefulCursorAsset(
-	style: Extract<CursorStyle, "tahoe" | "mono">,
-	key: CursorAssetKey,
-) {
+function getCursorPackStyleAsset(style: CursorPackStyle, key: CursorAssetKey) {
+	const styleAssets = loadedCursorPackAssets[style];
+	if (!styleAssets) {
+		if (!warnedMissingCursorPackStyles.has(style)) {
+			warnedMissingCursorPackStyles.add(style);
+			console.warn(
+				`[CursorRenderer] Missing cursor pack assets for ${style}; falling back to Tahoe cursors.`,
+			);
+		}
+		return getStatefulCursorAsset("tahoe", key);
+	}
+
+	const variant = resolveCursorPackVariant(key);
+	return styleAssets[variant] ?? styleAssets.default;
+}
+
+function getStatefulCursorAsset(style: StatefulCursorStyle, key: CursorAssetKey) {
 	const assetMap = style === "mono" ? loadedInvertedCursorAssets : loadedCursorAssets;
 	const asset = assetMap[key] ?? assetMap.arrow;
 	if (!asset) {
@@ -499,8 +563,32 @@ export async function preloadCursorAssets() {
 			);
 
 			loadedCursorStyleAssets = Object.fromEntries(customStyleEntries) as Partial<
-				Record<Exclude<CursorStyle, "tahoe">, LoadedCursorAsset>
+				Record<SingleCursorStyle, LoadedCursorAsset>
 			>;
+
+			const cursorPackEntries = await Promise.all(
+				(Object.entries(CURSOR_PACK_SOURCES) as Array<[CursorPackStyle, CursorPackSource]>).map(
+					async ([style, source]) => {
+						try {
+							const [defaultAsset, pointerAsset] = await Promise.all([
+								createCursorPackAsset(source.defaultUrl, source.defaultAnchor),
+								createCursorPackAsset(source.pointerUrl, source.pointerAnchor),
+							]);
+							return [style, { default: defaultAsset, pointer: pointerAsset }] as const;
+						} catch (error) {
+							console.warn(
+								`[CursorRenderer] Failed to load cursor pack style for: ${style}`,
+								error,
+							);
+							return null;
+						}
+					},
+				),
+			);
+
+			loadedCursorPackAssets = Object.fromEntries(
+				cursorPackEntries.filter(Boolean).map((entry) => entry!),
+			) as Partial<Record<CursorPackStyle, LoadedCursorPackAssets>>;
 
 			if (!loadedCursorAssets.arrow) {
 				throw new Error("Failed to initialize the fallback arrow cursor asset");
@@ -886,7 +974,7 @@ export class PixiCursorOverlay {
 
 	setStyle(style: CursorStyle) {
 		this.config.style = style;
-		if (style === "tahoe" || style === "mono") {
+		if (isStatefulCursorStyle(style)) {
 			for (const key of getAvailableCursorKeys()) {
 				const asset = getStatefulCursorAsset(style, key);
 				const shadowSprite = this.cursorShadowSprites[key];
@@ -903,7 +991,9 @@ export class PixiCursorOverlay {
 			return;
 		}
 
-		const asset = getCursorStyleAsset(style);
+		const asset = isSingleCursorStyle(style)
+			? getCursorStyleAsset(style)
+			: getCursorPackStyleAsset(style, "arrow");
 		this.customCursorShadowSprite.texture = asset.texture;
 		this.customCursorShadowSprite.anchor.set(asset.anchorX, asset.anchorY);
 		this.customCursorSprite.texture = asset.texture;
@@ -978,11 +1068,12 @@ export class PixiCursorOverlay {
 		this.clickRingGraphics.clear();
 		drawClickRing(this.clickRingGraphics, px, py, h, clickProgress);
 
-		if (this.config.style === "tahoe" || this.config.style === "mono") {
+		const spriteKey = (cursorType in this.cursorSprites ? cursorType : "arrow") as CursorAssetKey;
+
+		if (isStatefulCursorStyle(this.config.style)) {
 			this.customCursorShadowSprite.visible = false;
 			this.customCursorSprite.visible = false;
 
-			const spriteKey = (cursorType in this.cursorSprites ? cursorType : "arrow") as CursorAssetKey;
 			const asset = getStatefulCursorAsset(this.config.style, spriteKey);
 			const shadowSprite = this.cursorShadowSprites[spriteKey] ?? this.cursorShadowSprites.arrow!;
 			const sprite = this.cursorSprites[spriteKey] ?? this.cursorSprites.arrow!;
@@ -1022,8 +1113,12 @@ export class PixiCursorOverlay {
 				currentSprite.visible = false;
 			}
 
-			const asset = getCursorStyleAsset(this.config.style);
+			const asset = isSingleCursorStyle(this.config.style)
+				? getCursorStyleAsset(this.config.style)
+				: getCursorPackStyleAsset(this.config.style, spriteKey);
 			const showSeparateShadow = this.config.style !== "figma";
+			this.customCursorShadowSprite.texture = asset.texture;
+			this.customCursorShadowSprite.anchor.set(asset.anchorX, asset.anchorY);
 			this.customCursorShadowSprite.visible = showSeparateShadow;
 			if (showSeparateShadow) {
 				this.customCursorShadowSprite.height = scaledH * bounceScale;
@@ -1035,6 +1130,8 @@ export class PixiCursorOverlay {
 				this.customCursorShadowSprite.rotation = swayRotation;
 			}
 
+			this.customCursorSprite.texture = asset.texture;
+			this.customCursorSprite.anchor.set(asset.anchorX, asset.anchorY);
 			this.customCursorSprite.visible = true;
 			this.customCursorSprite.alpha = this.config.dotAlpha;
 			this.customCursorSprite.height = scaledH * bounceScale;
@@ -1168,13 +1265,14 @@ export function drawCursorOnCanvas(
 		timeMs,
 		config.clickBounceDuration,
 	);
-	const asset =
-		config.style === "tahoe" || config.style === "mono"
-			? getStatefulCursorAsset(
-					config.style,
-					(cursorType && loadedCursorAssets[cursorType] ? cursorType : "arrow") as CursorAssetKey,
-				)
-			: getCursorStyleAsset(config.style);
+	const spriteKey = (
+		cursorType && loadedCursorAssets[cursorType] ? cursorType : "arrow"
+	) as CursorAssetKey;
+	const asset = isStatefulCursorStyle(config.style)
+		? getStatefulCursorAsset(config.style, spriteKey)
+		: isSingleCursorStyle(config.style)
+			? getCursorStyleAsset(config.style)
+			: getCursorPackStyleAsset(config.style, spriteKey);
 	const bounceScale = Math.max(
 		0.72,
 		1 - Math.sin(clickBounceProgress * Math.PI) * (0.08 * config.clickBounce),

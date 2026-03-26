@@ -22,7 +22,12 @@
 			"tahoe": "Tahoe",
 			"dot": "Dot",
 			"figma": "Minimal",
-			"mono": "Inverted"
+			"mono": "Inverted",
+			"lavender": "Lavender",
+			"parched": "Parched",
+			"chooper": "Chooper",
+			"amongus": "Among Us",
+			"turtle": "Turtle"
 		},
 		"backgroundBlur": "Background Blur",
 		"zoomMotionBlur": "Zoom Motion Blur",
