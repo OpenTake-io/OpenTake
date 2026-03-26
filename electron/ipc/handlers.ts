@@ -3041,6 +3041,9 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           const micPath = path.join(recordingsDir, `recording-${timestamp}.mic.wav`)
           config.captureMic = true
           config.micOutputPath = micPath
+          if (options.microphoneDeviceId) {
+            config.micDeviceId = options.microphoneDeviceId
+          }
           if (options.microphoneLabel) {
             config.micDeviceName = options.microphoneLabel
           }

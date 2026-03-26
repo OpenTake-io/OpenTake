@@ -29,6 +29,7 @@ struct CaptureConfig {
     std::string outputPath;
     std::string audioOutputPath;
     std::string micOutputPath;
+    std::string micDeviceId;
     std::string micDeviceName;
     int fps = 60;
     int width = 0;
@@ -113,6 +114,7 @@ static bool parseSimpleJson(const std::string& json, CaptureConfig& config) {
 
     config.audioOutputPath = findString("audioOutputPath");
     config.micOutputPath = findString("micOutputPath");
+    config.micDeviceId = findString("micDeviceId");
     config.micDeviceName = findString("micDeviceName");
 
     auto findBool = [&](const std::string& key) -> bool {
@@ -276,7 +278,10 @@ int main(int argc, char* argv[]) {
     }
 
     if (config.captureMic && !config.micOutputPath.empty()) {
-        micInitialized = micCapture.initializeMic(config.micOutputPath, config.micDeviceName);
+        micInitialized = micCapture.initializeMic(
+            config.micOutputPath,
+            config.micDeviceId,
+            config.micDeviceName);
         if (!micInitialized) {
             std::cerr << "WARNING: Failed to initialize WASAPI mic capture" << std::endl;
         }
