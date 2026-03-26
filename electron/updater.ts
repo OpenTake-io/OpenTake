@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog } from "electron";
 import { autoUpdater } from "electron-updater";
+import type { MessageBoxOptions, MessageBoxReturnValue } from "electron";
 
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const AUTO_UPDATES_ENABLED = process.env.RECORDLY_ENABLE_AUTO_UPDATES === "1";
@@ -22,8 +23,16 @@ function getDialogWindow(getMainWindow: () => BrowserWindow | null) {
 	return window && !window.isDestroyed() ? window : undefined;
 }
 
+function showMessageBox(
+	getMainWindow: () => BrowserWindow | null,
+	options: MessageBoxOptions,
+): Promise<MessageBoxReturnValue> {
+	const window = getDialogWindow(getMainWindow);
+	return window ? dialog.showMessageBox(window, options) : dialog.showMessageBox(options);
+}
+
 async function showNoUpdatesDialog(getMainWindow: () => BrowserWindow | null) {
-	await dialog.showMessageBox(getDialogWindow(getMainWindow), {
+	await showMessageBox(getMainWindow, {
 		type: "info",
 		title: "No Updates Available",
 		message: "Recordly is up to date.",
@@ -32,7 +41,7 @@ async function showNoUpdatesDialog(getMainWindow: () => BrowserWindow | null) {
 }
 
 async function showUpdateErrorDialog(getMainWindow: () => BrowserWindow | null, error: unknown) {
-	await dialog.showMessageBox(getDialogWindow(getMainWindow), {
+	await showMessageBox(getMainWindow, {
 		type: "error",
 		title: "Update Check Failed",
 		message: "Recordly could not check for updates.",
@@ -46,7 +55,7 @@ export async function checkForAppUpdates(
 ) {
 	if (!canUseAutoUpdates()) {
 		if (options?.manual) {
-			await dialog.showMessageBox(getDialogWindow(getMainWindow), {
+			await showMessageBox(getMainWindow, {
 				type: "info",
 				title: "Updates Not Enabled",
 				message: "Auto-updates are not enabled in this build.",
@@ -58,7 +67,7 @@ export async function checkForAppUpdates(
 
 	if (updateCheckInProgress) {
 		if (options?.manual) {
-			await dialog.showMessageBox(getDialogWindow(getMainWindow), {
+			await showMessageBox(getMainWindow, {
 				type: "info",
 				title: "Update Check In Progress",
 				message: "Recordly is already checking for updates.",
@@ -98,7 +107,7 @@ export function setupAutoUpdates(getMainWindow: () => BrowserWindow | null) {
 			return;
 		}
 
-		void dialog.showMessageBox(getDialogWindow(getMainWindow), {
+		void showMessageBox(getMainWindow, {
 			type: "info",
 			title: "Update Available",
 			message: `Recordly ${info.version} is available.`,
@@ -129,7 +138,7 @@ export function setupAutoUpdates(getMainWindow: () => BrowserWindow | null) {
 		updateCheckInProgress = false;
 		manualCheckRequested = false;
 
-		const result = await dialog.showMessageBox(getDialogWindow(getMainWindow), {
+		const result = await showMessageBox(getMainWindow, {
 			type: "info",
 			title: "Update Ready",
 			message: `Recordly ${info.version} has been downloaded.`,
