@@ -66,16 +66,6 @@ Use drag-and-drop timeline tools for zooms, trims, speed regions, annotations, e
 </p>
 
 ---
-# Sponsor Wall
-
-Recordly is fully open-source and maintained by a solo developer.  
-If you find it useful, consider supporting its development:
-
-[![Github-sponsors](https://img.shields.io/badge/sponsor-30363D?style=for-the-badge&logo=GitHub-Sponsors&logoColor=%23EA4AAA)](https://github.com/sponsors/webadderall)
-[![Ko-Fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/webadderall)
-
-
----
 
 ## All Features
 
@@ -360,12 +350,14 @@ Pull requests are welcome.
 
 ---
 
-# Hall of Supporters ($100+ donors)
+# Hall of Supporters
 
 [![Ko-Fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/webadderall)
-[![Github-sponsors](https://img.shields.io/badge/sponsor-30363D?style=for-the-badge&logo=GitHub-Sponsors&logoColor=%23EA4AAA)](https://github.com/sponsors/webadderall)
 
 - Tadees
+- Anonymous Supporter
+- Erwan
+- Anonymous supporter
 ---
 
 # License
