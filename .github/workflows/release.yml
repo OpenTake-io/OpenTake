@@ -31,40 +31,53 @@ permissions:
 
 jobs:
   validate-release:
-    name: Validate release input
+    name: Prepare release input
     runs-on: ubuntu-latest
     outputs:
-      package_version: ${{ steps.version.outputs.package_version }}
-      source_sha: ${{ steps.source.outputs.source_sha }}
+      package_version: ${{ steps.prepare.outputs.package_version }}
+      source_sha: ${{ steps.prepare.outputs.source_sha }}
     steps:
       - name: Checkout source ref
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.source_ref }}
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Resolve source commit
-        id: source
+      - name: Sync version with release tag
+        id: prepare
         shell: bash
         run: |
           set -euo pipefail
-          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Validate tag matches package version
-        id: version
-        shell: bash
-        run: |
-          set -euo pipefail
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          INPUT_REF="${{ github.event.inputs.source_ref }}"
           TAG_VERSION="${{ github.event.inputs.tag_name }}"
           TAG_VERSION="${TAG_VERSION#v}"
+          SOURCE_BRANCH=""
+
+          if git ls-remote --exit-code --heads origin "$INPUT_REF" >/dev/null 2>&1; then
+            SOURCE_BRANCH="$INPUT_REF"
+          fi
+
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
 
           if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
-            echo "Release tag version ($TAG_VERSION) does not match package.json version ($PACKAGE_VERSION)."
-            exit 1
+            if [ -z "$SOURCE_BRANCH" ]; then
+              echo "Release tag version ($TAG_VERSION) does not match package.json version ($PACKAGE_VERSION), and source_ref '$INPUT_REF' is not a branch that can be updated automatically."
+              exit 1
+            fi
+
+            npm version "$TAG_VERSION" --no-git-tag-version
+
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package.json package-lock.json
+            git commit -m "chore(release): bump version to v$TAG_VERSION"
+            git push origin "HEAD:$SOURCE_BRANCH"
+
+            PACKAGE_VERSION=$(node -p "require('./package.json').version")
           fi
 
           echo "package_version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   build-macos-x64:
     name: Build macOS x64
