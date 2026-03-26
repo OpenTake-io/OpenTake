@@ -114,10 +114,11 @@ interface Window {
 		setCurrentRecordingSession: (session: {
 			videoPath: string;
 			webcamPath?: string | null;
+			timeOffsetMs?: number;
 		}) => Promise<{ success: boolean }>;
 		getCurrentRecordingSession: () => Promise<{
 			success: boolean;
-			session?: { videoPath: string; webcamPath?: string | null };
+			session?: { videoPath: string; webcamPath?: string | null; timeOffsetMs?: number };
 		}>;
 		getCurrentVideoPath: () => Promise<{ success: boolean; path?: string }>;
 		clearCurrentVideoPath: () => Promise<{ success: boolean }>;

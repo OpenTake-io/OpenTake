@@ -49,6 +49,7 @@ export type WebcamCorner = "top-left" | "top-right" | "bottom-left" | "bottom-ri
 export interface WebcamOverlaySettings {
   enabled: boolean;
   sourcePath: string | null;
+  timeOffsetMs: number;
   mirror: boolean;
   corner: WebcamCorner;
   size: number;
@@ -69,10 +70,12 @@ export const DEFAULT_WEBCAM_REACT_TO_ZOOM = true;
 export const DEFAULT_WEBCAM_CORNER_RADIUS = 18;
 export const DEFAULT_WEBCAM_SHADOW = 0.35;
 export const DEFAULT_WEBCAM_MARGIN = 24;
+export const DEFAULT_WEBCAM_TIME_OFFSET_MS = 0;
 
 export const DEFAULT_WEBCAM_OVERLAY: WebcamOverlaySettings = {
   enabled: false,
   sourcePath: null,
+  timeOffsetMs: DEFAULT_WEBCAM_TIME_OFFSET_MS,
   mirror: true,
   corner: "bottom-right",
   size: DEFAULT_WEBCAM_SIZE,
