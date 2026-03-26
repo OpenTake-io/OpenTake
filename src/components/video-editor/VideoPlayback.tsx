@@ -945,7 +945,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       }
 
       const targetTime = clampMediaTimeToDuration(
-        currentTime,
+        Math.max(0, currentTime - (webcam.timeOffsetMs ?? 0) / 1000),
         Number.isFinite(webcamVideo.duration) ? webcamVideo.duration : null,
       );
 

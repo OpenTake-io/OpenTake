@@ -79,6 +79,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const chunks = useRef<Blob[]>([]);
   const webcamChunks = useRef<Blob[]>([]);
   const startTime = useRef<number>(0);
+  const webcamStartTime = useRef<number | null>(null);
+  const webcamTimeOffsetMs = useRef(0);
   const recordingSessionTimestamp = useRef<number | null>(null);
   const nativeScreenRecording = useRef(false);
   const nativeWindowsRecording = useRef(false);
@@ -265,6 +267,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       await window.electronAPI.setCurrentRecordingSession({
         videoPath,
         webcamPath,
+        timeOffsetMs: webcamTimeOffsetMs.current,
       });
     } else {
       await window.electronAPI.setCurrentVideoPath(videoPath);
@@ -293,6 +296,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const startWebcamRecorder = useCallback(async () => {
     if (!webcamEnabled) {
       pendingWebcamPathPromise.current = Promise.resolve(null);
+      webcamStartTime.current = null;
+      webcamTimeOffsetMs.current = 0;
       return;
     }
 
@@ -345,7 +350,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
             return;
           }
 
-          const duration = getRecordingDurationMs(Date.now());
+          const duration = Math.max(0, getRecordingDurationMs(Date.now()) - webcamTimeOffsetMs.current);
           const webcamBlob = new Blob(webcamChunks.current, { type: mimeType });
           webcamChunks.current = [];
           const fixedBlob = await fixWebmDuration(webcamBlob, duration);
@@ -358,6 +363,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         } finally {
           webcamStopResolver.current = null;
           webcamRecorder.current = null;
+          webcamStartTime.current = null;
           if (webcamStream.current) {
             webcamStream.current.getTracks().forEach((track) => track.stop());
             webcamStream.current = null;
@@ -365,12 +371,15 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         }
       };
 
+      webcamStartTime.current = Date.now();
       recorder.start(RECORDER_TIMESLICE_MS);
     } catch (error) {
       console.warn("Failed to start webcam recording; continuing without webcam layer:", error);
       pendingWebcamPathPromise.current = Promise.resolve(null);
       webcamStopPromise.current = Promise.resolve(null);
       webcamRecorder.current = null;
+      webcamStartTime.current = null;
+      webcamTimeOffsetMs.current = 0;
       if (webcamStream.current) {
         webcamStream.current.getTracks().forEach((track) => track.stop());
         webcamStream.current = null;
@@ -524,6 +533,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
       recordingSessionTimestamp.current = Date.now();
       resetRecordingClock(recordingSessionTimestamp.current);
+      webcamStartTime.current = null;
+      webcamTimeOffsetMs.current = 0;
       await startWebcamRecorder();
 
       const platform = await window.electronAPI.getPlatform();
@@ -596,9 +607,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         }
 
         if (nativeResult.success) {
+          const mainStartedAt = Date.now();
           nativeScreenRecording.current = true;
           nativeWindowsRecording.current = useNativeWindowsCapture;
-          resetRecordingClock(Date.now());
+          webcamTimeOffsetMs.current = webcamStartTime.current === null
+            ? 0
+            : webcamStartTime.current - mainStartedAt;
+          resetRecordingClock(mainStartedAt);
           setRecording(true);
           window.electronAPI?.setRecordingState(true);
 
@@ -824,8 +839,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       recorder.onerror = () => {
         setRecording(false);
       };
+      const mainStartedAt = Date.now();
+      resetRecordingClock(mainStartedAt);
+      webcamTimeOffsetMs.current = webcamStartTime.current === null
+        ? 0
+        : webcamStartTime.current - mainStartedAt;
       recorder.start(RECORDER_TIMESLICE_MS);
-      resetRecordingClock(Date.now());
       setRecording(true);
       window.electronAPI?.setRecordingState(true);
     } catch (error) {
@@ -909,6 +928,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     webcamRecorder.current = null;
     webcamStream.current?.getTracks().forEach((t) => t.stop());
     webcamStream.current = null;
+    webcamStartTime.current = null;
+    webcamTimeOffsetMs.current = 0;
     pendingWebcamPathPromise.current = null;
 
     if (nativeScreenRecording.current) {

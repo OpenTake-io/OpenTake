@@ -36,11 +36,7 @@ HMONITOR findMonitorByDisplayId(int64_t displayId) {
         }
     }
 
-    if (!monitors.empty()) {
-        return monitors[0].handle;
-    }
-
-    return MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    return nullptr;
 }
 
 MonitorInfo getMonitorInfo(HMONITOR monitor) {
