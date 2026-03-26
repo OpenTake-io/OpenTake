@@ -14,7 +14,10 @@ public:
     ~WasapiCapture();
 
     bool initializeLoopback(const std::string& outputPath);
-    bool initializeMic(const std::string& outputPath, const std::string& deviceName = "");
+    bool initializeMic(
+        const std::string& outputPath,
+        const std::string& deviceId = "",
+        const std::string& deviceName = "");
     bool start();
     bool pause();
     bool resume();
@@ -24,6 +27,7 @@ private:
     bool initializeCommon();
     void captureThread();
     bool writeWavHeader(HANDLE file, DWORD dataSize);
+    IMMDevice* findCaptureDeviceById(const std::wstring& id);
     IMMDevice* findCaptureDeviceByName(const std::wstring& name);
 
     std::string outputPath_;

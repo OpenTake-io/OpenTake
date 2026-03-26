@@ -29,6 +29,36 @@ static std::wstring utf8ToWide(const std::string& str) {
     return wstr;
 }
 
+IMMDevice* WasapiCapture::findCaptureDeviceById(const std::wstring& targetId) {
+    IMMDeviceCollection* collection = nullptr;
+    HRESULT hr = enumerator_->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &collection);
+    if (FAILED(hr)) return nullptr;
+
+    UINT count = 0;
+    collection->GetCount(&count);
+
+    for (UINT i = 0; i < count; i++) {
+        IMMDevice* dev = nullptr;
+        collection->Item(i, &dev);
+
+        LPWSTR deviceId = nullptr;
+        hr = dev->GetId(&deviceId);
+        if (SUCCEEDED(hr) && deviceId) {
+            const bool matches = targetId == deviceId;
+            CoTaskMemFree(deviceId);
+            if (matches) {
+                collection->Release();
+                return dev;
+            }
+        }
+
+        dev->Release();
+    }
+
+    collection->Release();
+    return nullptr;
+}
+
 IMMDevice* WasapiCapture::findCaptureDeviceByName(const std::wstring& targetName) {
     IMMDeviceCollection* collection = nullptr;
     HRESULT hr = enumerator_->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &collection);
@@ -36,6 +66,8 @@ IMMDevice* WasapiCapture::findCaptureDeviceByName(const std::wstring& targetName
 
     UINT count = 0;
     collection->GetCount(&count);
+
+    IMMDevice* partialMatch = nullptr;
 
     for (UINT i = 0; i < count; i++) {
         IMMDevice* dev = nullptr;
@@ -50,15 +82,21 @@ IMMDevice* WasapiCapture::findCaptureDeviceByName(const std::wstring& targetName
         PropVariantClear(&pv);
         store->Release();
 
-        if (name.find(targetName) != std::wstring::npos || targetName.find(name) != std::wstring::npos) {
+        if (name == targetName) {
             collection->Release();
             return dev;
         }
+
+        if (!partialMatch && (name.find(targetName) != std::wstring::npos || targetName.find(name) != std::wstring::npos)) {
+            partialMatch = dev;
+            continue;
+        }
+
         dev->Release();
     }
 
     collection->Release();
-    return nullptr;
+    return partialMatch;
 }
 
 bool WasapiCapture::initializeLoopback(const std::string& outputPath) {
@@ -76,7 +114,10 @@ bool WasapiCapture::initializeLoopback(const std::string& outputPath) {
     return initializeCommon();
 }
 
-bool WasapiCapture::initializeMic(const std::string& outputPath, const std::string& deviceName) {
+bool WasapiCapture::initializeMic(
+    const std::string& outputPath,
+    const std::string& deviceId,
+    const std::string& deviceName) {
     outputPath_ = outputPath;
     streamFlags_ = 0;
 
@@ -85,7 +126,10 @@ bool WasapiCapture::initializeMic(const std::string& outputPath, const std::stri
         IID_IMMDeviceEnumerator_, reinterpret_cast<void**>(&enumerator_));
     if (FAILED(hr)) return false;
 
-    if (!deviceName.empty()) {
+    if (!deviceId.empty()) {
+        device_ = findCaptureDeviceById(utf8ToWide(deviceId));
+    }
+    if (!device_ && !deviceName.empty()) {
         device_ = findCaptureDeviceByName(utf8ToWide(deviceName));
     }
     if (!device_) {
