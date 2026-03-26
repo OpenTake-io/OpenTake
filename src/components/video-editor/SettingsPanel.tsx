@@ -508,13 +508,11 @@ export function SettingsPanel({
 	onAnnotationDelete,
 	autoCaptions = [],
 	autoCaptionSettings = DEFAULT_AUTO_CAPTION_SETTINGS,
-	whisperExecutablePath,
 	whisperModelPath,
 	whisperModelDownloadStatus = "idle",
 	whisperModelDownloadProgress = 0,
 	isGeneratingCaptions = false,
 	onAutoCaptionSettingsChange,
-	onPickWhisperExecutable,
 	onPickWhisperModel,
 	onGenerateAutoCaptions,
 	onClearAutoCaptions,
@@ -545,16 +543,6 @@ export function SettingsPanel({
 		[builtInWallpapers],
 	);
 	const captionCueCount = autoCaptions.length;
-	const getPathDisplayName = (value?: string | null) => {
-		if (!value) {
-			return null;
-		}
-
-		const parts = value.split(/[\\/]/);
-		return parts[parts.length - 1] || value;
-	};
-	const whisperRuntimeLabel = getPathDisplayName(whisperExecutablePath);
-	const whisperModelLabel = getPathDisplayName(whisperModelPath);
 	const updateAutoCaptionSettings = (partial: Partial<AutoCaptionSettings>) => {
 		onAutoCaptionSettingsChange?.({
 			...autoCaptionSettings,
@@ -1347,15 +1335,7 @@ export function SettingsPanel({
 			</div>
 
 			<div className="rounded-lg bg-white/[0.03] px-2.5 py-2 space-y-3">
-				<div className="grid w-full grid-cols-2 gap-2">
-					<Button
-						type="button"
-						variant="outline"
-						onClick={onPickWhisperExecutable}
-						className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
-					>
-						{tSettings("captions.selectRuntime", "Select Runtime")}
-					</Button>
+				<div>
 					<Button
 						type="button"
 						variant="outline"
@@ -1364,17 +1344,6 @@ export function SettingsPanel({
 					>
 						{tSettings("captions.selectModel", "Select Model")}
 					</Button>
-				</div>
-				<div className="space-y-1 text-xs text-slate-400">
-					<div>
-						{tSettings("captions.runtimeStatus", "Runtime")}:{" "}
-						{whisperRuntimeLabel ??
-							tSettings("captions.runtimeAuto", "Bundled or system auto-detect")}
-					</div>
-					<div>
-						{tSettings("captions.modelStatus", "Model")}:{" "}
-						{whisperModelLabel ?? tSettings("captions.modelMissing", "No model selected")}
-					</div>
 				</div>
 				<div className="flex items-center justify-between gap-3">
 					<div className="text-sm font-medium text-slate-200">
@@ -1397,7 +1366,7 @@ export function SettingsPanel({
 					</Select>
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
-					<div className="grid w-full grid-cols-3 gap-2">
+					<div className="grid w-full grid-cols-2 gap-2">
 						{whisperModelDownloadStatus === "downloading" ? (
 							<Button
 								type="button"
@@ -1414,7 +1383,7 @@ export function SettingsPanel({
 								onClick={onDeleteWhisperSmallModel}
 								className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
 							>
-								{tSettings("captions.clearModel", "Clear Model")}
+								{tSettings("captions.deleteModel", "Delete Model")}
 							</Button>
 						) : (
 							<Button
@@ -1425,14 +1394,6 @@ export function SettingsPanel({
 								{tSettings("captions.downloadModel", "Download Model")}
 							</Button>
 						)}
-						<Button
-							type="button"
-							variant="outline"
-							onClick={onPickWhisperModel}
-							className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
-						>
-							{tSettings("captions.browseModel", "Browse Model")}
-						</Button>
 						<Button
 							type="button"
 							variant="outline"
