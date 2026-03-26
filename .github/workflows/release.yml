@@ -35,11 +35,20 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       package_version: ${{ steps.version.outputs.package_version }}
+      source_sha: ${{ steps.source.outputs.source_sha }}
     steps:
       - name: Checkout source ref
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.source_ref }}
+          fetch-depth: 1
+
+      - name: Resolve source commit
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Validate tag matches package version
         id: version
@@ -65,7 +74,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.source_ref }}
+          ref: ${{ needs.validate-release.outputs.source_sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -109,7 +118,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.source_ref }}
+          ref: ${{ needs.validate-release.outputs.source_sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -153,7 +162,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.source_ref }}
+          ref: ${{ needs.validate-release.outputs.source_sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -196,7 +205,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.source_ref }}
+          ref: ${{ needs.validate-release.outputs.source_sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -267,7 +276,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.event.inputs.tag_name }}
-          commit: ${{ github.event.inputs.source_ref }}
+          commit: ${{ needs.validate-release.outputs.source_sha }}
           name: ${{ github.event.inputs.release_name }}
           body: ${{ github.event.inputs.release_notes }}
           makeLatest: ${{ github.event.inputs.make_latest }}
