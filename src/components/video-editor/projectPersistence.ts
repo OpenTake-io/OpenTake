@@ -20,6 +20,7 @@ import {
 	DEFAULT_WEBCAM_REACT_TO_ZOOM,
 	DEFAULT_WEBCAM_SHADOW,
 	DEFAULT_WEBCAM_SIZE,
+	DEFAULT_WEBCAM_TIME_OFFSET_MS,
 	DEFAULT_FIGURE_DATA,
 	DEFAULT_PLAYBACK_SPEED,
 	DEFAULT_ZOOM_DEPTH,
@@ -403,6 +404,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			enabled:
 				typeof webcam.enabled === "boolean" ? webcam.enabled : DEFAULT_WEBCAM_OVERLAY.enabled,
 			sourcePath: webcamSourcePath,
+			timeOffsetMs: isFiniteNumber(webcam.timeOffsetMs)
+				? Math.round(clamp(webcam.timeOffsetMs, -30_000, 30_000))
+				: DEFAULT_WEBCAM_TIME_OFFSET_MS,
 			mirror: typeof webcam.mirror === "boolean" ? webcam.mirror : DEFAULT_WEBCAM_OVERLAY.mirror,
 			corner:
 				webcam.corner === "top-left" ||

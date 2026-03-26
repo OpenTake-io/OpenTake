@@ -706,10 +706,13 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         return;
       }
 
-      const targetTime = Math.max(0, currentTime);
-      if (Math.abs(webcamVideo.currentTime - targetTime) > (isPlaying ? 0.1 : 0.01)) {
+      const targetTime = Math.max(0, currentTime - (webcam.timeOffsetMs ?? 0) / 1000);
+      const clampedTargetTime = Number.isFinite(webcamVideo.duration)
+        ? Math.min(targetTime, Math.max(0, webcamVideo.duration))
+        : targetTime;
+      if (Math.abs(webcamVideo.currentTime - clampedTargetTime) > (isPlaying ? 0.1 : 0.01)) {
         try {
-          webcamVideo.currentTime = targetTime;
+          webcamVideo.currentTime = clampedTargetTime;
         } catch {
           // no-op
         }

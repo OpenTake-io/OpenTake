@@ -57,12 +57,14 @@ type WindowBounds = {
 type RecordingSessionData = {
   videoPath: string
   webcamPath?: string | null
+  timeOffsetMs?: number
 }
 
 type RecordingSessionManifest = {
-  version: 1
+  version: 1 | 2
   videoFileName: string
   webcamFileName?: string | null
+  timeOffsetMs?: number
 }
 
 let selectedSource: SelectedSource | null = null
@@ -223,6 +225,12 @@ function normalizeVideoSourcePath(videoPath?: string | null): string | null {
   return trimmed
 }
 
+function normalizeRecordingTimeOffsetMs(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.round(value)
+    : 0
+}
+
 function getRecordingSessionManifestPath(videoPath: string) {
   const extension = path.extname(videoPath)
   const baseName = path.basename(videoPath, extension)
@@ -244,9 +252,10 @@ async function persistRecordingSessionManifest(session: RecordingSessionData): P
   }
 
   const manifest: RecordingSessionManifest = {
-    version: 1,
+    version: 2,
     videoFileName: path.basename(normalizedVideoPath),
     webcamFileName: path.basename(normalizedWebcamPath),
+    timeOffsetMs: normalizeRecordingTimeOffsetMs(session.timeOffsetMs),
   }
 
   await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
@@ -263,7 +272,7 @@ async function resolveRecordingSessionManifest(videoPath?: string | null): Promi
   try {
     const content = await fs.readFile(manifestPath, 'utf-8')
     const parsed = JSON.parse(content) as Partial<RecordingSessionManifest>
-    if (parsed.version !== 1) {
+    if (parsed.version !== 1 && parsed.version !== 2) {
       return null
     }
 
@@ -275,6 +284,7 @@ async function resolveRecordingSessionManifest(videoPath?: string | null): Promi
       return {
         videoPath: normalizedVideoPath,
         webcamPath: null,
+        timeOffsetMs: 0,
       }
     }
 
@@ -284,6 +294,7 @@ async function resolveRecordingSessionManifest(videoPath?: string | null): Promi
     return {
       videoPath: normalizedVideoPath,
       webcamPath,
+      timeOffsetMs: normalizeRecordingTimeOffsetMs(parsed.timeOffsetMs),
     }
   } catch {
     return null
@@ -338,6 +349,7 @@ async function resolveRecordingSession(videoPath?: string | null): Promise<Recor
   return {
     videoPath: normalizedVideoPath,
     webcamPath: linkedWebcamPath,
+    timeOffsetMs: 0,
   }
 }
 
@@ -3031,9 +3043,14 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
             ? ((project as { editor?: { webcam?: { sourcePath?: string } } }).editor?.webcam
                 ?.sourcePath ?? null)
             : null
+        const timeOffsetMs = normalizeRecordingTimeOffsetMs(
+          (project as { editor?: { webcam?: { timeOffsetMs?: unknown } } }).editor?.webcam
+            ?.timeOffsetMs,
+        )
         currentRecordingSession = {
           videoPath: normalizedVideoPath,
           webcamPath,
+          timeOffsetMs,
         }
       }
 
@@ -3069,9 +3086,14 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
             ? ((project as { editor?: { webcam?: { sourcePath?: string } } }).editor?.webcam
                 ?.sourcePath ?? null)
             : null
+        const timeOffsetMs = normalizeRecordingTimeOffsetMs(
+          (project as { editor?: { webcam?: { timeOffsetMs?: unknown } } }).editor?.webcam
+            ?.timeOffsetMs,
+        )
         currentRecordingSession = {
           videoPath: normalizedVideoPath,
           webcamPath,
+          timeOffsetMs,
         }
       }
       return {
@@ -3106,12 +3128,13 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     return { success: true, webcamPath: resolvedSession.webcamPath ?? null }
   })
 
-  ipcMain.handle('set-current-recording-session', async (_, session: { videoPath: string; webcamPath?: string | null }) => {
+  ipcMain.handle('set-current-recording-session', async (_, session: { videoPath: string; webcamPath?: string | null; timeOffsetMs?: number }) => {
     const normalizedVideoPath = normalizeVideoSourcePath(session.videoPath) ?? session.videoPath
     currentVideoPath = normalizedVideoPath
     currentRecordingSession = {
       videoPath: normalizedVideoPath,
       webcamPath: normalizeVideoSourcePath(session.webcamPath ?? null),
+      timeOffsetMs: normalizeRecordingTimeOffsetMs(session.timeOffsetMs),
     }
     currentProjectPath = null
     await persistRecordingSessionManifest(currentRecordingSession)
