@@ -25,6 +25,9 @@ export class AudioProcessor {
     speedRegions?: SpeedRegion[],
     readEndSec?: number,
     audioRegions?: AudioRegion[],
+    masterAudioVolume = 1,
+    audioTrackVolume = 1,
+    masterAudioMuted = false,
   ): Promise<void> {
     const sortedTrims = trimRegions ? [...trimRegions].sort((a, b) => a.startMs - b.startMs) : []
     const sortedSpeedRegions = speedRegions
@@ -43,6 +46,9 @@ export class AudioProcessor {
         sortedTrims,
         sortedSpeedRegions,
         sortedAudioRegions,
+        masterAudioVolume,
+        audioTrackVolume,
+        masterAudioMuted,
       )
       if (!this.cancelled) {
         await this.muxRenderedAudioBlob(renderedAudioBlob, muxer)
@@ -279,6 +285,9 @@ export class AudioProcessor {
     trimRegions: TrimRegion[],
     speedRegions: SpeedRegion[],
     audioRegions: AudioRegion[],
+    masterAudioVolume: number,
+    audioTrackVolume: number,
+    masterAudioMuted: boolean,
   ): Promise<Blob> {
     const mediaSource = await resolveMediaElementSource(videoUrl)
     const media = document.createElement('audio')
@@ -331,7 +340,8 @@ export class AudioProcessor {
 
       const regionSourceNode = audioContext.createMediaElementSource(audioEl)
       const gainNode = audioContext.createGain()
-      gainNode.gain.value = Math.max(0, Math.min(1, region.volume))
+      // Initial volume (will be updated in the tick loop for fades)
+      gainNode.gain.value = 0 
       regionSourceNode.connect(gainNode)
       gainNode.connect(destinationNode)
 
@@ -404,20 +414,36 @@ export class AudioProcessor {
 
           // Sync external audio regions with the video timeline position
           for (const entry of audioRegionElements) {
-            const { media: audioEl, region } = entry
+            const { media: audioEl, region, gainNode } = entry
             const isInRegion = currentTimeMs >= region.startMs && currentTimeMs < region.endMs
 
             if (isInRegion) {
               const audioOffset = (currentTimeMs - region.startMs) / 1000
+              
+              // Apply fade-in / fade-out multiplier
+              let fadeMultiplier = 1;
+              if (region.fadeInMs && currentTimeMs < region.startMs + region.fadeInMs) {
+                fadeMultiplier = (currentTimeMs - region.startMs) / region.fadeInMs;
+              } else if (region.fadeOutMs && currentTimeMs > region.endMs - region.fadeOutMs) {
+                fadeMultiplier = (region.endMs - currentTimeMs) / region.fadeOutMs;
+              }
+              fadeMultiplier = Math.max(0, Math.min(1, fadeMultiplier));
+
+              // Apply total volume including global settings
+              const totalVolume = masterAudioMuted ? 0 : region.volume * audioTrackVolume * masterAudioVolume * fadeMultiplier;
+              gainNode.gain.setTargetAtTime(totalVolume, audioContext.currentTime, 0.015);
+
               if (audioEl.paused) {
                 audioEl.currentTime = audioOffset
                 audioEl.play().catch(() => {})
-              } else if (Math.abs(audioEl.currentTime - audioOffset) > 0.3) {
+              } else if (Math.abs(audioEl.currentTime - audioOffset) > 0.1) {
+                // Tightened sync for export
                 audioEl.currentTime = audioOffset
               }
             } else {
               if (!audioEl.paused) {
                 audioEl.pause()
+                gainNode.gain.value = 0
               }
             }
           }

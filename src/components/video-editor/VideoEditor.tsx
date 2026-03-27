@@ -6,6 +6,7 @@ import {
 	FolderOpen,
 	Languages,
 	MousePointer2,
+	Music,
 	Redo2,
 	Save,
 	Sparkles,
@@ -130,6 +131,11 @@ type EditorHistorySnapshot = {
 	selectedAnnotationId: string | null;
 	selectedAudioId: string | null;
 	selectedCaptionId: string | null;
+	masterAudioMuted: boolean;
+	masterAudioSoloed: boolean;
+	masterAudioVolume: number;
+	audioTrackVolume: number;
+	isMasterSelected: boolean;
 };
 
 type PendingExportSave = {
@@ -402,6 +408,11 @@ export default function VideoEditor() {
 	const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
 	const [exportError, setExportError] = useState<string | null>(null);
 	const [showExportDropdown, setShowExportDropdown] = useState(false);
+	const [masterAudioMuted, setMasterAudioMuted] = useState(false);
+	const [masterAudioSoloed, setMasterAudioSoloed] = useState(false);
+	const [masterAudioVolume, setMasterAudioVolume] = useState(1);
+	const [audioTrackVolume, setAudioTrackVolume] = useState(1);
+	const [isMasterSelected, setIsMasterSelected] = useState(false);
 	const [previewVolume, setPreviewVolume] = useState(1);
 	const [aspectRatio, setAspectRatio] = useState<AspectRatio>(initialEditorPreferences.aspectRatio);
 	const [activeEffectSection, setActiveEffectSection] = useState<EditorEffectSection>("scene");
@@ -423,8 +434,14 @@ export default function VideoEditor() {
 	const [lastSavedSnapshot, setLastSavedSnapshot] = useState<EditorProjectData | null>(null);
 	const [showCropModal, setShowCropModal] = useState(false);
 	const [previewVersion, setPreviewVersion] = useState(0);
+	const [isAudioEngineReady, setIsAudioEngineReady] = useState(false);
 
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
+	const audioContextRef = useRef<AudioContext | null>(null);
+	const masterGainRef = useRef<GainNode | null>(null);
+	const audioRegionNodesRef = useRef<Map<string, { source: MediaElementAudioSourceNode; gain: GainNode }>>(new Map());
+	const videoAudioNodeRef = useRef<{ source: MediaElementAudioSourceNode; gain: GainNode } | null>(null);
+	
 	const projectBrowserTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const projectBrowserFallbackTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const nextZoomIdRef = useRef(1);
@@ -798,6 +815,7 @@ export default function VideoEditor() {
 				label: t("settings.sections.captions", "Captions"),
 				icon: Captions,
 			},
+			{ id: "audio" as const, label: t("settings.sections.audio", "Audio"), icon: Music },
 		],
 		[t],
 	);
@@ -973,6 +991,11 @@ export default function VideoEditor() {
 			selectedAnnotationId,
 			selectedAudioId,
 			selectedCaptionId,
+			masterAudioMuted,
+			masterAudioSoloed,
+			masterAudioVolume,
+			audioTrackVolume,
+			isMasterSelected,
 		};
 	}, [
 		zoomRegions,
@@ -987,6 +1010,11 @@ export default function VideoEditor() {
 		selectedAnnotationId,
 		selectedAudioId,
 		selectedCaptionId,
+		masterAudioMuted,
+		masterAudioSoloed,
+		masterAudioVolume,
+		audioTrackVolume,
+		isMasterSelected,
 	]);
 
 	const applyHistorySnapshot = useCallback(
@@ -1004,6 +1032,11 @@ export default function VideoEditor() {
 			setSelectedAnnotationId(snapshot.selectedAnnotationId);
 			setSelectedAudioId(snapshot.selectedAudioId);
 			setSelectedCaptionId(snapshot.selectedCaptionId);
+			setMasterAudioMuted(snapshot.masterAudioMuted);
+			setMasterAudioSoloed(snapshot.masterAudioSoloed);
+			setMasterAudioVolume(snapshot.masterAudioVolume);
+			setAudioTrackVolume(snapshot.audioTrackVolume);
+			setIsMasterSelected(snapshot.isMasterSelected);
 
 			nextZoomIdRef.current = deriveNextId(
 				"zoom",
@@ -1128,6 +1161,11 @@ export default function VideoEditor() {
 			setGifFrameRate(normalizedEditor.gifFrameRate);
 			setGifLoop(normalizedEditor.gifLoop);
 			setGifSizePreset(normalizedEditor.gifSizePreset);
+			setMasterAudioMuted(normalizedEditor.masterAudioMuted);
+			setMasterAudioSoloed(normalizedEditor.masterAudioSoloed);
+			setMasterAudioVolume(normalizedEditor.masterAudioVolume);
+			setAudioTrackVolume(normalizedEditor.audioTrackVolume);
+			setIsMasterSelected(normalizedEditor.isMasterSelected ?? false);
 
 			setSelectedZoomId(null);
 			setSelectedTrimId(null);
@@ -1366,6 +1404,8 @@ export default function VideoEditor() {
 			gifFrameRate,
 			gifLoop,
 			gifSizePreset,
+			masterAudioMuted,
+			masterAudioSoloed,
 			whisperExecutablePath,
 			whisperModelPath,
 			whisperSelectedModel: autoCaptionSettings.selectedModel,
@@ -1480,6 +1520,19 @@ export default function VideoEditor() {
 
 		setWhisperExecutablePath(result.path);
 		toast.success("Whisper executable selected");
+	}, []);
+
+	const handleSelectMaster = useCallback((selected: boolean) => {
+		setIsMasterSelected(selected);
+		if (selected) {
+			setSelectedZoomId(null);
+			setSelectedTrimId(null);
+			setSelectedSpeedId(null);
+			setSelectedAnnotationId(null);
+			setSelectedAudioId(null);
+			setSelectedCaptionId(null);
+			setActiveEffectSection("audio");
+		}
 	}, []);
 
 	const handleDownloadWhisperModel = useCallback(async () => {
@@ -1790,6 +1843,30 @@ export default function VideoEditor() {
 	}, [handleOpenProjectBrowser, handleSaveProject, handleSaveProjectAs]);
 
 	useEffect(() => {
+		const video = videoPlaybackRef.current?.video;
+		if (!video || !audioContextRef.current || (videoAudioNodeRef.current && videoAudioNodeRef.current.source.mediaElement === video)) {
+			return;
+		}
+
+		try {
+			// If we had an old source node for a different video, disconnect it
+			if (videoAudioNodeRef.current) {
+				videoAudioNodeRef.current.source.disconnect();
+				videoAudioNodeRef.current.gain.disconnect();
+			}
+
+			const source = audioContextRef.current.createMediaElementSource(video);
+			const gain = audioContextRef.current.createGain();
+			source.connect(gain);
+			gain.connect(masterGainRef.current!);
+			videoAudioNodeRef.current = { source, gain };
+			console.log("[VideoEditor] Video audio routed through Web Audio API");
+		} catch (e) {
+			console.warn("[VideoEditor] Could not route video audio", e);
+		}
+	}, [videoPlaybackRef.current?.video, previewVersion, isAudioEngineReady]);
+
+	useEffect(() => {
 		let mounted = true;
 
 		async function loadCursorTelemetry() {
@@ -1819,6 +1896,25 @@ export default function VideoEditor() {
 			mounted = false;
 		};
 	}, [videoPath]);
+
+	// Apply master volume to the master gain node
+	useEffect(() => {
+		if (masterGainRef.current) {
+			masterGainRef.current.gain.setTargetAtTime(masterAudioVolume * previewVolume, 0, 0.03);
+		}
+	}, [masterAudioVolume, previewVolume]);
+
+	// Handle video master solo/mute
+	useEffect(() => {
+		if (videoAudioNodeRef.current) {
+			const hasGlobalSolo = masterAudioSoloed || audioRegions.some((r) => r.soloed);
+			let vol = 1;
+			if (masterAudioMuted || (hasGlobalSolo && !masterAudioSoloed)) {
+				vol = 0;
+			}
+			videoAudioNodeRef.current.gain.gain.setTargetAtTime(vol, 0, 0.03);
+		}
+	}, [masterAudioMuted, masterAudioSoloed, audioRegions]);
 
 	const normalizedCursorTelemetry = useMemo(() => {
 		if (cursorTelemetry.length === 0) {
@@ -1938,10 +2034,33 @@ export default function VideoEditor() {
 		autoSuggestedVideoPathRef.current = videoPath;
 	}, [videoPath, duration, effectiveCursorTelemetry, loopCursor, zoomRegions.length]);
 
+	const initAudioContext = useCallback(() => {
+		if (audioContextRef.current) {
+			if (audioContextRef.current.state === 'suspended') {
+				audioContextRef.current.resume().then(() => setIsAudioEngineReady(true));
+			}
+			return;
+		}
+		
+		try {
+			const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+			const masterGain = ctx.createGain();
+			masterGain.connect(ctx.destination);
+			audioContextRef.current = ctx;
+			masterGainRef.current = masterGain;
+			setIsAudioEngineReady(true);
+			console.log("[VideoEditor] Web Audio API context initialized");
+		} catch (e) {
+			console.error("[VideoEditor] Failed to initialize AudioContext", e);
+		}
+	}, []);
+
 	function togglePlayPause() {
 		const playback = videoPlaybackRef.current;
 		const video = playback?.video;
 		if (!playback || !video) return;
+
+		initAudioContext();
 
 		if (!video.paused && !video.ended) {
 			playback.pause();
@@ -1964,6 +2083,7 @@ export default function VideoEditor() {
 			setSelectedSpeedId(null);
 			setSelectedAnnotationId(null);
 			setSelectedCaptionId(null);
+			setIsMasterSelected(false);
 		}
 	}, []);
 
@@ -1975,6 +2095,7 @@ export default function VideoEditor() {
 			setSelectedAudioId(null);
 			setSelectedSpeedId(null);
 			setSelectedCaptionId(null);
+			setIsMasterSelected(false);
 		}
 	}, []);
 
@@ -1986,6 +2107,7 @@ export default function VideoEditor() {
 			setSelectedAudioId(null);
 			setSelectedSpeedId(null);
 			setSelectedCaptionId(null);
+			setIsMasterSelected(false);
 		}
 	}, []);
 
@@ -2033,6 +2155,7 @@ export default function VideoEditor() {
 		setSelectedZoomId(null);
 		setSelectedAnnotationId(null);
 		setSelectedCaptionId(null);
+		setIsMasterSelected(false);
 	}, []);
 
 	const handleZoomSpanChange = useCallback((id: string, span: Span) => {
@@ -2122,6 +2245,7 @@ export default function VideoEditor() {
 			setSelectedAnnotationId(null);
 			setSelectedAudioId(null);
 			setSelectedCaptionId(null);
+			setIsMasterSelected(false);
 		}
 	}, []);
 
@@ -2173,6 +2297,8 @@ export default function VideoEditor() {
 			setSelectedAnnotationId(null);
 			setSelectedSpeedId(null);
 			setSelectedCaptionId(null);
+			setIsMasterSelected(false);
+			setActiveEffectSection("audio");
 		}
 	}, []);
 
@@ -2192,6 +2318,7 @@ export default function VideoEditor() {
 		setSelectedAnnotationId(null);
 		setSelectedSpeedId(null);
 		setSelectedCaptionId(null);
+		setIsMasterSelected(false);
 	}, []);
 
 	const handleAudioSpanChange = useCallback((id: string, span: Span) => {
@@ -2218,6 +2345,26 @@ export default function VideoEditor() {
 		[selectedAudioId],
 	);
 
+	const handleAudioVolumeChange = useCallback((id: string, volume: number) => {
+		setAudioRegions((prev) => prev.map((r) => (r.id === id ? { ...r, volume } : r)));
+	}, []);
+
+	const handleAudioMutedChange = useCallback((id: string, muted: boolean) => {
+		setAudioRegions((prev) => prev.map((r) => (r.id === id ? { ...r, muted } : r)));
+	}, []);
+
+	const handleAudioSoloedChange = useCallback((id: string, soloed: boolean) => {
+		setAudioRegions((prev) => prev.map((r) => (r.id === id ? { ...r, soloed } : r)));
+	}, []);
+
+	const handleAudioFadeInMsChange = useCallback((id: string, fadeInMs: number) => {
+		setAudioRegions((prev) => prev.map((r) => (r.id === id ? { ...r, fadeInMs } : r)));
+	}, []);
+
+	const handleAudioFadeOutMsChange = useCallback((id: string, fadeOutMs: number) => {
+		setAudioRegions((prev) => prev.map((r) => (r.id === id ? { ...r, fadeOutMs } : r)));
+	}, []);
+
 	const handleCaptionSpanChange = useCallback((id: string, span: Span) => {
 		setAutoCaptions((prev) =>
 			prev.map((caption) =>
@@ -2240,6 +2387,7 @@ export default function VideoEditor() {
 			setSelectedAnnotationId(null);
 			setSelectedSpeedId(null);
 			setSelectedAudioId(null);
+			setIsMasterSelected(false);
 		}
 	}, []);
 
@@ -2271,7 +2419,8 @@ export default function VideoEditor() {
 		setSelectedAnnotationId(id);
 		setSelectedZoomId(null);
 		setSelectedTrimId(null);
-		setSelectedCaptionId(null); // Added
+		setSelectedCaptionId(null);
+		setIsMasterSelected(false);
 	}, []);
 
 	const handleAnnotationSpanChange = useCallback((id: string, span: Span) => {
@@ -2493,40 +2642,75 @@ export default function VideoEditor() {
 
 	useEffect(() => {
 		const existing = audioElementsRef.current;
-		const currentIds = new Set(audioRegions.map((r) => r.id));
+		const unused = new Set(existing.keys());
 
-		// Remove old audio elements
-		for (const [id, audio] of existing) {
-			if (!currentIds.has(id)) {
-				audio.pause();
-				audio.src = "";
-				existing.delete(id);
-			}
-		}
+		const hasAudioContext = !!(audioContextRef.current && masterGainRef.current && isAudioEngineReady);
 
-		// Create/update audio elements
 		for (const region of audioRegions) {
+			unused.delete(region.id);
 			let audio = existing.get(region.id);
 			if (!audio) {
 				audio = new Audio();
-				audio.preload = "auto";
+				// Ensure cross-origin is handled to avoid CORS issues with AudioContext
+				audio.crossOrigin = "anonymous";
 				existing.set(region.id, audio);
 			}
 			const expectedSrc = toFileUrl(region.audioPath);
 			if (audio.src !== expectedSrc) {
 				audio.src = expectedSrc;
 			}
-			audio.volume = Math.max(0, Math.min(1, region.volume * previewVolume));
+
+			// Route through Web Audio API if ready
+			if (hasAudioContext && !audioRegionNodesRef.current.has(region.id)) {
+				try {
+					const source = audioContextRef.current!.createMediaElementSource(audio);
+					const gain = audioContextRef.current!.createGain();
+					source.connect(gain);
+					gain.connect(masterGainRef.current!);
+					audioRegionNodesRef.current.set(region.id, { source, gain });
+					console.log(`[VideoEditor] Audio region ${region.id} routed through GainNode`);
+				} catch (e) {
+					console.warn(`[VideoEditor] Failed to route audio ${region.id}:`, e);
+				}
+			}
+
+			// Initial volume setup — masterAudioMuted only affects the video element, not audio regions
+			const hasGlobalSolo = audioRegions.some((r) => r.soloed);
+			let baseVolume = region.volume * audioTrackVolume * previewVolume * masterAudioVolume;
+			if (region.muted || (hasGlobalSolo && !region.soloed)) {
+				baseVolume = 0;
+			}
+
+			const nodeEntry = audioRegionNodesRef.current.get(region.id);
+			if (nodeEntry) {
+				audio.volume = 1;
+				nodeEntry.gain.gain.setTargetAtTime(baseVolume, 0, 0.03);
+			} else {
+				// Fallback to native volume (limited to 100%)
+				audio.volume = Math.max(0, Math.min(1, baseVolume));
+			}
 		}
 
 		return () => {
-			for (const audio of existing.values()) {
-				audio.pause();
-				audio.src = "";
+			for (const id of unused) {
+				const audio = existing.get(id);
+				if (audio) {
+					audio.pause();
+					audio.src = "";
+				}
+				existing.delete(id);
+
+				const nodeEntry = audioRegionNodesRef.current.get(id);
+				if (nodeEntry) {
+					try {
+						nodeEntry.source.disconnect();
+						nodeEntry.gain.disconnect();
+					} catch (e) { /* ignore */ }
+					audioRegionNodesRef.current.delete(id);
+				}
 			}
-			existing.clear();
 		};
-	}, [audioRegions, previewVolume]);
+	}, [audioRegions, previewVolume, masterAudioVolume, audioTrackVolume, isAudioEngineReady]);
 
 	// Sync audio playback with video currentTime and isPlaying state
 	useEffect(() => {
@@ -2538,9 +2722,39 @@ export default function VideoEditor() {
 			const isInRegion = currentTimeMs >= region.startMs && currentTimeMs < region.endMs;
 
 			if (isPlaying && isInRegion) {
+				// Calculate fade multiplier
+				let fadeMultiplier = 1;
+				if (region.fadeInMs && currentTimeMs < region.startMs + region.fadeInMs) {
+					fadeMultiplier = (currentTimeMs - region.startMs) / region.fadeInMs;
+				} else if (region.fadeOutMs && currentTimeMs > region.endMs - region.fadeOutMs) {
+					fadeMultiplier = (region.endMs - currentTimeMs) / region.fadeOutMs;
+				}
+				fadeMultiplier = Math.max(0, Math.min(1, fadeMultiplier));
+
+				// masterAudioMuted only affects the video element — not audio regions
+				const hasGlobalSolo = audioRegions.some((r) => r.soloed);
+				let baseVolume = region.volume * audioTrackVolume * previewVolume * masterAudioVolume;
+				if (region.muted || (hasGlobalSolo && !region.soloed)) {
+					baseVolume = 0;
+				}
+
+				const targetVolume = baseVolume * fadeMultiplier;
+				const nodeEntry = audioRegionNodesRef.current.get(region.id);
+
+				if (nodeEntry) {
+					// Use Web Audio gain automation for smooth high-precision fade
+					nodeEntry.gain.gain.setTargetAtTime(targetVolume, 0, 0.03);
+				} else {
+					// Fallback to native volume (limited to 1.0)
+					const fallbackValue = Math.max(0, Math.min(1, targetVolume));
+					if (Math.abs(audio.volume - fallbackValue) > 0.01) {
+						audio.volume = fallbackValue;
+					}
+				}
+
 				const audioOffset = (currentTimeMs - region.startMs) / 1000;
-				// Only seek if significantly out of sync (> 200ms)
-				if (Math.abs(audio.currentTime - audioOffset) > 0.2) {
+				// Only seek if significantly out of sync (> 20ms) - tightened for Web Audio era
+				if (Math.abs(audio.currentTime - audioOffset) > 0.02) {
 					audio.currentTime = audioOffset;
 				}
 				if (audio.paused) {
@@ -2552,7 +2766,7 @@ export default function VideoEditor() {
 				}
 			}
 		}
-	}, [isPlaying, currentTime, audioRegions]);
+	}, [isPlaying, currentTime, audioRegions, previewVolume, masterAudioVolume, audioTrackVolume]);
 
 	const showExportSuccessToast = useCallback((filePath: string) => {
 		toast.success(`Exported successfully to ${filePath}`, {
@@ -2762,6 +2976,9 @@ export default function VideoEditor() {
 						cursorClickBounceDuration,
 						cursorSway,
 						audioRegions,
+						masterAudioVolume: masterAudioVolume ?? 1,
+						audioTrackVolume: audioTrackVolume ?? 1,
+						masterAudioMuted: masterAudioMuted ?? false,
 						previewWidth,
 						previewHeight,
 						onProgress: (progress: ExportProgress) => {
@@ -3370,6 +3587,13 @@ export default function VideoEditor() {
 										>
 											<VideoPlayback
 												key={`${videoPath || "no-video"}:${previewVersion}`}
+												volume={(() => {
+													const hasGlobalSolo = masterAudioSoloed || audioRegions.some((r) => r.soloed);
+													if (masterAudioMuted || (hasGlobalSolo && !masterAudioSoloed)) {
+														return 0;
+													}
+													return previewVolume * masterAudioVolume;
+												})()}
 												aspectRatio={aspectRatio}
 												ref={videoPlaybackRef}
 												videoPath={videoPath || ""}
@@ -3420,7 +3644,6 @@ export default function VideoEditor() {
 												cursorClickBounce={cursorClickBounce}
 												cursorClickBounceDuration={cursorClickBounceDuration}
 												cursorSway={cursorSway}
-												volume={previewVolume}
 											/>
 										</div>
 									</div>
@@ -3459,6 +3682,15 @@ export default function VideoEditor() {
 							<div className="h-full min-h-0 bg-[#17171a] rounded-2xl border border-white/10 shadow-lg overflow-auto flex flex-col">
 								<TimelineEditor
 									videoDuration={duration}
+									videoPath={videoPath || undefined}
+									masterAudioMuted={masterAudioMuted}
+									onMasterAudioMutedChange={setMasterAudioMuted}
+									masterAudioSoloed={masterAudioSoloed}
+									onMasterAudioSoloedChange={setMasterAudioSoloed}
+									masterAudioVolume={masterAudioVolume}
+									onMasterAudioVolumeChange={setMasterAudioVolume}
+									audioTrackVolume={audioTrackVolume}
+									onAudioTrackVolumeChange={setAudioTrackVolume}
 									currentTime={currentTime}
 									onSeek={handleSeek}
 									cursorTelemetry={normalizedCursorTelemetry}
@@ -3484,6 +3716,8 @@ export default function VideoEditor() {
 									audioRegions={audioRegions}
 									onAudioAdded={handleAudioAdded}
 									onAudioSpanChange={handleAudioSpanChange}
+									onAudioMutedChange={handleAudioMutedChange}
+									onAudioSoloedChange={handleAudioSoloedChange}
 									onAudioDelete={handleAudioDelete}
 									selectedAudioId={selectedAudioId}
 									onSelectAudio={handleSelectAudio}
@@ -3504,6 +3738,8 @@ export default function VideoEditor() {
 									isCropped={isCropped}
 									timeSelection={timeSelection}
 									onTimeSelectionChange={setTimeSelection}
+									isMasterSelected={isMasterSelected}
+									onSelectMaster={handleSelectMaster}
 								/>
 							</div>
 						</Panel>
@@ -3611,9 +3847,26 @@ export default function VideoEditor() {
 						}
 						onSpeedChange={handleSpeedChange}
 						onSpeedDelete={handleSpeedDelete}
+						audioRegions={audioRegions}
+						selectedAudioId={selectedAudioId}
+						onAudioVolumeChange={handleAudioVolumeChange}
+						onAudioMutedChange={handleAudioMutedChange}
+						onAudioSoloedChange={handleAudioSoloedChange}
+						onAudioFadeInMsChange={handleAudioFadeInMsChange}
+						onAudioFadeOutMsChange={handleAudioFadeOutMsChange}
+						onAudioDelete={handleAudioDelete}
 						selectedCaptionId={selectedCaptionId}
 						onSelectCaption={setSelectedCaptionId}
 						timeSelection={timeSelection}
+						isMasterSelected={isMasterSelected}
+						masterAudioVolume={masterAudioVolume}
+						masterAudioMuted={masterAudioMuted}
+						masterAudioSoloed={masterAudioSoloed}
+						videoDuration={duration}
+						videoPath={videoPath || undefined}
+						onMasterAudioVolumeChange={setMasterAudioVolume}
+						onMasterAudioMutedChange={setMasterAudioMuted}
+						onMasterAudioSoloedChange={setMasterAudioSoloed}
 					/>
 				</div>
 			</div>

@@ -247,6 +247,10 @@ export interface AudioRegion {
 	endMs: number;
 	audioPath: string;
 	volume: number;
+	muted?: boolean;
+	soloed?: boolean;
+	fadeInMs?: number;
+	fadeOutMs?: number;
 }
 
 

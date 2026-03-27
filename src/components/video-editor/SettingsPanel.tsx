@@ -1,4 +1,4 @@
-import { MessageSquare, Palette, Trash2, Upload, X } from "lucide-react";
+import { MessageSquare, Music, Palette, Trash2, Upload, X } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -26,11 +26,13 @@ import parchedCursorUrl from "../../assets/cursors/parched/default.png";
 import turtleCursorUrl from "../../assets/cursors/turtle/default.png";
 import { useI18n, useScopedT } from "../../contexts/I18nContext";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
+import { AudioSettingsPanel } from "./AudioSettingsPanel";
 import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
 import { SliderControl } from "./SliderControl";
 import type {
 	AnnotationRegion,
 	AnnotationType,
+	AudioRegion,
 	AutoCaptionAnimation,
 	AutoCaptionSettings,
 	CaptionCue,
@@ -111,6 +113,7 @@ export type EditorEffectSection =
 	| "cursor"
 	| "captions"
 	| "webcam"
+	| "audio"
 	| "zoom"
 	| "frame"
 	| "crop";
@@ -233,7 +236,24 @@ interface SettingsPanelProps {
 	selectedSpeedValue?: PlaybackSpeed | null;
 	onSpeedChange?: (speed: PlaybackSpeed) => void;
 	onSpeedDelete?: (id: string) => void;
+	audioRegions?: AudioRegion[];
+	selectedAudioId?: string | null;
+	onAudioVolumeChange?: (id: string, volume: number) => void;
+	onAudioMutedChange?: (id: string, muted: boolean) => void;
+	onAudioSoloedChange?: (id: string, soloed: boolean) => void;
+	onAudioFadeInMsChange?: (id: string, ms: number) => void;
+	onAudioFadeOutMsChange?: (id: string, ms: number) => void;
+	onAudioDelete?: (id: string) => void;
 	timeSelection?: { startMs: number; endMs: number } | null;
+	isMasterSelected?: boolean;
+	masterAudioVolume?: number;
+	masterAudioMuted?: boolean;
+	masterAudioSoloed?: boolean;
+	videoDuration?: number;
+	videoPath?: string;
+	onMasterAudioVolumeChange?: (volume: number) => void;
+	onMasterAudioMutedChange?: (muted: boolean) => void;
+	onMasterAudioSoloedChange?: (soloed: boolean) => void;
 }
 
 export default SettingsPanel;
@@ -591,7 +611,24 @@ export function SettingsPanel({
 	selectedSpeedValue,
 	onSpeedChange,
 	onSpeedDelete,
+	audioRegions = [],
+	selectedAudioId,
+	onAudioVolumeChange,
+	onAudioMutedChange,
+	onAudioSoloedChange,
+	onAudioFadeInMsChange,
+	onAudioFadeOutMsChange,
+	onAudioDelete,
 	timeSelection,
+	isMasterSelected,
+	masterAudioVolume = 1,
+	masterAudioMuted = false,
+	masterAudioSoloed = false,
+	videoDuration,
+	videoPath,
+	onMasterAudioVolumeChange,
+	onMasterAudioMutedChange,
+	onMasterAudioSoloedChange,
 }: SettingsPanelProps) {
 	const tSettings = useScopedT("settings");
 	const { t } = useI18n();
@@ -1782,6 +1819,54 @@ export function SettingsPanel({
 				return sceneSectionContent;
 			case "captions":
 				return captionsSectionContent;
+			case "audio": {
+				const selectedAudio = audioRegions?.find((a) => a.id === selectedAudioId);
+				if (selectedAudio) {
+					return (
+						<AudioSettingsPanel
+							audio={selectedAudio}
+							onVolumeChange={(volume) => onAudioVolumeChange?.(selectedAudio.id, volume)}
+							onMutedChange={(muted) => onAudioMutedChange?.(selectedAudio.id, muted)}
+							onSoloedChange={(soloed) => onAudioSoloedChange?.(selectedAudio.id, soloed)}
+							onFadeInMsChange={(ms) => onAudioFadeInMsChange?.(selectedAudio.id, ms)}
+							onFadeOutMsChange={(ms) => onAudioFadeOutMsChange?.(selectedAudio.id, ms)}
+							onDelete={() => onAudioDelete?.(selectedAudio.id)}
+						/>
+					);
+				}
+
+				if (isMasterSelected) {
+					const masterAudioMock: AudioRegion = {
+						id: "master",
+						startMs: 0,
+						endMs: (videoDuration || 0) * 1000,
+						volume: masterAudioVolume,
+						muted: masterAudioMuted,
+						soloed: masterAudioSoloed,
+						audioPath: videoPath || "",
+						fadeInMs: 0,
+						fadeOutMs: 0,
+					};
+					return (
+						<AudioSettingsPanel
+							audio={masterAudioMock}
+							onVolumeChange={onMasterAudioVolumeChange || (() => {})}
+							onMutedChange={onMasterAudioMutedChange || (() => {})}
+							onSoloedChange={onMasterAudioSoloedChange || (() => {})}
+							onFadeInMsChange={() => {}}
+							onFadeOutMsChange={() => {}}
+							onDelete={() => {}}
+						/>
+					);
+				}
+
+				return (
+					<div className="flex flex-col items-center justify-center h-full text-slate-500 gap-2 py-12">
+						<Music className="w-8 h-8 opacity-20" />
+						<p className="text-xs">Select an audio region to edit its settings</p>
+					</div>
+				);
+			}
 			case "cursor":
 				return (
 					<section className="flex flex-col gap-2">
