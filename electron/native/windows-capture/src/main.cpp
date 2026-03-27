@@ -1,10 +1,7 @@
-#include "wgc_session.h"
+#include "dxgi_session.h"
 #include "mf_encoder.h"
 #include "monitor_utils.h"
 #include "wasapi_loopback.h"
-
-#include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.System.h>
 
 #include <iostream>
 #include <string>
@@ -24,7 +21,7 @@ static std::mutex g_stopMutex;
 static std::condition_variable g_stopCv;
 
 struct CaptureConfig {
-    int displayId = 0;
+    int64_t displayId = 0;
     int64_t windowHandle = 0;
     std::string outputPath;
     std::string audioOutputPath;
@@ -96,7 +93,7 @@ static bool parseSimpleJson(const std::string& json, CaptureConfig& config) {
     config.outputPath = findString("outputPath");
     if (config.outputPath.empty()) return false;
 
-    int displayId = findInt("displayId");
+    int64_t displayId = findInt64("displayId");
     if (displayId >= 0) config.displayId = displayId;
 
     int64_t windowHandle = findInt64("windowHandle");
@@ -176,15 +173,13 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    winrt::init_apartment(winrt::apartment_type::multi_threaded);
-
     CaptureConfig config;
     if (!parseSimpleJson(argv[1], config)) {
         std::cerr << "ERROR: Failed to parse config JSON" << std::endl;
         return 1;
     }
 
-    WgcSession session;
+    DxgiSession session;
 
     if (config.windowHandle > 0) {
         HWND hwnd = reinterpret_cast<HWND>(static_cast<intptr_t>(config.windowHandle));
@@ -193,7 +188,7 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         if (!session.initialize(hwnd, config.fps)) {
-            std::cerr << "ERROR: Failed to initialize WGC window capture session" << std::endl;
+            std::cerr << "ERROR: Failed to initialize DXGI window capture session" << std::endl;
             return 1;
         }
     } else {
@@ -203,7 +198,7 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         if (!session.initialize(monitor, config.fps)) {
-            std::cerr << "ERROR: Failed to initialize WGC capture session" << std::endl;
+            std::cerr << "ERROR: Failed to initialize DXGI capture session" << std::endl;
             return 1;
         }
     }
@@ -278,7 +273,7 @@ int main(int argc, char* argv[]) {
 
     // Start video capture, then audio immediately after for sync
     if (!session.startCapture()) {
-        std::cerr << "ERROR: Failed to start WGC capture" << std::endl;
+        std::cerr << "ERROR: Failed to start DXGI capture" << std::endl;
         return 1;
     }
 
@@ -292,7 +287,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Recording started" << std::endl;
     std::cout.flush();
 
-    // Wait for stop signal while pausing/resuming audio tracks in lockstep.
+    // Wait for stop signal
     while (!g_stopRequested) {
         if (g_pauseRequested) {
             if (audioActive) loopback.pause();
