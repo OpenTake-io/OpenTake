@@ -178,6 +178,8 @@ interface Window {
 			whisperExecutablePath?: string;
 			whisperModelPath: string;
 			language?: string;
+			durationMs?: number;
+			startTimeMs?: number;
 		}) => Promise<{
 			success: boolean;
 			cues?: CaptionCue[];
@@ -303,6 +305,7 @@ interface Window {
 		cancelCountdown: () => Promise<{ success: boolean }>;
 		getActiveCountdown: () => Promise<{ success: boolean; seconds: number | null }>;
 		onAutoCaptionProgress: (callback: (payload: { progress: number }) => void) => () => void;
+		onAutoCaptionChunk: (callback: (payload: { cues: CaptionCue[] }) => void) => () => void;
 		onCountdownTick: (callback: (seconds: number) => void) => () => void;
 	};
 }

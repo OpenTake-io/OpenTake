@@ -228,6 +228,7 @@ interface SettingsPanelProps {
 	selectedSpeedValue?: PlaybackSpeed | null;
 	onSpeedChange?: (speed: PlaybackSpeed) => void;
 	onSpeedDelete?: (id: string) => void;
+	timeSelection?: { startMs: number; endMs: number } | null;
 }
 
 export default SettingsPanel;
@@ -550,9 +551,11 @@ export function SettingsPanel({
 	selectedSpeedValue,
 	onSpeedChange,
 	onSpeedDelete,
+	timeSelection,
 }: SettingsPanelProps) {
 	const tSettings = useScopedT("settings");
 	const { t } = useI18n();
+
 	const isBackgroundPanel = panelMode === "background";
 	const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
 	const [builtInWallpapers, setBuiltInWallpapers] =
@@ -1467,6 +1470,36 @@ export function SettingsPanel({
 						>
 							{tSettings("captions.clearFull", "Clear Captions")}
 						</Button>
+					</div>
+				</div>
+				<div className="flex flex-col gap-3 pt-1">
+					<div className="flex flex-col gap-1.5 px-1">
+						<SectionLabel>Generation Range</SectionLabel>
+						<ToggleGroup
+							type="single"
+							value={autoCaptionSettings?.generationRange || "full"}
+							onValueChange={(val) =>
+								val &&
+								onAutoCaptionSettingsChange?.({
+									...autoCaptionSettings!,
+									generationRange: val as any,
+								})
+							}
+							className="justify-start gap-1"
+						>
+							<ToggleGroupItem
+								value="full"
+								className="h-7 cursor-pointer rounded-lg border border-white/5 bg-white/5 px-2.5 text-[10px] data-[state=on]:border-blue-500/50 data-[state=on]:bg-blue-500/20 data-[state=on]:text-blue-400"
+							>
+								Full Video
+							</ToggleGroupItem>
+							<ToggleGroupItem
+								value="selected"
+								className="h-7 cursor-pointer rounded-lg border border-white/5 bg-white/5 px-2.5 text-[10px] data-[state=on]:border-blue-500/50 data-[state=on]:bg-blue-500/20 data-[state=on]:text-blue-400"
+							>
+								Selected Timeline {timeSelection ? `(${(timeSelection.startMs / 1000).toFixed(1)}s - ${(timeSelection.endMs / 1000).toFixed(1)}s)` : ""}
+							</ToggleGroupItem>
+						</ToggleGroup>
 					</div>
 				</div>
 				<div className="flex flex-col gap-2">

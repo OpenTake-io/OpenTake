@@ -498,6 +498,11 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		selectedModel: typeof rawAutoCaptionSettings.selectedModel === "string"
 			? rawAutoCaptionSettings.selectedModel
 			: DEFAULT_AUTO_CAPTION_SETTINGS.selectedModel,
+		generationRange:
+			rawAutoCaptionSettings.generationRange === "full" ||
+			rawAutoCaptionSettings.generationRange === "selected"
+				? rawAutoCaptionSettings.generationRange
+				: "full",
 	};
 
 	const rawCropX = isFiniteNumber(editor.cropRegion?.x)

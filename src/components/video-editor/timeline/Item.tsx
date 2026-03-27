@@ -14,7 +14,7 @@ interface ItemProps {
   onSelect?: () => void;
   zoomDepth?: number;
   speedValue?: number;
-  variant?: 'zoom' | 'trim' | 'annotation' | 'speed' | 'audio' | 'caption';
+  variant?: 'zoom' | 'trim' | 'annotation' | 'speed' | 'audio' | 'caption' | 'caption-range';
 }
 
 // Map zoom depth to multiplier labels
@@ -59,6 +59,7 @@ export default function Item({
   const isSpeed = variant === 'speed';
   const isAudio = variant === 'audio';
   const isCaption = variant === 'caption';
+  const isCaptionRange = variant === 'caption-range';
 
   const glassClass = isZoom
     ? glassStyles.glassGreen
@@ -70,6 +71,8 @@ export default function Item({
     ? glassStyles.glassPurple
     : isCaption
     ? glassStyles.glassCyan
+    : isCaptionRange
+    ? glassStyles.glassCyanDashed
     : glassStyles.glassYellow;
 
   const endCapColor = isZoom
@@ -82,6 +85,8 @@ export default function Item({
     ? '#a855f7'
     : isCaption
     ? '#0891b2'
+    : isCaptionRange
+    ? '#06b6d4'
     : '#B4A046';
 
 	const timeLabel = useMemo(
