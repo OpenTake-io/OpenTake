@@ -18,7 +18,12 @@ import type { BuiltInWallpaper } from "@/lib/wallpapers";
 import { BUILT_IN_WALLPAPERS, getAvailableWallpapers } from "@/lib/wallpapers";
 import { type AspectRatio } from "@/utils/aspectRatioUtils";
 import minimalCursorUrl from "../../../Minimal Cursor.svg";
+import amongusCursorUrl from "../../assets/cursors/amongus/default.png";
 import tahoeCursorUrl from "../../assets/cursors/Cursor=Default.svg";
+import chooperCursorUrl from "../../assets/cursors/chooper/default.png";
+import lavenderCursorUrl from "../../assets/cursors/lavender/default.png";
+import parchedCursorUrl from "../../assets/cursors/parched/default.png";
+import turtleCursorUrl from "../../assets/cursors/turtle/default.png";
 import { useI18n, useScopedT } from "../../contexts/I18nContext";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
@@ -255,6 +260,11 @@ const CURSOR_STYLE_OPTIONS: Array<{ value: CursorStyle; label: string }> = [
 	{ value: "dot", label: "Dot" },
 	{ value: "figma", label: "Minimal" },
 	{ value: "mono", label: "Inverted" },
+	{ value: "lavender", label: "Lavender" },
+	{ value: "parched", label: "Parched" },
+	{ value: "chooper", label: "Chooper" },
+	{ value: "amongus", label: "Among Us" },
+	{ value: "turtle", label: "Turtle" },
 ];
 
 const CAPTION_LANGUAGE_OPTIONS = [
@@ -439,6 +449,36 @@ function CursorStylePreview({
 	if (style === "dot") {
 		return (
 			<span className="h-[14px] w-[14px] rounded-full border-[2.5px] border-slate-900 bg-white shadow-[0_8px_12px_rgba(15,23,42,0.16)]" />
+		);
+	}
+
+	if (style === "lavender") {
+		return (
+			<img src={lavenderCursorUrl} alt="" className="h-7 w-7 object-contain" draggable={false} />
+		);
+	}
+
+	if (style === "parched") {
+		return (
+			<img src={parchedCursorUrl} alt="" className="h-7 w-7 object-contain" draggable={false} />
+		);
+	}
+
+	if (style === "chooper") {
+		return (
+			<img src={chooperCursorUrl} alt="" className="h-7 w-7 object-contain" draggable={false} />
+		);
+	}
+
+	if (style === "amongus") {
+		return (
+			<img src={amongusCursorUrl} alt="" className="h-7 w-7 object-contain" draggable={false} />
+		);
+	}
+
+	if (style === "turtle") {
+		return (
+			<img src={turtleCursorUrl} alt="" className="h-7 w-7 object-contain" draggable={false} />
 		);
 	}
 
@@ -1620,6 +1660,8 @@ export function SettingsPanel({
 										<ToggleGroupItem
 											key={option.value}
 											value={option.value}
+											title={option.label}
+											aria-label={option.label}
 											className={cn(
 												"group aspect-square h-auto min-w-0 rounded-[10px] border border-white/10 bg-white/[0.03] p-3 text-left text-slate-200 shadow-none transition-all hover:border-white/20 hover:bg-white/[0.06]",
 												"data-[state=on]:border-[#2563EB]/70 data-[state=on]:bg-[#2563EB]/12 data-[state=on]:text-white",

@@ -2,30 +2,31 @@ import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@
 import { DEFAULT_WALLPAPER_PATH } from "@/lib/wallpapers";
 import { ASPECT_RATIOS, type AspectRatio, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
 import {
+	type AnnotationRegion,
+	type AudioRegion,
 	type AutoCaptionAnimation,
 	type AutoCaptionSettings,
 	type CaptionCue,
 	type CaptionCueWord,
-	type AnnotationRegion,
-	type AudioRegion,
 	type CropRegion,
 	type CursorStyle,
-	DEFAULT_AUTO_CAPTION_SETTINGS,
-	getDefaultCaptionFontFamily,
 	DEFAULT_ANNOTATION_POSITION,
 	DEFAULT_ANNOTATION_SIZE,
 	DEFAULT_ANNOTATION_STYLE,
+	DEFAULT_AUTO_CAPTION_SETTINGS,
+	DEFAULT_CONNECTED_ZOOM_DURATION_MS,
+	DEFAULT_CONNECTED_ZOOM_EASING,
+	DEFAULT_CONNECTED_ZOOM_GAP_MS,
 	DEFAULT_CROP_REGION,
 	DEFAULT_CURSOR_CLICK_BOUNCE,
 	DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
 	DEFAULT_CURSOR_MOTION_BLUR,
 	DEFAULT_CURSOR_SIZE,
-	DEFAULT_CURSOR_STYLE,
 	DEFAULT_CURSOR_SMOOTHING,
+	DEFAULT_CURSOR_STYLE,
 	DEFAULT_CURSOR_SWAY,
-	DEFAULT_CONNECTED_ZOOM_DURATION_MS,
-	DEFAULT_CONNECTED_ZOOM_EASING,
-	DEFAULT_CONNECTED_ZOOM_GAP_MS,
+	DEFAULT_FIGURE_DATA,
+	DEFAULT_PLAYBACK_SPEED,
 	DEFAULT_WEBCAM_CORNER_RADIUS,
 	DEFAULT_WEBCAM_MARGIN,
 	DEFAULT_WEBCAM_OVERLAY,
@@ -35,6 +36,7 @@ import {
 	DEFAULT_WEBCAM_REACT_TO_ZOOM,
 	DEFAULT_WEBCAM_SHADOW,
 	DEFAULT_WEBCAM_SIZE,
+	DEFAULT_WEBCAM_TIME_OFFSET_MS,
 	DEFAULT_FIGURE_DATA,
 	DEFAULT_PLAYBACK_SPEED,
 	DEFAULT_ZOOM_DEPTH,
@@ -44,11 +46,12 @@ import {
 	DEFAULT_ZOOM_MOTION_BLUR,
 	DEFAULT_ZOOM_OUT_DURATION_MS,
 	DEFAULT_ZOOM_OUT_EASING,
+	getDefaultCaptionFontFamily,
 	type SpeedRegion,
 	type TrimRegion,
 	type WebcamOverlaySettings,
-	type ZoomTransitionEasing,
 	type ZoomRegion,
+	type ZoomTransitionEasing,
 } from "./types";
 
 export const PROJECT_VERSION = 1;
@@ -419,12 +422,16 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 					const endMs = Math.max(startMs + 1, rawEnd);
 					const words: CaptionCueWord[] | undefined = Array.isArray(cue.words)
 						? cue.words
-								.filter(
-									(word): word is CaptionCueWord => Boolean(word && typeof word.text === "string"),
+								.filter((word): word is CaptionCueWord =>
+									Boolean(word && typeof word.text === "string"),
 								)
 								.map((word) => {
-									const rawWordStart = isFiniteNumber(word.startMs) ? Math.round(word.startMs) : startMs;
-									const rawWordEnd = isFiniteNumber(word.endMs) ? Math.round(word.endMs) : rawWordStart + 1;
+									const rawWordStart = isFiniteNumber(word.startMs)
+										? Math.round(word.startMs)
+										: startMs;
+									const rawWordEnd = isFiniteNumber(word.endMs)
+										? Math.round(word.endMs)
+										: rawWordStart + 1;
 									const normalizedWordStart = clamp(rawWordStart, startMs, endMs - 1);
 									const normalizedWordEnd = clamp(rawWordEnd, normalizedWordStart + 1, endMs);
 
@@ -462,8 +469,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			typeof rawAutoCaptionSettings.language === "string" && rawAutoCaptionSettings.language.trim()
 				? rawAutoCaptionSettings.language.trim()
 				: DEFAULT_AUTO_CAPTION_SETTINGS.language,
-		fontFamily:
-			getDefaultCaptionFontFamily(),
+		fontFamily: getDefaultCaptionFontFamily(),
 		fontSize: isFiniteNumber(rawAutoCaptionSettings.fontSize)
 			? clamp(rawAutoCaptionSettings.fontSize, 16, 72)
 			: DEFAULT_AUTO_CAPTION_SETTINGS.fontSize,
@@ -484,11 +490,13 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			? clamp(rawAutoCaptionSettings.boxRadius, 0, 40)
 			: DEFAULT_AUTO_CAPTION_SETTINGS.boxRadius,
 		textColor:
-			typeof rawAutoCaptionSettings.textColor === "string" && rawAutoCaptionSettings.textColor.trim()
+			typeof rawAutoCaptionSettings.textColor === "string" &&
+			rawAutoCaptionSettings.textColor.trim()
 				? rawAutoCaptionSettings.textColor
 				: DEFAULT_AUTO_CAPTION_SETTINGS.textColor,
 		inactiveTextColor:
-			typeof rawAutoCaptionSettings.inactiveTextColor === "string" && rawAutoCaptionSettings.inactiveTextColor.trim()
+			typeof rawAutoCaptionSettings.inactiveTextColor === "string" &&
+			rawAutoCaptionSettings.inactiveTextColor.trim()
 				? rawAutoCaptionSettings.inactiveTextColor
 				: DEFAULT_AUTO_CAPTION_SETTINGS.inactiveTextColor,
 		backgroundOpacity: isFiniteNumber(rawAutoCaptionSettings.backgroundOpacity)
@@ -517,10 +525,11 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 	const webcam: Partial<WebcamOverlaySettings> =
 		editor.webcam && typeof editor.webcam === "object" ? editor.webcam : {};
 	const webcamSourcePath = typeof webcam.sourcePath === "string" ? webcam.sourcePath : null;
-	const legacyZoomScaleEffect =
-		isFiniteNumber((webcam as Partial<{ zoomScaleEffect: number }>).zoomScaleEffect)
-			? (webcam as Partial<{ zoomScaleEffect: number }>).zoomScaleEffect
-			: null;
+	const legacyZoomScaleEffect = isFiniteNumber(
+		(webcam as Partial<{ zoomScaleEffect: number }>).zoomScaleEffect,
+	)
+		? (webcam as Partial<{ zoomScaleEffect: number }>).zoomScaleEffect
+		: null;
 
 	return {
 		wallpaper: typeof editor.wallpaper === "string" ? editor.wallpaper : DEFAULT_WALLPAPER_PATH,
@@ -545,7 +554,12 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			editor.cursorStyle === "dot" ||
 			editor.cursorStyle === "figma" ||
 			editor.cursorStyle === "mono" ||
-			editor.cursorStyle === "tahoe"
+			editor.cursorStyle === "tahoe" ||
+			editor.cursorStyle === "lavender" ||
+			editor.cursorStyle === "parched" ||
+			editor.cursorStyle === "chooper" ||
+			editor.cursorStyle === "amongus" ||
+			editor.cursorStyle === "turtle"
 				? editor.cursorStyle
 				: DEFAULT_CURSOR_STYLE,
 		cursorSize: isFiniteNumber(editor.cursorSize)
@@ -560,7 +574,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		cursorClickBounce: isFiniteNumber((editor as Partial<ProjectEditorState>).cursorClickBounce)
 			? clamp((editor as Partial<ProjectEditorState>).cursorClickBounce as number, 0, 5)
 			: DEFAULT_CURSOR_CLICK_BOUNCE,
-		cursorClickBounceDuration: isFiniteNumber((editor as Partial<ProjectEditorState>).cursorClickBounceDuration)
+		cursorClickBounceDuration: isFiniteNumber(
+			(editor as Partial<ProjectEditorState>).cursorClickBounceDuration,
+		)
 			? clamp((editor as Partial<ProjectEditorState>).cursorClickBounceDuration as number, 60, 500)
 			: DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
 		cursorSway: isFiniteNumber((editor as Partial<ProjectEditorState>).cursorSway)
@@ -599,11 +615,11 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				webcam.positionPreset === "custom"
 					? webcam.positionPreset
 					: webcam.corner === "top-left" ||
-						webcam.corner === "top-right" ||
-						webcam.corner === "bottom-left" ||
-						webcam.corner === "bottom-right"
-							? webcam.corner
-							: DEFAULT_WEBCAM_POSITION_PRESET,
+							webcam.corner === "top-right" ||
+							webcam.corner === "bottom-left" ||
+							webcam.corner === "bottom-right"
+						? webcam.corner
+						: DEFAULT_WEBCAM_POSITION_PRESET,
 			positionX: isFiniteNumber(webcam.positionX)
 				? clamp(webcam.positionX, 0, 1)
 				: DEFAULT_WEBCAM_POSITION_X,
