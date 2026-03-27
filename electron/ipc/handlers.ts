@@ -81,14 +81,12 @@ type WindowBounds = {
 type RecordingSessionData = {
   videoPath: string
   webcamPath?: string | null
-  timeOffsetMs?: number
 }
 
 type RecordingSessionManifest = {
-  version: 1 | 2
+  version: 1
   videoFileName: string
   webcamFileName?: string | null
-  timeOffsetMs?: number
 }
 
 type ProjectLibraryEntry = {
@@ -386,7 +384,6 @@ async function loadProjectFromPath(projectPath: string) {
   currentRecordingSession = {
     videoPath: mediaSources.videoPath,
     webcamPath: mediaSources.webcamPath,
-    timeOffsetMs: mediaSources.timeOffsetMs,
   }
   await rememberRecentProject(normalizedPath)
 
@@ -423,7 +420,6 @@ async function resolveProjectMediaSources(project: unknown): Promise<
       success: true
       videoPath: string
       webcamPath: string | null
-      timeOffsetMs: number
     }
   | {
       success: false
@@ -457,9 +453,6 @@ async function resolveProjectMediaSources(project: unknown): Promise<
     typeof (project as { editor?: { webcam?: { sourcePath?: unknown } } }).editor?.webcam?.sourcePath === 'string'
       ? ((project as { editor?: { webcam?: { sourcePath?: string } } }).editor?.webcam?.sourcePath ?? null)
       : null
-  const timeOffsetMs = normalizeRecordingTimeOffsetMs(
-    (project as { editor?: { webcam?: { timeOffsetMs?: unknown } } }).editor?.webcam?.timeOffsetMs,
-  )
   const normalizedWebcamPath = normalizeVideoSourcePath(rawWebcamPath)
 
   if (!normalizedWebcamPath) {
@@ -467,7 +460,6 @@ async function resolveProjectMediaSources(project: unknown): Promise<
       success: true,
       videoPath: normalizedVideoPath,
       webcamPath: null,
-      timeOffsetMs,
     }
   }
 
@@ -477,22 +469,14 @@ async function resolveProjectMediaSources(project: unknown): Promise<
       success: true,
       videoPath: normalizedVideoPath,
       webcamPath: normalizedWebcamPath,
-      timeOffsetMs,
     }
   } catch {
     return {
       success: true,
       videoPath: normalizedVideoPath,
       webcamPath: null,
-      timeOffsetMs,
     }
   }
-}
-
-function normalizeRecordingTimeOffsetMs(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.round(value)
-    : 0
 }
 
 function getRecordingSessionManifestPath(videoPath: string) {
@@ -516,10 +500,9 @@ async function persistRecordingSessionManifest(session: RecordingSessionData): P
   }
 
   const manifest: RecordingSessionManifest = {
-    version: 2,
+    version: 1,
     videoFileName: path.basename(normalizedVideoPath),
     webcamFileName: path.basename(normalizedWebcamPath),
-    timeOffsetMs: normalizeRecordingTimeOffsetMs(session.timeOffsetMs),
   }
 
   await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
@@ -536,7 +519,7 @@ async function resolveRecordingSessionManifest(videoPath?: string | null): Promi
   try {
     const content = await fs.readFile(manifestPath, 'utf-8')
     const parsed = JSON.parse(content) as Partial<RecordingSessionManifest>
-    if (parsed.version !== 1 && parsed.version !== 2) {
+    if (parsed.version !== 1) {
       return null
     }
 
@@ -548,7 +531,6 @@ async function resolveRecordingSessionManifest(videoPath?: string | null): Promi
       return {
         videoPath: normalizedVideoPath,
         webcamPath: null,
-        timeOffsetMs: 0,
       }
     }
 
@@ -558,7 +540,6 @@ async function resolveRecordingSessionManifest(videoPath?: string | null): Promi
     return {
       videoPath: normalizedVideoPath,
       webcamPath,
-      timeOffsetMs: normalizeRecordingTimeOffsetMs(parsed.timeOffsetMs),
     }
   } catch {
     return null
@@ -613,7 +594,6 @@ async function resolveRecordingSession(videoPath?: string | null): Promise<Recor
   return {
     videoPath: normalizedVideoPath,
     webcamPath: linkedWebcamPath,
-    timeOffsetMs: 0,
   }
 }
 
@@ -1742,6 +1722,10 @@ function waitForWindowsCaptureStop(proc: ChildProcessWithoutNullStreams) {
         resolve(match[1].trim())
         return
       }
+      if (code === 0 && windowsCaptureTargetPath) {
+        resolve(windowsCaptureTargetPath)
+        return
+      }
       reject(new Error(windowsCaptureOutputBuffer.trim() || `Native Windows capture exited with code ${code ?? 'unknown'}`))
     }
 
@@ -1860,43 +1844,6 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
     if (audioPath) {
       await fs.rm(audioPath, { force: true }).catch(() => {})
     }
-  }
-}
-
-async function probeRecordedMediaStream(videoPath: string, streamType: 'video' | 'audio') {
-  const ffmpegPath = getFfmpegBinaryPath()
-  const args = streamType === 'video'
-    ? ['-v', 'error', '-i', videoPath, '-map', '0:v:0', '-frames:v', '1', '-f', 'null', '-']
-    : ['-v', 'error', '-i', videoPath, '-map', '0:a:0', '-frames:a', '1', '-f', 'null', '-']
-
-  await execFileAsync(ffmpegPath, args, {
-    timeout: 30000,
-    maxBuffer: 4 * 1024 * 1024,
-  })
-}
-
-async function validateRecordedVideoFile(videoPath: string, options?: { requiresAudio?: boolean }) {
-  await fs.access(videoPath, fsConstants.R_OK)
-
-  const stats = await fs.stat(videoPath)
-  if (stats.size <= 0) {
-    throw new Error('Recorded video file is empty')
-  }
-
-  try {
-    await probeRecordedMediaStream(videoPath, 'video')
-  } catch (error) {
-    throw new Error(`Recorded video file is unreadable or missing a video stream: ${String(error)}`)
-  }
-
-  if (!options?.requiresAudio) {
-    return
-  }
-
-  try {
-    await probeRecordedMediaStream(videoPath, 'audio')
-  } catch (error) {
-    throw new Error(`Recorded video is missing the requested audio track: ${String(error)}`)
   }
 }
 
@@ -2498,7 +2445,6 @@ function snapshotCursorTelemetryForPersistence() {
 }
 
 async function finalizeStoredVideo(videoPath: string) {
-  await validateRecordedVideoFile(videoPath)
   snapshotCursorTelemetryForPersistence()
   currentVideoPath = videoPath
   currentProjectPath = null
@@ -3061,9 +3007,6 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           const micPath = path.join(recordingsDir, `recording-${timestamp}.mic.wav`)
           config.captureMic = true
           config.micOutputPath = micPath
-          if (options.microphoneDeviceId) {
-            config.micDeviceId = options.microphoneDeviceId
-          }
           if (options.microphoneLabel) {
             config.micDeviceName = options.microphoneLabel
           }
@@ -3264,7 +3207,6 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           await moveFileWithOverwrite(tempVideoPath, finalVideoPath)
         }
 
-        await validateRecordedVideoFile(finalVideoPath)
         windowsPendingVideoPath = finalVideoPath
         return { success: true, path: finalVideoPath }
       } catch (error) {
@@ -3331,13 +3273,14 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         await moveFileWithOverwrite(tempVideoPath, finalVideoPath)
       }
 
-      const requiresAudio = Boolean(preferredSystemAudioPath || preferredMicrophonePath)
-
-      if (requiresAudio) {
-        await muxNativeMacRecordingWithAudio(finalVideoPath, preferredSystemAudioPath, preferredMicrophonePath)
+      if (preferredSystemAudioPath || preferredMicrophonePath) {
+        try {
+          await muxNativeMacRecordingWithAudio(finalVideoPath, preferredSystemAudioPath, preferredMicrophonePath)
+        } catch (error) {
+          console.warn('Failed to mux native macOS audio into capture:', error)
+        }
       }
 
-      await validateRecordedVideoFile(finalVideoPath, { requiresAudio })
       return await finalizeStoredVideo(finalVideoPath)
     } catch (error) {
       console.error('Failed to stop native ScreenCaptureKit recording:', error)
@@ -3471,21 +3414,22 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
 
     try {
-      const requiresAudio = Boolean(windowsSystemAudioPath || windowsMicAudioPath)
-
-      if (requiresAudio) {
+      if (windowsSystemAudioPath || windowsMicAudioPath) {
         await muxNativeWindowsVideoWithAudio(videoPath, windowsSystemAudioPath, windowsMicAudioPath)
         windowsSystemAudioPath = null
         windowsMicAudioPath = null
       }
 
-      await validateRecordedVideoFile(videoPath, { requiresAudio })
       return await finalizeStoredVideo(videoPath)
     } catch (error) {
       console.error('Failed to mux native Windows recording:', error)
       windowsSystemAudioPath = null
       windowsMicAudioPath = null
-      return { success: false, message: 'Failed to mux native Windows recording', error: String(error) }
+      try {
+        return await finalizeStoredVideo(videoPath)
+      } catch {
+        return { success: false, message: 'Failed to mux native Windows recording', error: String(error) }
+      }
     }
   })
 
@@ -4309,13 +4253,12 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     return { success: true, webcamPath: resolvedSession.webcamPath ?? null }
   })
 
-  ipcMain.handle('set-current-recording-session', async (_, session: { videoPath: string; webcamPath?: string | null; timeOffsetMs?: number }) => {
+  ipcMain.handle('set-current-recording-session', async (_, session: { videoPath: string; webcamPath?: string | null }) => {
     const normalizedVideoPath = normalizeVideoSourcePath(session.videoPath) ?? session.videoPath
     currentVideoPath = normalizedVideoPath
     currentRecordingSession = {
       videoPath: normalizedVideoPath,
       webcamPath: normalizeVideoSourcePath(session.webcamPath ?? null),
-      timeOffsetMs: normalizeRecordingTimeOffsetMs(session.timeOffsetMs),
     }
     currentProjectPath = null
     await persistRecordingSessionManifest(currentRecordingSession)
@@ -4361,6 +4304,10 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       return { success: false, error: String(error) };
     }
   });
+
+  ipcMain.handle('app:getVersion', () => {
+    return app.getVersion()
+  })
 
   ipcMain.handle('get-platform', () => {
     return process.platform;
@@ -4497,10 +4444,6 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       success: true,
       seconds: countdownInProgress ? countdownRemaining : null,
     }
-  })
-
-  ipcMain.handle('app:getVersion', () => {
-    return app.getVersion()
   })
 }
 

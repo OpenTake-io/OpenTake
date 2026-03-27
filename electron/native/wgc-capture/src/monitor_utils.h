@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <windows.h>
 #include <string>
 #include <vector>
@@ -15,5 +14,5 @@ struct MonitorInfo {
 };
 
 std::vector<MonitorInfo> enumerateMonitors();
-HMONITOR findMonitorByDisplayId(int64_t displayId);
+HMONITOR findMonitorByDisplayId(int displayId);
 MonitorInfo getMonitorInfo(HMONITOR monitor);
