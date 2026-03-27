@@ -1961,6 +1961,9 @@ export default function VideoEditor() {
 		if (id) {
 			setSelectedTrimId(null);
 			setSelectedAudioId(null);
+			setSelectedSpeedId(null);
+			setSelectedAnnotationId(null);
+			setSelectedCaptionId(null);
 		}
 	}, []);
 
@@ -1970,6 +1973,8 @@ export default function VideoEditor() {
 			setSelectedZoomId(null);
 			setSelectedAnnotationId(null);
 			setSelectedAudioId(null);
+			setSelectedSpeedId(null);
+			setSelectedCaptionId(null);
 		}
 	}, []);
 
@@ -1979,6 +1984,8 @@ export default function VideoEditor() {
 			setSelectedZoomId(null);
 			setSelectedTrimId(null);
 			setSelectedAudioId(null);
+			setSelectedSpeedId(null);
+			setSelectedCaptionId(null);
 		}
 	}, []);
 
@@ -1995,6 +2002,7 @@ export default function VideoEditor() {
 		setSelectedZoomId(id);
 		setSelectedTrimId(null);
 		setSelectedAnnotationId(null);
+		setSelectedCaptionId(null);
 	}, []);
 
 	const handleZoomSuggested = useCallback((span: Span, focus: ZoomFocus) => {
@@ -2010,6 +2018,7 @@ export default function VideoEditor() {
 		setSelectedZoomId(id);
 		setSelectedTrimId(null);
 		setSelectedAnnotationId(null);
+		setSelectedCaptionId(null);
 	}, []);
 
 	const handleTrimAdded = useCallback((span: Span) => {
@@ -2023,6 +2032,7 @@ export default function VideoEditor() {
 		setSelectedTrimId(id);
 		setSelectedZoomId(null);
 		setSelectedAnnotationId(null);
+		setSelectedCaptionId(null);
 	}, []);
 
 	const handleZoomSpanChange = useCallback((id: string, span: Span) => {
@@ -2111,6 +2121,7 @@ export default function VideoEditor() {
 			setSelectedTrimId(null);
 			setSelectedAnnotationId(null);
 			setSelectedAudioId(null);
+			setSelectedCaptionId(null);
 		}
 	}, []);
 
@@ -2127,6 +2138,7 @@ export default function VideoEditor() {
 		setSelectedZoomId(null);
 		setSelectedTrimId(null);
 		setSelectedAnnotationId(null);
+		setSelectedCaptionId(null);
 	}, []);
 
 	const handleSpeedSpanChange = useCallback((id: string, span: Span) => {
@@ -2160,6 +2172,7 @@ export default function VideoEditor() {
 			setSelectedTrimId(null);
 			setSelectedAnnotationId(null);
 			setSelectedSpeedId(null);
+			setSelectedCaptionId(null);
 		}
 	}, []);
 
@@ -2178,6 +2191,7 @@ export default function VideoEditor() {
 		setSelectedTrimId(null);
 		setSelectedAnnotationId(null);
 		setSelectedSpeedId(null);
+		setSelectedCaptionId(null);
 	}, []);
 
 	const handleAudioSpanChange = useCallback((id: string, span: Span) => {
@@ -2203,6 +2217,31 @@ export default function VideoEditor() {
 		},
 		[selectedAudioId],
 	);
+
+	const handleCaptionSpanChange = useCallback((id: string, span: Span) => {
+		setAutoCaptions((prev) =>
+			prev.map((caption) =>
+				caption.id === id
+					? {
+						...caption,
+						startMs: Math.round(span.start),
+						endMs: Math.round(span.end),
+					}
+					: caption,
+			),
+		);
+	}, []);
+
+	const handleSelectCaption = useCallback((id: string | null) => {
+		setSelectedCaptionId(id);
+		if (id) {
+			setSelectedZoomId(null);
+			setSelectedTrimId(null);
+			setSelectedAnnotationId(null);
+			setSelectedSpeedId(null);
+			setSelectedAudioId(null);
+		}
+	}, []);
 
 	const handleSpeedChange = useCallback(
 		(speed: PlaybackSpeed) => {
@@ -2442,6 +2481,12 @@ export default function VideoEditor() {
 			setSelectedAudioId(null);
 		}
 	}, [selectedAudioId, audioRegions]);
+
+	useEffect(() => {
+		if (selectedCaptionId && !autoCaptions.some((cue) => cue.id === selectedCaptionId)) {
+			setSelectedCaptionId(null);
+		}
+	}, [selectedCaptionId, autoCaptions]);
 
 	// Audio playback sync: manage Audio elements that play in sync with video
 	const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
