@@ -2066,9 +2066,18 @@ export default function VideoEditor() {
 		if (!video.paused && !video.ended) {
 			playback.pause();
 		} else {
+			// Selection awareness: if playing with a selection active, jump to start if out of bounds
+			if (timeSelection) {
+				const currentTimeMs = Math.round(currentTime * 1000);
+				const bufferMs = 50; // Small buffer for end boundary
+				if (currentTimeMs < timeSelection.startMs || currentTimeMs >= timeSelection.endMs - bufferMs) {
+					handleSeek(timeSelection.startMs / 1000);
+				}
+			}
 			playback.play().catch((err) => console.error("Video play failed:", err));
 		}
 	}
+
 
 	function handleSeek(time: number) {
 		const video = videoPlaybackRef.current?.video;
@@ -3653,7 +3662,9 @@ export default function VideoEditor() {
 												cursorClickBounce={cursorClickBounce}
 												cursorClickBounceDuration={cursorClickBounceDuration}
 												cursorSway={cursorSway}
+												timeSelection={timeSelection}
 											/>
+
 										</div>
 									</div>
 								</div>

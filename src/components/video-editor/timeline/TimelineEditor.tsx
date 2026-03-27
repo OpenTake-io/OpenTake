@@ -238,13 +238,17 @@ function PlaybackCursor({
   onSeek,
   timelineRef,
   keyframes = [],
+  timeSelection = null,
 }: {
+
   currentTimeMs: number;
   videoDurationMs: number;
   onSeek?: (time: number) => void;
   timelineRef: React.RefObject<HTMLDivElement>;
   keyframes?: { id: string; time: number }[];
+  timeSelection?: import('../types').TimeSelection | null;
 }) {
+
   const { sidebarWidth = 0, direction, range, valueToPixels, pixelsToValue } = useTimelineContext();
   const sideProperty = direction === "rtl" ? "right" : "left";
   const [isDragging, setIsDragging] = useState(false);
@@ -278,10 +282,24 @@ function PlaybackCursor({
       onSeek(absoluteMs / 1000);
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
+      if (isDragging && timeSelection && onSeek) {
+        const rect = timelineRef.current?.getBoundingClientRect();
+        if (rect) {
+          const clickX = e.clientX - rect.left - sidebarWidth;
+          const relativeMs = pixelsToValue(clickX);
+          const absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
+          
+          // If released outside selection, jump back to selection start
+          if (absoluteMs < timeSelection.startMs || absoluteMs > timeSelection.endMs) {
+            onSeek(timeSelection.startMs / 1000);
+          }
+        }
+      }
       setIsDragging(false);
       document.body.style.cursor = "";
     };
+
 
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
@@ -564,7 +582,9 @@ function Timeline({
 
   const isDraggingSelectionRef = useRef(false);
   const selectionAnchorMsRef = useRef<number | null>(null);
+  const selectionCurrentMsRef = useRef<number | null>(null);
   const initialMouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
+
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -604,8 +624,10 @@ function Timeline({
       } else {
         // Plain drag: anchor starts at the click point itself
         selectionAnchorMsRef.current = absoluteMs;
+        selectionCurrentMsRef.current = absoluteMs;
         onTimeSelectionChange?.({ startMs: absoluteMs, endMs: absoluteMs });
       }
+
 
       const handleGlobalMouseMove = (moveEvent: MouseEvent) => {
         if (selectionAnchorMsRef.current === null || initialMouseDownPosRef.current === null) return;
@@ -621,6 +643,8 @@ function Timeline({
         const moveX = moveEvent.clientX - capturedRect.left - sidebarWidth;
         const moveRelativeMs = pixelsToValue(moveX);
         const moveAbsoluteMs = Math.max(0, Math.min(range.start + moveRelativeMs, videoDurationMs));
+        selectionCurrentMsRef.current = moveAbsoluteMs;
+
 
         const start = Math.min(selectionAnchorMsRef.current, moveAbsoluteMs);
         const end = Math.max(selectionAnchorMsRef.current, moveAbsoluteMs);
@@ -629,11 +653,20 @@ function Timeline({
       };
 
       const handleGlobalMouseUp = () => {
+        if (isDraggingSelectionRef.current && selectionAnchorMsRef.current !== null && selectionCurrentMsRef.current !== null) {
+          // When finished dragging a selection, jump playhead to the start of selection
+          const start = Math.min(selectionAnchorMsRef.current, selectionCurrentMsRef.current);
+          onSeek?.(start / 1000);
+        }
+
         selectionAnchorMsRef.current = null;
+        selectionCurrentMsRef.current = null;
         initialMouseDownPosRef.current = null;
         window.removeEventListener("mousemove", handleGlobalMouseMove);
         window.removeEventListener("mouseup", handleGlobalMouseUp);
       };
+
+
 
       window.addEventListener("mousemove", handleGlobalMouseMove);
       window.addEventListener("mouseup", handleGlobalMouseUp);
@@ -655,11 +688,9 @@ function Timeline({
       // In Select mode, shift+click updates the selection (already done in mousedown) — don't seek
       if (timelineMode === 'select' && e.shiftKey) return;
 
-      // Plain click: deselect all blocks, then seek
-      // Only clear timeSelection in Select mode; in Move mode leave it as-is
-      if (timelineMode === 'select') {
-        onTimeSelectionChange?.(null);
-      }
+      // Plain click: deselect all blocks, then seek and clear time selection
+      onTimeSelectionChange?.(null);
+
       onSelectZoom?.(null);
       onSelectTrim?.(null);
       onSelectAnnotation?.(null);
@@ -834,7 +865,9 @@ function Timeline({
         onSeek={onSeek}
         timelineRef={localTimelineRef}
         keyframes={keyframes}
+        timeSelection={timeSelection}
       />
+
 
       <div className="relative z-10 flex flex-1 min-h-0 flex-col">
         <Row id={ZOOM_ROW_ID} isEmpty={zoomItems.length === 0} hint="Press Z to add zoom">
