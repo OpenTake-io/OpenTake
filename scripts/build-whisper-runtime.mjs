@@ -95,6 +95,12 @@ function findCmake() {
 	}
 
 	if (process.platform === "win32") {
+		// Local .cmake_ext path
+		const localCmake = path.join(projectRoot, ".cmake_ext", "cmake-4.3.0-windows-x86_64", "bin", "cmake.exe");
+		if (existsSync(localCmake)) {
+			return localCmake;
+		}
+
 		const vsEditions = ["Community", "Professional", "Enterprise", "BuildTools"];
 		for (const edition of vsEditions) {
 			const cmakePath = path.join(
@@ -194,7 +200,7 @@ async function ensureSourceTree() {
 	}
 
 	ensureTarAvailable();
-	execFileSync("tar", ["-xzf", archivePath, "-C", extractRoot], { stdio: "inherit" });
+	execFileSync("tar", ["-xzf", path.relative(projectRoot, archivePath), "-C", path.relative(projectRoot, extractRoot)], { stdio: "inherit" });
 
 	if (!existsSync(path.join(extractedSourceDir, "CMakeLists.txt"))) {
 		throw new Error(

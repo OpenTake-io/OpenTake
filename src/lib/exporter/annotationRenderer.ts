@@ -289,6 +289,67 @@ async function renderImage(
   });
 }
 
+function renderBlur(
+  ctx: CanvasRenderingContext2D,
+  annotation: AnnotationRegion,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  scaleFactor: number
+) {
+  // Get intensity scaled to canvas resolution
+  const intensity = (annotation.blurIntensity ?? 12) * scaleFactor;
+  if (intensity <= 0 || width <= 0 || height <= 0) return;
+
+  ctx.save();
+  try {
+    // Determine bounds and ensure they are within canvas to avoid ImageData errors
+    const srcX = Math.max(0, x);
+    const srcY = Math.max(0, y);
+    const srcW = Math.min(width, ctx.canvas.width - srcX);
+    const srcH = Math.min(height, ctx.canvas.height - srcY);
+
+    if (srcW <= 0 || srcH <= 0) {
+      ctx.restore();
+      return;
+    }
+
+    // Capture the current canvas region
+    const imageData = ctx.getImageData(srcX, srcY, srcW, srcH);
+    
+    let offscreen: HTMLCanvasElement | OffscreenCanvas;
+    if (typeof document !== 'undefined') {
+      offscreen = document.createElement('canvas');
+    } else {
+      offscreen = new OffscreenCanvas(srcW, srcH);
+    }
+    offscreen.width = srcW;
+    offscreen.height = srcH;
+    
+    const offCtx = offscreen.getContext('2d') as CanvasRenderingContext2D;
+    offCtx.putImageData(imageData, 0, 0);
+
+    // Create rounded rect clipping path (matches UI's rounded-lg approx 8px)
+    const radius = 8 * scaleFactor;
+    ctx.beginPath();
+    if (ctx.roundRect) {
+      ctx.roundRect(x, y, width, height, radius);
+    } else {
+      ctx.rect(x, y, width, height);
+    }
+    ctx.clip();
+
+    // Apply the blur filter and draw the captured region back
+    ctx.filter = `blur(${intensity}px)`;
+    ctx.drawImage(offscreen as any, srcX, srcY);
+
+  } catch (err) {
+    console.warn('[AnnotationRenderer] Blur annotation render failed:', err);
+  }
+  ctx.restore();
+}
+
 export async function renderAnnotations(
   ctx: CanvasRenderingContext2D,
   annotations: AnnotationRegion[],
@@ -334,6 +395,10 @@ export async function renderAnnotations(
             scaleFactor
           );
         }
+        break;
+        
+      case 'blur':
+        renderBlur(ctx, annotation, x, y, width, height, scaleFactor);
         break;
     }
   }

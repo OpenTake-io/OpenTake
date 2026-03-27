@@ -495,6 +495,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		backgroundOpacity: isFiniteNumber(rawAutoCaptionSettings.backgroundOpacity)
 			? clamp(rawAutoCaptionSettings.backgroundOpacity, 0, 1)
 			: DEFAULT_AUTO_CAPTION_SETTINGS.backgroundOpacity,
+		selectedModel: typeof rawAutoCaptionSettings.selectedModel === "string"
+			? rawAutoCaptionSettings.selectedModel
+			: DEFAULT_AUTO_CAPTION_SETTINGS.selectedModel,
 	};
 
 	const rawCropX = isFiniteNumber(editor.cropRegion?.x)
