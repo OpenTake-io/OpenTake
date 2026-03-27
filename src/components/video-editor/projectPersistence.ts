@@ -37,8 +37,6 @@ import {
 	DEFAULT_WEBCAM_SHADOW,
 	DEFAULT_WEBCAM_SIZE,
 	DEFAULT_WEBCAM_TIME_OFFSET_MS,
-	DEFAULT_FIGURE_DATA,
-	DEFAULT_PLAYBACK_SPEED,
 	DEFAULT_ZOOM_DEPTH,
 	DEFAULT_ZOOM_IN_DURATION_MS,
 	DEFAULT_ZOOM_IN_EASING,
@@ -644,6 +642,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				? clamp(webcam.cornerRadius, 0, 160)
 				: DEFAULT_WEBCAM_CORNER_RADIUS,
 			shadow: isFiniteNumber(webcam.shadow) ? clamp(webcam.shadow, 0, 1) : DEFAULT_WEBCAM_SHADOW,
+			timeOffsetMs: isFiniteNumber(webcam.timeOffsetMs)
+				? Math.round(webcam.timeOffsetMs)
+				: DEFAULT_WEBCAM_TIME_OFFSET_MS,
 			margin: isFiniteNumber(webcam.margin) ? clamp(webcam.margin, 0, 96) : DEFAULT_WEBCAM_MARGIN,
 		},
 		aspectRatio:
