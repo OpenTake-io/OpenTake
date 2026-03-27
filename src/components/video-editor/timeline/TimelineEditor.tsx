@@ -23,7 +23,7 @@ import Row from "./Row";
 import Item from "./Item";
 import KeyframeMarkers from "./KeyframeMarkers";
 import type { Range, Span } from "dnd-timeline";
-import type { ZoomRegion, TrimRegion, AnnotationRegion, SpeedRegion, AudioRegion, CursorTelemetryPoint, ZoomFocus, CaptionCue } from "../types";
+import type { ZoomRegion, TrimRegion, AnnotationRegion, SpeedRegion, AudioRegion, CursorTelemetryPoint, ZoomFocus, CaptionCue, TimeSelection } from "../types";
 import { toFileUrl } from "../projectPersistence";
 import { detectInteractionCandidates, normalizeCursorTelemetry } from "./zoomSuggestionUtils";
 
@@ -36,6 +36,7 @@ const CAPTION_ROW_ID = "row-caption";
 const FALLBACK_RANGE_MS = 1000;
 const TARGET_MARKER_COUNT = 12;
 const SUGGESTION_SPACING_MS = 1800;
+const DRAG_THRESHOLD_PX = 5;
 
 interface TimelineEditorProps {
   videoDuration: number;
@@ -74,7 +75,7 @@ interface TimelineEditorProps {
   onAudioDelete?: (id: string) => void;
   selectedAudioId?: string | null;
   onSelectAudio?: (id: string | null) => void;
-  autoCaptions?: any[];
+  autoCaptions?: CaptionCue[];
   onCaptionSpanChange?: (id: string, span: Span) => void;
   selectedCaptionId?: string | null;
   onSelectCaption?: (id: string | null) => void;
@@ -82,6 +83,8 @@ interface TimelineEditorProps {
   onAspectRatioChange: (aspectRatio: AspectRatio) => void;
   onOpenCropEditor?: () => void;
   isCropped?: boolean;
+  timeSelection?: TimeSelection | null;
+  onTimeSelectionChange?: (selection: TimeSelection | null) => void;
 }
 
 interface TimelineScaleConfig {
@@ -219,7 +222,7 @@ function PlaybackCursor({
 	timelineRef: React.RefObject<HTMLDivElement>;
 	keyframes?: { id: string; time: number }[];
 }) {
-	const { sidebarWidth, direction, range, valueToPixels, pixelsToValue } = useTimelineContext();
+	const { sidebarWidth = 0, direction, range, valueToPixels, pixelsToValue } = useTimelineContext();
 	const sideProperty = direction === "rtl" ? "right" : "left";
 	const [isDragging, setIsDragging] = useState(false);
 
@@ -331,7 +334,7 @@ function TimelineAxis({
 	videoDurationMs: number;
 	currentTimeMs: number;
 }) {
-	const { sidebarWidth, direction, range, valueToPixels } = useTimelineContext();
+	const { sidebarWidth = 0, direction, range, valueToPixels } = useTimelineContext();
 	const sideProperty = direction === "rtl" ? "right" : "left";
 
 	const { intervalMs } = useMemo(
@@ -394,9 +397,17 @@ function TimelineAxis({
 
 	return (
 		<div
-      className="h-8 bg-[#161619] border-b border-white/10 relative overflow-hidden select-none"
+      className="h-8 bg-[#161619] border-b border-white/10 relative overflow-hidden select-none cursor-pointer"
 			style={{
 				[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth}px`,
+			}}
+			onMouseDown={(e) => {
+				// Also allow starting selection from the ruler
+				(e.currentTarget.parentElement as any)?.__handleMouseDown?.(e);
+			}}
+			onClick={(e) => {
+				// Also allow seeking/clearing from the ruler
+				(e.currentTarget.parentElement as any)?.__handleTimelineClick?.(e);
 			}}
 		>
 			{/* Minor Ticks */}
@@ -464,6 +475,8 @@ function Timeline({
   selectAllBlocksActive = false,
   onClearBlockSelection,
   keyframes = [],
+  timeSelection,
+  onTimeSelectionChange,
 }: {
   items: TimelineRenderItem[];
   videoDurationMs: number;
@@ -484,31 +497,119 @@ function Timeline({
   selectAllBlocksActive?: boolean;
   onClearBlockSelection?: () => void;
   keyframes?: { id: string; time: number }[];
+  timeSelection?: TimeSelection | null;
+  onTimeSelectionChange?: (selection: TimeSelection | null) => void;
 }) {
-	const { setTimelineRef, style, sidebarWidth, range, pixelsToValue } = useTimelineContext();
+	const { setTimelineRef, style, sidebarWidth = 0, range, pixelsToValue, valueToPixels } = useTimelineContext();
 	const localTimelineRef = useRef<HTMLDivElement | null>(null);
 
 	const setRefs = useCallback(
 		(node: HTMLDivElement | null) => {
-			setTimelineRef(node);
-			localTimelineRef.current = node;
+			if (localTimelineRef.current !== node) {
+				setTimelineRef(node);
+				localTimelineRef.current = node;
+			}
 		},
 		[setTimelineRef],
 	);
 
+	const isDraggingSelectionRef = useRef(false);
+	const selectionAnchorMsRef = useRef<number | null>(null);
+	const initialMouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
+
+	const handleMouseDown = useCallback(
+		(e: React.MouseEvent<HTMLDivElement>) => {
+			if (videoDurationMs <= 0) return;
+
+			// Capture the rect NOW — e.currentTarget becomes null after React's
+			// synthetic event is processed and must not be read inside async closures.
+			const capturedRect = e.currentTarget.getBoundingClientRect();
+			const clickX = e.clientX - capturedRect.left - sidebarWidth;
+
+			if (clickX < 0) return;
+
+			const relativeMs = pixelsToValue(clickX);
+			const absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
+
+			initialMouseDownPosRef.current = { x: e.clientX, y: e.clientY };
+			isDraggingSelectionRef.current = false; // Reset drag flag
+
+			if (e.shiftKey) {
+				// Shift+mousedown: anchor to the far edge of the existing selection,
+				// or to the current playhead if there is no selection yet.
+				let anchor = currentTimeMs;
+				if (timeSelection) {
+					const distToStart = Math.abs(timeSelection.startMs - absoluteMs);
+					const distToEnd = Math.abs(timeSelection.endMs - absoluteMs);
+					anchor = distToStart > distToEnd ? timeSelection.startMs : timeSelection.endMs;
+				}
+
+				selectionAnchorMsRef.current = anchor;
+				const start = Math.min(anchor, absoluteMs);
+				const end = Math.max(anchor, absoluteMs);
+				onTimeSelectionChange?.({ startMs: start, endMs: end });
+			} else {
+				// Plain drag: anchor starts at the click point itself
+				selectionAnchorMsRef.current = absoluteMs;
+				onTimeSelectionChange?.({ startMs: absoluteMs, endMs: absoluteMs });
+			}
+
+			const handleGlobalMouseMove = (moveEvent: MouseEvent) => {
+				if (selectionAnchorMsRef.current === null || initialMouseDownPosRef.current === null) return;
+
+				const dx = Math.abs(moveEvent.clientX - initialMouseDownPosRef.current.x);
+				const dy = Math.abs(moveEvent.clientY - initialMouseDownPosRef.current.y);
+
+				if (dx > DRAG_THRESHOLD_PX || dy > DRAG_THRESHOLD_PX) {
+					isDraggingSelectionRef.current = true;
+				}
+
+				// Use the captured rect — safe to read from an async listener
+				const moveX = moveEvent.clientX - capturedRect.left - sidebarWidth;
+				const moveRelativeMs = pixelsToValue(moveX);
+				const moveAbsoluteMs = Math.max(0, Math.min(range.start + moveRelativeMs, videoDurationMs));
+
+				const start = Math.min(selectionAnchorMsRef.current, moveAbsoluteMs);
+				const end = Math.max(selectionAnchorMsRef.current, moveAbsoluteMs);
+
+				onTimeSelectionChange?.({ startMs: start, endMs: end });
+			};
+
+			const handleGlobalMouseUp = () => {
+				selectionAnchorMsRef.current = null;
+				initialMouseDownPosRef.current = null;
+				window.removeEventListener("mousemove", handleGlobalMouseMove);
+				window.removeEventListener("mouseup", handleGlobalMouseUp);
+			};
+
+			window.addEventListener("mousemove", handleGlobalMouseMove);
+			window.addEventListener("mouseup", handleGlobalMouseUp);
+		},
+		[range.start, sidebarWidth, pixelsToValue, videoDurationMs, onTimeSelectionChange, timeSelection, currentTimeMs],
+	);
+
 	const handleTimelineClick = useCallback(
 		(e: React.MouseEvent<HTMLDivElement>) => {
+			// If a drag occurred, swallow the click entirely
+			if (isDraggingSelectionRef.current) {
+				isDraggingSelectionRef.current = false;
+				return;
+			}
+
 			if (!onSeek || videoDurationMs <= 0) return;
 
-    // Only clear selection if clicking on empty space (not on items)
-    // This is handled by event propagation - items stop propagation
-    onSelectZoom?.(null);
-    onSelectTrim?.(null);
-    onSelectAnnotation?.(null);
-    onSelectSpeed?.(null);
-    onSelectAudio?.(null);
-    onSelectCaption?.(null);
-    onClearBlockSelection?.();
+			// Shift+click: the selection was already updated in mousedown — don't seek or clear
+			if (e.shiftKey) return;
+
+			// Plain click: clear selection and deselect all blocks, then seek
+			onTimeSelectionChange?.(null);
+			onSelectZoom?.(null);
+			onSelectTrim?.(null);
+			onSelectAnnotation?.(null);
+			onSelectSpeed?.(null);
+			onSelectAudio?.(null);
+			onSelectCaption?.(null);
+			onClearBlockSelection?.();
 
 			const rect = e.currentTarget.getBoundingClientRect();
 			const clickX = e.clientX - rect.left - sidebarWidth;
@@ -517,10 +618,19 @@ function Timeline({
 
 			const relativeMs = pixelsToValue(clickX);
 			const absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
-			const timeInSeconds = absoluteMs / 1000;
 
-    onSeek(timeInSeconds);
-  }, [onSeek, onSelectZoom, onSelectTrim, onSelectAnnotation, onSelectSpeed, onSelectAudio, onSelectCaption, videoDurationMs, sidebarWidth, range.start, pixelsToValue]);
+			onSeek(absoluteMs / 1000);
+		},
+		[onSeek, onSelectZoom, onSelectTrim, onSelectAnnotation, onSelectSpeed, onSelectAudio, onSelectCaption, videoDurationMs, sidebarWidth, range.start, pixelsToValue, onTimeSelectionChange, onClearBlockSelection],
+	);
+
+	useEffect(() => {
+		if (localTimelineRef.current) {
+			// Expose handlers for internal components like Axis
+			(localTimelineRef.current as any).__handleMouseDown = handleMouseDown;
+			(localTimelineRef.current as any).__handleTimelineClick = handleTimelineClick;
+		}
+	}, [handleMouseDown, handleTimelineClick]);
 
   const zoomItems = items.filter(item => item.rowId === ZOOM_ROW_ID);
   const trimItems = items.filter(item => item.rowId === TRIM_ROW_ID);
@@ -534,8 +644,19 @@ function Timeline({
 			ref={setRefs}
 			style={style}
       className="select-none bg-[#17171a] h-full min-h-0 relative cursor-pointer group flex flex-col"
+			onMouseDown={handleMouseDown}
 			onClick={handleTimelineClick}
 		>
+      {timeSelection && (
+        <div 
+          className="absolute top-0 bottom-0 bg-blue-500/20 border-x border-blue-500/50 z-20 pointer-events-none"
+          style={{
+            left: `${sidebarWidth + valueToPixels(Math.max(range.start, timeSelection.startMs) - range.start)}px`,
+            width: `${valueToPixels(Math.min(range.end, timeSelection.endMs) - Math.max(range.start, timeSelection.startMs))}px`,
+            display: (timeSelection.endMs < range.start || timeSelection.startMs > range.end) ? 'none' : 'block'
+          }}
+        />
+      )}
 			<div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px)] bg-[length:20px_100%] pointer-events-none" />
 			<TimelineAxis videoDurationMs={videoDurationMs} currentTimeMs={currentTimeMs} />
 			<PlaybackCursor
@@ -632,7 +753,8 @@ function Timeline({
             </Item>
           ))}
         </Row>
-        
+
+
         <Row id={CAPTION_ROW_ID} isEmpty={captionItems.length === 0} hint="Generated captions will appear here">
           {captionItems.map((item) => (
             <Item
@@ -698,6 +820,8 @@ export default function TimelineEditor({
   onAspectRatioChange,
   onOpenCropEditor,
   isCropped = false,
+  timeSelection,
+  onTimeSelectionChange,
 }: TimelineEditorProps) {
   const t = useScopedT("settings");
   const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
@@ -824,6 +948,7 @@ export default function TimelineEditor({
     onSelectAudio(null);
   }, [selectedAudioId, onAudioDelete, onSelectAudio]);
 
+
   const clearSelectedBlocks = useCallback(() => {
     onSelectZoom(null);
     onSelectTrim?.(null);
@@ -895,6 +1020,7 @@ export default function TimelineEditor({
     setSelectAllBlocksActive(false);
     onSelectAudio?.(id);
   }, [onSelectAudio]);
+
 
   const handleSelectCaption = useCallback((id: string | null) => {
     setSelectAllBlocksActive(false);
@@ -1046,23 +1172,23 @@ export default function TimelineEditor({
 
     // Always place zoom at playhead
     const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
-    // Find the next zoom region after the playhead
     const sorted = [...zoomRegions].sort((a, b) => a.startMs - b.startMs);
     const nextRegion = sorted.find(region => region.startMs > startPos);
     const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
 
-    // Check if playhead is inside any zoom region
-    const isOverlapping = sorted.some(region => startPos >= region.startMs && startPos < region.endMs);
-    if (isOverlapping || gapToNext <= 0) {
-      toast.error("Cannot place zoom here", {
-        description: "Zoom already exists at this location or not enough space available.",
-      });
-      return;
-    }
+    const actualDuration = timeSelection
+      ? timeSelection.endMs - timeSelection.startMs
+      : Math.min(defaultRegionDurationMs, gapToNext);
 
-    const actualDuration = Math.min(defaultRegionDurationMs, gapToNext);
-    onZoomAdded({ start: startPos, end: startPos + actualDuration });
-  }, [videoDuration, totalMs, currentTimeMs, zoomRegions, onZoomAdded, defaultRegionDurationMs]);
+    const finalStart = timeSelection ? timeSelection.startMs : startPos;
+    const finalEnd = timeSelection ? timeSelection.endMs : startPos + actualDuration;
+
+    onZoomAdded({ start: finalStart, end: finalEnd });
+
+    if (timeSelection) {
+      onTimeSelectionChange?.(null);
+    }
+  }, [videoDuration, totalMs, currentTimeMs, zoomRegions, onZoomAdded, defaultRegionDurationMs, timeSelection, onTimeSelectionChange]);
 
   const handleSuggestZooms = useCallback(() => {
     if (!videoDuration || videoDuration === 0 || totalMs === 0) {
@@ -1174,23 +1300,23 @@ export default function TimelineEditor({
 
     // Always place trim at playhead
     const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
-    // Find the next trim region after the playhead
     const sorted = [...trimRegions].sort((a, b) => a.startMs - b.startMs);
     const nextRegion = sorted.find(region => region.startMs > startPos);
     const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
 
-    // Check if playhead is inside any trim region
-    const isOverlapping = sorted.some(region => startPos >= region.startMs && startPos < region.endMs);
-    if (isOverlapping || gapToNext <= 0) {
-      toast.error("Cannot place trim here", {
-        description: "Trim already exists at this location or not enough space available.",
-      });
-      return;
-    }
+    const actualDuration = timeSelection
+      ? timeSelection.endMs - timeSelection.startMs
+      : Math.min(defaultRegionDurationMs, gapToNext);
 
-    const actualDuration = Math.min(defaultRegionDurationMs, gapToNext);
-    onTrimAdded({ start: startPos, end: startPos + actualDuration });
-  }, [videoDuration, totalMs, currentTimeMs, trimRegions, onTrimAdded, defaultRegionDurationMs]);
+    const finalStart = timeSelection ? timeSelection.startMs : startPos;
+    const finalEnd = timeSelection ? timeSelection.endMs : startPos + actualDuration;
+
+    onTrimAdded({ start: finalStart, end: finalEnd });
+
+    if (timeSelection) {
+      onTimeSelectionChange?.(null);
+    }
+  }, [videoDuration, totalMs, currentTimeMs, trimRegions, onTrimAdded, defaultRegionDurationMs, timeSelection, onTimeSelectionChange]);
 
   const handleAddSpeed = useCallback(() => {
     if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onSpeedAdded) {
@@ -1204,23 +1330,23 @@ export default function TimelineEditor({
 
     // Always place speed region at playhead
     const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
-    // Find the next speed region after the playhead
     const sorted = [...speedRegions].sort((a, b) => a.startMs - b.startMs);
     const nextRegion = sorted.find(region => region.startMs > startPos);
     const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
 
-    // Check if playhead is inside any speed region
-    const isOverlapping = sorted.some(region => startPos >= region.startMs && startPos < region.endMs);
-    if (isOverlapping || gapToNext <= 0) {
-      toast.error("Cannot place speed here", {
-        description: "Speed region already exists at this location or not enough space available.",
-      });
-      return;
-    }
+    const actualDuration = timeSelection
+      ? timeSelection.endMs - timeSelection.startMs
+      : Math.min(defaultRegionDurationMs, gapToNext);
 
-    const actualDuration = Math.min(defaultRegionDurationMs, gapToNext);
-    onSpeedAdded({ start: startPos, end: startPos + actualDuration });
-  }, [videoDuration, totalMs, currentTimeMs, speedRegions, onSpeedAdded, defaultRegionDurationMs]);
+    const finalStart = timeSelection ? timeSelection.startMs : startPos;
+    const finalEnd = timeSelection ? timeSelection.endMs : startPos + actualDuration;
+
+    onSpeedAdded({ start: finalStart, end: finalEnd });
+
+    if (timeSelection) {
+      onTimeSelectionChange?.(null);
+    }
+  }, [videoDuration, totalMs, currentTimeMs, speedRegions, onSpeedAdded, defaultRegionDurationMs, timeSelection, onTimeSelectionChange]);
 
   const handleAddAudio = useCallback(async () => {
     if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onAudioAdded) {
@@ -1281,11 +1407,16 @@ export default function TimelineEditor({
     }
 
     // Multiple annotations can exist at the same timestamp
-    const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
-    const endPos = Math.min(startPos + defaultDuration, totalMs);
+    const finalStart = timeSelection ? timeSelection.startMs : Math.max(0, Math.min(currentTimeMs, totalMs));
+    const finalEnd = timeSelection ? timeSelection.endMs : Math.min(finalStart + defaultDuration, totalMs);
 
-    onAnnotationAdded({ start: startPos, end: endPos });
-  }, [videoDuration, totalMs, currentTimeMs, onAnnotationAdded, defaultRegionDurationMs]);
+    onAnnotationAdded({ start: finalStart, end: finalEnd });
+
+    if (timeSelection) {
+      onTimeSelectionChange?.(null);
+    }
+  }, [videoDuration, totalMs, currentTimeMs, onAnnotationAdded, defaultRegionDurationMs, timeSelection, onTimeSelectionChange]);
+
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1304,9 +1435,6 @@ export default function TimelineEditor({
         return;
       }
 
-      if (matchesShortcut(e, keyShortcuts.addKeyframe, isMac)) {
-        addKeyframe();
-      }
       if (matchesShortcut(e, keyShortcuts.addZoom, isMac)) {
         handleAddZoom();
       }
@@ -1736,6 +1864,8 @@ export default function TimelineEditor({
             selectAllBlocksActive={selectAllBlocksActive}
             onClearBlockSelection={clearSelectedBlocks}
             keyframes={keyframes}
+            timeSelection={timeSelection}
+            onTimeSelectionChange={onTimeSelectionChange}
           />
         </TimelineWrapper>
       </div>

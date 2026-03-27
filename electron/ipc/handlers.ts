@@ -1473,6 +1473,8 @@ async function extractCaptionAudioSource(options: {
   videoPath: string
   ffmpegPath: string
   wavPath: string
+  startTime?: number // in seconds
+  duration?: number // in seconds
 }) {
   const candidates = await resolveCaptionAudioCandidates(options.videoPath)
   const attemptedCandidates: Array<{
@@ -1486,10 +1488,20 @@ async function extractCaptionAudioSource(options: {
   for (const candidate of candidates) {
     try {
       await ensureReadableFile(candidate.path, 'video file')
-      console.log('[auto-captions] Extracting audio from:', candidate.path)
+      console.log('[auto-captions] Extracting audio from:', candidate.path, options.startTime ? `at ${options.startTime}s` : '')
+      
+      const ffmpegArgs = ['-y'];
+      if (options.startTime !== undefined) {
+        ffmpegArgs.push('-ss', options.startTime.toString());
+      }
+      if (options.duration !== undefined) {
+        ffmpegArgs.push('-t', options.duration.toString());
+      }
+      ffmpegArgs.push('-i', candidate.path, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', options.wavPath);
+
       await execFileAsync(
         options.ffmpegPath,
-        ['-y', '-i', candidate.path, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', options.wavPath],
+        ffmpegArgs,
         { timeout: 5 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 },
       )
       console.log('[auto-captions] Audio extracted successfully to:', options.wavPath)
@@ -1518,6 +1530,8 @@ async function generateAutoCaptionsFromVideo(
 		whisperExecutablePath?: string;
 		whisperModelPath: string;
 		language?: string;
+		durationMs?: number;
+		startTimeMs?: number;
 	},
 ) {
   const ffmpegPath = getFfmpegBinaryPath()
@@ -1531,79 +1545,130 @@ async function generateAutoCaptionsFromVideo(
   await ensureReadableFile(whisperExecutablePath, 'whisper executable')
   await ensureReadableFile(whisperModelPath, 'whisper model')
 
-  console.log('[auto-captions] Starting caption generation sequence')
+  // Constants for segmentation
+  const CHUNK_SIZE_MS = 5 * 60 * 1000; // 5 minutes
+  const OVERLAP_MS = 10 * 1000;      // 10 seconds overlap for word boundaries
+  
+  const startTimeMs = options.startTimeMs || 0;
+  const totalDurationMs = options.durationMs || 0; 
+  const endTimeMs = totalDurationMs > 0 ? startTimeMs + totalDurationMs : Infinity;
+
+  console.log('[auto-captions] Starting segmented caption generation sequence')
   console.log('[auto-captions] Video:', normalizedVideoPath)
-  console.log('[auto-captions] Runtime:', whisperExecutablePath)
-  console.log('[auto-captions] Model:', whisperModelPath)
-  console.log('[auto-captions] Language:', options.language || 'auto')
+  console.log('[auto-captions] Range:', `${(startTimeMs/1000).toFixed(2)}s - ${totalDurationMs ? `${((startTimeMs + totalDurationMs)/1000).toFixed(2)}s` : 'End'}`)
 
-  const tempBase = path.join(app.getPath('temp'), `recordly-captions-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
-  const wavPath = `${tempBase}.wav`
-  const outputBase = `${tempBase}-whisper`
-  const srtPath = `${outputBase}.srt`
-  const jsonPath = `${outputBase}.json`
+  const allCues: any[] = [];
+  let chunkCount = 1;
+  if (totalDurationMs > 0) {
+    chunkCount = Math.ceil(totalDurationMs / CHUNK_SIZE_MS);
+  }
 
-  try {
-    const audioSource = await extractCaptionAudioSource({
-      videoPath: normalizedVideoPath,
-      ffmpegPath,
-      wavPath,
-    })
+  let audioSourceLabel = 'Unknown';
 
-    const language = options.language && options.language.trim() ? options.language.trim() : 'auto'
-    const whisperBaseArgs = [
-      '-m', whisperModelPath,
-      '-f', wavPath,
-      '-osrt',
-      '-of', outputBase,
-      '-l', language,
-      '-np',
-    ]
+  for (let offsetMs = startTimeMs; offsetMs < endTimeMs; offsetMs += CHUNK_SIZE_MS) {
+    const chunkIndex = Math.floor((offsetMs - startTimeMs) / CHUNK_SIZE_MS);
+    const tempBase = path.join(app.getPath('temp'), `recordly-captions-chunk-${chunkIndex}-${Date.now()}`)
+    const wavPath = `${tempBase}.wav`
+    const outputBase = `${tempBase}-whisper`
+    const srtPath = `${outputBase}.srt`
+    const jsonPath = `${outputBase}.json`
 
-    let jsonEnabled = true
     try {
-      console.log('[auto-captions] Running Whisper with JSON output...')
-      await runWhisperWithProgress(whisperExecutablePath, [...whisperBaseArgs, '-ojf'], (progress) => {
-        webContents.send('auto-caption-progress', { progress })
+      console.log(`[auto-captions] Processing chunk ${chunkIndex + 1}/${chunkCount || '?'} at offset ${offsetMs / 1000}s`)
+      
+      const audioSource = await extractCaptionAudioSource({
+        videoPath: normalizedVideoPath,
+        ffmpegPath,
+        wavPath,
+        startTime: offsetMs / 1000,
+        duration: (CHUNK_SIZE_MS + OVERLAP_MS) / 1000
       })
-      console.log('[auto-captions] Whisper JSON output generated.')
-    } catch (error) {
-      if (!shouldRetryWhisperWithoutJson(error)) {
-        throw error
+      audioSourceLabel = audioSource.label;
+
+      const language = options.language && options.language.trim() ? options.language.trim() : 'auto'
+      const whisperBaseArgs = [
+        '-m', whisperModelPath,
+        '-f', wavPath,
+        '-osrt',
+        '-of', outputBase,
+        '-l', language,
+        '-np',
+      ]
+
+      let jsonEnabled = true
+      const updateChunkProgress = (progress: number) => {
+        if (totalDurationMs > 0) {
+          const totalProgress = (offsetMs / totalDurationMs * 100) + (progress / (totalDurationMs / CHUNK_SIZE_MS));
+          webContents.send('auto-caption-progress', { progress: Math.min(99, totalProgress) })
+        } else {
+          webContents.send('auto-caption-progress', { progress })
+        }
+      };
+
+      try {
+        await runWhisperWithProgress(whisperExecutablePath, [...whisperBaseArgs, '-ojf'], updateChunkProgress)
+      } catch (error) {
+        if (!shouldRetryWhisperWithoutJson(error)) throw error
+        jsonEnabled = false
+        console.warn(`[auto-captions] Whisper runtime error, retrying with SRT: ${error}`)
+        await runWhisperWithProgress(whisperExecutablePath, whisperBaseArgs, updateChunkProgress)
       }
 
-      jsonEnabled = false
-      console.warn('[auto-captions] Whisper runtime does not support JSON full output, retrying with SRT only:', error)
-      console.log('[auto-captions] Running Whisper with SRT output...')
-      await runWhisperWithProgress(whisperExecutablePath, whisperBaseArgs, (progress) => {
-        webContents.send('auto-caption-progress', { progress })
-      })
-      console.log('[auto-captions] Whisper SRT output generated.')
-    }
+      let cues = jsonEnabled
+        ? parseWhisperJsonCues(await fs.readFile(jsonPath, 'utf-8'))
+        : parseSrtCues(await fs.readFile(srtPath, 'utf-8'))
+      
+      if (cues.length === 0 && !jsonEnabled) {
+          // If JSON failed, SRT might be empty or not yet read?
+          try { cues = parseSrtCues(await fs.readFile(srtPath, 'utf-8')); } catch { /* ignore */ }
+      }
 
-    const timedCues = jsonEnabled
-      ? parseWhisperJsonCues(await fs.readFile(jsonPath, 'utf-8'))
-      : []
-    const cues = timedCues.length > 0
-      ? timedCues
-      : parseSrtCues(await fs.readFile(srtPath, 'utf-8'))
-    if (cues.length === 0) {
-      console.error('[auto-captions] No cues were parsed from Whisper output.')
-      throw new Error('Whisper completed, but no caption cues were produced.')
-    }
+      // Adjust timings and deduplicate
+      const adjustedCues = cues
+        .map(cue => ({
+          ...cue,
+          startMs: cue.startMs + offsetMs,
+          endMs: cue.endMs + offsetMs
+        }))
+        // Only keep cues that START within this chunk's main window (prevent overlap duplicates)
+        // Except for the very last chunk where we take everything
+        .filter(cue => {
+          const isLastChunk = totalDurationMs > 0 && (offsetMs + CHUNK_SIZE_MS >= totalDurationMs);
+          if (isLastChunk) return true;
+          return cue.startMs < offsetMs + CHUNK_SIZE_MS;
+        });
 
-    console.log(`[auto-captions] Successfully generated ${cues.length} cues.`)
+      if (adjustedCues.length > 0) {
+        console.log(`[auto-captions] Chunk ${chunkIndex + 1} produced ${adjustedCues.length} adjusted cues.`)
+        allCues.push(...adjustedCues);
+        webContents.send('auto-caption-chunk', { cues: adjustedCues });
+      }
 
-    return {
-      cues,
-      audioSourceLabel: audioSource.label,
+      // If we don't know duration and this was a short chunk, we might be at the end
+      // Actually, FFmpeg will just produce a short file if duration is past EOS.
+      const stats = await fs.stat(wavPath).catch(() => null);
+      if (stats && stats.size < 1000) { // Tiny audio file means we hit the end
+          break;
+      }
+      
+      if (totalDurationMs > 0 && offsetMs + CHUNK_SIZE_MS >= totalDurationMs) {
+          break;
+      }
+
+    } finally {
+      await Promise.allSettled([
+        fs.rm(wavPath, { force: true }),
+        fs.rm(srtPath, { force: true }),
+        fs.rm(jsonPath, { force: true }),
+      ])
     }
-  } finally {
-    await Promise.allSettled([
-      fs.rm(wavPath, { force: true }),
-      fs.rm(srtPath, { force: true }),
-      fs.rm(jsonPath, { force: true }),
-    ])
+  }
+
+  console.log(`[auto-captions] Generation complete. Total cues: ${allCues.length}`)
+  webContents.send('auto-caption-progress', { progress: 100 })
+  return {
+    cues: allCues,
+    audioSourceLabel,
   }
 }
 

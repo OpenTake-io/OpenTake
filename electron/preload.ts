@@ -209,6 +209,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("auto-caption-progress", listener);
 		return () => ipcRenderer.removeListener("auto-caption-progress", listener);
 	},
+	onAutoCaptionChunk: (callback: (payload: { cues: CaptionCue[] }) => void) => {
+		const listener = (_event: Electron.IpcRendererEvent, payload: { cues: CaptionCue[] }) =>
+			callback(payload);
+		ipcRenderer.on("auto-caption-chunk", listener);
+		return () => ipcRenderer.removeListener("auto-caption-chunk", listener);
+	},
 	setCurrentVideoPath: (path: string) => {
 		return ipcRenderer.invoke("set-current-video-path", path);
 	},

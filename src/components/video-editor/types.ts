@@ -251,6 +251,12 @@ export interface AudioRegion {
   volume: number;
 }
 
+
+export interface TimeSelection {
+  startMs: number;
+  endMs: number;
+}
+
 export interface CaptionCue {
   id: string;
   startMs: number;
@@ -283,6 +289,7 @@ export interface AutoCaptionSettings {
   textColor: string;
   inactiveTextColor: string;
   backgroundOpacity: number;
+  generationRange: "full" | "selected";
 }
 
 export const DEFAULT_AUTO_CAPTION_SETTINGS: AutoCaptionSettings = {
@@ -298,7 +305,8 @@ export const DEFAULT_AUTO_CAPTION_SETTINGS: AutoCaptionSettings = {
   boxRadius: 17.5,
   textColor: "#FFFFFF",
   inactiveTextColor: "#A3A3A3",
-  backgroundOpacity: 0.9,
+  backgroundOpacity: 0.1,
+  generationRange: "full",
 };
 
 export type PlaybackSpeed = 0.25 | 0.5 | 0.75 | 1.25 | 1.5 | 1.75 | 2;

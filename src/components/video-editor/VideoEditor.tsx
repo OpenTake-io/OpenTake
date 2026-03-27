@@ -109,6 +109,7 @@ import {
 	type ZoomFocus,
 	type ZoomRegion,
 	type ZoomTransitionEasing,
+	type TimeSelection,
 } from "./types";
 import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
 import {
@@ -380,6 +381,7 @@ export default function VideoEditor() {
 	const [selectedAudioId, setSelectedAudioId] = useState<string | null>(null);
 	const [autoCaptions, setAutoCaptions] = useState<CaptionCue[]>([]);
 	const [selectedCaptionId, setSelectedCaptionId] = useState<string | null>(null);
+	const [timeSelection, setTimeSelection] = useState<TimeSelection | null>(null);
 	const [autoCaptionSettings, setAutoCaptionSettings] = useState<AutoCaptionSettings>(() => ({
 		...DEFAULT_AUTO_CAPTION_SETTINGS,
 		selectedModel: (initialEditorPreferences.whisperSelectedModel as any) || "small",
@@ -1274,9 +1276,9 @@ export default function VideoEditor() {
 		() =>
 			Boolean(
 				currentProjectPath &&
-					currentProjectSnapshot &&
-					lastSavedSnapshot &&
-					!areDeepEqual(currentProjectSnapshot, lastSavedSnapshot),
+				currentProjectSnapshot &&
+				lastSavedSnapshot &&
+				!areDeepEqual(currentProjectSnapshot, lastSavedSnapshot),
 			),
 		[currentProjectPath, currentProjectSnapshot, lastSavedSnapshot],
 	);
@@ -1442,7 +1444,18 @@ export default function VideoEditor() {
 		const unlistenProgress = window.electronAPI.onAutoCaptionProgress((payload: { progress: number }) => {
 			setAutoCaptionProgress(payload.progress);
 		});
-		return unlistenProgress;
+		const unlistenChunk = window.electronAPI.onAutoCaptionChunk(({ cues }) => {
+			setAutoCaptions((prev) => {
+				const existingIds = new Set(prev.map((c) => c.id));
+				const newCues = cues.filter((c) => !existingIds.has(c.id));
+				if (newCues.length === 0) return prev;
+				return [...prev, ...newCues].sort((a, b) => a.startMs - b.startMs);
+			});
+		});
+		return () => {
+			unlistenProgress();
+			unlistenChunk();
+		};
 	}, []);
 
 	useEffect(() => {
@@ -1489,7 +1502,7 @@ export default function VideoEditor() {
 			setWhisperModelDownloadStatus("error");
 			toast.error(
 				result.error ||
-					`Failed to download Whisper ${autoCaptionSettings.selectedModel} model`,
+				`Failed to download Whisper ${autoCaptionSettings.selectedModel} model`,
 			);
 			return;
 		}
@@ -1516,7 +1529,7 @@ export default function VideoEditor() {
 		if (!result.success) {
 			toast.error(
 				result.error ||
-					`Failed to delete Whisper ${autoCaptionSettings.selectedModel} model`,
+				`Failed to delete Whisper ${autoCaptionSettings.selectedModel} model`,
 			);
 			return;
 		}
@@ -1575,31 +1588,51 @@ export default function VideoEditor() {
 
 		setIsGeneratingCaptions(true);
 		setAutoCaptionProgress(0);
+
+		const startTimeMs = autoCaptionSettings.generationRange === "selected" && timeSelection
+			? timeSelection.startMs
+			: 0;
+		const rangeDurationMs = autoCaptionSettings.generationRange === "selected" && timeSelection
+			? timeSelection.endMs - timeSelection.startMs
+			: duration * 1000;
+
+		if (autoCaptionSettings.generationRange === "selected" && !timeSelection) {
+			toast.error("Please select a range on the timeline first", {
+				description: "Click and drag or Shift+Click on the timeline to select a range for caption generation.",
+			});
+			setIsGeneratingCaptions(false);
+			return;
+		}
+
 		try {
 			const result = await window.electronAPI.generateAutoCaptions({
 				videoPath: sourcePath,
 				whisperExecutablePath: whisperExecutablePath ?? undefined,
 				whisperModelPath,
 				language: autoCaptionSettings.language,
+				durationMs: rangeDurationMs,
+				startTimeMs,
 			});
 
 			console.log("[VideoEditor] handleGenerateAutoCaptions: result", result);
 
-			if (!result.success || !result.cues) {
+			if (result.success && result.cues) {
+				const cuesWithIds = result.cues.map((cue: CaptionCue) => ({
+					...cue,
+					id: cue.id || uuidv4(),
+				}));
+				// Sort cues by time
+				cuesWithIds.sort((a, b) => a.startMs - b.startMs);
+				setAutoCaptions(cuesWithIds);
+				setAutoCaptionSettings((prev) => ({ ...prev, enabled: true }));
+				toast.success(`Generated ${cuesWithIds.length} captions`);
+			} else if (!result.success) {
 				toast.error(
 					result.message || getErrorMessage(result.error) || "Failed to generate captions",
 				);
-				return;
+			} else {
+				toast.error("No captions were generated");
 			}
-
-			const cuesWithIds = result.cues.map((cue: CaptionCue) => ({
-				...cue,
-				id: cue.id || uuidv4(),
-			}));
-
-			setAutoCaptions(cuesWithIds);
-			setAutoCaptionSettings((prev) => ({ ...prev, enabled: true }));
-			toast.success(result.message || `Generated ${result.cues.length} captions`);
 		} catch (error) {
 			toast.error(getErrorMessage(error));
 		} finally {
@@ -1608,13 +1641,15 @@ export default function VideoEditor() {
 		}
 	}, [
 		autoCaptionSettings.language,
+		autoCaptionSettings.generationRange,
 		isGeneratingCaptions,
-		webcam.sourcePath,
-		syncActiveVideoSource,
-		videoPath,
 		videoSourcePath,
-		whisperExecutablePath,
+		videoPath,
+		duration,
 		whisperModelPath,
+		timeSelection,
+		syncActiveVideoSource,
+		webcam.sourcePath,
 	]);
 
 	const handleClearAutoCaptions = useCallback(() => {
@@ -2001,10 +2036,10 @@ export default function VideoEditor() {
 			prev.map((region) =>
 				region.id === id
 					? {
-							...region,
-							startMs: Math.round(span.start),
-							endMs: Math.round(span.end),
-						}
+						...region,
+						startMs: Math.round(span.start),
+						endMs: Math.round(span.end),
+					}
 					: region,
 			),
 		);
@@ -2015,10 +2050,10 @@ export default function VideoEditor() {
 			prev.map((region) =>
 				region.id === id
 					? {
-							...region,
-							startMs: Math.round(span.start),
-							endMs: Math.round(span.end),
-						}
+						...region,
+						startMs: Math.round(span.start),
+						endMs: Math.round(span.end),
+					}
 					: region,
 			),
 		);
@@ -2029,9 +2064,9 @@ export default function VideoEditor() {
 			prev.map((region) =>
 				region.id === id
 					? {
-							...region,
-							focus: clampFocusToDepth(focus, region.depth),
-						}
+						...region,
+						focus: clampFocusToDepth(focus, region.depth),
+					}
 					: region,
 			),
 		);
@@ -2044,10 +2079,10 @@ export default function VideoEditor() {
 				prev.map((region) =>
 					region.id === selectedZoomId
 						? {
-								...region,
-								depth,
-								focus: clampFocusToDepth(region.focus, depth),
-							}
+							...region,
+							depth,
+							focus: clampFocusToDepth(region.focus, depth),
+						}
 						: region,
 				),
 			);
@@ -2105,10 +2140,10 @@ export default function VideoEditor() {
 			prev.map((region) =>
 				region.id === id
 					? {
-							...region,
-							startMs: Math.round(span.start),
-							endMs: Math.round(span.end),
-						}
+						...region,
+						startMs: Math.round(span.start),
+						endMs: Math.round(span.end),
+					}
 					: region,
 			),
 		);
@@ -2156,10 +2191,10 @@ export default function VideoEditor() {
 			prev.map((region) =>
 				region.id === id
 					? {
-							...region,
-							startMs: Math.round(span.start),
-							endMs: Math.round(span.end),
-						}
+						...region,
+						startMs: Math.round(span.start),
+						endMs: Math.round(span.end),
+					}
 					: region,
 			),
 		);
@@ -2211,10 +2246,10 @@ export default function VideoEditor() {
 			prev.map((region) =>
 				region.id === id
 					? {
-							...region,
-							startMs: Math.round(span.start),
-							endMs: Math.round(span.end),
-						}
+						...region,
+						startMs: Math.round(span.start),
+						endMs: Math.round(span.end),
+					}
 					: region,
 			),
 		);
@@ -2831,12 +2866,12 @@ export default function VideoEditor() {
 			gifConfig:
 				exportFormat === "gif"
 					? {
-							frameRate: gifFrameRate,
-							loop: gifLoop,
-							sizePreset: gifSizePreset,
-							width: gifDimensions.width,
-							height: gifDimensions.height,
-						}
+						frameRate: gifFrameRate,
+						loop: gifLoop,
+						sizePreset: gifSizePreset,
+						width: gifDimensions.width,
+						height: gifDimensions.height,
+					}
 					: undefined,
 		};
 
@@ -2953,11 +2988,11 @@ export default function VideoEditor() {
 			? t("editor.exportStatus.saving", "Opening save dialog...")
 			: isExportFinalizing && typeof exportProgress.renderProgress === "number"
 				? t("editor.exportStatus.finalizingPercent", "Finalizing {{percent}}%", {
-						percent: Math.round(exportProgress.renderProgress),
-					})
+					percent: Math.round(exportProgress.renderProgress),
+				})
 				: t("editor.exportStatus.completePercent", "{{percent}}% complete", {
-						percent: Math.round(exportProgress.percentage),
-					})
+					percent: Math.round(exportProgress.percentage),
+				})
 		: t("editor.exportStatus.preparing", "Preparing export...");
 
 	const projectBrowser = (
@@ -3431,6 +3466,8 @@ export default function VideoEditor() {
 									}}
 									selectedCaptionId={selectedCaptionId}
 									onSelectCaption={setSelectedCaptionId}
+									timeSelection={timeSelection}
+									onTimeSelectionChange={setTimeSelection}
 								/>
 							</div>
 						</Panel>
@@ -3507,7 +3544,6 @@ export default function VideoEditor() {
 						aspectRatio={aspectRatio}
 						onAspectRatioChange={setAspectRatio}
 						selectedAnnotationId={selectedAnnotationId}
-						annotationRegions={annotationRegions}
 						onSeek={(time) => videoPlaybackRef.current?.seek(time)}
 						autoCaptions={autoCaptions}
 						onAutoCaptionsChange={setAutoCaptions}
@@ -3541,6 +3577,7 @@ export default function VideoEditor() {
 						onSpeedDelete={handleSpeedDelete}
 						selectedCaptionId={selectedCaptionId}
 						onSelectCaption={setSelectedCaptionId}
+						timeSelection={timeSelection}
 					/>
 				</div>
 			</div>
