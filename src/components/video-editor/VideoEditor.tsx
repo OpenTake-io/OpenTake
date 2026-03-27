@@ -3838,6 +3838,7 @@ export default function VideoEditor() {
 						aspectRatio={aspectRatio}
 						onAspectRatioChange={setAspectRatio}
 						selectedAnnotationId={selectedAnnotationId}
+						annotationRegions={annotationRegions}
 						onSeek={(time) => videoPlaybackRef.current?.seek(time)}
 						autoCaptions={autoCaptions}
 						onAutoCaptionsChange={setAutoCaptions}
@@ -3878,7 +3879,7 @@ export default function VideoEditor() {
 						onAudioFadeOutMsChange={handleAudioFadeOutMsChange}
 						onAudioDelete={handleAudioDelete}
 						selectedCaptionId={selectedCaptionId}
-						onSelectCaption={setSelectedCaptionId}
+						onSelectCaption={handleSelectCaption}
 						timeSelection={timeSelection}
 						isMasterSelected={isMasterSelected}
 						masterAudioVolume={masterAudioVolume}

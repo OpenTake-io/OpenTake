@@ -341,7 +341,10 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						id: region.id,
 						startMs,
 						endMs,
-						type: region.type === "image" || region.type === "figure" ? region.type : "text",
+						type:
+							region.type === "image" || region.type === "figure" || region.type === "blur"
+								? region.type
+								: "text",
 						content: typeof region.content === "string" ? region.content : "",
 						textContent: typeof region.textContent === "string" ? region.textContent : undefined,
 						imageContent: typeof region.imageContent === "string" ? region.imageContent : undefined,
@@ -384,10 +387,11 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						zIndex: isFiniteNumber(region.zIndex) ? region.zIndex : index + 1,
 						figureData: region.figureData
 							? {
-									...DEFAULT_FIGURE_DATA,
-									...region.figureData,
-								}
+								...DEFAULT_FIGURE_DATA,
+								...region.figureData,
+							}
 							: undefined,
+						blurIntensity: isFiniteNumber(region.blurIntensity) ? region.blurIntensity : undefined,
 					};
 				})
 		: [];
@@ -408,7 +412,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						startMs,
 						endMs,
 						audioPath: typeof region.audioPath === "string" ? region.audioPath : "",
-						volume: isFiniteNumber(region.volume) ? clamp(region.volume, 0, 1) : 1,
+						volume: isFiniteNumber(region.volume) ? clamp(region.volume, 0, 2) : 1,
 						muted: typeof region.muted === "boolean" ? region.muted : false,
 						soloed: typeof region.soloed === "boolean" ? region.soloed : false,
 						fadeInMs: isFiniteNumber(region.fadeInMs) ? clamp(region.fadeInMs, 0, 10000) : 0,

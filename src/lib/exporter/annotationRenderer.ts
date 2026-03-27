@@ -307,25 +307,25 @@ function renderBlur(
     // Determine bounds and ensure they are within canvas to avoid ImageData errors
     const srcX = Math.max(0, x);
     const srcY = Math.max(0, y);
-    const srcW = Math.min(width, ctx.canvas.width - srcX);
-    const srcH = Math.min(height, ctx.canvas.height - srcY);
+    const srcWidth = Math.min(x + width, ctx.canvas.width) - srcX;
+    const srcHeight = Math.min(y + height, ctx.canvas.height) - srcY;
 
-    if (srcW <= 0 || srcH <= 0) {
+    if (srcWidth <= 0 || srcHeight <= 0) {
       ctx.restore();
       return;
     }
 
-    // Capture the current canvas region
-    const imageData = ctx.getImageData(srcX, srcY, srcW, srcH);
+    // Capture the current canvas region precisely for this intersection
+    const imageData = ctx.getImageData(srcX, srcY, srcWidth, srcHeight);
     
     let offscreen: HTMLCanvasElement | OffscreenCanvas;
     if (typeof document !== 'undefined') {
       offscreen = document.createElement('canvas');
     } else {
-      offscreen = new OffscreenCanvas(srcW, srcH);
+      offscreen = new OffscreenCanvas(srcWidth, srcHeight);
     }
-    offscreen.width = srcW;
-    offscreen.height = srcH;
+    offscreen.width = srcWidth;
+    offscreen.height = srcHeight;
     
     const offCtx = offscreen.getContext('2d') as CanvasRenderingContext2D;
     offCtx.putImageData(imageData, 0, 0);
@@ -340,7 +340,7 @@ function renderBlur(
     }
     ctx.clip();
 
-    // Apply the blur filter and draw the captured region back
+    // Apply the blur filter and draw the captured region back at its source position
     ctx.filter = `blur(${intensity}px)`;
     ctx.drawImage(offscreen as any, srcX, srcY);
 

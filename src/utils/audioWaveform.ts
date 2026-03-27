@@ -13,12 +13,12 @@ export async function generateWaveform(audioPath: string, samples = 200): Promis
     return waveformCache.get(cacheKey)!;
   }
 
+  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
   try {
     const response = await fetch(toFileUrl(audioPath));
     const arrayBuffer = await response.arrayBuffer();
     
     // Use an offline audio context to decode the data
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
     
     const channelData = audioBuffer.getChannelData(0); // Use the first channel
@@ -40,5 +40,11 @@ export async function generateWaveform(audioPath: string, samples = 200): Promis
   } catch (error) {
     console.error('Failed to generate waveform:', error);
     return new Array(samples).fill(0);
+  } finally {
+    try {
+      await audioContext.close();
+    } catch (e) {
+      // ignore close errors
+    }
   }
 }

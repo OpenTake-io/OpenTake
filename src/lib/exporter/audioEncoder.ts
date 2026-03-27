@@ -28,6 +28,7 @@ export class AudioProcessor {
     masterAudioVolume = 1,
     audioTrackVolume = 1,
     masterAudioMuted = false,
+    masterAudioSoloed = false,
   ): Promise<void> {
     const sortedTrims = trimRegions ? [...trimRegions].sort((a, b) => a.startMs - b.startMs) : []
     const sortedSpeedRegions = speedRegions
@@ -39,8 +40,15 @@ export class AudioProcessor {
       ? [...audioRegions].sort((a, b) => a.startMs - b.startMs)
       : []
 
-    // When audio regions or speed edits are present, use AudioContext mixing path.
-    if (sortedSpeedRegions.length > 0 || sortedAudioRegions.length > 0) {
+    // When audio regions, speed edits, or global volume/mute settings are present, use AudioContext mixing path.
+    if (
+      sortedSpeedRegions.length > 0 ||
+      sortedAudioRegions.length > 0 ||
+      masterAudioVolume !== 1 ||
+      audioTrackVolume !== 1 ||
+      masterAudioMuted ||
+      masterAudioSoloed
+    ) {
       const renderedAudioBlob = await this.renderMixedTimelineAudio(
         videoUrl,
         sortedTrims,
@@ -49,6 +57,7 @@ export class AudioProcessor {
         masterAudioVolume,
         audioTrackVolume,
         masterAudioMuted,
+        masterAudioSoloed,
       )
       if (!this.cancelled) {
         await this.muxRenderedAudioBlob(renderedAudioBlob, muxer)
@@ -288,6 +297,7 @@ export class AudioProcessor {
     masterAudioVolume: number,
     audioTrackVolume: number,
     masterAudioMuted: boolean,
+    masterAudioSoloed: boolean,
   ): Promise<Blob> {
     const mediaSource = await resolveMediaElementSource(videoUrl)
     const media = document.createElement('audio')
@@ -311,9 +321,11 @@ export class AudioProcessor {
     const audioContext = new AudioContext()
     const destinationNode = audioContext.createMediaStreamDestination()
 
-    // Connect original video audio
+    // Connect original video audio with its own gain node
     const sourceNode = audioContext.createMediaElementSource(media)
-    sourceNode.connect(destinationNode)
+    const masterGainNode = audioContext.createGain()
+    sourceNode.connect(masterGainNode)
+    masterGainNode.connect(destinationNode)
 
     // Prepare external audio region elements
     const audioRegionElements: {
@@ -412,6 +424,18 @@ export class AudioProcessor {
             }
           }
 
+          // Check for Solo - if any track is soloed, everything else is muted
+          const anyTrackSoloed = masterAudioSoloed || audioRegionElements.some(e => e.region.soloed);
+
+          // Update Master Video Audio Track Volume
+          let masterTargetVolume = masterAudioMuted ? 0 : audioTrackVolume;
+          if (anyTrackSoloed && !masterAudioSoloed) {
+            masterTargetVolume = 0;
+          }
+          // Factor in the overall Master output volume
+          masterTargetVolume *= masterAudioVolume;
+          masterGainNode.gain.setTargetAtTime(masterTargetVolume, audioContext.currentTime, 0.015);
+
           // Sync external audio regions with the video timeline position
           for (const entry of audioRegionElements) {
             const { media: audioEl, region, gainNode } = entry
@@ -429,9 +453,15 @@ export class AudioProcessor {
               }
               fadeMultiplier = Math.max(0, Math.min(1, fadeMultiplier));
 
-              // Apply total volume including global settings
-              const totalVolume = masterAudioMuted ? 0 : region.volume * audioTrackVolume * masterAudioVolume * fadeMultiplier;
-              gainNode.gain.setTargetAtTime(totalVolume, audioContext.currentTime, 0.015);
+              // Respect Solo and Mute
+              let regionTargetVolume = (region.muted || masterAudioMuted) ? 0 : region.volume;
+              if (anyTrackSoloed && !region.soloed) {
+                regionTargetVolume = 0;
+              }
+              // Also factor in global master volume
+              regionTargetVolume *= masterAudioVolume * fadeMultiplier;
+
+              gainNode.gain.setTargetAtTime(regionTargetVolume, audioContext.currentTime, 0.015);
 
               if (audioEl.paused) {
                 audioEl.currentTime = audioOffset

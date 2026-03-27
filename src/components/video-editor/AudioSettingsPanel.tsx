@@ -34,9 +34,13 @@ export function AudioSettingsPanel({
   const [waveform, setWaveform] = useState<number[] | null>(null);
 
   useEffect(() => {
+    let active = true;
     if (audio.audioPath) {
-      generateWaveform(audio.audioPath, 120).then(setWaveform);
+      generateWaveform(audio.audioPath, 120).then(result => {
+        if (active) setWaveform(result);
+      });
     }
+    return () => { active = false; };
   }, [audio.audioPath]);
 
   const clipDurationMs = audio.endMs - audio.startMs;

@@ -1607,7 +1607,9 @@ async function generateAutoCaptionsFromVideo(
       let jsonEnabled = true
       const updateChunkProgress = (progress: number) => {
         if (totalDurationMs > 0) {
-          const totalProgress = (offsetMs / totalDurationMs * 100) + (progress / (totalDurationMs / CHUNK_SIZE_MS));
+          const totalRangeMs = totalDurationMs > 0 ? totalDurationMs : 1;
+          const rangeOffsetMs = offsetMs - startTimeMs;
+          const totalProgress = (rangeOffsetMs / totalRangeMs * 100) + (progress / (totalRangeMs / CHUNK_SIZE_MS));
           safeSend(webContents, 'auto-caption-progress', { progress: Math.min(99, totalProgress) })
         } else {
           safeSend(webContents, 'auto-caption-progress', { progress })
@@ -1634,15 +1636,16 @@ async function generateAutoCaptionsFromVideo(
 
       // Adjust timings and deduplicate
       const adjustedCues = cues
-        .map(cue => ({
+        .map((cue, idx) => ({
           ...cue,
+          id: `caption-${offsetMs}-${idx}`,
           startMs: cue.startMs + offsetMs,
           endMs: cue.endMs + offsetMs
         }))
         // Only keep cues that START within this chunk's main window (prevent overlap duplicates)
         // Except for the very last chunk where we take everything
         .filter(cue => {
-          const isLastChunk = totalDurationMs > 0 && (offsetMs + CHUNK_SIZE_MS >= totalDurationMs);
+          const isLastChunk = offsetMs + CHUNK_SIZE_MS >= endTimeMs;
           if (isLastChunk) return true;
           return cue.startMs < offsetMs + CHUNK_SIZE_MS;
         });
@@ -1659,7 +1662,7 @@ async function generateAutoCaptionsFromVideo(
           break;
       }
       
-      if (totalDurationMs > 0 && offsetMs + CHUNK_SIZE_MS >= totalDurationMs) {
+      if (offsetMs + CHUNK_SIZE_MS >= endTimeMs) {
           break;
       }
 
