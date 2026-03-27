@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent a
 import { useTimelineContext } from "dnd-timeline";
 import { Button } from "@/components/ui/button";
 import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Scissors, ZoomIn, MessageSquare, ChevronDown, Check, Gauge, WandSparkles, Music, Crop } from "lucide-react";
+import { Plus, Scissors, ZoomIn, MessageSquare, ChevronDown, Check, Gauge, WandSparkles, Music, Crop, MousePointer2, BoxSelect } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { v4 as uuidv4 } from 'uuid';
@@ -100,12 +100,14 @@ interface TimelineEditorProps {
   onTimeSelectionChange?: (selection: TimeSelection | null) => void;
   isMasterSelected?: boolean;
   onSelectMaster?: (selected: boolean) => void;
+  timelineMode?: 'move' | 'select';
+  onTimelineModeChange?: (mode: 'move' | 'select') => void;
 }
 
 interface TimelineScaleConfig {
-	minItemDurationMs: number;
-	defaultItemDurationMs: number;
-	minVisibleRangeMs: number;
+  minItemDurationMs: number;
+  defaultItemDurationMs: number;
+  minVisibleRangeMs: number;
 }
 
 interface TimelineRenderItem {
@@ -124,356 +126,356 @@ interface TimelineRenderItem {
 }
 
 const SCALE_CANDIDATES = [
-	{ intervalSeconds: 0.05, gridSeconds: 0.01 },
-	{ intervalSeconds: 0.1, gridSeconds: 0.02 },
-	{ intervalSeconds: 0.25, gridSeconds: 0.05 },
-	{ intervalSeconds: 0.5, gridSeconds: 0.1 },
-	{ intervalSeconds: 1, gridSeconds: 0.25 },
-	{ intervalSeconds: 2, gridSeconds: 0.5 },
-	{ intervalSeconds: 5, gridSeconds: 1 },
-	{ intervalSeconds: 10, gridSeconds: 2 },
-	{ intervalSeconds: 15, gridSeconds: 3 },
-	{ intervalSeconds: 30, gridSeconds: 5 },
-	{ intervalSeconds: 60, gridSeconds: 10 },
-	{ intervalSeconds: 120, gridSeconds: 20 },
-	{ intervalSeconds: 300, gridSeconds: 30 },
-	{ intervalSeconds: 600, gridSeconds: 60 },
-	{ intervalSeconds: 900, gridSeconds: 120 },
-	{ intervalSeconds: 1800, gridSeconds: 180 },
-	{ intervalSeconds: 3600, gridSeconds: 300 },
+  { intervalSeconds: 0.05, gridSeconds: 0.01 },
+  { intervalSeconds: 0.1, gridSeconds: 0.02 },
+  { intervalSeconds: 0.25, gridSeconds: 0.05 },
+  { intervalSeconds: 0.5, gridSeconds: 0.1 },
+  { intervalSeconds: 1, gridSeconds: 0.25 },
+  { intervalSeconds: 2, gridSeconds: 0.5 },
+  { intervalSeconds: 5, gridSeconds: 1 },
+  { intervalSeconds: 10, gridSeconds: 2 },
+  { intervalSeconds: 15, gridSeconds: 3 },
+  { intervalSeconds: 30, gridSeconds: 5 },
+  { intervalSeconds: 60, gridSeconds: 10 },
+  { intervalSeconds: 120, gridSeconds: 20 },
+  { intervalSeconds: 300, gridSeconds: 30 },
+  { intervalSeconds: 600, gridSeconds: 60 },
+  { intervalSeconds: 900, gridSeconds: 120 },
+  { intervalSeconds: 1800, gridSeconds: 180 },
+  { intervalSeconds: 3600, gridSeconds: 300 },
 ];
 
 function calculateAxisScale(visibleRangeMs: number): { intervalMs: number; gridMs: number } {
-	const visibleSeconds = visibleRangeMs / 1000;
-	const candidate =
-		SCALE_CANDIDATES.find((scaleCandidate) => {
-			if (visibleSeconds <= 0) {
-				return true;
-			}
-			return visibleSeconds / scaleCandidate.intervalSeconds <= TARGET_MARKER_COUNT;
-		}) ?? SCALE_CANDIDATES[SCALE_CANDIDATES.length - 1];
+  const visibleSeconds = visibleRangeMs / 1000;
+  const candidate =
+    SCALE_CANDIDATES.find((scaleCandidate) => {
+      if (visibleSeconds <= 0) {
+        return true;
+      }
+      return visibleSeconds / scaleCandidate.intervalSeconds <= TARGET_MARKER_COUNT;
+    }) ?? SCALE_CANDIDATES[SCALE_CANDIDATES.length - 1];
 
-	return {
-		intervalMs: Math.round(candidate.intervalSeconds * 1000),
-		gridMs: Math.round(candidate.gridSeconds * 1000),
-	};
+  return {
+    intervalMs: Math.round(candidate.intervalSeconds * 1000),
+    gridMs: Math.round(candidate.gridSeconds * 1000),
+  };
 }
 
 function calculateTimelineScale(durationSeconds: number): TimelineScaleConfig {
-	const totalMs = Math.max(0, Math.round(durationSeconds * 1000));
+  const totalMs = Math.max(0, Math.round(durationSeconds * 1000));
 
-	const minItemDurationMs = 100;
+  const minItemDurationMs = 100;
 
-	const defaultItemDurationMs =
-		totalMs > 0
-			? Math.max(minItemDurationMs, Math.min(Math.round(totalMs * 0.05), 30000))
-			: Math.max(minItemDurationMs, 1000);
+  const defaultItemDurationMs =
+    totalMs > 0
+      ? Math.max(minItemDurationMs, Math.min(Math.round(totalMs * 0.05), 30000))
+      : Math.max(minItemDurationMs, 1000);
 
-	const minVisibleRangeMs = 300;
+  const minVisibleRangeMs = 300;
 
-	return {
-		minItemDurationMs,
-		defaultItemDurationMs,
-		minVisibleRangeMs,
-	};
+  return {
+    minItemDurationMs,
+    defaultItemDurationMs,
+    minVisibleRangeMs,
+  };
 }
 
 function createInitialRange(totalMs: number): Range {
-	if (totalMs > 0) {
-		return { start: 0, end: totalMs };
-	}
+  if (totalMs > 0) {
+    return { start: 0, end: totalMs };
+  }
 
-	return { start: 0, end: FALLBACK_RANGE_MS };
+  return { start: 0, end: FALLBACK_RANGE_MS };
 }
 
 function normalizeWheelDeltaToPixels(delta: number, deltaMode: number) {
-	if (deltaMode === 1) {
-		return delta * 16;
-	}
+  if (deltaMode === 1) {
+    return delta * 16;
+  }
 
-	if (deltaMode === 2) {
-		return delta * 240;
-	}
+  if (deltaMode === 2) {
+    return delta * 240;
+  }
 
-	return delta;
+  return delta;
 }
 
 function formatTimeLabel(milliseconds: number, intervalMs: number) {
-	const totalSeconds = milliseconds / 1000;
-	const hours = Math.floor(totalSeconds / 3600);
-	const minutes = Math.floor((totalSeconds % 3600) / 60);
-	const seconds = totalSeconds % 60;
+  const totalSeconds = milliseconds / 1000;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
 
-	const fractionalDigits = intervalMs < 250 ? 2 : intervalMs < 1000 ? 1 : 0;
+  const fractionalDigits = intervalMs < 250 ? 2 : intervalMs < 1000 ? 1 : 0;
 
-	if (hours > 0) {
-		const minutesString = minutes.toString().padStart(2, "0");
-		const secondsString = Math.floor(seconds).toString().padStart(2, "0");
-		return `${hours}:${minutesString}:${secondsString}`;
-	}
+  if (hours > 0) {
+    const minutesString = minutes.toString().padStart(2, "0");
+    const secondsString = Math.floor(seconds).toString().padStart(2, "0");
+    return `${hours}:${minutesString}:${secondsString}`;
+  }
 
-	if (fractionalDigits > 0) {
-		const secondsWithFraction = seconds.toFixed(fractionalDigits);
-		const [wholeSeconds, fraction] = secondsWithFraction.split(".");
-		return `${minutes}:${wholeSeconds.padStart(2, "0")}.${fraction}`;
-	}
+  if (fractionalDigits > 0) {
+    const secondsWithFraction = seconds.toFixed(fractionalDigits);
+    const [wholeSeconds, fraction] = secondsWithFraction.split(".");
+    return `${minutes}:${wholeSeconds.padStart(2, "0")}.${fraction}`;
+  }
 
-	return `${minutes}:${Math.floor(seconds).toString().padStart(2, "0")}`;
+  return `${minutes}:${Math.floor(seconds).toString().padStart(2, "0")}`;
 }
 
 
 function formatPlayheadTime(ms: number): string {
-	const s = ms / 1000;
-	const min = Math.floor(s / 60);
-	const sec = s % 60;
-	if (min > 0) return `${min}:${sec.toFixed(1).padStart(4, "0")}`;
-	return `${sec.toFixed(1)}s`;
+  const s = ms / 1000;
+  const min = Math.floor(s / 60);
+  const sec = s % 60;
+  if (min > 0) return `${min}:${sec.toFixed(1).padStart(4, "0")}`;
+  return `${sec.toFixed(1)}s`;
 }
 
 function PlaybackCursor({
-	currentTimeMs,
-	videoDurationMs,
-	onSeek,
-	timelineRef,
-	keyframes = [],
+  currentTimeMs,
+  videoDurationMs,
+  onSeek,
+  timelineRef,
+  keyframes = [],
 }: {
-	currentTimeMs: number;
-	videoDurationMs: number;
-	onSeek?: (time: number) => void;
-	timelineRef: React.RefObject<HTMLDivElement>;
-	keyframes?: { id: string; time: number }[];
+  currentTimeMs: number;
+  videoDurationMs: number;
+  onSeek?: (time: number) => void;
+  timelineRef: React.RefObject<HTMLDivElement>;
+  keyframes?: { id: string; time: number }[];
 }) {
-	const { sidebarWidth = 0, direction, range, valueToPixels, pixelsToValue } = useTimelineContext();
-	const sideProperty = direction === "rtl" ? "right" : "left";
-	const [isDragging, setIsDragging] = useState(false);
+  const { sidebarWidth = 0, direction, range, valueToPixels, pixelsToValue } = useTimelineContext();
+  const sideProperty = direction === "rtl" ? "right" : "left";
+  const [isDragging, setIsDragging] = useState(false);
 
-	useEffect(() => {
-		if (!isDragging) return;
+  useEffect(() => {
+    if (!isDragging) return;
 
-		const handleMouseMove = (e: MouseEvent) => {
-			if (!timelineRef.current || !onSeek) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!timelineRef.current || !onSeek) return;
 
-			const rect = timelineRef.current.getBoundingClientRect();
-			const clickX = e.clientX - rect.left - sidebarWidth;
+      const rect = timelineRef.current.getBoundingClientRect();
+      const clickX = e.clientX - rect.left - sidebarWidth;
 
-			// Allow dragging outside to 0 or max, but clamp the value
-			const relativeMs = pixelsToValue(clickX);
-			let absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
+      // Allow dragging outside to 0 or max, but clamp the value
+      const relativeMs = pixelsToValue(clickX);
+      let absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
 
-			// Snap to nearby keyframe if within threshold (150ms)
-			const snapThresholdMs = 150;
-			const nearbyKeyframe = keyframes.find(
-				(kf) =>
-					Math.abs(kf.time - absoluteMs) <= snapThresholdMs &&
-					kf.time >= range.start &&
-					kf.time <= range.end,
-			);
+      // Snap to nearby keyframe if within threshold (150ms)
+      const snapThresholdMs = 150;
+      const nearbyKeyframe = keyframes.find(
+        (kf) =>
+          Math.abs(kf.time - absoluteMs) <= snapThresholdMs &&
+          kf.time >= range.start &&
+          kf.time <= range.end,
+      );
 
-			if (nearbyKeyframe) {
-				absoluteMs = nearbyKeyframe.time;
-			}
+      if (nearbyKeyframe) {
+        absoluteMs = nearbyKeyframe.time;
+      }
 
-			onSeek(absoluteMs / 1000);
-		};
+      onSeek(absoluteMs / 1000);
+    };
 
-		const handleMouseUp = () => {
-			setIsDragging(false);
-			document.body.style.cursor = "";
-		};
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      document.body.style.cursor = "";
+    };
 
-		window.addEventListener("mousemove", handleMouseMove);
-		window.addEventListener("mouseup", handleMouseUp);
-		document.body.style.cursor = "ew-resize";
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "ew-resize";
 
-		return () => {
-			window.removeEventListener("mousemove", handleMouseMove);
-			window.removeEventListener("mouseup", handleMouseUp);
-			document.body.style.cursor = "";
-		};
-	}, [
-		isDragging,
-		onSeek,
-		timelineRef,
-		sidebarWidth,
-		range.start,
-		range.end,
-		videoDurationMs,
-		pixelsToValue,
-		keyframes,
-	]);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+    };
+  }, [
+    isDragging,
+    onSeek,
+    timelineRef,
+    sidebarWidth,
+    range.start,
+    range.end,
+    videoDurationMs,
+    pixelsToValue,
+    keyframes,
+  ]);
 
-	if (videoDurationMs <= 0 || currentTimeMs < 0) {
-		return null;
-	}
+  if (videoDurationMs <= 0 || currentTimeMs < 0) {
+    return null;
+  }
 
-	const clampedTime = Math.min(currentTimeMs, videoDurationMs);
+  const clampedTime = Math.min(currentTimeMs, videoDurationMs);
 
-	if (clampedTime < range.start || clampedTime > range.end) {
-		return null;
-	}
+  if (clampedTime < range.start || clampedTime > range.end) {
+    return null;
+  }
 
-	const offset = valueToPixels(clampedTime - range.start);
+  const offset = valueToPixels(clampedTime - range.start);
 
-	return (
-		<div
-			className="absolute top-0 bottom-0 z-50 group/cursor"
-			style={{
-				[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth - 1}px`,
-				pointerEvents: "none", // Allow clicks to pass through to timeline, but we'll enable pointer events on the handle
-			}}
-		>
-			<div
-				className="absolute top-0 bottom-0 w-[2px] bg-[#2563EB] shadow-[0_0_10px_rgba(37,99,235,0.5)] cursor-ew-resize pointer-events-auto hover:shadow-[0_0_15px_rgba(37,99,235,0.7)] transition-shadow"
-				style={{
-					[sideProperty]: `${offset}px`,
-				}}
-				onMouseDown={(e) => {
-					e.stopPropagation(); // Prevent timeline click
-					setIsDragging(true);
-				}}
-			>
-				<div
-					className="absolute -top-1 left-1/2 -translate-x-1/2 hover:scale-125 transition-transform"
-					style={{ width: "16px", height: "16px" }}
-				>
-					<div className="w-3 h-3 mx-auto mt-[2px] bg-[#2563EB] rotate-45 rounded-sm shadow-lg border border-white/20" />
-				</div>
-				{isDragging && (
-					<div className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/80 text-[10px] text-white/90 font-medium tabular-nums whitespace-nowrap border border-white/10 shadow-lg pointer-events-none">
-						{formatPlayheadTime(clampedTime)}
-					</div>
-				)}
-			</div>
-		</div>
-	);
+  return (
+    <div
+      className="absolute top-0 bottom-0 z-50 group/cursor"
+      style={{
+        [sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth - 1}px`,
+        pointerEvents: "none", // Allow clicks to pass through to timeline, but we'll enable pointer events on the handle
+      }}
+    >
+      <div
+        className="absolute top-0 bottom-0 w-[2px] bg-[#2563EB] shadow-[0_0_10px_rgba(37,99,235,0.5)] cursor-ew-resize pointer-events-auto hover:shadow-[0_0_15px_rgba(37,99,235,0.7)] transition-shadow"
+        style={{
+          [sideProperty]: `${offset}px`,
+        }}
+        onMouseDown={(e) => {
+          e.stopPropagation(); // Prevent timeline click
+          setIsDragging(true);
+        }}
+      >
+        <div
+          className="absolute -top-1 left-1/2 -translate-x-1/2 hover:scale-125 transition-transform"
+          style={{ width: "16px", height: "16px" }}
+        >
+          <div className="w-3 h-3 mx-auto mt-[2px] bg-[#2563EB] rotate-45 rounded-sm shadow-lg border border-white/20" />
+        </div>
+        {isDragging && (
+          <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/80 text-[10px] text-white/90 font-medium tabular-nums whitespace-nowrap border border-white/10 shadow-lg pointer-events-none">
+            {formatPlayheadTime(clampedTime)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function TimelineAxis({
-	videoDurationMs,
-	currentTimeMs,
+  videoDurationMs,
+  currentTimeMs,
 }: {
-	videoDurationMs: number;
-	currentTimeMs: number;
+  videoDurationMs: number;
+  currentTimeMs: number;
 }) {
-	const { sidebarWidth = 0, direction, range, valueToPixels } = useTimelineContext();
-	const sideProperty = direction === "rtl" ? "right" : "left";
+  const { sidebarWidth = 0, direction, range, valueToPixels } = useTimelineContext();
+  const sideProperty = direction === "rtl" ? "right" : "left";
 
-	const { intervalMs } = useMemo(
-		() => calculateAxisScale(range.end - range.start),
-		[range.end, range.start],
-	);
+  const { intervalMs } = useMemo(
+    () => calculateAxisScale(range.end - range.start),
+    [range.end, range.start],
+  );
 
-	const markers = useMemo(() => {
-		if (intervalMs <= 0) {
-			return { markers: [], minorTicks: [] };
-		}
+  const markers = useMemo(() => {
+    if (intervalMs <= 0) {
+      return { markers: [], minorTicks: [] };
+    }
 
-		const maxTime = videoDurationMs > 0 ? videoDurationMs : range.end;
-		const visibleStart = Math.max(0, Math.min(range.start, maxTime));
-		const visibleEnd = Math.min(range.end, maxTime);
-		const markerTimes = new Set<number>();
+    const maxTime = videoDurationMs > 0 ? videoDurationMs : range.end;
+    const visibleStart = Math.max(0, Math.min(range.start, maxTime));
+    const visibleEnd = Math.min(range.end, maxTime);
+    const markerTimes = new Set<number>();
 
-		const firstMarker = Math.ceil(visibleStart / intervalMs) * intervalMs;
+    const firstMarker = Math.ceil(visibleStart / intervalMs) * intervalMs;
 
-		for (let time = firstMarker; time <= maxTime; time += intervalMs) {
-			if (time >= visibleStart && time <= visibleEnd) {
-				markerTimes.add(Math.round(time));
-			}
-		}
+    for (let time = firstMarker; time <= maxTime; time += intervalMs) {
+      if (time >= visibleStart && time <= visibleEnd) {
+        markerTimes.add(Math.round(time));
+      }
+    }
 
-		if (visibleStart <= maxTime) {
-			markerTimes.add(Math.round(visibleStart));
-		}
+    if (visibleStart <= maxTime) {
+      markerTimes.add(Math.round(visibleStart));
+    }
 
-		if (videoDurationMs > 0) {
-			markerTimes.add(Math.round(videoDurationMs));
-		}
+    if (videoDurationMs > 0) {
+      markerTimes.add(Math.round(videoDurationMs));
+    }
 
-		const sorted = Array.from(markerTimes)
-			.filter((time) => time <= maxTime)
-			.sort((a, b) => a - b);
+    const sorted = Array.from(markerTimes)
+      .filter((time) => time <= maxTime)
+      .sort((a, b) => a - b);
 
-		// Generate minor ticks (4 ticks between major intervals)
-		const minorTicks = [];
-		const minorInterval = intervalMs / 5;
+    // Generate minor ticks (4 ticks between major intervals)
+    const minorTicks = [];
+    const minorInterval = intervalMs / 5;
 
-		for (let time = firstMarker; time <= maxTime; time += minorInterval) {
-			if (time >= visibleStart && time <= visibleEnd) {
-				// Skip if it's close to a major marker
-				const isMajor = Math.abs(time % intervalMs) < 1;
-				if (!isMajor) {
-					minorTicks.push(time);
-				}
-			}
-		}
+    for (let time = firstMarker; time <= maxTime; time += minorInterval) {
+      if (time >= visibleStart && time <= visibleEnd) {
+        // Skip if it's close to a major marker
+        const isMajor = Math.abs(time % intervalMs) < 1;
+        if (!isMajor) {
+          minorTicks.push(time);
+        }
+      }
+    }
 
-		return {
-			markers: sorted.map((time) => ({
-				time,
-				label: formatTimeLabel(time, intervalMs),
-			})),
-			minorTicks,
-		};
-	}, [intervalMs, range.end, range.start, videoDurationMs]);
+    return {
+      markers: sorted.map((time) => ({
+        time,
+        label: formatTimeLabel(time, intervalMs),
+      })),
+      minorTicks,
+    };
+  }, [intervalMs, range.end, range.start, videoDurationMs]);
 
-	return (
-		<div
+  return (
+    <div
       className="h-8 bg-[#161619] border-b border-white/10 relative overflow-hidden select-none cursor-pointer"
-			style={{
-				[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth}px`,
-			}}
-			onMouseDown={(e) => {
-				// Also allow starting selection from the ruler
-				(e.currentTarget.parentElement as any)?.__handleMouseDown?.(e);
-			}}
-			onClick={(e) => {
-				// Also allow seeking/clearing from the ruler
-				(e.currentTarget.parentElement as any)?.__handleTimelineClick?.(e);
-			}}
-		>
-			{/* Minor Ticks */}
-			{markers.minorTicks.map((time) => {
-				const offset = valueToPixels(time - range.start);
-				return (
-					<div
-						key={`minor-${time}`}
-						className="absolute bottom-0 h-1 w-[1px] bg-white/5"
-						style={{ [sideProperty]: `${offset}px` }}
-					/>
-				);
-			})}
+      style={{
+        [sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth}px`,
+      }}
+      onMouseDown={(e) => {
+        // Also allow starting selection from the ruler
+        (e.currentTarget.parentElement as any)?.__handleMouseDown?.(e);
+      }}
+      onClick={(e) => {
+        // Also allow seeking/clearing from the ruler
+        (e.currentTarget.parentElement as any)?.__handleTimelineClick?.(e);
+      }}
+    >
+      {/* Minor Ticks */}
+      {markers.minorTicks.map((time) => {
+        const offset = valueToPixels(time - range.start);
+        return (
+          <div
+            key={`minor-${time}`}
+            className="absolute bottom-0 h-1 w-[1px] bg-white/5"
+            style={{ [sideProperty]: `${offset}px` }}
+          />
+        );
+      })}
 
-			{/* Major Markers */}
-			{markers.markers.map((marker) => {
-				const offset = valueToPixels(marker.time - range.start);
-				const markerStyle: React.CSSProperties = {
-					position: "absolute",
-					bottom: 0,
-					height: "100%",
-					display: "flex",
-					flexDirection: "row",
-					alignItems: "flex-end",
-					[sideProperty]: `${offset}px`,
-				};
+      {/* Major Markers */}
+      {markers.markers.map((marker) => {
+        const offset = valueToPixels(marker.time - range.start);
+        const markerStyle: React.CSSProperties = {
+          position: "absolute",
+          bottom: 0,
+          height: "100%",
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "flex-end",
+          [sideProperty]: `${offset}px`,
+        };
 
-				return (
-					<div key={marker.time} style={markerStyle}>
-						<div className="flex flex-col items-center pb-1">
-							<div className="h-2 w-[1px] bg-white/20 mb-1" />
-							<span
-								className={cn(
-									"text-[10px] font-medium tabular-nums tracking-tight",
-									marker.time === currentTimeMs ? "text-[#2563EB]" : "text-slate-500",
-								)}
-							>
-								{marker.label}
-							</span>
-						</div>
-					</div>
-				);
-			})}
-		</div>
-	);
+        return (
+          <div key={marker.time} style={markerStyle}>
+            <div className="flex flex-col items-center pb-1">
+              <div className="h-2 w-[1px] bg-white/20 mb-1" />
+              <span
+                className={cn(
+                  "text-[10px] font-medium tabular-nums tracking-tight",
+                  marker.time === currentTimeMs ? "text-[#2563EB]" : "text-slate-500",
+                )}
+              >
+                {marker.label}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function Timeline({
@@ -509,6 +511,7 @@ function Timeline({
   onTimeSelectionChange,
   isMasterSelected = false,
   onSelectMaster,
+  timelineMode = 'move',
 }: {
   items: TimelineRenderItem[];
   videoDurationMs: number;
@@ -544,139 +547,149 @@ function Timeline({
   onTimeSelectionChange?: (selection: TimeSelection | null) => void;
   isMasterSelected?: boolean;
   onSelectMaster?: (selected: boolean) => void;
+  timelineMode?: 'move' | 'select';
 }) {
-	const { setTimelineRef, style, sidebarWidth = 0, range, pixelsToValue, valueToPixels } = useTimelineContext();
-	const localTimelineRef = useRef<HTMLDivElement | null>(null);
+  const { setTimelineRef, style, sidebarWidth = 0, range, pixelsToValue, valueToPixels } = useTimelineContext();
+  const localTimelineRef = useRef<HTMLDivElement | null>(null);
 
-	const setRefs = useCallback(
-		(node: HTMLDivElement | null) => {
-			if (localTimelineRef.current !== node) {
-				setTimelineRef(node);
-				localTimelineRef.current = node;
-			}
-		},
-		[setTimelineRef],
-	);
+  const setRefs = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (localTimelineRef.current !== node) {
+        setTimelineRef(node);
+        localTimelineRef.current = node;
+      }
+    },
+    [setTimelineRef],
+  );
 
-	const isDraggingSelectionRef = useRef(false);
-	const selectionAnchorMsRef = useRef<number | null>(null);
-	const initialMouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
+  const isDraggingSelectionRef = useRef(false);
+  const selectionAnchorMsRef = useRef<number | null>(null);
+  const initialMouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
 
-	const handleMouseDown = useCallback(
-		(e: React.MouseEvent<HTMLDivElement>) => {
-			if (videoDurationMs <= 0) return;
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      // In Move mode, the timeline background never starts a selection drag.
+      // Items handle their own drag-and-drop via dnd-timeline.
+      if (timelineMode !== 'select') return;
 
-			// Capture the rect NOW — e.currentTarget becomes null after React's
-			// synthetic event is processed and must not be read inside async closures.
-			const capturedRect = e.currentTarget.getBoundingClientRect();
-			const clickX = e.clientX - capturedRect.left - sidebarWidth;
+      if (videoDurationMs <= 0) return;
 
-			if (clickX < 0) return;
+      // Capture the rect NOW — e.currentTarget becomes null after React's
+      // synthetic event is processed and must not be read inside async closures.
+      const capturedRect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - capturedRect.left - sidebarWidth;
 
-			const relativeMs = pixelsToValue(clickX);
-			const absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
+      if (clickX < 0) return;
 
-			initialMouseDownPosRef.current = { x: e.clientX, y: e.clientY };
-			isDraggingSelectionRef.current = false; // Reset drag flag
+      const relativeMs = pixelsToValue(clickX);
+      const absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
 
-			if (e.shiftKey) {
-				// Shift+mousedown: anchor to the far edge of the existing selection,
-				// or to the current playhead if there is no selection yet.
-				let anchor = currentTimeMs;
-				if (timeSelection) {
-					const distToStart = Math.abs(timeSelection.startMs - absoluteMs);
-					const distToEnd = Math.abs(timeSelection.endMs - absoluteMs);
-					anchor = distToStart > distToEnd ? timeSelection.startMs : timeSelection.endMs;
-				}
+      initialMouseDownPosRef.current = { x: e.clientX, y: e.clientY };
+      isDraggingSelectionRef.current = false; // Reset drag flag
 
-				selectionAnchorMsRef.current = anchor;
-				const start = Math.min(anchor, absoluteMs);
-				const end = Math.max(anchor, absoluteMs);
-				onTimeSelectionChange?.({ startMs: start, endMs: end });
-			} else {
-				// Plain drag: anchor starts at the click point itself
-				selectionAnchorMsRef.current = absoluteMs;
-				onTimeSelectionChange?.({ startMs: absoluteMs, endMs: absoluteMs });
-			}
+      if (e.shiftKey) {
+        // Shift+mousedown: anchor to the far edge of the existing selection,
+        // or to the current playhead if there is no selection yet.
+        let anchor = currentTimeMs;
+        if (timeSelection) {
+          const distToStart = Math.abs(timeSelection.startMs - absoluteMs);
+          const distToEnd = Math.abs(timeSelection.endMs - absoluteMs);
+          anchor = distToStart > distToEnd ? timeSelection.startMs : timeSelection.endMs;
+        }
 
-			const handleGlobalMouseMove = (moveEvent: MouseEvent) => {
-				if (selectionAnchorMsRef.current === null || initialMouseDownPosRef.current === null) return;
+        selectionAnchorMsRef.current = anchor;
+        const start = Math.min(anchor, absoluteMs);
+        const end = Math.max(anchor, absoluteMs);
+        onTimeSelectionChange?.({ startMs: start, endMs: end });
+      } else {
+        // Plain drag: anchor starts at the click point itself
+        selectionAnchorMsRef.current = absoluteMs;
+        onTimeSelectionChange?.({ startMs: absoluteMs, endMs: absoluteMs });
+      }
 
-				const dx = Math.abs(moveEvent.clientX - initialMouseDownPosRef.current.x);
-				const dy = Math.abs(moveEvent.clientY - initialMouseDownPosRef.current.y);
+      const handleGlobalMouseMove = (moveEvent: MouseEvent) => {
+        if (selectionAnchorMsRef.current === null || initialMouseDownPosRef.current === null) return;
 
-				if (dx > DRAG_THRESHOLD_PX || dy > DRAG_THRESHOLD_PX) {
-					isDraggingSelectionRef.current = true;
-				}
+        const dx = Math.abs(moveEvent.clientX - initialMouseDownPosRef.current.x);
+        const dy = Math.abs(moveEvent.clientY - initialMouseDownPosRef.current.y);
 
-				// Use the captured rect — safe to read from an async listener
-				const moveX = moveEvent.clientX - capturedRect.left - sidebarWidth;
-				const moveRelativeMs = pixelsToValue(moveX);
-				const moveAbsoluteMs = Math.max(0, Math.min(range.start + moveRelativeMs, videoDurationMs));
+        if (dx > DRAG_THRESHOLD_PX || dy > DRAG_THRESHOLD_PX) {
+          isDraggingSelectionRef.current = true;
+        }
 
-				const start = Math.min(selectionAnchorMsRef.current, moveAbsoluteMs);
-				const end = Math.max(selectionAnchorMsRef.current, moveAbsoluteMs);
+        // Use the captured rect — safe to read from an async listener
+        const moveX = moveEvent.clientX - capturedRect.left - sidebarWidth;
+        const moveRelativeMs = pixelsToValue(moveX);
+        const moveAbsoluteMs = Math.max(0, Math.min(range.start + moveRelativeMs, videoDurationMs));
 
-				onTimeSelectionChange?.({ startMs: start, endMs: end });
-			};
+        const start = Math.min(selectionAnchorMsRef.current, moveAbsoluteMs);
+        const end = Math.max(selectionAnchorMsRef.current, moveAbsoluteMs);
 
-			const handleGlobalMouseUp = () => {
-				selectionAnchorMsRef.current = null;
-				initialMouseDownPosRef.current = null;
-				window.removeEventListener("mousemove", handleGlobalMouseMove);
-				window.removeEventListener("mouseup", handleGlobalMouseUp);
-			};
+        onTimeSelectionChange?.({ startMs: start, endMs: end });
+      };
 
-			window.addEventListener("mousemove", handleGlobalMouseMove);
-			window.addEventListener("mouseup", handleGlobalMouseUp);
-		},
-		[range.start, sidebarWidth, pixelsToValue, videoDurationMs, onTimeSelectionChange, timeSelection, currentTimeMs],
-	);
+      const handleGlobalMouseUp = () => {
+        selectionAnchorMsRef.current = null;
+        initialMouseDownPosRef.current = null;
+        window.removeEventListener("mousemove", handleGlobalMouseMove);
+        window.removeEventListener("mouseup", handleGlobalMouseUp);
+      };
 
-	const handleTimelineClick = useCallback(
-		(e: React.MouseEvent<HTMLDivElement>) => {
-			// If a drag occurred, swallow the click entirely
-			if (isDraggingSelectionRef.current) {
-				isDraggingSelectionRef.current = false;
-				return;
-			}
+      window.addEventListener("mousemove", handleGlobalMouseMove);
+      window.addEventListener("mouseup", handleGlobalMouseUp);
+    },
+    [timelineMode, range.start, sidebarWidth, pixelsToValue, videoDurationMs, onTimeSelectionChange, timeSelection, currentTimeMs],
+  );
 
-			if (!onSeek || videoDurationMs <= 0) return;
 
-			// Shift+click: the selection was already updated in mousedown — don't seek or clear
-			if (e.shiftKey) return;
+  const handleTimelineClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      // If a selection-drag occurred (only possible in Select mode), swallow the click
+      if (isDraggingSelectionRef.current) {
+        isDraggingSelectionRef.current = false;
+        return;
+      }
 
-			// Plain click: clear selection and deselect all blocks, then seek
-			onTimeSelectionChange?.(null);
-			onSelectZoom?.(null);
-			onSelectTrim?.(null);
-			onSelectAnnotation?.(null);
-			onSelectSpeed?.(null);
-			onSelectAudio?.(null);
-			onSelectCaption?.(null);
-			onSelectMaster?.(false);
-			onClearBlockSelection?.();
+      if (!onSeek || videoDurationMs <= 0) return;
 
-			const rect = e.currentTarget.getBoundingClientRect();
-			const clickX = e.clientX - rect.left - sidebarWidth;
+      // In Select mode, shift+click updates the selection (already done in mousedown) — don't seek
+      if (timelineMode === 'select' && e.shiftKey) return;
 
-			if (clickX < 0) return;
+      // Plain click: deselect all blocks, then seek
+      // Only clear timeSelection in Select mode; in Move mode leave it as-is
+      if (timelineMode === 'select') {
+        onTimeSelectionChange?.(null);
+      }
+      onSelectZoom?.(null);
+      onSelectTrim?.(null);
+      onSelectAnnotation?.(null);
+      onSelectSpeed?.(null);
+      onSelectAudio?.(null);
+      onSelectCaption?.(null);
+      onSelectMaster?.(false);
+      onClearBlockSelection?.();
 
-			const relativeMs = pixelsToValue(clickX);
-			const absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - rect.left - sidebarWidth;
 
-			onSeek(absoluteMs / 1000);
-		},
-		[onSeek, onSelectZoom, onSelectTrim, onSelectAnnotation, onSelectSpeed, onSelectAudio, onSelectCaption, videoDurationMs, sidebarWidth, range.start, pixelsToValue, onTimeSelectionChange, onClearBlockSelection],
-	);
+      if (clickX < 0) return;
 
-	useEffect(() => {
-		if (localTimelineRef.current) {
-			// Expose handlers for internal components like Axis
-			(localTimelineRef.current as any).__handleMouseDown = handleMouseDown;
-			(localTimelineRef.current as any).__handleTimelineClick = handleTimelineClick;
-		}
-	}, [handleMouseDown, handleTimelineClick]);
+      const relativeMs = pixelsToValue(clickX);
+      const absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
+
+      onSeek(absoluteMs / 1000);
+    },
+    [timelineMode, onSeek, onSelectZoom, onSelectTrim, onSelectAnnotation, onSelectSpeed, onSelectAudio, onSelectCaption, videoDurationMs, sidebarWidth, range.start, pixelsToValue, onTimeSelectionChange, onClearBlockSelection],
+  );
+
+
+  useEffect(() => {
+    if (localTimelineRef.current) {
+      // Expose handlers for internal components like Axis
+      (localTimelineRef.current as any).__handleMouseDown = handleMouseDown;
+      (localTimelineRef.current as any).__handleTimelineClick = handleTimelineClick;
+    }
+  }, [handleMouseDown, handleTimelineClick]);
 
   const zoomItems = items.filter(item => item.rowId === ZOOM_ROW_ID);
   const trimItems = items.filter(item => item.rowId === TRIM_ROW_ID);
@@ -795,16 +808,16 @@ function Timeline({
     </div>
   );
 
-	return (
-		<div
-			ref={setRefs}
-			style={style}
+  return (
+    <div
+      ref={setRefs}
+      style={style}
       className="select-none bg-[#17171a] h-full min-h-0 relative cursor-pointer group flex flex-col"
-			onMouseDown={handleMouseDown}
-			onClick={handleTimelineClick}
-		>
+      onMouseDown={handleMouseDown}
+      onClick={handleTimelineClick}
+    >
       {timeSelection && (
-        <div 
+        <div
           className="absolute top-0 bottom-0 bg-blue-500/20 border-x border-blue-500/50 z-20 pointer-events-none"
           style={{
             left: `${sidebarWidth + valueToPixels(Math.max(range.start, timeSelection.startMs) - range.start)}px`,
@@ -813,15 +826,15 @@ function Timeline({
           }}
         />
       )}
-			<div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px)] bg-[length:20px_100%] pointer-events-none" />
-			<TimelineAxis videoDurationMs={videoDurationMs} currentTimeMs={currentTimeMs} />
-			<PlaybackCursor
-				currentTimeMs={currentTimeMs}
-				videoDurationMs={videoDurationMs}
-				onSeek={onSeek}
-				timelineRef={localTimelineRef}
-				keyframes={keyframes}
-			/>
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px)] bg-[length:20px_100%] pointer-events-none" />
+      <TimelineAxis videoDurationMs={videoDurationMs} currentTimeMs={currentTimeMs} />
+      <PlaybackCursor
+        currentTimeMs={currentTimeMs}
+        videoDurationMs={videoDurationMs}
+        onSeek={onSeek}
+        timelineRef={localTimelineRef}
+        keyframes={keyframes}
+      />
 
       <div className="relative z-10 flex flex-1 min-h-0 flex-col">
         <Row id={ZOOM_ROW_ID} isEmpty={zoomItems.length === 0} hint="Press Z to add zoom">
@@ -835,6 +848,7 @@ function Timeline({
               onSelect={() => onSelectZoom?.(item.id)}
               zoomDepth={item.zoomDepth}
               variant="zoom"
+              timelineMode={timelineMode}
             >
               {item.label}
             </Item>
@@ -851,6 +865,7 @@ function Timeline({
               isSelected={selectAllBlocksActive || item.id === selectedTrimId}
               onSelect={() => onSelectTrim?.(item.id)}
               variant="trim"
+              timelineMode={timelineMode}
             >
               {item.label}
             </Item>
@@ -871,6 +886,7 @@ function Timeline({
               isSelected={selectAllBlocksActive || item.id === selectedAnnotationId}
               onSelect={() => onSelectAnnotation?.(item.id)}
               variant="annotation"
+              timelineMode={timelineMode}
             >
               {item.label}
             </Item>
@@ -888,6 +904,7 @@ function Timeline({
               onSelect={() => onSelectSpeed?.(item.id)}
               variant="speed"
               speedValue={item.speedValue}
+              timelineMode={timelineMode}
             >
               {item.label}
             </Item>
@@ -914,6 +931,7 @@ function Timeline({
               isDraggable={false}
               isResizable={false}
               muted={item.muted}
+              timelineMode={timelineMode}
             >
               {item.label}
             </Item>
@@ -934,6 +952,7 @@ function Timeline({
               muted={item.muted}
               fadeInMs={item.fadeInMs}
               fadeOutMs={item.fadeOutMs}
+              timelineMode={timelineMode}
             >
               {item.label}
             </Item>
@@ -1019,6 +1038,8 @@ export default function TimelineEditor({
   isCropped = false,
   timeSelection,
   onTimeSelectionChange,
+  timelineMode = 'move',
+  onTimelineModeChange,
 }: TimelineEditorProps) {
   const t = useScopedT("settings");
   const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
@@ -1604,11 +1625,11 @@ export default function TimelineEditor({
       return;
     }
 
-      const audioPath = result.path;
+    const audioPath = result.path;
 
     // Load the audio file to get its full duration
     const audioDurationMs = await new Promise<number>((resolve) => {
-        const audio = new Audio(toFileUrl(audioPath));
+      const audio = new Audio(toFileUrl(audioPath));
       audio.addEventListener('loadedmetadata', () => {
         resolve(Math.round(audio.duration * 1000));
       });
@@ -1693,6 +1714,15 @@ export default function TimelineEditor({
       if (matchesShortcut(e, keyShortcuts.addSpeed, isMac)) {
         handleAddSpeed();
       }
+
+      // Mode switching shortcuts
+      if (e.key.toLowerCase() === 'v' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        onTimelineModeChange?.('move');
+      }
+      if (e.key.toLowerCase() === 'e' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        onTimelineModeChange?.('select');
+      }
+
 
       // Tab: Cycle through overlapping annotations at current time
       if (e.key === 'Tab' && annotationRegions.length > 0) {
@@ -1924,7 +1954,43 @@ export default function TimelineEditor({
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-[#17171a] overflow-auto">
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-[#161619]">
+      <div className="flex items-center gap-4 px-4 py-2 border-b border-white/10 bg-[#161619]">
+        <div className="flex items-center bg-black/40 rounded-lg p-1 border border-white/5 shadow-inner">
+          <Button
+            onClick={() => onTimelineModeChange?.('move')}
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-7 px-3 text-[11px] transition-all gap-1.5 rounded-md border border-transparent",
+              timelineMode === 'move'
+                ? "bg-[#2563EB] text-white hover:bg-[#3b82f6] shadow-lg shadow-blue-500/20 border-white/10"
+                : "text-white/50 hover:text-white/80 hover:bg-white/5"
+            )}
+            title="Move Tools (V)"
+          >
+            <MousePointer2 className={cn("w-3.5 h-3.5", timelineMode === 'move' ? "text-white" : "text-white/40")} />
+            <span className="font-semibold uppercase tracking-wider">Move</span>
+          </Button>
+          <Button
+            onClick={() => onTimelineModeChange?.('select')}
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-7 px-3 text-[11px] transition-all gap-1.5 rounded-md border border-transparent",
+              timelineMode === 'select'
+                ? "bg-[#2563EB] text-white hover:bg-[#3b82f6] shadow-lg shadow-blue-500/20 border-white/10"
+                : "text-white/50 hover:text-white/80 hover:bg-white/5"
+            )}
+            title="Select Tools (E)"
+          >
+            <BoxSelect className={cn("w-3.5 h-3.5", timelineMode === 'select' ? "text-white" : "text-white/40")} />
+            <span className="font-semibold uppercase tracking-wider">Select</span>
+          </Button>
+        </div>
+
+
+
+        <div className="w-[1px] h-4 bg-white/10" />
         <div className="flex items-center gap-1">
           <Button
             onClick={handleAddZoom}
@@ -2138,6 +2204,7 @@ export default function TimelineEditor({
             onTimeSelectionChange={onTimeSelectionChange}
             isMasterSelected={isMasterSelected}
             onSelectMaster={onSelectMaster}
+            timelineMode={timelineMode}
           />
         </TimelineWrapper>
       </div>

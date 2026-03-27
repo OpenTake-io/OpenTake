@@ -435,6 +435,7 @@ export default function VideoEditor() {
 	const [showCropModal, setShowCropModal] = useState(false);
 	const [previewVersion, setPreviewVersion] = useState(0);
 	const [isAudioEngineReady, setIsAudioEngineReady] = useState(false);
+	const [timelineMode, setTimelineMode] = useState<'move' | 'select'>('move');
 
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
 	const audioContextRef = useRef<AudioContext | null>(null);
@@ -2592,6 +2593,14 @@ export default function VideoEditor() {
 					}
 				}
 			}
+
+			if (!isEditableTarget) {
+				if (key === "v") {
+					setTimelineMode("move");
+				} else if (key === "r") {
+					setTimelineMode("select");
+				}
+			}
 		};
 
 		window.addEventListener("keydown", handleKeyDown, { capture: true });
@@ -3740,6 +3749,8 @@ export default function VideoEditor() {
 									onTimeSelectionChange={setTimeSelection}
 									isMasterSelected={isMasterSelected}
 									onSelectMaster={handleSelectMaster}
+									timelineMode={timelineMode}
+									onTimelineModeChange={setTimelineMode}
 								/>
 							</div>
 						</Panel>

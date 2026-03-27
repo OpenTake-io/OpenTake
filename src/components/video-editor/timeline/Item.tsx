@@ -1,10 +1,13 @@
 import type { Span } from "dnd-timeline";
 import { useItem } from "dnd-timeline";
 import { Gauge, MessageSquare, Music, Scissors, ZoomIn } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import glassStyles from "./ItemGlass.module.css";
 import { generateWaveform } from "@/utils/audioWaveform";
+
+
+
 
 interface ItemProps {
   id: string;
@@ -22,6 +25,7 @@ interface ItemProps {
   muted?: boolean;
   fadeInMs?: number;
   fadeOutMs?: number;
+  timelineMode?: 'move' | 'select';
 }
 
 // Map zoom depth to multiplier labels
@@ -60,10 +64,14 @@ export default function Item({
   muted = false,
   fadeInMs,
   fadeOutMs,
+  timelineMode = 'move',
 }: ItemProps) {
+  const isDraggableEffective = isDraggable && timelineMode === 'move';
+
 	const { setNodeRef, attributes, listeners, itemStyle, itemContentStyle } = useItem({
 		id,
 		span,
+		disabled: !isDraggableEffective,
 		data: { rowId },
 	});
 
@@ -85,6 +93,32 @@ export default function Item({
       });
     }
   }, [isAudio, audioPath]);
+
+  const mouseDownPosRef = useRef({ x: 0, y: 0 });
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    mouseDownPosRef.current = { x: e.clientX, y: e.clientY };
+    // If dragging is enabled, let dnd-timeline handle its part
+    if (isDraggableEffective) {
+      listeners?.onPointerDown(e);
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    // We MUST NOT stop propagation on the pointer-up event.
+    // Standard dnd libraries (like dnd-timeline) need this event to bubble
+    // up to the window/document to successfully terminate the drag state.
+    // If we stop it here, the item stays 'sticky' to the mouse.
+    const deltaX = Math.abs(e.clientX - mouseDownPosRef.current.x);
+    const deltaY = Math.abs(e.clientY - mouseDownPosRef.current.y);
+    
+    if (deltaX < 5 && deltaY < 5) {
+      onSelect?.();
+    }
+  };
+
+
+
 
   const glassClass = isZoom
     ? glassStyles.glassGreen
@@ -126,25 +160,38 @@ export default function Item({
     <div
       ref={setNodeRef}
       style={safeItemStyle}
-      {...(isDraggable ? listeners : {})}
-      {...(isDraggable ? attributes : {})}
-      onPointerDownCapture={() => onSelect?.()}
+      {...(isDraggableEffective ? attributes : {})}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onMouseDown={(e) => {
+        // Prevent background selection logic in Move mode
+        if (timelineMode === 'move') {
+          e.stopPropagation();
+        }
+      }}
+      onClick={(e) => {
+        // Prevent the timeline background's onClick (seeking) from firing
+        // when we click on a track item.
+        e.stopPropagation();
+      }}
       className="group h-full"
     >
+
       <div className="h-full" style={{ ...itemContentStyle, minWidth: 24, height: "100%" }}>
         <div
           className={cn(
             glassClass,
-            "w-full h-full overflow-hidden flex items-center justify-center gap-1.5 cursor-grab active:cursor-grabbing relative",
+            "w-full h-full overflow-hidden flex items-center justify-center gap-1.5 relative",
+            isDraggableEffective ? "cursor-grab active:cursor-grabbing" : "cursor-default",
             isSelected && glassStyles.selected,
             muted && "opacity-40 grayscale-[0.5]"
           )}
           style={{ height: "100%", minHeight: 22, color: '#fff', minWidth: 24 }}
           onClick={(event) => {
             event.stopPropagation();
-            onSelect?.();
           }}
         >
+
           {/* Waveform Background for Audio */}
           {isAudio && waveform && (
             <div className="absolute inset-0 z-0 opacity-30 flex items-center pointer-events-none px-4">
