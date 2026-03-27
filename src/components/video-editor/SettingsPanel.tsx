@@ -1,4 +1,4 @@
-import { Palette, Trash2, Upload, X } from "lucide-react";
+import { MessageSquare, Palette, Trash2, Upload, X } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -205,10 +205,11 @@ interface SettingsPanelProps {
 	onAnnotationFigureDataChange?: (id: string, figureData: FigureData) => void;
 	onAnnotationBlurIntensityChange?: (id: string, blurIntensity: number) => void;
 	onAnnotationDelete?: (id: string) => void;
-	currentTime?: number;
 	onSeek?: (time: number) => void;
 	autoCaptions?: CaptionCue[];
 	onAutoCaptionsChange?: (captions: CaptionCue[]) => void;
+	selectedCaptionId?: string | null;
+	onSelectCaption?: (id: string | null) => void;
 	autoCaptionSettings?: AutoCaptionSettings;
 	whisperExecutablePath?: string | null;
 	whisperModelPath?: string | null;
@@ -528,7 +529,6 @@ export function SettingsPanel({
 	onAnnotationFigureDataChange,
 	onAnnotationBlurIntensityChange,
 	onAnnotationDelete,
-	currentTime = 0,
 	onSeek,
 	autoCaptions = [],
 	onAutoCaptionsChange,
@@ -544,6 +544,8 @@ export function SettingsPanel({
 	onClearAutoCaptions,
 	onDownloadWhisperModel,
 	onDeleteWhisperModel,
+	selectedCaptionId,
+	onSelectCaption,
 	selectedSpeedId,
 	selectedSpeedValue,
 	onSpeedChange,
@@ -1459,7 +1461,6 @@ export function SettingsPanel({
 						)}
 						<Button
 							type="button"
-							variant="outline"
 							onClick={onClearAutoCaptions}
 							disabled={captionCueCount === 0}
 							className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white disabled:opacity-50"
@@ -1494,21 +1495,19 @@ export function SettingsPanel({
 						<div className="mt-4 flex flex-col gap-2">
 							<div className="flex items-center justify-between px-1">
 								<span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-									Edit Cues ({autoCaptions.length})
+									{selectedCaptionId ? "Edit Selected Cue" : "Select Cue on Timeline"}
 								</span>
 							</div>
-							<div className="max-h-[300px] overflow-y-auto rounded-xl border border-white/5 bg-black/20 p-1 subtle-scrollbar">
-								<div className="flex flex-col gap-1">
-									{autoCaptions.map((cue, index) => {
-										const isActive = currentTime >= cue.startMs / 1000 && currentTime <= cue.endMs / 1000;
+
+							<div className="rounded-xl border border-white/5 bg-black/20 p-2">
+								{selectedCaptionId ? (
+									(() => {
+										const index = autoCaptions.findIndex((c) => c.id === selectedCaptionId);
+										const cue = autoCaptions[index];
+										if (!cue) return null;
+
 										return (
-											<div
-												key={cue.id || index}
-												className={cn(
-													"group flex flex-col gap-1 rounded-lg p-2 transition-colors",
-													isActive ? "bg-white/10" : "hover:bg-white/5"
-												)}
-											>
+											<div className="flex flex-col gap-2">
 												<div className="flex items-center justify-between">
 													<button
 														type="button"
@@ -1523,10 +1522,11 @@ export function SettingsPanel({
 															const newCaptions = [...autoCaptions];
 															newCaptions.splice(index, 1);
 															onAutoCaptionsChange?.(newCaptions);
+															onSelectCaption?.(null);
 														}}
-														className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-500 hover:text-red-400"
+														className="text-slate-500 hover:text-red-400 p-1"
 													>
-														<Trash2 className="h-3 w-3" />
+														<Trash2 className="h-4 w-4" />
 													</button>
 												</div>
 												<textarea
@@ -1536,24 +1536,23 @@ export function SettingsPanel({
 														newCaptions[index] = { ...cue, text: e.target.value };
 														onAutoCaptionsChange?.(newCaptions);
 													}}
-													rows={1}
-													className="w-full resize-none border-none bg-transparent p-0 text-sm text-slate-300 placeholder:text-slate-600 focus:outline-none focus:ring-0"
-													onInput={(e) => {
-														const target = e.target as HTMLTextAreaElement;
-														target.style.height = "auto";
-														target.style.height = `${target.scrollHeight}px`;
-													}}
-													ref={(el) => {
-														if (el) {
-															el.style.height = "auto";
-															el.style.height = `${el.scrollHeight}px`;
-														}
-													}}
+													rows={2}
+													autoFocus
+													className="w-full resize-none rounded-lg border-none bg-white/5 p-2 text-sm text-slate-300 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
 												/>
 											</div>
 										);
-									})}
-								</div>
+									})()
+								) : (
+									<div className="flex flex-col items-center justify-center py-6 px-4 text-center">
+										<div className="mb-2 rounded-full bg-white/5 p-2.5">
+											<MessageSquare className="h-4 w-4 text-slate-600" />
+										</div>
+										<p className="text-[11px] text-slate-500 leading-relaxed max-w-[160px]">
+											Select a caption block on the timeline to edit its text and timing
+										</p>
+									</div>
+								)}
 							</div>
 						</div>
 					)}

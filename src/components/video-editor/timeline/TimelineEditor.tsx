@@ -23,7 +23,7 @@ import Row from "./Row";
 import Item from "./Item";
 import KeyframeMarkers from "./KeyframeMarkers";
 import type { Range, Span } from "dnd-timeline";
-import type { ZoomRegion, TrimRegion, AnnotationRegion, SpeedRegion, AudioRegion, CursorTelemetryPoint, ZoomFocus } from "../types";
+import type { ZoomRegion, TrimRegion, AnnotationRegion, SpeedRegion, AudioRegion, CursorTelemetryPoint, ZoomFocus, CaptionCue } from "../types";
 import { toFileUrl } from "../projectPersistence";
 import { detectInteractionCandidates, normalizeCursorTelemetry } from "./zoomSuggestionUtils";
 
@@ -32,6 +32,7 @@ const TRIM_ROW_ID = "row-trim";
 const ANNOTATION_ROW_ID = "row-annotation";
 const SPEED_ROW_ID = "row-speed";
 const AUDIO_ROW_ID = "row-audio";
+const CAPTION_ROW_ID = "row-caption";
 const FALLBACK_RANGE_MS = 1000;
 const TARGET_MARKER_COUNT = 12;
 const SUGGESTION_SPACING_MS = 1800;
@@ -73,6 +74,10 @@ interface TimelineEditorProps {
   onAudioDelete?: (id: string) => void;
   selectedAudioId?: string | null;
   onSelectAudio?: (id: string | null) => void;
+  autoCaptions?: any[];
+  onCaptionSpanChange?: (id: string, span: Span) => void;
+  selectedCaptionId?: string | null;
+  onSelectCaption?: (id: string | null) => void;
   aspectRatio: AspectRatio;
   onAspectRatioChange: (aspectRatio: AspectRatio) => void;
   onOpenCropEditor?: () => void;
@@ -92,7 +97,7 @@ interface TimelineRenderItem {
   label: string;
   zoomDepth?: number;
   speedValue?: number;
-  variant: 'zoom' | 'trim' | 'annotation' | 'speed' | 'audio';
+  variant: 'zoom' | 'trim' | 'annotation' | 'speed' | 'audio' | 'caption';
 }
 
 const SCALE_CANDIDATES = [
@@ -454,6 +459,8 @@ function Timeline({
   selectedAnnotationId,
   selectedSpeedId,
   selectedAudioId,
+  selectedCaptionId,
+  onSelectCaption,
   selectAllBlocksActive = false,
   onClearBlockSelection,
   keyframes = [],
@@ -472,6 +479,8 @@ function Timeline({
   selectedAnnotationId?: string | null;
   selectedSpeedId?: string | null;
   selectedAudioId?: string | null;
+  selectedCaptionId?: string | null;
+  onSelectCaption?: (id: string | null) => void;
   selectAllBlocksActive?: boolean;
   onClearBlockSelection?: () => void;
   keyframes?: { id: string; time: number }[];
@@ -498,6 +507,7 @@ function Timeline({
     onSelectAnnotation?.(null);
     onSelectSpeed?.(null);
     onSelectAudio?.(null);
+    onSelectCaption?.(null);
     onClearBlockSelection?.();
 
 			const rect = e.currentTarget.getBoundingClientRect();
@@ -510,13 +520,14 @@ function Timeline({
 			const timeInSeconds = absoluteMs / 1000;
 
     onSeek(timeInSeconds);
-  }, [onSeek, onSelectZoom, onSelectTrim, onSelectAnnotation, onSelectSpeed, onSelectAudio, videoDurationMs, sidebarWidth, range.start, pixelsToValue]);
+  }, [onSeek, onSelectZoom, onSelectTrim, onSelectAnnotation, onSelectSpeed, onSelectAudio, onSelectCaption, videoDurationMs, sidebarWidth, range.start, pixelsToValue]);
 
   const zoomItems = items.filter(item => item.rowId === ZOOM_ROW_ID);
   const trimItems = items.filter(item => item.rowId === TRIM_ROW_ID);
   const annotationItems = items.filter(item => item.rowId === ANNOTATION_ROW_ID);
   const speedItems = items.filter(item => item.rowId === SPEED_ROW_ID);
   const audioItems = items.filter(item => item.rowId === AUDIO_ROW_ID);
+  const captionItems = items.filter(item => item.rowId === CAPTION_ROW_ID);
 
 	return (
 		<div
@@ -621,6 +632,22 @@ function Timeline({
             </Item>
           ))}
         </Row>
+        
+        <Row id={CAPTION_ROW_ID} isEmpty={captionItems.length === 0} hint="Generated captions will appear here">
+          {captionItems.map((item) => (
+            <Item
+              id={item.id}
+              key={item.id}
+              rowId={item.rowId}
+              span={item.span}
+              isSelected={selectAllBlocksActive || item.id === selectedCaptionId}
+              onSelect={() => onSelectCaption?.(item.id)}
+              variant="caption"
+            >
+              {item.label}
+            </Item>
+          ))}
+        </Row>
       </div>
     </div>
   );
@@ -663,6 +690,10 @@ export default function TimelineEditor({
   onAudioDelete,
   selectedAudioId,
   onSelectAudio,
+  autoCaptions = [],
+  onCaptionSpanChange,
+  selectedCaptionId,
+  onSelectCaption,
   aspectRatio,
   onAspectRatioChange,
   onOpenCropEditor,
@@ -799,15 +830,17 @@ export default function TimelineEditor({
     onSelectAnnotation?.(null);
     onSelectSpeed?.(null);
     onSelectAudio?.(null);
+    onSelectCaption?.(null);
     setSelectAllBlocksActive(false);
-  }, [onSelectAnnotation, onSelectAudio, onSelectSpeed, onSelectTrim, onSelectZoom]);
+  }, [onSelectAnnotation, onSelectAudio, onSelectSpeed, onSelectTrim, onSelectZoom, onSelectCaption]);
 
   const hasAnyTimelineBlocks =
     zoomRegions.length > 0 ||
     trimRegions.length > 0 ||
     annotationRegions.length > 0 ||
     speedRegions.length > 0 ||
-    audioRegions.length > 0;
+    audioRegions.length > 0 ||
+    autoCaptions.length > 0;
 
   const deleteAllBlocks = useCallback(() => {
     const zoomIds = zoomRegions.map((region) => region.id);
@@ -863,6 +896,11 @@ export default function TimelineEditor({
     onSelectAudio?.(id);
   }, [onSelectAudio]);
 
+  const handleSelectCaption = useCallback((id: string | null) => {
+    setSelectAllBlocksActive(false);
+    onSelectCaption?.(id);
+  }, [onSelectCaption]);
+
   useEffect(() => {
     setRange(createInitialRange(totalMs));
   }, [totalMs]);
@@ -874,10 +912,12 @@ export default function TimelineEditor({
   const trimRegionsRef = useRef(trimRegions);
   const speedRegionsRef = useRef(speedRegions);
   const audioRegionsRef = useRef(audioRegions);
+  const autoCaptionsRef = useRef(autoCaptions);
   zoomRegionsRef.current = zoomRegions;
   trimRegionsRef.current = trimRegions;
   speedRegionsRef.current = speedRegions;
   audioRegionsRef.current = audioRegions;
+  autoCaptionsRef.current = autoCaptions;
 
   useEffect(() => {
     if (totalMs === 0 || safeMinDurationMs <= 0) {
@@ -931,8 +971,20 @@ export default function TimelineEditor({
         onAudioSpanChange?.(region.id, { start: normalizedStart, end: normalizedEnd });
       }
     });
+
+    autoCaptionsRef.current.forEach((caption: CaptionCue) => {
+      const clampedStart = Math.max(0, Math.min(caption.startMs, totalMs));
+      const minEnd = clampedStart + safeMinDurationMs;
+      const clampedEnd = Math.min(totalMs, Math.max(minEnd, caption.endMs));
+      const normalizedStart = Math.max(0, Math.min(clampedStart, totalMs - safeMinDurationMs));
+      const normalizedEnd = Math.max(minEnd, Math.min(clampedEnd, totalMs));
+
+      if (normalizedStart !== caption.startMs || normalizedEnd !== caption.endMs) {
+        onCaptionSpanChange?.(caption.id, { start: normalizedStart, end: normalizedEnd });
+      }
+    });
     // Only re-run when the timeline scale changes, not on every region edit
-  }, [totalMs, safeMinDurationMs, onZoomSpanChange, onTrimSpanChange, onSpeedSpanChange, onAudioSpanChange]);
+  }, [totalMs, safeMinDurationMs, onZoomSpanChange, onTrimSpanChange, onSpeedSpanChange, onAudioSpanChange, onCaptionSpanChange]);
 
   const hasOverlap = useCallback((newSpan: Span, excludeId?: string): boolean => {
     // Determine which row the item belongs to
@@ -941,8 +993,9 @@ export default function TimelineEditor({
     const isAnnotationItem = annotationRegions.some(r => r.id === excludeId);
     const isSpeedItem = speedRegions.some(r => r.id === excludeId);
     const isAudioItem = audioRegions.some(r => r.id === excludeId);
+    const isCaptionItem = autoCaptions.some(r => r.id === excludeId);
 
-    if (isAnnotationItem) {
+    if (isAnnotationItem || isCaptionItem) {
       return false;
     }
 
@@ -972,7 +1025,7 @@ export default function TimelineEditor({
     }
 
     return false;
-  }, [zoomRegions, trimRegions, annotationRegions, speedRegions, audioRegions]);
+  }, [zoomRegions, trimRegions, annotationRegions, speedRegions, audioRegions, autoCaptions]);
 
   // Keep newly added timeline regions at the original short default instead of
   // scaling them with the full recording length.
@@ -1373,19 +1426,25 @@ export default function TimelineEditor({
       variant: 'speed',
     }));
 
-    const audios: TimelineRenderItem[] = audioRegions.map((region) => {
-      const fileName = region.audioPath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || 'Audio';
-      return {
-        id: region.id,
+    const audios: TimelineRenderItem[] = [
+      ...audioRegions.map((audio): TimelineRenderItem => ({
+        id: audio.id,
         rowId: AUDIO_ROW_ID,
-        span: { start: region.startMs, end: region.endMs },
-        label: fileName,
-        variant: 'audio',
-      };
-    });
+        span: { start: audio.startMs, end: audio.endMs },
+        label: audio.audioPath.split(/[\\/]/).pop() || 'Audio',
+        variant: 'audio'
+      })),
+      ...autoCaptions.map((cue): TimelineRenderItem => ({
+        id: cue.id,
+        rowId: CAPTION_ROW_ID,
+        span: { start: cue.startMs, end: cue.endMs },
+        label: cue.text,
+        variant: 'caption'
+      }))
+    ];
 
     return [...zooms, ...trims, ...annotations, ...speeds, ...audios];
-  }, [zoomRegions, trimRegions, annotationRegions, speedRegions, audioRegions]);
+  }, [zoomRegions, trimRegions, annotationRegions, speedRegions, audioRegions, autoCaptions]);
 
   // Flat list of all non-annotation region spans for neighbour-clamping during drag/resize
   const allRegionSpans = useMemo(() => {
@@ -1393,23 +1452,25 @@ export default function TimelineEditor({
     const trims = trimRegions.map((r) => ({ id: r.id, start: r.startMs, end: r.endMs }));
     const speeds = speedRegions.map((r) => ({ id: r.id, start: r.startMs, end: r.endMs }));
     const audios = audioRegions.map((r) => ({ id: r.id, start: r.startMs, end: r.endMs }));
-    return [...zooms, ...trims, ...speeds, ...audios];
-  }, [zoomRegions, trimRegions, speedRegions, audioRegions]);
+    const captions = autoCaptions.map((r) => ({ id: r.id, start: r.startMs, end: r.endMs }));
+    return [...zooms, ...trims, ...speeds, ...audios, ...captions];
+  }, [zoomRegions, trimRegions, speedRegions, audioRegions, autoCaptions]);
 
-  const handleItemSpanChange = useCallback((id: string, span: Span) => {
-    // Check if it's a zoom, trim, speed, or annotation item
-    if (zoomRegions.some(r => r.id === id)) {
+  const handleItemSpanChange = useCallback((id: string, span: Span, rowId: string) => {
+    if (rowId === ZOOM_ROW_ID) {
       onZoomSpanChange(id, span);
-    } else if (trimRegions.some(r => r.id === id)) {
-      onTrimSpanChange?.(id, span);
-    } else if (speedRegions.some(r => r.id === id)) {
-      onSpeedSpanChange?.(id, span);
-    } else if (annotationRegions.some(r => r.id === id)) {
-      onAnnotationSpanChange?.(id, span);
-    } else if (audioRegions.some(r => r.id === id)) {
-      onAudioSpanChange?.(id, span);
+    } else if (rowId === TRIM_ROW_ID && onTrimSpanChange) {
+      onTrimSpanChange(id, span);
+    } else if (rowId === ANNOTATION_ROW_ID && onAnnotationSpanChange) {
+      onAnnotationSpanChange(id, span);
+    } else if (rowId === SPEED_ROW_ID && onSpeedSpanChange) {
+      onSpeedSpanChange(id, span);
+    } else if (rowId === AUDIO_ROW_ID && onAudioSpanChange) {
+      onAudioSpanChange(id, span);
+    } else if (rowId === CAPTION_ROW_ID && onCaptionSpanChange) {
+      onCaptionSpanChange(id, span);
     }
-  }, [zoomRegions, trimRegions, speedRegions, annotationRegions, audioRegions, onZoomSpanChange, onTrimSpanChange, onSpeedSpanChange, onAnnotationSpanChange, onAudioSpanChange]);
+  }, [onZoomSpanChange, onTrimSpanChange, onAnnotationSpanChange, onSpeedSpanChange, onAudioSpanChange, onCaptionSpanChange]);
 
   const panTimelineRange = useCallback((deltaMs: number) => {
     if (!Number.isFinite(deltaMs) || deltaMs === 0 || totalMs <= 0) {
@@ -1665,11 +1726,13 @@ export default function TimelineEditor({
             onSelectAnnotation={handleSelectAnnotation}
             onSelectSpeed={handleSelectSpeed}
             onSelectAudio={handleSelectAudio}
+            onSelectCaption={handleSelectCaption}
             selectedZoomId={selectedZoomId}
             selectedTrimId={selectedTrimId}
             selectedAnnotationId={selectedAnnotationId}
             selectedSpeedId={selectedSpeedId}
             selectedAudioId={selectedAudioId}
+            selectedCaptionId={selectedCaptionId}
             selectAllBlocksActive={selectAllBlocksActive}
             onClearBlockSelection={clearSelectedBlocks}
             keyframes={keyframes}
