@@ -267,7 +267,7 @@ export interface CaptionCueWord {
 }
 
 export type AutoCaptionAnimation = "none" | "fade" | "rise" | "pop";
-export type WhisperModel = "tiny" | "base" | "small" | "medium" | "large";
+export type WhisperModel = "tiny" | "base" | "small" | "medium" | "large" | "custom";
 
 export interface AutoCaptionSettings {
   enabled: boolean;

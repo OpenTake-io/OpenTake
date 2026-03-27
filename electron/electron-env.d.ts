@@ -180,7 +180,7 @@ interface Window {
 			language?: string;
 		}) => Promise<{
 			success: boolean;
-			cues?: AutoCaptionCue[];
+			cues?: CaptionCue[];
 			message?: string;
 			error?: string;
 		}>;
@@ -302,6 +302,7 @@ interface Window {
 		startCountdown: (seconds: number) => Promise<{ success: boolean; cancelled?: boolean }>;
 		cancelCountdown: () => Promise<{ success: boolean }>;
 		getActiveCountdown: () => Promise<{ success: boolean; seconds: number | null }>;
+		onAutoCaptionProgress: (callback: (payload: { progress: number }) => void) => () => void;
 		onCountdownTick: (callback: (seconds: number) => void) => () => void;
 	};
 }
@@ -343,7 +344,7 @@ interface SystemCursorAsset {
 	height: number;
 }
 
-interface AutoCaptionCue {
+interface CaptionCue {
 	id: string;
 	startMs: number;
 	endMs: number;

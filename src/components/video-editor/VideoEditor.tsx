@@ -392,6 +392,7 @@ export default function VideoEditor() {
 	>(initialEditorPreferences.whisperModelPath ? "downloaded" : "idle");
 	const [whisperModelDownloadProgress, setWhisperModelDownloadProgress] = useState(0);
 	const [isGeneratingCaptions, setIsGeneratingCaptions] = useState(false);
+	const [autoCaptionProgress, setAutoCaptionProgress] = useState(0);
 	const [isExporting, setIsExporting] = useState(false);
 	const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
 	const [exportError, setExportError] = useState<string | null>(null);
@@ -1432,6 +1433,13 @@ export default function VideoEditor() {
 	}, [autoCaptionSettings.selectedModel]);
 
 	useEffect(() => {
+		const unlistenProgress = window.electronAPI.onAutoCaptionProgress((payload: { progress: number }) => {
+			setAutoCaptionProgress(payload.progress);
+		});
+		return unlistenProgress;
+	}, []);
+
+	useEffect(() => {
 		void (async () => {
 			const result = await window.electronAPI.getWhisperModelStatus(
 				autoCaptionSettings.selectedModel,
@@ -1552,7 +1560,15 @@ export default function VideoEditor() {
 			return;
 		}
 
+		console.log("[VideoEditor] handleGenerateAutoCaptions: starting", {
+			sourcePath,
+			whisperExecutablePath,
+			whisperModelPath,
+			language: autoCaptionSettings.language,
+		});
+
 		setIsGeneratingCaptions(true);
+		setAutoCaptionProgress(0);
 		try {
 			const result = await window.electronAPI.generateAutoCaptions({
 				videoPath: sourcePath,
@@ -1560,6 +1576,8 @@ export default function VideoEditor() {
 				whisperModelPath,
 				language: autoCaptionSettings.language,
 			});
+
+			console.log("[VideoEditor] handleGenerateAutoCaptions: result", result);
 
 			if (!result.success || !result.cues) {
 				toast.error(
@@ -1575,6 +1593,7 @@ export default function VideoEditor() {
 			toast.error(getErrorMessage(error));
 		} finally {
 			setIsGeneratingCaptions(false);
+			setAutoCaptionProgress(0);
 		}
 	}, [
 		autoCaptionSettings.language,
@@ -3479,6 +3498,7 @@ export default function VideoEditor() {
 						whisperModelDownloadStatus={whisperModelDownloadStatus}
 						whisperModelDownloadProgress={whisperModelDownloadProgress}
 						isGeneratingCaptions={isGeneratingCaptions}
+						autoCaptionProgress={autoCaptionProgress}
 						onAutoCaptionSettingsChange={setAutoCaptionSettings}
 						onPickWhisperExecutable={handlePickWhisperExecutable}
 						onPickWhisperModel={handlePickWhisperModel}
