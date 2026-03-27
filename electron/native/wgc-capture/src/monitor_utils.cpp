@@ -46,32 +46,7 @@ HMONITOR findMonitorByDisplayId(int64_t displayId) {
         }
     }
 
-    // Try matching lower 32-bits (HMONITOR handles on Windows are often 32-bit values zero-extended or sign-extended to 64-bit)
-    for (const auto& m : monitors) {
-        if ((static_cast<int64_t>(reinterpret_cast<intptr_t>(m.handle)) & 0xFFFFFFFF) == (displayId & 0xFFFFFFFF)) {
-            std::cerr << "WARNING: Found monitor via 32-bit partial match. Target: " << displayId 
-                      << ", Found: " << static_cast<int64_t>(reinterpret_cast<intptr_t>(m.handle)) << std::endl;
-            return m.handle;
-        }
-    }
-
-    // If we only have one monitor and we couldn't match by ID, just use the only one we have.
-    // This is a safe fallback for the most common case (single monitor setups) where Electron
-    // and native Windows might report different IDs for the same display.
-    if (monitors.size() == 1) {
-        std::cerr << "WARNING: Found only one monitor, using it as fallback for displayId " << displayId 
-                  << " (Handle: " << reinterpret_cast<intptr_t>(monitors[0].handle) << ")" << std::endl;
-        return monitors[0].handle;
-    }
-
-    // Debug: Print available monitors if not found
-    std::cerr << "ERROR: Monitor matching failed for displayId " << displayId << ". Enumerated " << monitors.size() << " monitors:" << std::endl;
-    for (const auto& m : monitors) {
-        std::cerr << "  - Handle: " << reinterpret_cast<intptr_t>(m.handle)
-                  << " (device: " << wstringToString(m.deviceName) 
-                  << ", bounds: " << m.x << "," << m.y << " " << m.width << "x" << m.height << ")" << std::endl;
-    }
-
+    // No exact ID match found. Return nullptr to allow main.cpp to try coordinate-based matching.
     return nullptr;
 }
 
