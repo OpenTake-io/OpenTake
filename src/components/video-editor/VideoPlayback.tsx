@@ -202,7 +202,9 @@ interface VideoPlaybackProps {
   cursorClickBounceDuration?: number;
   cursorSway?: number;
   volume?: number;
+  timeSelection?: import("./types").TimeSelection | null;
 }
+
 
 export interface VideoPlaybackRef {
   video: HTMLVideoElement | null;
@@ -269,7 +271,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       cursorClickBounceDuration = DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
       cursorSway = DEFAULT_CURSOR_SWAY,
       volume = 1,
+      timeSelection = null,
     },
+
     ref,
   ) => {
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -347,6 +351,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const cursorClickBounceRef = useRef(cursorClickBounce);
     const cursorClickBounceDurationRef = useRef(cursorClickBounceDuration);
     const cursorSwayRef = useRef(cursorSway);
+    const timeSelectionRef = useRef(timeSelection);
+
 
     const activeCaptionLayout = useMemo(() => {
       if (!autoCaptionSettings?.enabled || autoCaptions.length === 0 || typeof document === "undefined") {
@@ -842,6 +848,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     }, [cursorSway]);
 
     useEffect(() => {
+      timeSelectionRef.current = timeSelection;
+    }, [timeSelection]);
+
+
+    useEffect(() => {
       currentTimeRef.current = currentTime * 1000;
     }, [currentTime]);
 
@@ -1183,7 +1194,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
           onTimeUpdate,
           trimRegionsRef,
           speedRegionsRef,
+          timeSelectionRef,
         });
+
 
       video.addEventListener("play", handlePlay);
       video.addEventListener("pause", handlePause);
