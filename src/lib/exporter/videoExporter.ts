@@ -207,6 +207,9 @@ export class VideoExporter {
 							this.config.speedRegions,
 							undefined,
 							this.config.audioRegions,
+							this.config.masterAudioVolume,
+							this.config.audioTrackVolume,
+							this.config.masterAudioMuted,
 						),
 						"audio processing",
 					);

@@ -94,6 +94,11 @@ export interface ProjectEditorState {
 	gifFrameRate: GifFrameRate;
 	gifLoop: boolean;
 	gifSizePreset: GifSizePreset;
+	masterAudioMuted: boolean;
+	masterAudioSoloed: boolean;
+	masterAudioVolume: number;
+	audioTrackVolume: number;
+	isMasterSelected?: boolean;
 }
 
 export interface EditorProjectData {
@@ -404,6 +409,10 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						endMs,
 						audioPath: typeof region.audioPath === "string" ? region.audioPath : "",
 						volume: isFiniteNumber(region.volume) ? clamp(region.volume, 0, 1) : 1,
+						muted: typeof region.muted === "boolean" ? region.muted : false,
+						soloed: typeof region.soloed === "boolean" ? region.soloed : false,
+						fadeInMs: isFiniteNumber(region.fadeInMs) ? clamp(region.fadeInMs, 0, 10000) : 0,
+						fadeOutMs: isFiniteNumber(region.fadeOutMs) ? clamp(region.fadeOutMs, 0, 10000) : 0,
 					};
 				})
 		: [];
@@ -683,6 +692,11 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			editor.gifSizePreset === "original"
 				? editor.gifSizePreset
 				: "medium",
+		masterAudioMuted: typeof editor.masterAudioMuted === "boolean" ? editor.masterAudioMuted : false,
+		masterAudioSoloed: typeof editor.masterAudioSoloed === "boolean" ? editor.masterAudioSoloed : false,
+		masterAudioVolume: isFiniteNumber(editor.masterAudioVolume) ? clamp(editor.masterAudioVolume, 0, 2) : 1,
+		audioTrackVolume: isFiniteNumber(editor.audioTrackVolume) ? clamp(editor.audioTrackVolume, 0, 2) : 1,
+		isMasterSelected: Boolean(editor.isMasterSelected),
 	};
 }
 

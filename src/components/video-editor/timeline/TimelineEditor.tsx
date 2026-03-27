@@ -31,6 +31,7 @@ const ZOOM_ROW_ID = "row-zoom";
 const TRIM_ROW_ID = "row-trim";
 const ANNOTATION_ROW_ID = "row-annotation";
 const SPEED_ROW_ID = "row-speed";
+const ORIGINAL_AUDIO_ROW_ID = "row-original-audio";
 const AUDIO_ROW_ID = "row-audio";
 const CAPTION_ROW_ID = "row-caption";
 const FALLBACK_RANGE_MS = 1000;
@@ -40,6 +41,7 @@ const DRAG_THRESHOLD_PX = 5;
 
 interface TimelineEditorProps {
   videoDuration: number;
+  videoPath?: string;
   currentTime: number;
   onSeek?: (time: number) => void;
   cursorTelemetry?: CursorTelemetryPoint[];
@@ -72,9 +74,19 @@ interface TimelineEditorProps {
   audioRegions?: AudioRegion[];
   onAudioAdded?: (span: Span, audioPath: string) => void;
   onAudioSpanChange?: (id: string, span: Span) => void;
+  onAudioMutedChange?: (id: string, muted: boolean) => void;
+  onAudioSoloedChange?: (id: string, soloed: boolean) => void;
   onAudioDelete?: (id: string) => void;
   selectedAudioId?: string | null;
   onSelectAudio?: (id: string | null) => void;
+  masterAudioMuted?: boolean;
+  onMasterAudioMutedChange?: (muted: boolean) => void;
+  masterAudioSoloed?: boolean;
+  onMasterAudioSoloedChange?: (soloed: boolean) => void;
+  masterAudioVolume?: number;
+  audioTrackVolume?: number;
+  onMasterAudioVolumeChange?: (volume: number) => void;
+  onAudioTrackVolumeChange?: (volume: number) => void;
   autoCaptions?: CaptionCue[];
   onCaptionSpanChange?: (id: string, span: Span) => void;
   selectedCaptionId?: string | null;
@@ -86,6 +98,8 @@ interface TimelineEditorProps {
   isCropped?: boolean;
   timeSelection?: TimeSelection | null;
   onTimeSelectionChange?: (selection: TimeSelection | null) => void;
+  isMasterSelected?: boolean;
+  onSelectMaster?: (selected: boolean) => void;
 }
 
 interface TimelineScaleConfig {
@@ -101,7 +115,12 @@ interface TimelineRenderItem {
   label: string;
   zoomDepth?: number;
   speedValue?: number;
+  audioPath?: string;
   variant: 'zoom' | 'trim' | 'annotation' | 'speed' | 'audio' | 'caption';
+  muted?: boolean;
+  soloed?: boolean;
+  fadeInMs?: number;
+  fadeOutMs?: number;
 }
 
 const SCALE_CANDIDATES = [
@@ -201,6 +220,7 @@ function formatTimeLabel(milliseconds: number, intervalMs: number) {
 
 	return `${minutes}:${Math.floor(seconds).toString().padStart(2, "0")}`;
 }
+
 
 function formatPlayheadTime(ms: number): string {
 	const s = ms / 1000;
@@ -466,6 +486,15 @@ function Timeline({
   onSelectAnnotation,
   onSelectSpeed,
   onSelectAudio,
+  onAudioMutedChange,
+  onAudioSoloedChange,
+  audioRegions,
+  masterAudioMuted = false,
+  onMasterAudioMutedChange,
+  masterAudioSoloed = false,
+  onMasterAudioSoloedChange,
+  masterAudioVolume = 1,
+  audioTrackVolume = 1,
   selectedZoomId,
   selectedTrimId,
   selectedAnnotationId,
@@ -478,6 +507,8 @@ function Timeline({
   keyframes = [],
   timeSelection,
   onTimeSelectionChange,
+  isMasterSelected = false,
+  onSelectMaster,
 }: {
   items: TimelineRenderItem[];
   videoDurationMs: number;
@@ -488,6 +519,17 @@ function Timeline({
   onSelectAnnotation?: (id: string | null) => void;
   onSelectSpeed?: (id: string | null) => void;
   onSelectAudio?: (id: string | null) => void;
+  onAudioMutedChange?: (id: string, muted: boolean) => void;
+  onAudioSoloedChange?: (id: string, soloed: boolean) => void;
+  audioRegions?: AudioRegion[];
+  masterAudioMuted?: boolean;
+  onMasterAudioMutedChange?: (muted: boolean) => void;
+  masterAudioSoloed?: boolean;
+  onMasterAudioSoloedChange?: (soloed: boolean) => void;
+  masterAudioVolume?: number;
+  audioTrackVolume?: number;
+  onMasterAudioVolumeChange?: (volume: number) => void;
+  onAudioTrackVolumeChange?: (volume: number) => void;
   selectedZoomId: string | null;
   selectedTrimId?: string | null;
   selectedAnnotationId?: string | null;
@@ -500,6 +542,8 @@ function Timeline({
   keyframes?: { id: string; time: number }[];
   timeSelection?: TimeSelection | null;
   onTimeSelectionChange?: (selection: TimeSelection | null) => void;
+  isMasterSelected?: boolean;
+  onSelectMaster?: (selected: boolean) => void;
 }) {
 	const { setTimelineRef, style, sidebarWidth = 0, range, pixelsToValue, valueToPixels } = useTimelineContext();
 	const localTimelineRef = useRef<HTMLDivElement | null>(null);
@@ -610,6 +654,7 @@ function Timeline({
 			onSelectSpeed?.(null);
 			onSelectAudio?.(null);
 			onSelectCaption?.(null);
+			onSelectMaster?.(false);
 			onClearBlockSelection?.();
 
 			const rect = e.currentTarget.getBoundingClientRect();
@@ -637,8 +682,118 @@ function Timeline({
   const trimItems = items.filter(item => item.rowId === TRIM_ROW_ID);
   const annotationItems = items.filter(item => item.rowId === ANNOTATION_ROW_ID);
   const speedItems = items.filter(item => item.rowId === SPEED_ROW_ID);
+  const originalAudioItems = items.filter(item => item.rowId === ORIGINAL_AUDIO_ROW_ID);
   const audioItems = items.filter(item => item.rowId === AUDIO_ROW_ID);
   const captionItems = items.filter(item => item.rowId === CAPTION_ROW_ID);
+
+  const handleAllAudioMute = useCallback(() => {
+    if (!audioRegions || audioRegions.length === 0) return;
+    const allMuted = audioRegions.every((r) => r.muted);
+    audioRegions.forEach((r) => {
+      onAudioMutedChange?.(r.id, !allMuted);
+      if (!allMuted && r.soloed) onAudioSoloedChange?.(r.id, false);
+    });
+  }, [audioRegions, onAudioMutedChange, onAudioSoloedChange]);
+
+  const handleAllAudioSolo = useCallback(() => {
+    if (!audioRegions || audioRegions.length === 0) return;
+    const anySoloed = audioRegions.some((r) => r.soloed);
+    audioRegions.forEach((r) => {
+      onAudioSoloedChange?.(r.id, !anySoloed);
+      if (!anySoloed && r.muted) onAudioMutedChange?.(r.id, false);
+    });
+  }, [audioRegions, onAudioSoloedChange, onAudioMutedChange]);
+
+  const anyAudioMuted = useMemo(() => audioRegions && audioRegions.length > 0 && audioRegions.every((r) => r.muted), [audioRegions]);
+  const anyAudioSoloed = useMemo(() => audioRegions && audioRegions.length > 0 && audioRegions.some((r) => r.soloed), [audioRegions]);
+
+  const masterAudioControls = (
+    <div className="flex items-center gap-1 ml-1 overflow-hidden pointer-events-auto">
+      <button
+        type="button"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          const nextMuted = !masterAudioMuted;
+          onMasterAudioMutedChange?.(nextMuted);
+          if (nextMuted && masterAudioSoloed) onMasterAudioSoloedChange?.(false);
+        }}
+        className={cn(
+          "w-4 h-4 rounded-[4px] border flex items-center justify-center text-[8px] font-bold transition-all",
+          masterAudioMuted
+            ? "bg-red-500/20 border-red-500/50 text-red-400"
+            : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
+        )}
+        title="Mute Master"
+      >
+        M
+      </button>
+      <button
+        type="button"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          const nextSoloed = !masterAudioSoloed;
+          onMasterAudioSoloedChange?.(nextSoloed);
+          if (nextSoloed && masterAudioMuted) onMasterAudioMutedChange?.(false);
+        }}
+        className={cn(
+          "w-4 h-4 rounded-[4px] border flex items-center justify-center text-[8px] font-bold transition-all",
+          masterAudioSoloed
+            ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
+            : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
+        )}
+        title="Solo Master"
+      >
+        S
+      </button>
+      {masterAudioVolume !== 1 && (
+        <span className="text-[8px] tabular-nums text-white/30 ml-0.5">{Math.round(masterAudioVolume * 100)}%</span>
+      )}
+    </div>
+  );
+
+  const audioControls = (
+    <div className="flex items-center gap-1 ml-1 overflow-hidden pointer-events-auto">
+      <button
+        type="button"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleAllAudioMute();
+        }}
+        className={cn(
+          "w-4 h-4 rounded-[4px] border flex items-center justify-center text-[8px] font-bold transition-all",
+          anyAudioMuted
+            ? "bg-red-500/20 border-red-500/50 text-red-400"
+            : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
+        )}
+        title="Mute All Audio"
+      >
+        M
+      </button>
+      <button
+        type="button"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleAllAudioSolo();
+        }}
+        className={cn(
+          "w-4 h-4 rounded-[4px] border flex items-center justify-center text-[8px] font-bold transition-all",
+          anyAudioSoloed
+            ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
+            : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
+        )}
+        title="Solo All Audio"
+      >
+        S
+      </button>
+      {audioTrackVolume !== 1 && (
+        <span className="text-[8px] tabular-nums text-white/30 ml-0.5">{Math.round(audioTrackVolume * 100)}%</span>
+      )}
+    </div>
+  );
 
 	return (
 		<div
@@ -739,7 +894,33 @@ function Timeline({
           ))}
         </Row>
 
-        <Row id={AUDIO_ROW_ID} isEmpty={audioItems.length === 0} hint="Click music icon to add audio">
+        <Row
+          id={ORIGINAL_AUDIO_ROW_ID}
+          label="Master"
+          labelColor="#A855F7"
+          isEmpty={originalAudioItems.length === 0}
+          controls={masterAudioControls}
+        >
+          {originalAudioItems.map((item) => (
+            <Item
+              id={item.id}
+              key={item.id}
+              rowId={item.rowId}
+              span={item.span}
+              isSelected={isMasterSelected}
+              onSelect={() => onSelectMaster?.(true)}
+              variant="audio"
+              audioPath={item.audioPath}
+              isDraggable={false}
+              isResizable={false}
+              muted={item.muted}
+            >
+              {item.label}
+            </Item>
+          ))}
+        </Row>
+
+        <Row id={AUDIO_ROW_ID} label="Audio" labelColor="#A855F7" controls={audioControls} isEmpty={audioItems.length === 0} hint="Click music icon to add audio">
           {audioItems.map((item) => (
             <Item
               id={item.id}
@@ -749,12 +930,15 @@ function Timeline({
               isSelected={selectAllBlocksActive || item.id === selectedAudioId}
               onSelect={() => onSelectAudio?.(item.id)}
               variant="audio"
+              audioPath={item.audioPath}
+              muted={item.muted}
+              fadeInMs={item.fadeInMs}
+              fadeOutMs={item.fadeOutMs}
             >
               {item.label}
             </Item>
           ))}
         </Row>
-
 
         <Row id={CAPTION_ROW_ID} isEmpty={captionItems.length === 0} hint="Generated captions will appear here">
           {captionItems.map((item) => (
@@ -813,11 +997,22 @@ export default function TimelineEditor({
   onAudioDelete,
   selectedAudioId,
   onSelectAudio,
+  onAudioMutedChange,
+  onAudioSoloedChange,
   autoCaptions = [],
   onCaptionSpanChange,
   selectedCaptionId,
   onSelectCaption,
   onClearAutoCaptions,
+  videoPath,
+  masterAudioMuted = false,
+  onMasterAudioMutedChange,
+  masterAudioSoloed = false,
+  onMasterAudioSoloedChange,
+  masterAudioVolume = 1,
+  audioTrackVolume = 1,
+  isMasterSelected = false,
+  onSelectMaster,
   aspectRatio,
   onAspectRatioChange,
   onOpenCropEditor,
@@ -1605,13 +1800,28 @@ export default function TimelineEditor({
       variant: 'speed',
     }));
 
+    const videoAudio: TimelineRenderItem[] = videoPath && totalMs > 0 ? [{
+      id: 'original-video-audio',
+      rowId: ORIGINAL_AUDIO_ROW_ID,
+      span: { start: 0, end: totalMs },
+      label: 'Original Audio',
+      variant: 'audio',
+      audioPath: videoPath,
+      muted: masterAudioMuted
+    }] : [];
+
     const audios: TimelineRenderItem[] = [
       ...audioRegions.map((audio): TimelineRenderItem => ({
         id: audio.id,
         rowId: AUDIO_ROW_ID,
         span: { start: audio.startMs, end: audio.endMs },
         label: audio.audioPath.split(/[\\/]/).pop() || 'Audio',
-        variant: 'audio'
+        variant: 'audio',
+        audioPath: audio.audioPath,
+        muted: audio.muted,
+        soloed: audio.soloed,
+        fadeInMs: audio.fadeInMs,
+        fadeOutMs: audio.fadeOutMs
       })),
       ...autoCaptions.map((cue): TimelineRenderItem => ({
         id: cue.id,
@@ -1622,8 +1832,8 @@ export default function TimelineEditor({
       }))
     ];
 
-    return [...zooms, ...trims, ...annotations, ...speeds, ...audios];
-  }, [zoomRegions, trimRegions, annotationRegions, speedRegions, audioRegions, autoCaptions]);
+    return [...zooms, ...trims, ...annotations, ...speeds, ...videoAudio, ...audios];
+  }, [zoomRegions, trimRegions, annotationRegions, speedRegions, audioRegions, autoCaptions, videoPath, totalMs, masterAudioMuted]);
 
   // Flat list of all non-annotation region spans for neighbour-clamping during drag/resize
   const allRegionSpans = useMemo(() => {
@@ -1905,7 +2115,16 @@ export default function TimelineEditor({
             onSelectAnnotation={handleSelectAnnotation}
             onSelectSpeed={handleSelectSpeed}
             onSelectAudio={handleSelectAudio}
+            onAudioMutedChange={onAudioMutedChange}
+            onAudioSoloedChange={onAudioSoloedChange}
+            audioRegions={audioRegions}
             onSelectCaption={handleSelectCaption}
+            masterAudioMuted={masterAudioMuted}
+            onMasterAudioMutedChange={onMasterAudioMutedChange}
+            masterAudioSoloed={masterAudioSoloed}
+            onMasterAudioSoloedChange={onMasterAudioSoloedChange}
+            masterAudioVolume={masterAudioVolume}
+            audioTrackVolume={audioTrackVolume}
             selectedZoomId={selectedZoomId}
             selectedTrimId={selectedTrimId}
             selectedAnnotationId={selectedAnnotationId}
@@ -1917,6 +2136,8 @@ export default function TimelineEditor({
             keyframes={keyframes}
             timeSelection={timeSelection}
             onTimeSelectionChange={onTimeSelectionChange}
+            isMasterSelected={isMasterSelected}
+            onSelectMaster={onSelectMaster}
           />
         </TimelineWrapper>
       </div>

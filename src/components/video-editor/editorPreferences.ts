@@ -33,6 +33,9 @@ type PersistedEditorControls = Pick<
 	| "gifFrameRate"
 	| "gifLoop"
 	| "gifSizePreset"
+	| "masterAudioMuted"
+	| "masterAudioSoloed"
+	| "masterAudioVolume"
 >;
 
 type PartialEditorControls = Partial<PersistedEditorControls>;
@@ -82,6 +85,9 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
 	gifFrameRate: DEFAULT_EDITOR_CONTROLS.gifFrameRate,
 	gifLoop: DEFAULT_EDITOR_CONTROLS.gifLoop,
 	gifSizePreset: DEFAULT_EDITOR_CONTROLS.gifSizePreset,
+	masterAudioMuted: DEFAULT_EDITOR_CONTROLS.masterAudioMuted,
+	masterAudioSoloed: DEFAULT_EDITOR_CONTROLS.masterAudioSoloed,
+	masterAudioVolume: DEFAULT_EDITOR_CONTROLS.masterAudioVolume,
 	customAspectWidth: "16",
 	customAspectHeight: "9",
 	customWallpapers: [],
@@ -161,6 +167,9 @@ function normalizeEditorControls(
 		gifFrameRate: raw.gifFrameRate ?? fallback.gifFrameRate,
 		gifLoop: raw.gifLoop ?? fallback.gifLoop,
 		gifSizePreset: raw.gifSizePreset ?? fallback.gifSizePreset,
+		masterAudioMuted: raw.masterAudioMuted ?? fallback.masterAudioMuted,
+		masterAudioSoloed: raw.masterAudioSoloed ?? fallback.masterAudioSoloed,
+		masterAudioVolume: raw.masterAudioVolume ?? fallback.masterAudioVolume,
 	};
 
 	const normalized = normalizeProjectEditor(candidate);
@@ -197,6 +206,9 @@ function normalizeEditorControls(
 		gifFrameRate: normalized.gifFrameRate,
 		gifLoop: normalized.gifLoop,
 		gifSizePreset: normalized.gifSizePreset,
+		masterAudioMuted: normalized.masterAudioMuted,
+		masterAudioSoloed: normalized.masterAudioSoloed,
+		masterAudioVolume: normalized.masterAudioVolume,
 	};
 }
 
