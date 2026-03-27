@@ -40,3 +40,8 @@ electron/native/cursor-monitor/build/
 .cache/
 .cmake_ext/
 ebcache/
+docs/
+
+# Local debug helpers
+tmp-*.ps1
+.tmp-*.ps1

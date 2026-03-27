@@ -10,6 +10,11 @@ const nativeRoot = path.join(projectRoot, "electron", "native");
 const cacheRoot = path.join(projectRoot, ".tmp", "whisper-runtime");
 const archivePath = path.join(cacheRoot, `${whisperVersion}.tar.gz`);
 const extractRoot = path.join(cacheRoot, `src-${whisperVersion}`);
+
+function getHostArch() {
+	return process.arch === "arm64" ? "arm64" : "x64";
+}
+
 function getNativeArchTag(platform, arch) {
 	if (platform === "darwin") {
 		return arch === "arm64" ? "darwin-arm64" : "darwin-x64";
@@ -26,29 +31,66 @@ function getNativeArchTag(platform, arch) {
 	throw new Error(`[build-whisper-runtime] Unsupported platform: ${platform}/${arch}`);
 }
 
-function getTargetConfigs() {
-	if (process.platform === "darwin") {
-		return [
-			{
-				platform: "darwin",
-				arch: "arm64",
-				archTag: getNativeArchTag("darwin", "arm64"),
-				buildRoot: path.join(cacheRoot, "build-darwin-arm64"),
-				outputDir: path.join(nativeRoot, "bin", getNativeArchTag("darwin", "arm64")),
-				configureArgs: ["-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_OSX_ARCHITECTURES=arm64"],
-			},
-			{
-				platform: "darwin",
-				arch: "x64",
-				archTag: getNativeArchTag("darwin", "x64"),
-				buildRoot: path.join(cacheRoot, "build-darwin-x64"),
-				outputDir: path.join(nativeRoot, "bin", getNativeArchTag("darwin", "x64")),
-				configureArgs: ["-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_OSX_ARCHITECTURES=x86_64"],
-			},
-		];
+function getRequestedArchitectures(platform) {
+	const hostArch = getHostArch();
+	const configured = process.env.WHISPER_RUNTIME_ARCHS?.trim();
+
+	if (!configured) {
+		return [hostArch];
 	}
 
-	const arch = process.arch === "arm64" ? "arm64" : "x64";
+	if (configured === "all") {
+		return ["arm64", "x64"];
+	}
+
+	const supported = new Set(["arm64", "x64"]);
+	const requested = configured
+		.split(",")
+		.map((entry) => entry.trim())
+		.filter(Boolean);
+
+	if (requested.length === 0) {
+		return [hostArch];
+	}
+
+	const invalid = requested.filter((arch) => !supported.has(arch));
+	if (invalid.length > 0) {
+		throw new Error(
+			`[build-whisper-runtime] Unsupported ${platform} target architecture request: ${invalid.join(", ")}`,
+		);
+	}
+
+	return [...new Set(requested)];
+}
+
+function createDarwinTarget(arch) {
+	const targetArch = arch === "arm64" ? "arm64" : "x64";
+	const isCrossCompile = targetArch !== getHostArch();
+	const configureArgs = [
+		"-DCMAKE_BUILD_TYPE=Release",
+		`-DCMAKE_OSX_ARCHITECTURES=${targetArch === "arm64" ? "arm64" : "x86_64"}`,
+	];
+
+	if (isCrossCompile) {
+		configureArgs.push("-DGGML_NATIVE=OFF");
+	}
+
+	return {
+		platform: "darwin",
+		arch: targetArch,
+		archTag: getNativeArchTag("darwin", targetArch),
+		buildRoot: path.join(cacheRoot, `build-darwin-${targetArch}`),
+		outputDir: path.join(nativeRoot, "bin", getNativeArchTag("darwin", targetArch)),
+		configureArgs,
+	};
+}
+
+function getTargetConfigs() {
+	if (process.platform === "darwin") {
+		return getRequestedArchitectures("darwin").map((arch) => createDarwinTarget(arch));
+	}
+
+	const arch = getHostArch();
 	const archTag = getNativeArchTag(process.platform, arch);
 
 	if (process.platform === "win32") {
@@ -326,8 +368,13 @@ async function main() {
 	}
 
 	const sourceDir = await ensureSourceTree();
+	const targets = getTargetConfigs();
 
-	for (const target of getTargetConfigs()) {
+	console.log(
+		`[build-whisper-runtime] Target architectures for ${process.platform}: ${targets.map((target) => target.archTag).join(", ")}`,
+	);
+
+	for (const target of targets) {
 		if (await shouldSkipBuild(target)) {
 			console.log(
 				`[build-whisper-runtime] Whisper runtime ${whisperVersion} already staged for ${target.archTag}.`,

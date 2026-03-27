@@ -16,7 +16,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
-		"postinstall": "npm run rebuild:native && npm run build:platform-native-helpers",
+		"postinstall": "node scripts/postinstall.mjs",
 		"build": "npm run build:platform-native-helpers && tsc && vite build && electron-builder",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",

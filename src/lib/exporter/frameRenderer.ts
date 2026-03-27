@@ -112,6 +112,19 @@ function createAnimationState(): AnimationState {
   };
 }
 
+function configureHighQuality2DContext(
+  context: CanvasRenderingContext2D | null,
+): CanvasRenderingContext2D | null {
+  if (!context) {
+    return null;
+  }
+
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+
+  return context;
+}
+
 // Renders video frames with all effects (background, zoom, crop, blur, shadow) to an offscreen canvas for export.
 
 export class FrameRenderer {
@@ -129,6 +142,8 @@ export class FrameRenderer {
   private shadowCtx: CanvasRenderingContext2D | null = null;
   private compositeCanvas: HTMLCanvasElement | null = null;
   private compositeCtx: CanvasRenderingContext2D | null = null;
+  private backgroundVideoElement: HTMLVideoElement | null = null;
+  private cleanupBackgroundSource: (() => void) | null = null;
   private config: FrameRenderConfig;
   private animationState: AnimationState;
   private motionBlurState: MotionBlurState;
@@ -236,9 +251,11 @@ export class FrameRenderer {
     this.compositeCanvas = document.createElement("canvas");
     this.compositeCanvas.width = this.config.width;
     this.compositeCanvas.height = this.config.height;
-    this.compositeCtx = this.compositeCanvas.getContext("2d", {
-      willReadFrequently: false,
-    });
+    this.compositeCtx = configureHighQuality2DContext(
+      this.compositeCanvas.getContext("2d", {
+        willReadFrequently: false,
+      }),
+    );
 
     if (!this.compositeCtx) {
       throw new Error("Failed to get 2D context for composite canvas");
@@ -249,9 +266,11 @@ export class FrameRenderer {
       this.shadowCanvas = document.createElement("canvas");
       this.shadowCanvas.width = this.config.width;
       this.shadowCanvas.height = this.config.height;
-      this.shadowCtx = this.shadowCanvas.getContext("2d", {
-        willReadFrequently: false,
-      });
+      this.shadowCtx = configureHighQuality2DContext(
+        this.shadowCanvas.getContext("2d", {
+          willReadFrequently: false,
+        }),
+      );
 
       if (!this.shadowCtx) {
         throw new Error("Failed to get 2D context for shadow canvas");
@@ -276,7 +295,11 @@ export class FrameRenderer {
     const bgCanvas = document.createElement("canvas");
     bgCanvas.width = this.config.width;
     bgCanvas.height = this.config.height;
-    const bgCtx = bgCanvas.getContext("2d")!;
+    const bgCtx = configureHighQuality2DContext(bgCanvas.getContext("2d"));
+
+    if (!bgCtx) {
+      throw new Error("Failed to get 2D context for background canvas");
+    }
 
     try {
       // Render background based on type
@@ -842,8 +865,6 @@ export class FrameRenderer {
     const croppedVideoWidth = videoWidth * (cropEndX - cropStartX);
     const croppedVideoHeight = videoHeight * (cropEndY - cropStartY);
 
-    // Calculate scale to fit in viewport
-    // Padding is a percentage (0-100), where 50% ~ 0.8 scale
     const paddingScale = 1.0 - (padding / 100) * 0.4;
     const viewportWidth = width * paddingScale;
     const viewportHeight = height * paddingScale;
@@ -867,7 +888,6 @@ export class FrameRenderer {
 
     this.videoContainer.position.set(0, 0);
 
-    // scale border radius by export/preview canvas ratio
     const previewWidth = this.config.previewWidth || 1920;
     const previewHeight = this.config.previewHeight || 1080;
     const canvasScaleFactor = Math.min(
@@ -1024,6 +1044,8 @@ export class FrameRenderer {
 
     // Clear composite canvas
     ctx.clearRect(0, 0, w, h);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
 
     // Step 1: Draw background layer (with optional blur, not affected by zoom)
     if (this.backgroundSprite) {
@@ -1052,6 +1074,8 @@ export class FrameRenderer {
     ) {
       const shadowCtx = this.shadowCtx;
       shadowCtx.clearRect(0, 0, w, h);
+      shadowCtx.imageSmoothingEnabled = true;
+      shadowCtx.imageSmoothingQuality = "high";
       shadowCtx.save();
 
       // Calculate shadow parameters based on intensity (0-1)
@@ -1133,12 +1157,14 @@ export class FrameRenderer {
       bubbleCanvas.height = bubbleSize;
     }
     this.webcamBubbleCanvas = bubbleCanvas;
-    const bubbleCtx = this.webcamBubbleCtx ?? bubbleCanvas.getContext("2d");
+    const bubbleCtx = this.webcamBubbleCtx ?? configureHighQuality2DContext(bubbleCanvas.getContext("2d"));
     if (!bubbleCtx) {
       return;
     }
     this.webcamBubbleCtx = bubbleCtx;
     bubbleCtx.clearRect(0, 0, bubbleCanvas.width, bubbleCanvas.height);
+    bubbleCtx.imageSmoothingEnabled = true;
+    bubbleCtx.imageSmoothingQuality = "high";
 
     const canRefreshCache =
       hasLiveWebcamFrame &&
@@ -1165,7 +1191,9 @@ export class FrameRenderer {
         this.webcamFrameCacheCanvas = document.createElement("canvas");
         this.webcamFrameCacheCanvas.width = liveFrameWidth;
         this.webcamFrameCacheCanvas.height = liveFrameHeight;
-        this.webcamFrameCacheCtx = this.webcamFrameCacheCanvas.getContext("2d");
+        this.webcamFrameCacheCtx = configureHighQuality2DContext(
+          this.webcamFrameCacheCanvas.getContext("2d"),
+        );
       }
 
       this.webcamFrameCacheCtx?.clearRect(
@@ -1278,6 +1306,14 @@ export class FrameRenderer {
     this.shadowCtx = null;
     this.compositeCanvas = null;
     this.compositeCtx = null;
+    if (this.backgroundVideoElement) {
+      this.backgroundVideoElement.pause();
+      this.backgroundVideoElement.src = "";
+      this.backgroundVideoElement.load();
+      this.backgroundVideoElement = null;
+    }
+    this.cleanupBackgroundSource?.();
+    this.cleanupBackgroundSource = null;
     if (this.webcamVideoElement) {
       this.webcamVideoElement.pause();
       this.webcamVideoElement.src = "";

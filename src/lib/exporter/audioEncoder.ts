@@ -7,6 +7,7 @@ const AUDIO_BITRATE = 128_000
 const DECODE_BACKPRESSURE_LIMIT = 20
 const ENCODE_BACKPRESSURE_LIMIT = 20
 const MIN_SPEED_REGION_DELTA_MS = 0.0001
+const MP4_AUDIO_CODEC = 'mp4a.40.2'
 
 export class AudioProcessor {
   private cancelled = false
@@ -74,6 +75,35 @@ export class AudioProcessor {
       return
     }
 
+    const audioStream = typeof readEndSec === 'number'
+      ? demuxer.read('audio', 0, readEndSec)
+      : demuxer.read('audio')
+
+    await this.transcodeAudioStream(
+      audioStream as ReadableStream<EncodedAudioChunk>,
+      audioConfig,
+      muxer,
+      {
+        shouldSkipChunk: (timestampMs) => this.isInTrimRegion(timestampMs, sortedTrims),
+        transformAudioData: (data) => {
+          const timestampMs = data.timestamp / 1000
+          const trimOffsetMs = this.computeTrimOffset(timestampMs, sortedTrims)
+          const adjustedTimestampUs = data.timestamp - trimOffsetMs * 1000
+          return this.cloneWithTimestamp(data, Math.max(0, adjustedTimestampUs))
+        },
+      },
+    )
+  }
+
+  private async transcodeAudioStream(
+    audioStream: ReadableStream<EncodedAudioChunk>,
+    audioConfig: AudioDecoderConfig,
+    muxer: VideoMuxer,
+    options: {
+      shouldSkipChunk?: (timestampMs: number) => boolean
+      transformAudioData?: (data: AudioData) => AudioData | null
+    } = {},
+  ): Promise<void> {
     const pendingFrames: AudioData[] = []
     let decodeError: Error | null = null
     let encodeError: Error | null = null
@@ -115,7 +145,7 @@ export class AudioProcessor {
     const sampleRate = audioConfig.sampleRate || 48_000
     const channels = audioConfig.numberOfChannels || 2
     const encodeConfig: AudioEncoderConfig = {
-      codec: 'opus',
+      codec: MP4_AUDIO_CODEC,
       sampleRate,
       numberOfChannels: channels,
       bitrate: AUDIO_BITRATE,
@@ -123,7 +153,7 @@ export class AudioProcessor {
 
     const encodeSupport = await AudioEncoder.isConfigSupported(encodeConfig)
     if (!encodeSupport.supported) {
-      console.warn('[AudioProcessor] Opus encoding not supported, skipping audio')
+      console.warn('[AudioProcessor] AAC encoding not supported, skipping audio')
       return
     }
 
@@ -154,12 +184,17 @@ export class AudioProcessor {
           return
         }
 
-        const timestampMs = data.timestamp / 1000
-        const trimOffsetMs = this.computeTrimOffset(timestampMs, sortedTrims)
-        const adjustedTimestampUs = data.timestamp - trimOffsetMs * 1000
-        const adjusted = this.cloneWithTimestamp(data, Math.max(0, adjustedTimestampUs))
-        data.close()
-        pendingFrames.push(adjusted)
+        const transformed = options.transformAudioData ? options.transformAudioData(data) : data
+
+        if (transformed !== data) {
+          data.close()
+        }
+
+        if (!transformed) {
+          return
+        }
+
+        pendingFrames.push(transformed)
       },
       error: (error: DOMException) => {
         decodeError = new Error(`[AudioProcessor] Decode error: ${error.message}`)
@@ -167,10 +202,7 @@ export class AudioProcessor {
     })
     decoder.configure(audioConfig)
 
-    const audioStream = typeof readEndSec === 'number'
-      ? demuxer.read('audio', 0, readEndSec)
-      : demuxer.read('audio')
-    const reader = (audioStream as ReadableStream<EncodedAudioChunk>).getReader()
+    const reader = audioStream.getReader()
 
     try {
       while (!this.cancelled) {
@@ -180,7 +212,7 @@ export class AudioProcessor {
         if (done || !chunk) break
 
         const timestampMs = chunk.timestamp / 1000
-        if (this.isInTrimRegion(timestampMs, sortedTrims)) continue
+        if (options.shouldSkipChunk?.(timestampMs)) continue
 
         decoder.decode(chunk)
         pumpEncodedFrames()
@@ -434,7 +466,7 @@ export class AudioProcessor {
     return recordedBlob
   }
 
-  // Demuxes the rendered speed-adjusted blob and feeds encoded chunks into the MP4 muxer.
+  // Demuxes the rendered speed-adjusted blob, decodes it, and re-encodes it to AAC for MP4 output.
   private async muxRenderedAudioBlob(blob: Blob, muxer: VideoMuxer): Promise<void> {
     if (this.cancelled) return
 
@@ -445,27 +477,17 @@ export class AudioProcessor {
     try {
       await demuxer.load(file)
       const audioConfig = (await demuxer.getDecoderConfig('audio')) as AudioDecoderConfig
-      const reader = (demuxer.read('audio') as ReadableStream<EncodedAudioChunk>).getReader()
-      let isFirstChunk = true
-
-      try {
-        while (!this.cancelled) {
-          const { done, value: chunk } = await reader.read()
-          if (done || !chunk) break
-          if (isFirstChunk) {
-            await muxer.addAudioChunk(chunk, { decoderConfig: audioConfig })
-            isFirstChunk = false
-          } else {
-            await muxer.addAudioChunk(chunk)
-          }
-        }
-      } finally {
-        try {
-          await reader.cancel()
-        } catch {
-          // reader already closed
-        }
+      const codecCheck = await AudioDecoder.isConfigSupported(audioConfig)
+      if (!codecCheck.supported) {
+        console.warn('[AudioProcessor] Rendered audio codec not supported:', audioConfig.codec)
+        return
       }
+
+      await this.transcodeAudioStream(
+        demuxer.read('audio') as ReadableStream<EncodedAudioChunk>,
+        audioConfig,
+        muxer,
+      )
     } finally {
       try {
         demuxer.destroy()
