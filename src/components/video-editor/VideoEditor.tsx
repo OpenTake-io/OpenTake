@@ -1175,7 +1175,7 @@ export default function VideoEditor() {
 	}, [currentPersistedEditorState, currentSourcePath]);
 
 	const syncRecordingSessionWebcam = useCallback(
-		async (webcamPath: string | null, timeOffsetMs = 0) => {
+		async (webcamPath: string | null) => {
 			if (!currentSourcePath || !window.electronAPI.setCurrentRecordingSession) {
 				return;
 			}
@@ -1183,7 +1183,6 @@ export default function VideoEditor() {
 			await window.electronAPI.setCurrentRecordingSession({
 				videoPath: currentSourcePath,
 				webcamPath,
-				timeOffsetMs,
 			});
 		},
 		[currentSourcePath],
@@ -1214,10 +1213,9 @@ export default function VideoEditor() {
 			...prev,
 			enabled: true,
 			sourcePath: result.path ?? null,
-			timeOffsetMs: 0,
 		}));
 
-		await syncRecordingSessionWebcam(result.path, 0);
+		await syncRecordingSessionWebcam(result.path);
 		toast.success(t("settings.effects.webcamFootageAdded"));
 	}, [syncRecordingSessionWebcam, t]);
 
@@ -1226,10 +1224,9 @@ export default function VideoEditor() {
 			...prev,
 			enabled: false,
 			sourcePath: null,
-			timeOffsetMs: 0,
 		}));
 
-		await syncRecordingSessionWebcam(null, 0);
+		await syncRecordingSessionWebcam(null);
 		toast.success(t("settings.effects.webcamFootageRemoved"));
 	}, [syncRecordingSessionWebcam, t]);
 
@@ -1298,7 +1295,6 @@ export default function VideoEditor() {
 						...prev,
 						enabled: Boolean(sessionResult.session?.webcamPath),
 						sourcePath: sessionResult.session?.webcamPath ?? null,
-						timeOffsetMs: sessionResult.session?.timeOffsetMs ?? 0,
 					}));
 					return;
 				}
@@ -1314,7 +1310,6 @@ export default function VideoEditor() {
 						...prev,
 						enabled: false,
 						sourcePath: null,
-						timeOffsetMs: 0,
 					}));
 				} else {
 					setError("No video to load. Please record or select a video.");

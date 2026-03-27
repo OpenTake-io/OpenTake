@@ -24,7 +24,7 @@ static std::mutex g_stopMutex;
 static std::condition_variable g_stopCv;
 
 struct CaptureConfig {
-    int64_t displayId = 0;
+    int displayId = 0;
     int64_t windowHandle = 0;
     std::string outputPath;
     std::string audioOutputPath;
@@ -97,7 +97,7 @@ static bool parseSimpleJson(const std::string& json, CaptureConfig& config) {
     config.outputPath = findString("outputPath");
     if (config.outputPath.empty()) return false;
 
-    int64_t displayId = findInt64("displayId");
+    int displayId = findInt("displayId");
     if (displayId >= 0) config.displayId = displayId;
 
     int64_t windowHandle = findInt64("windowHandle");

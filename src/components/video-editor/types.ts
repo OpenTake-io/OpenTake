@@ -69,7 +69,6 @@ export type WebcamPositionPreset =
 export interface WebcamOverlaySettings {
   enabled: boolean;
   sourcePath: string | null;
-  timeOffsetMs: number;
   mirror: boolean;
   corner: WebcamCorner;
   positionPreset: WebcamPositionPreset;
@@ -105,12 +104,10 @@ export const DEFAULT_WEBCAM_MARGIN = 24;
 export const DEFAULT_WEBCAM_POSITION_PRESET: WebcamPositionPreset = "bottom-right";
 export const DEFAULT_WEBCAM_POSITION_X = 1;
 export const DEFAULT_WEBCAM_POSITION_Y = 1;
-export const DEFAULT_WEBCAM_TIME_OFFSET_MS = 0;
 
 export const DEFAULT_WEBCAM_OVERLAY: WebcamOverlaySettings = {
   enabled: false,
   sourcePath: null,
-  timeOffsetMs: DEFAULT_WEBCAM_TIME_OFFSET_MS,
   mirror: true,
   corner: "bottom-right",
   positionPreset: DEFAULT_WEBCAM_POSITION_PRESET,
