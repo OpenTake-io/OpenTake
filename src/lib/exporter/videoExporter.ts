@@ -59,10 +59,10 @@ interface VideoExporterConfig extends ExportConfig {
 	previewWidth?: number;
 	previewHeight?: number;
 	onProgress?: (progress: ExportProgress) => void;
-	masterAudioVolume: number;
-	masterAudioMuted: boolean;
-	masterAudioSoloed: boolean;
-	audioTrackVolume: number;
+	masterAudioVolume?: number;
+	masterAudioMuted?: boolean;
+	masterAudioSoloed?: boolean;
+	audioTrackVolume?: number;
 }
 
 export class VideoExporter {
