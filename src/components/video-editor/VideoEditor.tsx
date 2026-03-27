@@ -12,6 +12,7 @@ import {
 	Undo2,
 	X,
 } from "lucide-react";
+import { v4 as uuidv4 } from "uuid";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -127,6 +128,7 @@ type EditorHistorySnapshot = {
 	selectedSpeedId: string | null;
 	selectedAnnotationId: string | null;
 	selectedAudioId: string | null;
+	selectedCaptionId: string | null;
 };
 
 type PendingExportSave = {
@@ -377,6 +379,7 @@ export default function VideoEditor() {
 	const [audioRegions, setAudioRegions] = useState<AudioRegion[]>([]);
 	const [selectedAudioId, setSelectedAudioId] = useState<string | null>(null);
 	const [autoCaptions, setAutoCaptions] = useState<CaptionCue[]>([]);
+	const [selectedCaptionId, setSelectedCaptionId] = useState<string | null>(null);
 	const [autoCaptionSettings, setAutoCaptionSettings] = useState<AutoCaptionSettings>(() => ({
 		...DEFAULT_AUTO_CAPTION_SETTINGS,
 		selectedModel: (initialEditorPreferences.whisperSelectedModel as any) || "small",
@@ -967,6 +970,7 @@ export default function VideoEditor() {
 			selectedSpeedId,
 			selectedAnnotationId,
 			selectedAudioId,
+			selectedCaptionId,
 		};
 	}, [
 		zoomRegions,
@@ -980,46 +984,48 @@ export default function VideoEditor() {
 		selectedSpeedId,
 		selectedAnnotationId,
 		selectedAudioId,
+		selectedCaptionId,
 	]);
 
 	const applyHistorySnapshot = useCallback(
 		(snapshot: EditorHistorySnapshot) => {
 			applyingHistoryRef.current = true;
-			const cloned = cloneSnapshot(snapshot);
-			setZoomRegions(cloned.zoomRegions);
-			setTrimRegions(cloned.trimRegions);
-			setSpeedRegions(cloned.speedRegions);
-			setAnnotationRegions(cloned.annotationRegions);
-			setAudioRegions(cloned.audioRegions);
-			setAutoCaptions(cloned.autoCaptions);
-			setSelectedZoomId(cloned.selectedZoomId);
-			setSelectedTrimId(cloned.selectedTrimId);
-			setSelectedSpeedId(cloned.selectedSpeedId);
-			setSelectedAnnotationId(cloned.selectedAnnotationId);
-			setSelectedAudioId(cloned.selectedAudioId);
+			setZoomRegions(cloneStructured(snapshot.zoomRegions));
+			setTrimRegions(cloneStructured(snapshot.trimRegions));
+			setSpeedRegions(cloneStructured(snapshot.speedRegions));
+			setAnnotationRegions(cloneStructured(snapshot.annotationRegions));
+			setAudioRegions(cloneStructured(snapshot.audioRegions));
+			setAutoCaptions(cloneStructured(snapshot.autoCaptions));
+			setSelectedZoomId(snapshot.selectedZoomId);
+			setSelectedTrimId(snapshot.selectedTrimId);
+			setSelectedSpeedId(snapshot.selectedSpeedId);
+			setSelectedAnnotationId(snapshot.selectedAnnotationId);
+			setSelectedAudioId(snapshot.selectedAudioId);
+			setSelectedCaptionId(snapshot.selectedCaptionId);
 
 			nextZoomIdRef.current = deriveNextId(
 				"zoom",
-				cloned.zoomRegions.map((region) => region.id),
+				snapshot.zoomRegions.map((region: ZoomRegion) => region.id),
 			);
 			nextTrimIdRef.current = deriveNextId(
 				"trim",
-				cloned.trimRegions.map((region) => region.id),
+				snapshot.trimRegions.map((region: TrimRegion) => region.id),
 			);
 			nextSpeedIdRef.current = deriveNextId(
 				"speed",
-				cloned.speedRegions.map((region) => region.id),
+				snapshot.speedRegions.map((region: SpeedRegion) => region.id),
 			);
 			nextAnnotationIdRef.current = deriveNextId(
 				"annotation",
-				cloned.annotationRegions.map((region) => region.id),
+				snapshot.annotationRegions.map((region: AnnotationRegion) => region.id),
 			);
 			nextAudioIdRef.current = deriveNextId(
 				"audio",
-				cloned.audioRegions.map((region) => region.id),
+				snapshot.audioRegions.map((region: AudioRegion) => region.id),
 			);
 			nextAnnotationZIndexRef.current =
-				cloned.annotationRegions.reduce((max, region) => Math.max(max, region.zIndex), 0) + 1;
+				snapshot.annotationRegions.reduce((max: number, region: AnnotationRegion) => Math.max(max, region.zIndex), 0) + 1;
+			applyingHistoryRef.current = false;
 		},
 		[cloneSnapshot],
 	);
@@ -1586,7 +1592,12 @@ export default function VideoEditor() {
 				return;
 			}
 
-			setAutoCaptions(result.cues);
+			const cuesWithIds = result.cues.map((cue: CaptionCue) => ({
+				...cue,
+				id: cue.id || uuidv4(),
+			}));
+
+			setAutoCaptions(cuesWithIds);
 			setAutoCaptionSettings((prev) => ({ ...prev, enabled: true }));
 			toast.success(result.message || `Generated ${result.cues.length} captions`);
 		} catch (error) {
@@ -2192,6 +2203,7 @@ export default function VideoEditor() {
 		setSelectedAnnotationId(id);
 		setSelectedZoomId(null);
 		setSelectedTrimId(null);
+		setSelectedCaptionId(null); // Added
 	}, []);
 
 	const handleAnnotationSpanChange = useCallback((id: string, span: Span) => {
@@ -3411,6 +3423,14 @@ export default function VideoEditor() {
 									onAspectRatioChange={setAspectRatio}
 									onOpenCropEditor={handleOpenCropEditor}
 									isCropped={isCropped}
+									autoCaptions={autoCaptions}
+									onCaptionSpanChange={(id, span) => {
+										setAutoCaptions((prev) =>
+											prev.map((r) => (r.id === id ? { ...r, startMs: span.start, endMs: span.end } : r)),
+										);
+									}}
+									selectedCaptionId={selectedCaptionId}
+									onSelectCaption={setSelectedCaptionId}
 								/>
 							</div>
 						</Panel>
@@ -3488,7 +3508,6 @@ export default function VideoEditor() {
 						onAspectRatioChange={setAspectRatio}
 						selectedAnnotationId={selectedAnnotationId}
 						annotationRegions={annotationRegions}
-						currentTime={currentTime}
 						onSeek={(time) => videoPlaybackRef.current?.seek(time)}
 						autoCaptions={autoCaptions}
 						onAutoCaptionsChange={setAutoCaptions}
@@ -3520,6 +3539,8 @@ export default function VideoEditor() {
 						}
 						onSpeedChange={handleSpeedChange}
 						onSpeedDelete={handleSpeedDelete}
+						selectedCaptionId={selectedCaptionId}
+						onSelectCaption={setSelectedCaptionId}
 					/>
 				</div>
 			</div>
