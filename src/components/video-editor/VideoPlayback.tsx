@@ -213,6 +213,7 @@ export interface VideoPlaybackRef {
   play: () => Promise<void>;
   pause: () => void;
   refreshFrame: () => Promise<void>;
+  seek: (time: number) => void;
 }
 
 const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
@@ -659,6 +660,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
           video.addEventListener("seeked", handleFirstSeeked, { once: true });
           video.currentTime = nudgeTarget;
         });
+      },
+      seek: (time: number) => {
+        const video = videoRef.current;
+        if (!video) return;
+        video.currentTime = time;
       },
     }));
 

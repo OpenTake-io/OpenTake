@@ -43,6 +43,7 @@ export interface EditorPreferences extends PersistedEditorControls {
 	customWallpapers: string[];
 	whisperExecutablePath: string | null;
 	whisperModelPath: string | null;
+	whisperSelectedModel: string;
 }
 
 export const EDITOR_PREFERENCES_STORAGE_KEY = "recordly.editor.preferences";
@@ -86,6 +87,7 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
 	customWallpapers: [],
 	whisperExecutablePath: null,
 	whisperModelPath: null,
+	whisperSelectedModel: "small",
 };
 
 function normalizePositiveIntegerString(value: unknown, fallback: string): string {
@@ -220,6 +222,10 @@ export function normalizeEditorPreferences(
 			normalizeNullablePath(raw.whisperExecutablePath) ?? fallback.whisperExecutablePath,
 		whisperModelPath:
 			normalizeNullablePath(raw.whisperModelPath) ?? fallback.whisperModelPath,
+		whisperSelectedModel:
+			typeof raw.whisperSelectedModel === "string"
+				? raw.whisperSelectedModel
+				: fallback.whisperSelectedModel,
 	};
 }
 

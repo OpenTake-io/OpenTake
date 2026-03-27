@@ -203,8 +203,12 @@ interface SettingsPanelProps {
 	onAnnotationTypeChange?: (id: string, type: AnnotationType) => void;
 	onAnnotationStyleChange?: (id: string, style: Partial<AnnotationRegion["style"]>) => void;
 	onAnnotationFigureDataChange?: (id: string, figureData: FigureData) => void;
+	onAnnotationBlurIntensityChange?: (id: string, blurIntensity: number) => void;
 	onAnnotationDelete?: (id: string) => void;
+	currentTime?: number;
+	onSeek?: (time: number) => void;
 	autoCaptions?: CaptionCue[];
+	onAutoCaptionsChange?: (captions: CaptionCue[]) => void;
 	autoCaptionSettings?: AutoCaptionSettings;
 	whisperExecutablePath?: string | null;
 	whisperModelPath?: string | null;
@@ -216,8 +220,8 @@ interface SettingsPanelProps {
 	onPickWhisperModel?: () => void;
 	onGenerateAutoCaptions?: () => void;
 	onClearAutoCaptions?: () => void;
-	onDownloadWhisperSmallModel?: () => void;
-	onDeleteWhisperSmallModel?: () => void;
+	onDownloadWhisperModel?: () => void;
+	onDeleteWhisperModel?: () => void;
 	selectedSpeedId?: string | null;
 	selectedSpeedValue?: PlaybackSpeed | null;
 	onSpeedChange?: (speed: PlaybackSpeed) => void;
@@ -268,7 +272,22 @@ const CAPTION_LANGUAGE_OPTIONS = [
 	{ value: "zh", label: "Chinese" },
 	{ value: "ja", label: "Japanese" },
 	{ value: "ko", label: "Korean" },
+	{ value: "id", label: "Indonesian" },
 ] as const;
+
+export type WhisperModelInfo = {
+	value: "tiny" | "base" | "small" | "medium" | "large";
+	label: string;
+	size: string;
+};
+
+const WHISPER_MODEL_OPTIONS: WhisperModelInfo[] = [
+	{ value: "tiny", label: "Tiny", size: "75 MB" },
+	{ value: "base", label: "Base", size: "142 MB" },
+	{ value: "small", label: "Small", size: "466 MB" },
+	{ value: "medium", label: "Medium", size: "1.5 GB" },
+	{ value: "large", label: "Large (v3)", size: "2.9 GB" },
+];
 
 function loadPreviewImage(url: string) {
 	return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -505,8 +524,12 @@ export function SettingsPanel({
 	onAnnotationTypeChange,
 	onAnnotationStyleChange,
 	onAnnotationFigureDataChange,
+	onAnnotationBlurIntensityChange,
 	onAnnotationDelete,
+	currentTime = 0,
+	onSeek,
 	autoCaptions = [],
+	onAutoCaptionsChange,
 	autoCaptionSettings = DEFAULT_AUTO_CAPTION_SETTINGS,
 	whisperModelPath,
 	whisperModelDownloadStatus = "idle",
@@ -516,8 +539,8 @@ export function SettingsPanel({
 	onPickWhisperModel,
 	onGenerateAutoCaptions,
 	onClearAutoCaptions,
-	onDownloadWhisperSmallModel,
-	onDeleteWhisperSmallModel,
+	onDownloadWhisperModel,
+	onDeleteWhisperModel,
 	selectedSpeedId,
 	selectedSpeedValue,
 	onSpeedChange,
@@ -1139,6 +1162,11 @@ export function SettingsPanel({
 						? (figureData) => onAnnotationFigureDataChange(selectedAnnotation.id, figureData)
 						: undefined
 				}
+				onBlurIntensityChange={
+					onAnnotationBlurIntensityChange
+						? (intensity) => onAnnotationBlurIntensityChange(selectedAnnotation.id, intensity)
+						: undefined
+				}
 				onDelete={() => onAnnotationDelete(selectedAnnotation.id)}
 			/>
 		);
@@ -1365,6 +1393,29 @@ export function SettingsPanel({
 						</SelectContent>
 					</Select>
 				</div>
+				<div className="flex items-center justify-between gap-3">
+					<div className="text-sm font-medium text-slate-200">
+						Model
+					</div>
+					<Select
+						value={autoCaptionSettings.selectedModel || "small"}
+						onValueChange={(value) => updateAutoCaptionSettings({ selectedModel: value as any })}
+					>
+						<SelectTrigger className="h-10 w-[180px] rounded-xl border-white/10 bg-white/5 text-sm text-slate-200 hover:bg-white/10">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent className="border-white/10 bg-[#1a1a1f] text-slate-200">
+							{WHISPER_MODEL_OPTIONS.map((option) => (
+								<SelectItem key={option.value} value={option.value}>
+									<div className="flex items-center justify-between w-full gap-4">
+										<span>{option.label}</span>
+										<span className="text-[10px] text-slate-500">{option.size}</span>
+									</div>
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</div>
 				<div className="flex flex-wrap items-center gap-2">
 					<div className="grid w-full grid-cols-2 gap-2">
 						{whisperModelDownloadStatus === "downloading" ? (
@@ -1380,7 +1431,7 @@ export function SettingsPanel({
 							<Button
 								type="button"
 								variant="outline"
-								onClick={onDeleteWhisperSmallModel}
+								onClick={onDeleteWhisperModel}
 								className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
 							>
 								{tSettings("captions.deleteModel", "Delete Model")}
@@ -1388,7 +1439,7 @@ export function SettingsPanel({
 						) : (
 							<Button
 								type="button"
-								onClick={onDownloadWhisperSmallModel}
+								onClick={onDownloadWhisperModel}
 								className="h-10 w-full rounded-xl bg-[#2563EB] px-4 text-sm font-medium text-white hover:bg-[#2563EB]/90"
 							>
 								{tSettings("captions.downloadModel", "Download Model")}
@@ -1418,6 +1469,75 @@ export function SettingsPanel({
 								? tSettings("captions.regenerateFull", "Regenerate Captions")
 								: tSettings("captions.generateFull", "Generate Captions")}
 					</Button>
+
+					{autoCaptions.length > 0 && (
+						<div className="mt-4 flex flex-col gap-2">
+							<div className="flex items-center justify-between px-1">
+								<span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+									Edit Cues ({autoCaptions.length})
+								</span>
+							</div>
+							<div className="max-h-[300px] overflow-y-auto rounded-xl border border-white/5 bg-black/20 p-1 subtle-scrollbar">
+								<div className="flex flex-col gap-1">
+									{autoCaptions.map((cue, index) => {
+										const isActive = currentTime >= cue.startMs / 1000 && currentTime <= cue.endMs / 1000;
+										return (
+											<div
+												key={cue.id || index}
+												className={cn(
+													"group flex flex-col gap-1 rounded-lg p-2 transition-colors",
+													isActive ? "bg-white/10" : "hover:bg-white/5"
+												)}
+											>
+												<div className="flex items-center justify-between">
+													<button
+														type="button"
+														onClick={() => onSeek?.(cue.startMs / 1000)}
+														className="text-[10px] font-medium text-slate-500 hover:text-[#2563EB]"
+													>
+														{(cue.startMs / 1000).toFixed(2)}s – {(cue.endMs / 1000).toFixed(2)}s
+													</button>
+													<button
+														type="button"
+														onClick={() => {
+															const newCaptions = [...autoCaptions];
+															newCaptions.splice(index, 1);
+															onAutoCaptionsChange?.(newCaptions);
+														}}
+														className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-500 hover:text-red-400"
+													>
+														<Trash2 className="h-3 w-3" />
+													</button>
+												</div>
+												<textarea
+													value={cue.text}
+													onChange={(e) => {
+														const newCaptions = [...autoCaptions];
+														newCaptions[index] = { ...cue, text: e.target.value };
+														onAutoCaptionsChange?.(newCaptions);
+													}}
+													rows={1}
+													className="w-full resize-none border-none bg-transparent p-0 text-sm text-slate-300 placeholder:text-slate-600 focus:outline-none focus:ring-0"
+													onInput={(e) => {
+														const target = e.target as HTMLTextAreaElement;
+														target.style.height = "auto";
+														target.style.height = `${target.scrollHeight}px`;
+													}}
+													ref={(el) => {
+														if (el) {
+															el.style.height = "auto";
+															el.style.height = `${el.scrollHeight}px`;
+														}
+													}}
+												/>
+											</div>
+										);
+									})}
+								</div>
+							</div>
+						</div>
+					)}
+
 					{isGeneratingCaptions ? (
 						<div className="space-y-1">
 							<div className="text-xs text-slate-400">

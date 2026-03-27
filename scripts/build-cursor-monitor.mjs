@@ -25,6 +25,12 @@ function findCmake() {
 		// not on PATH
 	}
 
+	// Local .cmake_ext path
+	const localCmake = path.join(projectRoot, ".cmake_ext", "cmake-4.3.0-windows-x86_64", "bin", "cmake.exe");
+	if (existsSync(localCmake)) {
+		return `"${localCmake}"`;
+	}
+
 	// VS 2022 bundled CMake
 	const vsEditions = ["Community", "Professional", "Enterprise", "BuildTools"];
 	for (const edition of vsEditions) {

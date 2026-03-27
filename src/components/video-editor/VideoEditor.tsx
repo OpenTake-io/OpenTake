@@ -84,6 +84,7 @@ import {
 	DEFAULT_ANNOTATION_SIZE,
 	DEFAULT_ANNOTATION_STYLE,
 	DEFAULT_AUTO_CAPTION_SETTINGS,
+	DEFAULT_BLUR_INTENSITY,
 	DEFAULT_CONNECTED_ZOOM_DURATION_MS,
 	DEFAULT_CONNECTED_ZOOM_EASING,
 	DEFAULT_CONNECTED_ZOOM_GAP_MS,
@@ -376,16 +377,16 @@ export default function VideoEditor() {
 	const [audioRegions, setAudioRegions] = useState<AudioRegion[]>([]);
 	const [selectedAudioId, setSelectedAudioId] = useState<string | null>(null);
 	const [autoCaptions, setAutoCaptions] = useState<CaptionCue[]>([]);
-	const [autoCaptionSettings, setAutoCaptionSettings] = useState<AutoCaptionSettings>(
-		DEFAULT_AUTO_CAPTION_SETTINGS,
-	);
+	const [autoCaptionSettings, setAutoCaptionSettings] = useState<AutoCaptionSettings>(() => ({
+		...DEFAULT_AUTO_CAPTION_SETTINGS,
+		selectedModel: (initialEditorPreferences.whisperSelectedModel as any) || "small",
+	}));
 	const [whisperExecutablePath, setWhisperExecutablePath] = useState<string | null>(
 		initialEditorPreferences.whisperExecutablePath,
 	);
 	const [whisperModelPath, setWhisperModelPath] = useState<string | null>(
 		initialEditorPreferences.whisperModelPath,
 	);
-	const [downloadedWhisperModelPath, setDownloadedWhisperModelPath] = useState<string | null>(null);
 	const [whisperModelDownloadStatus, setWhisperModelDownloadStatus] = useState<
 		"idle" | "downloading" | "downloaded" | "error"
 	>(initialEditorPreferences.whisperModelPath ? "downloaded" : "idle");
@@ -1364,6 +1365,7 @@ export default function VideoEditor() {
 			gifSizePreset,
 			whisperExecutablePath,
 			whisperModelPath,
+			whisperSelectedModel: autoCaptionSettings.selectedModel,
 		});
 	}, [
 		wallpaper,
@@ -1399,45 +1401,55 @@ export default function VideoEditor() {
 		gifSizePreset,
 		whisperExecutablePath,
 		whisperModelPath,
+		autoCaptionSettings.selectedModel,
 	]);
 
 	useEffect(() => {
-		const unsubscribe = window.electronAPI.onWhisperSmallModelDownloadProgress((state) => {
-			setWhisperModelDownloadStatus(state.status);
-			setWhisperModelDownloadProgress(state.progress);
+		const unsubscribe = window.electronAPI.onWhisperModelDownloadProgress((state) => {
+			if (state.model === autoCaptionSettings.selectedModel) {
+				setWhisperModelDownloadStatus(state.status);
+				setWhisperModelDownloadProgress(state.progress);
+			}
+
 			if (state.status === "downloaded") {
-				setDownloadedWhisperModelPath(state.path ?? null);
-				setWhisperModelPath((currentPath) => currentPath ?? state.path ?? null);
+				if (state.model === autoCaptionSettings.selectedModel) {
+					setWhisperModelPath(state.path ?? null);
+				}
 			}
+
 			if (state.status === "idle") {
-				setDownloadedWhisperModelPath(null);
+				if (state.model === autoCaptionSettings.selectedModel) {
+					setWhisperModelPath(null);
+				}
 			}
+
 			if (state.status === "error" && state.error) {
 				toast.error(state.error);
 			}
 		});
 
+		return () => unsubscribe?.();
+	}, [autoCaptionSettings.selectedModel]);
+
+	useEffect(() => {
 		void (async () => {
-			const result = await window.electronAPI.getWhisperSmallModelStatus();
+			const result = await window.electronAPI.getWhisperModelStatus(
+				autoCaptionSettings.selectedModel,
+			);
 			if (!result.success) {
 				return;
 			}
 
 			if (result.exists && result.path) {
-				setDownloadedWhisperModelPath(result.path);
 				setWhisperModelPath((currentPath) => currentPath ?? result.path ?? null);
 				setWhisperModelDownloadStatus("downloaded");
 				setWhisperModelDownloadProgress(100);
-				return;
+			} else {
+				setWhisperModelDownloadStatus("idle");
+				setWhisperModelDownloadProgress(0);
 			}
-
-			setDownloadedWhisperModelPath(null);
-			setWhisperModelDownloadStatus("idle");
-			setWhisperModelDownloadProgress(0);
 		})();
-
-		return () => unsubscribe?.();
-	}, []);
+	}, [autoCaptionSettings.selectedModel]);
 
 	const handlePickWhisperExecutable = useCallback(async () => {
 		const result = await window.electronAPI.openWhisperExecutablePicker();
@@ -1449,25 +1461,29 @@ export default function VideoEditor() {
 		toast.success("Whisper executable selected");
 	}, []);
 
-	const handleDownloadWhisperSmallModel = useCallback(async () => {
+	const handleDownloadWhisperModel = useCallback(async () => {
 		if (whisperModelDownloadStatus === "downloading") {
 			return;
 		}
 
 		setWhisperModelDownloadStatus("downloading");
 		setWhisperModelDownloadProgress(0);
-		const result = await window.electronAPI.downloadWhisperSmallModel();
+		const result = await window.electronAPI.downloadWhisperModel(
+			autoCaptionSettings.selectedModel,
+		);
 		if (!result.success) {
 			setWhisperModelDownloadStatus("error");
-			toast.error(result.error || "Failed to download Whisper small model");
+			toast.error(
+				result.error ||
+					`Failed to download Whisper ${autoCaptionSettings.selectedModel} model`,
+			);
 			return;
 		}
 
 		if (result.path) {
-			setDownloadedWhisperModelPath(result.path);
 			setWhisperModelPath(result.path);
 		}
-	}, [whisperModelDownloadStatus]);
+	}, [whisperModelDownloadStatus, autoCaptionSettings.selectedModel]);
 
 	const handlePickWhisperModel = useCallback(async () => {
 		const result = await window.electronAPI.openWhisperModelPicker();
@@ -1479,21 +1495,23 @@ export default function VideoEditor() {
 		toast.success("Whisper model selected");
 	}, []);
 
-	const handleDeleteWhisperSmallModel = useCallback(async () => {
-		const result = await window.electronAPI.deleteWhisperSmallModel();
+	const handleDeleteWhisperModel = useCallback(async () => {
+		const result = await window.electronAPI.deleteWhisperModel(
+			autoCaptionSettings.selectedModel,
+		);
 		if (!result.success) {
-			toast.error(result.error || "Failed to delete Whisper small model");
+			toast.error(
+				result.error ||
+					`Failed to delete Whisper ${autoCaptionSettings.selectedModel} model`,
+			);
 			return;
 		}
 
-		setWhisperModelPath((currentPath) =>
-			currentPath === downloadedWhisperModelPath ? null : currentPath,
-		);
-		setDownloadedWhisperModelPath(null);
+		setWhisperModelPath(null);
 		setWhisperModelDownloadStatus("idle");
 		setWhisperModelDownloadProgress(0);
-		toast.success("Whisper small model deleted");
-	}, [downloadedWhisperModelPath]);
+		toast.success(`Whisper ${autoCaptionSettings.selectedModel} model deleted`);
+	}, [autoCaptionSettings.selectedModel]);
 
 	const handleGenerateAutoCaptions = useCallback(async () => {
 		if (isGeneratingCaptions) {
@@ -2216,6 +2234,11 @@ export default function VideoEditor() {
 					if (!region.figureData) {
 						updatedRegion.figureData = { ...DEFAULT_FIGURE_DATA };
 					}
+				} else if (type === "blur") {
+					updatedRegion.content = "";
+					if (updatedRegion.blurIntensity === undefined) {
+						updatedRegion.blurIntensity = DEFAULT_BLUR_INTENSITY;
+					}
 				}
 
 				return updatedRegion;
@@ -2238,6 +2261,12 @@ export default function VideoEditor() {
 	const handleAnnotationFigureDataChange = useCallback((id: string, figureData: FigureData) => {
 		setAnnotationRegions((prev) =>
 			prev.map((region) => (region.id === id ? { ...region, figureData } : region)),
+		);
+	}, []);
+
+	const handleAnnotationBlurIntensityChange = useCallback((id: string, blurIntensity: number) => {
+		setAnnotationRegions((prev) =>
+			prev.map((region) => (region.id === id ? { ...region, blurIntensity } : region)),
 		);
 	}, []);
 
@@ -3440,7 +3469,10 @@ export default function VideoEditor() {
 						onAspectRatioChange={setAspectRatio}
 						selectedAnnotationId={selectedAnnotationId}
 						annotationRegions={annotationRegions}
+						currentTime={currentTime}
+						onSeek={(time) => videoPlaybackRef.current?.seek(time)}
 						autoCaptions={autoCaptions}
+						onAutoCaptionsChange={setAutoCaptions}
 						autoCaptionSettings={autoCaptionSettings}
 						whisperExecutablePath={whisperExecutablePath}
 						whisperModelPath={whisperModelPath}
@@ -3452,12 +3484,13 @@ export default function VideoEditor() {
 						onPickWhisperModel={handlePickWhisperModel}
 						onGenerateAutoCaptions={handleGenerateAutoCaptions}
 						onClearAutoCaptions={handleClearAutoCaptions}
-						onDownloadWhisperSmallModel={handleDownloadWhisperSmallModel}
-						onDeleteWhisperSmallModel={handleDeleteWhisperSmallModel}
+						onDownloadWhisperModel={handleDownloadWhisperModel}
+						onDeleteWhisperModel={handleDeleteWhisperModel}
 						onAnnotationContentChange={handleAnnotationContentChange}
 						onAnnotationTypeChange={handleAnnotationTypeChange}
 						onAnnotationStyleChange={handleAnnotationStyleChange}
 						onAnnotationFigureDataChange={handleAnnotationFigureDataChange}
+						onAnnotationBlurIntensityChange={handleAnnotationBlurIntensityChange}
 						onAnnotationDelete={handleAnnotationDelete}
 						selectedSpeedId={selectedSpeedId}
 						selectedSpeedValue={

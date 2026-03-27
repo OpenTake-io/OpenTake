@@ -129,7 +129,7 @@ export interface TrimRegion {
   endMs: number;
 }
 
-export type AnnotationType = "text" | "image" | "figure";
+export type AnnotationType = "text" | "image" | "figure" | "blur";
 
 export type ArrowDirection =
   | "up"
@@ -197,7 +197,10 @@ export interface AnnotationRegion {
   style: AnnotationTextStyle;
   zIndex: number;
   figureData?: FigureData;
+  blurIntensity?: number;
 }
+
+export const DEFAULT_BLUR_INTENSITY = 12;
 
 export const DEFAULT_ANNOTATION_POSITION: AnnotationPosition = {
   x: 50,
@@ -264,10 +267,12 @@ export interface CaptionCueWord {
 }
 
 export type AutoCaptionAnimation = "none" | "fade" | "rise" | "pop";
+export type WhisperModel = "tiny" | "base" | "small" | "medium" | "large";
 
 export interface AutoCaptionSettings {
   enabled: boolean;
   language: string;
+  selectedModel: WhisperModel;
   fontFamily: string;
   fontSize: number;
   bottomOffset: number;
@@ -283,6 +288,7 @@ export interface AutoCaptionSettings {
 export const DEFAULT_AUTO_CAPTION_SETTINGS: AutoCaptionSettings = {
   enabled: false,
   language: "auto",
+  selectedModel: "small",
   fontFamily: getDefaultCaptionFontFamily(),
   fontSize: 30,
   bottomOffset: 3,

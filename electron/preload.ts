@@ -164,24 +164,36 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	openWhisperModelPicker: () => {
 		return ipcRenderer.invoke("open-whisper-model-picker");
 	},
-	getWhisperSmallModelStatus: () => {
-		return ipcRenderer.invoke("get-whisper-small-model-status");
+	getWhisperModelStatus: (modelName: string) => {
+		return ipcRenderer.invoke("get-whisper-model-status", modelName);
 	},
-	downloadWhisperSmallModel: () => {
-		return ipcRenderer.invoke("download-whisper-small-model");
+	downloadWhisperModel: (modelName: string) => {
+		return ipcRenderer.invoke("download-whisper-model", modelName);
 	},
-	deleteWhisperSmallModel: () => {
-		return ipcRenderer.invoke("delete-whisper-small-model");
+	deleteWhisperModel: (modelName: string) => {
+		return ipcRenderer.invoke("delete-whisper-model", modelName);
 	},
-	onWhisperSmallModelDownloadProgress: (
-		callback: (state: { status: "idle" | "downloading" | "downloaded" | "error"; progress: number; path?: string | null; error?: string }) => void,
+	onWhisperModelDownloadProgress: (
+		callback: (state: {
+			status: "idle" | "downloading" | "downloaded" | "error";
+			progress: number;
+			model: string;
+			path?: string | null;
+			error?: string;
+		}) => void,
 	) => {
 		const listener = (
 			_event: Electron.IpcRendererEvent,
-			payload: { status: "idle" | "downloading" | "downloaded" | "error"; progress: number; path?: string | null; error?: string },
+			payload: {
+				status: "idle" | "downloading" | "downloaded" | "error";
+				progress: number;
+				model: string;
+				path?: string | null;
+				error?: string;
+			},
 		) => callback(payload);
-		ipcRenderer.on("whisper-small-model-download-progress", listener);
-		return () => ipcRenderer.removeListener("whisper-small-model-download-progress", listener);
+		ipcRenderer.on("whisper-model-download-progress", listener);
+		return () => ipcRenderer.removeListener("whisper-model-download-progress", listener);
 	},
 	generateAutoCaptions: (options: {
 		videoPath: string;

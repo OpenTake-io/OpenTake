@@ -30,9 +30,48 @@ const AUTO_RECORDING_RETENTION_COUNT = 20
 const AUTO_RECORDING_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000
 const ALLOW_RECORDLY_WINDOW_CAPTURE = Boolean(process.env['VITE_DEV_SERVER_URL'])
 const RECORDING_SESSION_MANIFEST_SUFFIX = '.recordly-session.json'
-const WHISPER_MODEL_DOWNLOAD_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin'
-const WHISPER_MODEL_DIR = path.join(app.getPath('userData'), 'whisper')
-const WHISPER_SMALL_MODEL_PATH = path.join(WHISPER_MODEL_DIR, 'ggml-small.bin')
+const WHISPER_MODEL_DIR = path.join(app.getPath("userData"), "whisper");
+
+const WHISPER_MODELS = {
+	tiny: {
+		label: "Tiny",
+		size: "75 MB",
+		filename: "ggml-tiny.bin",
+		url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
+	},
+	base: {
+		label: "Base",
+		size: "142 MB",
+		filename: "ggml-base.bin",
+		url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
+	},
+	small: {
+		label: "Small",
+		size: "466 MB",
+		filename: "ggml-small.bin",
+		url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
+	},
+	medium: {
+		label: "Medium",
+		size: "1.5 GB",
+		filename: "ggml-medium.bin",
+		url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
+	},
+	large: {
+		label: "Large (v3)",
+		size: "2.9 GB",
+		filename: "ggml-large-v3.bin",
+		url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin",
+	},
+} as const;
+
+function getWhisperModelPath(modelName: string) {
+	const model = WHISPER_MODELS[modelName as keyof typeof WHISPER_MODELS];
+	if (!model) {
+		throw new Error(`Unsupported Whisper model: ${modelName}`);
+	}
+	return path.join(WHISPER_MODEL_DIR, model.filename);
+}
 
 function getAssetRootPath() {
   if (app.isPackaged) {
@@ -961,27 +1000,34 @@ function getFfmpegBinaryPath() {
 }
 
 function sendWhisperModelDownloadProgress(
-  webContents: Electron.WebContents,
-  payload: { status: 'idle' | 'downloading' | 'downloaded' | 'error'; progress: number; path?: string | null; error?: string },
+	webContents: Electron.WebContents,
+	payload: {
+		status: "idle" | "downloading" | "downloaded" | "error";
+		progress: number;
+		model: string;
+		path?: string | null;
+		error?: string;
+	},
 ) {
-  webContents.send('whisper-small-model-download-progress', payload)
+	webContents.send("whisper-model-download-progress", payload);
 }
 
-async function getWhisperSmallModelStatus() {
-  try {
-    await fs.access(WHISPER_SMALL_MODEL_PATH, fsConstants.R_OK)
-    return {
-      success: true,
-      exists: true,
-      path: WHISPER_SMALL_MODEL_PATH,
-    }
-  } catch {
-    return {
-      success: true,
-      exists: false,
-      path: null,
-    }
-  }
+async function getWhisperModelStatus(_event: any, modelName: string) {
+	try {
+		const modelPath = getWhisperModelPath(modelName);
+		await fs.access(modelPath, fsConstants.R_OK);
+		return {
+			success: true,
+			exists: true,
+			path: modelPath,
+		};
+	} catch {
+		return {
+			success: true,
+			exists: false,
+			path: null,
+		};
+	}
 }
 
 function downloadFileWithProgress(
@@ -1048,46 +1094,60 @@ function downloadFileWithProgress(
   return request(url)
 }
 
-async function downloadWhisperSmallModel(webContents: Electron.WebContents) {
-  await fs.mkdir(WHISPER_MODEL_DIR, { recursive: true })
-  const tempPath = `${WHISPER_SMALL_MODEL_PATH}.download`
+async function downloadWhisperModel(
+	webContents: Electron.WebContents,
+	modelName: string,
+) {
+	const model = WHISPER_MODELS[modelName as keyof typeof WHISPER_MODELS];
+	if (!model) {
+		throw new Error(`Unsupported Whisper model: ${modelName}`);
+	}
 
-  sendWhisperModelDownloadProgress(webContents, {
-    status: 'downloading',
-    progress: 0,
-    path: null,
-  })
+	await fs.mkdir(WHISPER_MODEL_DIR, { recursive: true });
+	const modelPath = getWhisperModelPath(modelName);
+	const tempPath = `${modelPath}.download`;
 
-  try {
-    await fs.rm(tempPath, { force: true })
-    await downloadFileWithProgress(WHISPER_MODEL_DOWNLOAD_URL, tempPath, (progress) => {
-      sendWhisperModelDownloadProgress(webContents, {
-        status: 'downloading',
-        progress,
-        path: null,
-      })
-    })
-    await fs.rename(tempPath, WHISPER_SMALL_MODEL_PATH)
-    sendWhisperModelDownloadProgress(webContents, {
-      status: 'downloaded',
-      progress: 100,
-      path: WHISPER_SMALL_MODEL_PATH,
-    })
-    return WHISPER_SMALL_MODEL_PATH
-  } catch (error) {
-    await fs.rm(tempPath, { force: true }).catch(() => undefined)
-    sendWhisperModelDownloadProgress(webContents, {
-      status: 'error',
-      progress: 0,
-      path: null,
-      error: String(error),
-    })
-    throw error
-  }
+	sendWhisperModelDownloadProgress(webContents, {
+		status: "downloading",
+		progress: 0,
+		model: modelName,
+		path: null,
+	});
+
+	try {
+		await fs.rm(tempPath, { force: true });
+		await downloadFileWithProgress(model.url, tempPath, (progress) => {
+			sendWhisperModelDownloadProgress(webContents, {
+				status: "downloading",
+				progress,
+				model: modelName,
+				path: null,
+			});
+		});
+		await fs.rename(tempPath, modelPath);
+		sendWhisperModelDownloadProgress(webContents, {
+			status: "downloaded",
+			progress: 100,
+			model: modelName,
+			path: modelPath,
+		});
+		return modelPath;
+	} catch (error) {
+		await fs.rm(tempPath, { force: true }).catch(() => undefined);
+		sendWhisperModelDownloadProgress(webContents, {
+			status: "error",
+			progress: 0,
+			model: modelName,
+			path: null,
+			error: String(error),
+		});
+		throw error;
+	}
 }
 
-async function deleteWhisperSmallModel() {
-  await fs.rm(WHISPER_SMALL_MODEL_PATH, { force: true })
+async function deleteWhisperModel(_event: any, modelName: string) {
+	const modelPath = getWhisperModelPath(modelName);
+	await fs.rm(modelPath, { force: true });
 }
 
 function parseSrtTimestamp(value: string) {
@@ -3975,45 +4035,47 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
   })
 
-  ipcMain.handle('get-whisper-small-model-status', async () => {
+  ipcMain.handle('get-whisper-model-status', async (event, modelName: string) => {
     try {
-      return await getWhisperSmallModelStatus()
+      return await getWhisperModelStatus(event, modelName)
     } catch (error) {
       return { success: false, exists: false, path: null, error: String(error) }
     }
   })
 
-  ipcMain.handle('download-whisper-small-model', async (event) => {
+  ipcMain.handle('download-whisper-model', async (event, modelName: string) => {
     try {
-      const existing = await getWhisperSmallModelStatus()
+      const existing = await getWhisperModelStatus(event, modelName)
       if (existing.exists) {
         sendWhisperModelDownloadProgress(event.sender, {
           status: 'downloaded',
           progress: 100,
+          model: modelName,
           path: existing.path,
         })
         return { success: true, path: existing.path, alreadyDownloaded: true }
       }
 
-      const modelPath = await downloadWhisperSmallModel(event.sender)
+      const modelPath = await downloadWhisperModel(event.sender, modelName)
       return { success: true, path: modelPath }
     } catch (error) {
-      console.error('Failed to download Whisper small model:', error)
+      console.error(`Failed to download Whisper model ${modelName}:`, error)
       return { success: false, error: String(error) }
     }
   })
 
-  ipcMain.handle('delete-whisper-small-model', async (event) => {
+  ipcMain.handle('delete-whisper-model', async (event, modelName: string) => {
     try {
-      await deleteWhisperSmallModel()
+      await deleteWhisperModel(event, modelName)
       sendWhisperModelDownloadProgress(event.sender, {
         status: 'idle',
         progress: 0,
+        model: modelName,
         path: null,
       })
       return { success: true }
     } catch (error) {
-      console.error('Failed to delete Whisper small model:', error)
+      console.error(`Failed to delete Whisper model ${modelName}:`, error)
       return { success: false, error: String(error) }
     }
   })
