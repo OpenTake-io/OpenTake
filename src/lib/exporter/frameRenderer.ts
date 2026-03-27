@@ -14,17 +14,14 @@ import type {
   ZoomRegion,
   CropRegion,
   AnnotationRegion,
-  SceneFrameStyle,
   SpeedRegion,
   CursorStyle,
   CursorTelemetryPoint,
   WebcamOverlaySettings,
   ZoomTransitionEasing,
 } from "@/components/video-editor/types";
-import { computeSceneFrameLayout } from "@/lib/sceneFrames";
 import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
 import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
-import { isVideoWallpaperSource } from "@/lib/wallpapers";
 import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
 import {
   applyZoomTransform,
@@ -69,10 +66,6 @@ interface FrameRenderConfig {
   zoomInEasing?: ZoomTransitionEasing;
   zoomOutEasing?: ZoomTransitionEasing;
   connectedZoomEasing?: ZoomTransitionEasing;
-  sceneFrameStyle?: SceneFrameStyle;
-  sceneFrameText?: string;
-  sceneFrameOpacity?: number;
-  sceneFrameThickness?: number;
   borderRadius?: number;
   padding?: number;
   cropRegion: CropRegion;
@@ -150,7 +143,6 @@ export class FrameRenderer {
   private compositeCanvas: HTMLCanvasElement | null = null;
   private compositeCtx: CanvasRenderingContext2D | null = null;
   private backgroundVideoElement: HTMLVideoElement | null = null;
-  private backgroundVideoSeekPromise: Promise<void> | null = null;
   private cleanupBackgroundSource: (() => void) | null = null;
   private config: FrameRenderConfig;
   private animationState: AnimationState;
@@ -299,38 +291,6 @@ export class FrameRenderer {
       this.config.wallpaper,
     );
 
-    if (isVideoWallpaperSource(wallpaper)) {
-      const resolved = await resolveMediaElementSource(wallpaper);
-      const video = document.createElement("video");
-      video.src = resolved.src;
-      video.muted = true;
-      video.playsInline = true;
-      video.preload = "auto";
-
-      await new Promise<void>((resolve, reject) => {
-        const handleLoaded = () => {
-          cleanup();
-          resolve();
-        };
-        const handleError = () => {
-          cleanup();
-          reject(new Error(`Failed to load background video: ${wallpaper}`));
-        };
-        const cleanup = () => {
-          video.removeEventListener("loadeddata", handleLoaded);
-          video.removeEventListener("error", handleError);
-        };
-        video.addEventListener("loadeddata", handleLoaded);
-        video.addEventListener("error", handleError);
-        video.load();
-      });
-
-      this.backgroundVideoElement = video;
-      this.cleanupBackgroundSource = resolved.revoke;
-      this.backgroundSprite = null;
-      return;
-    }
-
     // Create background canvas for separate rendering (not affected by zoom)
     const bgCanvas = document.createElement("canvas");
     bgCanvas.width = this.config.width;
@@ -465,51 +425,6 @@ export class FrameRenderer {
 
     // Store the background canvas for compositing
     this.backgroundSprite = bgCanvas as any;
-  }
-
-  private async syncBackgroundVideoFrame(targetTime: number): Promise<void> {
-    const video = this.backgroundVideoElement;
-    if (!video) {
-      return;
-    }
-
-    if (this.backgroundVideoSeekPromise) {
-      await this.backgroundVideoSeekPromise;
-    }
-
-    if (!Number.isFinite(video.duration) || video.duration <= 0) {
-      return;
-    }
-
-    const loopedTime = targetTime % video.duration;
-    if (
-      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-      !video.seeking &&
-      Math.abs(video.currentTime - loopedTime) <= 0.02
-    ) {
-      return;
-    }
-
-    this.backgroundVideoSeekPromise = new Promise<void>((resolve) => {
-      const handleSettled = () => {
-        cleanup();
-        resolve();
-      };
-      const cleanup = () => {
-        video.removeEventListener("seeked", handleSettled);
-        video.removeEventListener("error", handleSettled);
-      };
-
-      video.addEventListener("seeked", handleSettled);
-      video.addEventListener("error", handleSettled);
-      video.currentTime = loopedTime;
-    });
-
-    try {
-      await this.backgroundVideoSeekPromise;
-    } finally {
-      this.backgroundVideoSeekPromise = null;
-    }
   }
 
   private async resolveWallpaperImageUrl(wallpaper: string): Promise<string> {
@@ -816,10 +731,6 @@ export class FrameRenderer {
       await this.syncWebcamFrame(targetTime);
     }
 
-    if (this.backgroundVideoElement) {
-      await this.syncBackgroundVideoFrame(Math.max(0, this.currentVideoTime));
-    }
-
     // Create or update video sprite from VideoFrame
     if (!this.videoSprite) {
       const texture = Texture.from(videoFrame as any);
@@ -954,27 +865,9 @@ export class FrameRenderer {
     const croppedVideoWidth = videoWidth * (cropEndX - cropStartX);
     const croppedVideoHeight = videoHeight * (cropEndY - cropStartY);
 
-    const previewWidth = this.config.previewWidth || 1920;
-    const previewHeight = this.config.previewHeight || 1080;
-    const canvasScaleFactor = Math.min(
-      width / previewWidth,
-      height / previewHeight,
-    );
-    const scaledBorderRadius = borderRadius * canvasScaleFactor;
-    const scaledFrameThickness =
-      (this.config.sceneFrameThickness ?? 12) * canvasScaleFactor;
-    const sceneFrameLayout = computeSceneFrameLayout({
-      containerWidth: width,
-      containerHeight: height,
-      padding,
-      contentAspectRatio:
-        croppedVideoHeight > 0 ? croppedVideoWidth / croppedVideoHeight : videoWidth / videoHeight,
-      borderRadius: scaledBorderRadius,
-      frameStyle: this.config.sceneFrameStyle ?? "none",
-      frameThickness: scaledFrameThickness,
-    });
-    const viewportWidth = sceneFrameLayout.contentRect.width;
-    const viewportHeight = sceneFrameLayout.contentRect.height;
+    const paddingScale = 1.0 - (padding / 100) * 0.4;
+    const viewportWidth = width * paddingScale;
+    const viewportHeight = height * paddingScale;
     const scale = Math.min(
       viewportWidth / croppedVideoWidth,
       viewportHeight / croppedVideoHeight,
@@ -986,12 +879,8 @@ export class FrameRenderer {
     const fullVideoDisplayHeight = videoHeight * scale;
     const croppedDisplayWidth = croppedVideoWidth * scale;
     const croppedDisplayHeight = croppedVideoHeight * scale;
-    const centerOffsetX =
-      sceneFrameLayout.contentRect.x +
-      (sceneFrameLayout.contentRect.width - croppedDisplayWidth) / 2;
-    const centerOffsetY =
-      sceneFrameLayout.contentRect.y +
-      (sceneFrameLayout.contentRect.height - croppedDisplayHeight) / 2;
+    const centerOffsetX = (width - croppedDisplayWidth) / 2;
+    const centerOffsetY = (height - croppedDisplayHeight) / 2;
 
     const spriteX = centerOffsetX - cropRegion.x * fullVideoDisplayWidth;
     const spriteY = centerOffsetY - cropRegion.y * fullVideoDisplayHeight;
@@ -999,13 +888,21 @@ export class FrameRenderer {
 
     this.videoContainer.position.set(0, 0);
 
+    const previewWidth = this.config.previewWidth || 1920;
+    const previewHeight = this.config.previewHeight || 1080;
+    const canvasScaleFactor = Math.min(
+      width / previewWidth,
+      height / previewHeight,
+    );
+    const scaledBorderRadius = borderRadius * canvasScaleFactor;
+
     this.maskGraphics.clear();
     drawSquircleOnGraphics(this.maskGraphics, {
       x: centerOffsetX,
       y: centerOffsetY,
       width: croppedDisplayWidth,
       height: croppedDisplayHeight,
-      radius: sceneFrameLayout.contentRadius,
+      radius: scaledBorderRadius,
     });
     this.maskGraphics.fill({ color: 0xffffff });
 
@@ -1022,7 +919,6 @@ export class FrameRenderer {
         height: croppedDisplayHeight,
         sourceCrop: cropRegion,
       },
-      sceneFrameLayout,
     };
   }
 
@@ -1152,19 +1048,7 @@ export class FrameRenderer {
     ctx.imageSmoothingQuality = "high";
 
     // Step 1: Draw background layer (with optional blur, not affected by zoom)
-    if (
-      this.backgroundVideoElement &&
-      this.backgroundVideoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
-    ) {
-      if (this.config.backgroundBlur > 0) {
-        ctx.save();
-        ctx.filter = `blur(${this.config.backgroundBlur * 3}px)`;
-        ctx.drawImage(this.backgroundVideoElement, 0, 0, w, h);
-        ctx.restore();
-      } else {
-        ctx.drawImage(this.backgroundVideoElement, 0, 0, w, h);
-      }
-    } else if (this.backgroundSprite) {
+    if (this.backgroundSprite) {
       const bgCanvas = this.backgroundSprite as any as HTMLCanvasElement;
 
       if (this.config.backgroundBlur > 0) {
@@ -1180,8 +1064,6 @@ export class FrameRenderer {
         "[FrameRenderer] No background sprite found during compositing!",
       );
     }
-
-    this.drawSceneFrameBackground(ctx);
 
     // Draw video layer with shadows on top of background
     if (
@@ -1215,122 +1097,6 @@ export class FrameRenderer {
     }
 
     this.drawWebcamOverlay(ctx, w, h);
-  }
-
-  private drawSceneFrameBackground(ctx: CanvasRenderingContext2D): void {
-    const sceneFrameLayout = this.layoutCache?.sceneFrameLayout;
-    if (!sceneFrameLayout || sceneFrameLayout.style === "none") {
-      return;
-    }
-
-    const opacity = Math.max(0.05, Math.min(1, this.config.sceneFrameOpacity ?? 0.24));
-
-    if (sceneFrameLayout.style === "glass") {
-      const strokeWidth = sceneFrameLayout.glassStrokeWidth;
-      const rect = {
-        x: sceneFrameLayout.contentRect.x - strokeWidth / 2,
-        y: sceneFrameLayout.contentRect.y - strokeWidth / 2,
-        width: sceneFrameLayout.contentRect.width + strokeWidth,
-        height: sceneFrameLayout.contentRect.height + strokeWidth,
-        radius: sceneFrameLayout.contentRadius + strokeWidth * 1.15,
-      };
-
-      ctx.save();
-      drawSquircleOnCanvas(ctx, rect);
-      ctx.lineWidth = strokeWidth;
-      ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
-      ctx.stroke();
-      ctx.restore();
-      return;
-    }
-
-    if (sceneFrameLayout.style !== "safari" || !sceneFrameLayout.toolbarRect) {
-      return;
-    }
-
-    ctx.save();
-    drawSquircleOnCanvas(ctx, {
-      x: sceneFrameLayout.frameRect.x,
-      y: sceneFrameLayout.frameRect.y,
-      width: sceneFrameLayout.frameRect.width,
-      height: sceneFrameLayout.frameRect.height,
-      radius: sceneFrameLayout.frameRadius,
-    });
-    ctx.fillStyle = "rgb(248, 250, 252)";
-    ctx.fill();
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(226, 232, 240, 0.95)";
-    ctx.stroke();
-
-    const toolbarRect = sceneFrameLayout.toolbarRect;
-    const circleSize = Math.max(9, toolbarRect.height * 0.28);
-    const circleY = toolbarRect.y + toolbarRect.height / 2;
-    const firstCircleX = toolbarRect.x + circleSize / 2;
-    ["#ff5f57", "#febc2e", "#28c840"].forEach((color, index) => {
-      ctx.beginPath();
-      ctx.fillStyle = color;
-      ctx.arc(firstCircleX + index * (circleSize + 6), circleY, circleSize / 2, 0, Math.PI * 2);
-      ctx.fill();
-    });
-
-    const iconColor = "rgba(71, 85, 105, 0.8)";
-    const iconsStartX = toolbarRect.x + circleSize * 3 + 28;
-    const chevronY = circleY;
-    ctx.strokeStyle = iconColor;
-    ctx.lineWidth = 1.6;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.beginPath();
-    ctx.moveTo(iconsStartX + 7, chevronY - 4);
-    ctx.lineTo(iconsStartX + 3, chevronY);
-    ctx.lineTo(iconsStartX + 7, chevronY + 4);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(iconsStartX + 12, chevronY - 4);
-    ctx.lineTo(iconsStartX + 16, chevronY);
-    ctx.lineTo(iconsStartX + 12, chevronY + 4);
-    ctx.stroke();
-
-    const addressX = iconsStartX + 28;
-    const addressHeight = Math.max(24, toolbarRect.height * 0.62);
-    const addressWidth = Math.max(toolbarRect.width * 0.42, 120);
-    const addressY = toolbarRect.y + (toolbarRect.height - addressHeight) / 2;
-    drawSquircleOnCanvas(ctx, {
-      x: addressX,
-      y: addressY,
-      width: addressWidth,
-      height: addressHeight,
-      radius: addressHeight / 2,
-    });
-    ctx.fillStyle = "rgba(255,255,255,0.96)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.18)";
-    ctx.stroke();
-    ctx.fillStyle = "rgba(71, 85, 105, 0.9)";
-    ctx.font = `${Math.max(11, toolbarRect.height * 0.28)}px system-ui`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(
-      (this.config.sceneFrameText || "recordly.app").slice(0, 40),
-      addressX + addressWidth / 2,
-      addressY + addressHeight / 2,
-    );
-
-    const rightIconsX = toolbarRect.x + toolbarRect.width - 56;
-    ctx.beginPath();
-    ctx.moveTo(rightIconsX, chevronY);
-    ctx.lineTo(rightIconsX + 8, chevronY);
-    ctx.moveTo(rightIconsX + 4, chevronY - 4);
-    ctx.lineTo(rightIconsX + 4, chevronY + 4);
-    ctx.stroke();
-    ctx.strokeRect(rightIconsX + 16, chevronY - 4, 8, 8);
-    [0, 1, 2].forEach((offset) => {
-      ctx.beginPath();
-      ctx.arc(rightIconsX + 36 + offset * 6, chevronY, 1.2, 0, Math.PI * 2);
-      ctx.fillStyle = iconColor;
-      ctx.fill();
-    });
-    ctx.restore();
   }
 
   private drawWebcamOverlay(
