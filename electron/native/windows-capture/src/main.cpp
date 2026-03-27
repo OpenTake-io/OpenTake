@@ -1,10 +1,7 @@
-#include "wgc_session.h"
+#include "dxgi_session.h"
 #include "mf_encoder.h"
 #include "monitor_utils.h"
 #include "wasapi_loopback.h"
-
-#include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.System.h>
 
 #include <iostream>
 #include <string>
@@ -33,11 +30,6 @@ struct CaptureConfig {
     int fps = 60;
     int width = 0;
     int height = 0;
-    int displayX = 0;
-    int displayY = 0;
-    int displayW = 0;
-    int displayH = 0;
-    bool hasDisplayBounds = false;
     bool captureSystemAudio = false;
     bool captureMic = false;
 };
@@ -132,18 +124,6 @@ static bool parseSimpleJson(const std::string& json, CaptureConfig& config) {
     config.captureSystemAudio = findBool("captureSystemAudio");
     config.captureMic = findBool("captureMic");
 
-    int dx = findInt("displayX");
-    int dy = findInt("displayY");
-    int dw = findInt("displayW");
-    int dh = findInt("displayH");
-    if (dw > 0 && dh > 0) {
-        config.displayX = dx;
-        config.displayY = dy;
-        config.displayW = dw;
-        config.displayH = dh;
-        config.hasDisplayBounds = true;
-    }
-
     return true;
 }
 
@@ -193,15 +173,13 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    winrt::init_apartment(winrt::apartment_type::multi_threaded);
-
     CaptureConfig config;
     if (!parseSimpleJson(argv[1], config)) {
         std::cerr << "ERROR: Failed to parse config JSON" << std::endl;
         return 1;
     }
 
-    WgcSession session;
+    DxgiSession session;
 
     if (config.windowHandle > 0) {
         HWND hwnd = reinterpret_cast<HWND>(static_cast<intptr_t>(config.windowHandle));
@@ -210,23 +188,17 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         if (!session.initialize(hwnd, config.fps)) {
-            std::cerr << "ERROR: Failed to initialize WGC window capture session" << std::endl;
+            std::cerr << "ERROR: Failed to initialize DXGI window capture session" << std::endl;
             return 1;
         }
     } else {
         HMONITOR monitor = findMonitorByDisplayId(config.displayId);
-        if (!monitor && config.hasDisplayBounds) {
-            std::cerr << "Monitor ID match failed, attempting coordinate-based match: " 
-                      << config.displayX << "," << config.displayY << " " << config.displayW << "x" << config.displayH << std::endl;
-            monitor = findMonitorByBounds(config.displayX, config.displayY, config.displayW, config.displayH);
-        }
-
         if (!monitor) {
             std::cerr << "ERROR: Could not find monitor for displayId " << config.displayId << std::endl;
             return 1;
         }
         if (!session.initialize(monitor, config.fps)) {
-            std::cerr << "ERROR: Failed to initialize WGC capture session" << std::endl;
+            std::cerr << "ERROR: Failed to initialize DXGI capture session" << std::endl;
             return 1;
         }
     }
@@ -301,7 +273,7 @@ int main(int argc, char* argv[]) {
 
     // Start video capture, then audio immediately after for sync
     if (!session.startCapture()) {
-        std::cerr << "ERROR: Failed to start WGC capture" << std::endl;
+        std::cerr << "ERROR: Failed to start DXGI capture" << std::endl;
         return 1;
     }
 
@@ -315,7 +287,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Recording started" << std::endl;
     std::cout.flush();
 
-    // Wait for stop signal while pausing/resuming audio tracks in lockstep.
+    // Wait for stop signal
     while (!g_stopRequested) {
         if (g_pauseRequested) {
             if (audioActive) loopback.pause();

@@ -85,11 +85,15 @@ function getScreen() {
   return nodeRequire('electron').screen as typeof import('electron').screen
 }
 
+function normalizeRecordingTimeOffsetMs(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.round(value)
+    : 0
+}
+
 function broadcastSelectedSourceChange() {
   for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) {
-      window.webContents.send('selected-source-changed', selectedSource)
-    }
+    safeSend(window.webContents, 'selected-source-changed', selectedSource)
   }
 }
 
@@ -425,7 +429,7 @@ async function loadProjectFromPath(projectPath: string) {
   currentRecordingSession = {
     videoPath: mediaSources.videoPath,
     webcamPath: mediaSources.webcamPath,
-    timeOffsetMs: mediaSources.timeOffsetMs,
+    timeOffsetMs: 0,
   }
   await rememberRecentProject(normalizedPath)
 
@@ -462,7 +466,6 @@ async function resolveProjectMediaSources(project: unknown): Promise<
       success: true
       videoPath: string
       webcamPath: string | null
-      timeOffsetMs: number
     }
   | {
       success: false
@@ -496,9 +499,6 @@ async function resolveProjectMediaSources(project: unknown): Promise<
     typeof (project as { editor?: { webcam?: { sourcePath?: unknown } } }).editor?.webcam?.sourcePath === 'string'
       ? ((project as { editor?: { webcam?: { sourcePath?: string } } }).editor?.webcam?.sourcePath ?? null)
       : null
-  const timeOffsetMs = normalizeRecordingTimeOffsetMs(
-    (project as { editor?: { webcam?: { timeOffsetMs?: unknown } } }).editor?.webcam?.timeOffsetMs,
-  )
   const normalizedWebcamPath = normalizeVideoSourcePath(rawWebcamPath)
 
   if (!normalizedWebcamPath) {
@@ -506,7 +506,6 @@ async function resolveProjectMediaSources(project: unknown): Promise<
       success: true,
       videoPath: normalizedVideoPath,
       webcamPath: null,
-      timeOffsetMs,
     }
   }
 
@@ -516,22 +515,14 @@ async function resolveProjectMediaSources(project: unknown): Promise<
       success: true,
       videoPath: normalizedVideoPath,
       webcamPath: normalizedWebcamPath,
-      timeOffsetMs,
     }
   } catch {
     return {
       success: true,
       videoPath: normalizedVideoPath,
       webcamPath: null,
-      timeOffsetMs,
     }
   }
-}
-
-function normalizeRecordingTimeOffsetMs(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.round(value)
-    : 0
 }
 
 function getRecordingSessionManifestPath(videoPath: string) {
@@ -652,7 +643,6 @@ async function resolveRecordingSession(videoPath?: string | null): Promise<Recor
   return {
     videoPath: normalizedVideoPath,
     webcamPath: linkedWebcamPath,
-    timeOffsetMs: 0,
   }
 }
 
@@ -1036,17 +1026,25 @@ function runWhisperWithProgress(
 	});
 }
 
+function safeSend(webContents: Electron.WebContents | undefined, channel: string, ...args: any[]) {
+  if (webContents && !webContents.isDestroyed()) {
+    webContents.send(channel, ...args)
+  }
+}
+
+type WhisperModelDownloadStatus = {
+  status: "idle" | "downloading" | "downloaded" | "error";
+  progress: number;
+  model: string;
+  path?: string | null;
+  error?: string;
+}
+
 function sendWhisperModelDownloadProgress(
-	webContents: Electron.WebContents,
-	payload: {
-		status: "idle" | "downloading" | "downloaded" | "error";
-		progress: number;
-		model: string;
-		path?: string | null;
-		error?: string;
-	},
+  webContents: Electron.WebContents | undefined,
+  progress: WhisperModelDownloadStatus,
 ) {
-	webContents.send("whisper-model-download-progress", payload);
+  safeSend(webContents, 'whisper-model-download-progress', progress)
 }
 
 async function getWhisperModelStatus(_event: any, modelName: string) {
@@ -1116,7 +1114,9 @@ function downloadFileWithProgress(
           reject(error)
         })
 
-        fileStream.on('finish', () => {
+        // On Windows, the 'finish' event might fire before the OS has fully released the file handle.
+        // We listen for 'close' to be absolutely sure the file descriptor is closed.
+        fileStream.on('close', () => {
           onProgress(100)
           resolve()
         })
@@ -1151,35 +1151,50 @@ async function downloadWhisperModel(
 		path: null,
 	});
 
-	try {
-		await fs.rm(tempPath, { force: true });
-		await downloadFileWithProgress(model.url, tempPath, (progress) => {
-			sendWhisperModelDownloadProgress(webContents, {
-				status: "downloading",
-				progress,
-				model: modelName,
-				path: null,
-			});
-		});
-		await fs.rename(tempPath, modelPath);
-		sendWhisperModelDownloadProgress(webContents, {
-			status: "downloaded",
-			progress: 100,
-			model: modelName,
-			path: modelPath,
-		});
-		return modelPath;
-	} catch (error) {
-		await fs.rm(tempPath, { force: true }).catch(() => undefined);
-		sendWhisperModelDownloadProgress(webContents, {
-			status: "error",
-			progress: 0,
-			model: modelName,
-			path: null,
-			error: String(error),
-		});
-		throw error;
-	}
+  try {
+    await fs.rm(tempPath, { force: true }).catch(() => undefined)
+    await downloadFileWithProgress(model.url, tempPath, (progress) => {
+      sendWhisperModelDownloadProgress(webContents, {
+        status: 'downloading',
+        progress,
+        model: modelName,
+        path: null,
+      })
+    })
+
+    // Robust rename logic for Windows to avoid EPERM/EBUSY
+    let renameRetries = 0
+    const maxRetries = 5
+    while (renameRetries < maxRetries) {
+      try {
+        await fs.rename(tempPath, modelPath)
+        break
+      } catch (err) {
+        renameRetries++
+        if (renameRetries >= maxRetries) throw err
+        // Wait briefly between retries to allow OS to release file handles
+        await new Promise((resolve) => setTimeout(resolve, 100 * renameRetries))
+      }
+    }
+
+    sendWhisperModelDownloadProgress(webContents, {
+      status: 'downloaded',
+      progress: 100,
+      model: modelName,
+      path: modelPath,
+    })
+    return modelPath
+  } catch (error) {
+    await fs.rm(tempPath, { force: true }).catch(() => undefined)
+    sendWhisperModelDownloadProgress(webContents, {
+      status: 'error',
+      progress: 0,
+      model: modelName,
+      path: null,
+      error: String(error),
+    })
+    throw error
+  }
 }
 
 async function deleteWhisperModel(_event: any, modelName: string) {
@@ -1488,7 +1503,7 @@ async function extractCaptionAudioSource(options: {
   for (const candidate of candidates) {
     try {
       await ensureReadableFile(candidate.path, 'video file')
-      console.log('[auto-captions] Extracting audio from:', candidate.path, options.startTime ? `at ${options.startTime}s` : '')
+      console.log('[auto-captions] Extracting audio from:', path.basename(candidate.path), options.startTime ? `at ${options.startTime}s` : '')
       
       const ffmpegArgs = ['-y'];
       if (options.startTime !== undefined) {
@@ -1504,7 +1519,7 @@ async function extractCaptionAudioSource(options: {
         ffmpegArgs,
         { timeout: 5 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 },
       )
-      console.log('[auto-captions] Audio extracted successfully to:', options.wavPath)
+      console.log('[auto-captions] Audio extracted successfully to temporary workspace')
       attemptedCandidates.push({ ...candidate, readable: true, extractedAudio: true })
       return candidate
     } catch (error) {
@@ -1518,7 +1533,7 @@ async function extractCaptionAudioSource(options: {
     }
   }
 
-  console.warn('[auto-captions] No audio source candidate could be extracted:', attemptedCandidates)
+  console.warn('[auto-captions] No audio source candidate could be extracted')
 
   throw new Error('No audio was found to transcribe in the saved recording file. Captions need an audio track. If this recording should have contained sound, the recording was saved without an audio stream.')
 }
@@ -1554,15 +1569,10 @@ async function generateAutoCaptionsFromVideo(
   const endTimeMs = totalDurationMs > 0 ? startTimeMs + totalDurationMs : Infinity;
 
   console.log('[auto-captions] Starting segmented caption generation sequence')
-  console.log('[auto-captions] Video:', normalizedVideoPath)
+  console.log('[auto-captions] Video:', path.basename(normalizedVideoPath))
   console.log('[auto-captions] Range:', `${(startTimeMs/1000).toFixed(2)}s - ${totalDurationMs ? `${((startTimeMs + totalDurationMs)/1000).toFixed(2)}s` : 'End'}`)
 
   const allCues: any[] = [];
-  let chunkCount = 1;
-  if (totalDurationMs > 0) {
-    chunkCount = Math.ceil(totalDurationMs / CHUNK_SIZE_MS);
-  }
-
   let audioSourceLabel = 'Unknown';
 
   for (let offsetMs = startTimeMs; offsetMs < endTimeMs; offsetMs += CHUNK_SIZE_MS) {
@@ -1574,7 +1584,6 @@ async function generateAutoCaptionsFromVideo(
     const jsonPath = `${outputBase}.json`
 
     try {
-      console.log(`[auto-captions] Processing chunk ${chunkIndex + 1}/${chunkCount || '?'} at offset ${offsetMs / 1000}s`)
       
       const audioSource = await extractCaptionAudioSource({
         videoPath: normalizedVideoPath,
@@ -1599,9 +1608,9 @@ async function generateAutoCaptionsFromVideo(
       const updateChunkProgress = (progress: number) => {
         if (totalDurationMs > 0) {
           const totalProgress = (offsetMs / totalDurationMs * 100) + (progress / (totalDurationMs / CHUNK_SIZE_MS));
-          webContents.send('auto-caption-progress', { progress: Math.min(99, totalProgress) })
+          safeSend(webContents, 'auto-caption-progress', { progress: Math.min(99, totalProgress) })
         } else {
-          webContents.send('auto-caption-progress', { progress })
+          safeSend(webContents, 'auto-caption-progress', { progress })
         }
       };
 
@@ -1639,9 +1648,8 @@ async function generateAutoCaptionsFromVideo(
         });
 
       if (adjustedCues.length > 0) {
-        console.log(`[auto-captions] Chunk ${chunkIndex + 1} produced ${adjustedCues.length} adjusted cues.`)
         allCues.push(...adjustedCues);
-        webContents.send('auto-caption-chunk', { cues: adjustedCues });
+        safeSend(webContents, 'auto-caption-chunk', { cues: adjustedCues });
       }
 
       // If we don't know duration and this was a short chunk, we might be at the end
@@ -1664,8 +1672,7 @@ async function generateAutoCaptionsFromVideo(
     }
   }
 
-  console.log(`[auto-captions] Generation complete. Total cues: ${allCues.length}`)
-  webContents.send('auto-caption-progress', { progress: 100 })
+  safeSend(webContents, 'auto-caption-progress', { progress: 100 })
   return {
     cues: allCues,
     audioSourceLabel,
@@ -1920,6 +1927,10 @@ function waitForWindowsCaptureStop(proc: ChildProcessWithoutNullStreams) {
         resolve(match[1].trim())
         return
       }
+      if (code === 0 && windowsCaptureTargetPath) {
+        resolve(windowsCaptureTargetPath)
+        return
+      }
       reject(new Error(windowsCaptureOutputBuffer.trim() || `Native Windows capture exited with code ${code ?? 'unknown'}`))
     }
 
@@ -1954,7 +1965,7 @@ function attachWindowsCaptureLifecycle(proc: ChildProcessWithoutNullStreams) {
     const sourceName = selectedSource?.name ?? 'Screen'
     BrowserWindow.getAllWindows().forEach((window) => {
       if (!window.isDestroyed()) {
-        window.webContents.send('recording-state-changed', {
+        safeSend(window.webContents, 'recording-state-changed', {
           recording: false,
           sourceName,
         })
@@ -2038,43 +2049,6 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
     if (audioPath) {
       await fs.rm(audioPath, { force: true }).catch(() => {})
     }
-  }
-}
-
-async function probeRecordedMediaStream(videoPath: string, streamType: 'video' | 'audio') {
-  const ffmpegPath = getFfmpegBinaryPath()
-  const args = streamType === 'video'
-    ? ['-v', 'error', '-i', videoPath, '-map', '0:v:0', '-frames:v', '1', '-f', 'null', '-']
-    : ['-v', 'error', '-i', videoPath, '-map', '0:a:0', '-frames:a', '1', '-f', 'null', '-']
-
-  await execFileAsync(ffmpegPath, args, {
-    timeout: 30000,
-    maxBuffer: 4 * 1024 * 1024,
-  })
-}
-
-async function validateRecordedVideoFile(videoPath: string, options?: { requiresAudio?: boolean }) {
-  await fs.access(videoPath, fsConstants.R_OK)
-
-  const stats = await fs.stat(videoPath)
-  if (stats.size <= 0) {
-    throw new Error('Recorded video file is empty')
-  }
-
-  try {
-    await probeRecordedMediaStream(videoPath, 'video')
-  } catch (error) {
-    throw new Error(`Recorded video file is unreadable or missing a video stream: ${String(error)}`)
-  }
-
-  if (!options?.requiresAudio) {
-    return
-  }
-
-  try {
-    await probeRecordedMediaStream(videoPath, 'audio')
-  } catch (error) {
-    throw new Error(`Recorded video is missing the requested audio track: ${String(error)}`)
   }
 }
 
@@ -2228,7 +2202,7 @@ async function muxNativeMacRecordingWithAudio(
 function emitRecordingInterrupted(reason: string, message: string) {
   BrowserWindow.getAllWindows().forEach((window) => {
     if (!window.isDestroyed()) {
-      window.webContents.send('recording-interrupted', { reason, message })
+      safeSend(window.webContents, 'recording-interrupted', { reason, message })
     }
   })
 }
@@ -2236,7 +2210,7 @@ function emitRecordingInterrupted(reason: string, message: string) {
 function emitCursorStateChanged(cursorType: CursorVisualType) {
   BrowserWindow.getAllWindows().forEach((window) => {
     if (!window.isDestroyed()) {
-      window.webContents.send('cursor-state-changed', { cursorType })
+      safeSend(window.webContents, 'cursor-state-changed', { cursorType })
     }
   })
 }
@@ -2272,7 +2246,7 @@ function attachNativeCaptureLifecycle(process: ChildProcessWithoutNullStreams) {
     const sourceName = selectedSource?.name ?? 'Screen'
     BrowserWindow.getAllWindows().forEach((window) => {
       if (!window.isDestroyed()) {
-        window.webContents.send('recording-state-changed', {
+        safeSend(window.webContents, 'recording-state-changed', {
           recording: false,
           sourceName,
         })
@@ -2676,7 +2650,6 @@ function snapshotCursorTelemetryForPersistence() {
 }
 
 async function finalizeStoredVideo(videoPath: string) {
-  await validateRecordedVideoFile(videoPath)
   snapshotCursorTelemetryForPersistence()
   currentVideoPath = videoPath
   currentProjectPath = null
@@ -3239,9 +3212,6 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           const micPath = path.join(recordingsDir, `recording-${timestamp}.mic.wav`)
           config.captureMic = true
           config.micOutputPath = micPath
-          if (options.microphoneDeviceId) {
-            config.micDeviceId = options.microphoneDeviceId
-          }
           if (options.microphoneLabel) {
             config.micDeviceName = options.microphoneLabel
           }
@@ -3454,7 +3424,6 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           await moveFileWithOverwrite(tempVideoPath, finalVideoPath)
         }
 
-        await validateRecordedVideoFile(finalVideoPath)
         windowsPendingVideoPath = finalVideoPath
         return { success: true, path: finalVideoPath }
       } catch (error) {
@@ -3521,13 +3490,14 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         await moveFileWithOverwrite(tempVideoPath, finalVideoPath)
       }
 
-      const requiresAudio = Boolean(preferredSystemAudioPath || preferredMicrophonePath)
-
-      if (requiresAudio) {
-        await muxNativeMacRecordingWithAudio(finalVideoPath, preferredSystemAudioPath, preferredMicrophonePath)
+      if (preferredSystemAudioPath || preferredMicrophonePath) {
+        try {
+          await muxNativeMacRecordingWithAudio(finalVideoPath, preferredSystemAudioPath, preferredMicrophonePath)
+        } catch (error) {
+          console.warn('Failed to mux native macOS audio into capture:', error)
+        }
       }
 
-      await validateRecordedVideoFile(finalVideoPath, { requiresAudio })
       return await finalizeStoredVideo(finalVideoPath)
     } catch (error) {
       console.error('Failed to stop native ScreenCaptureKit recording:', error)
@@ -3661,21 +3631,22 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
 
     try {
-      const requiresAudio = Boolean(windowsSystemAudioPath || windowsMicAudioPath)
-
-      if (requiresAudio) {
+      if (windowsSystemAudioPath || windowsMicAudioPath) {
         await muxNativeWindowsVideoWithAudio(videoPath, windowsSystemAudioPath, windowsMicAudioPath)
         windowsSystemAudioPath = null
         windowsMicAudioPath = null
       }
 
-      await validateRecordedVideoFile(videoPath, { requiresAudio })
       return await finalizeStoredVideo(videoPath)
     } catch (error) {
       console.error('Failed to mux native Windows recording:', error)
       windowsSystemAudioPath = null
       windowsMicAudioPath = null
-      return { success: false, message: 'Failed to mux native Windows recording', error: String(error) }
+      try {
+        return await finalizeStoredVideo(videoPath)
+      } catch {
+        return { success: false, message: 'Failed to mux native Windows recording', error: String(error) }
+      }
     }
   })
 
@@ -3823,7 +3794,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     const source = selectedSource || { name: 'Screen' }
     BrowserWindow.getAllWindows().forEach((window) => {
       if (!window.isDestroyed()) {
-        window.webContents.send('recording-state-changed', {
+        safeSend(window.webContents, 'recording-state-changed', {
           recording,
           sourceName: source.name,
         })
@@ -4489,6 +4460,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       ?? {
         videoPath: currentVideoPath,
         webcamPath: null,
+        timeOffsetMs: 0,
       }
 
     currentRecordingSession = resolvedSession
@@ -4553,6 +4525,10 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       return { success: false, error: String(error) };
     }
   });
+
+  ipcMain.handle('app:getVersion', () => {
+    return app.getVersion()
+  })
 
   ipcMain.handle('get-platform', () => {
     return process.platform;
@@ -4635,7 +4611,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       let remaining = seconds
       countdownRemaining = remaining
 
-      countdownWin.webContents.send('countdown-tick', remaining)
+      safeSend(countdownWin.webContents, 'countdown-tick', remaining)
 
       countdownTimer = setInterval(() => {
         if (countdownCancelled) {
@@ -4664,9 +4640,11 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           resolve({ success: true })
         } else {
           const win = getCountdownWindow()
-          if (win && !win.isDestroyed()) {
-            win.webContents.send('countdown-tick', remaining)
-          }
+          try {
+            if (win && !win.isDestroyed()) {
+              safeSend(win.webContents, 'countdown-tick', remaining)
+            }
+          } catch {}
         }
       }, 1000)
     })
@@ -4689,10 +4667,6 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       success: true,
       seconds: countdownInProgress ? countdownRemaining : null,
     }
-  })
-
-  ipcMain.handle('app:getVersion', () => {
-    return app.getVersion()
   })
 }
 

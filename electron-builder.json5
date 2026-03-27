@@ -65,7 +65,6 @@
     ],
     "icon": "icons/icons/win/icon.ico",
     "executableName": "Recordly",
-    "artifactName": "${productName}-Setup-${version}.${ext}"
+    "artifactName": "Recordly.${ext}"
   }
 }
-

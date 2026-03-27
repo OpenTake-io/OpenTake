@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
 const projectRoot = process.cwd();
@@ -31,26 +31,44 @@ function findCmake() {
 		return `"${localCmake}"`;
 	}
 
-	// VS 2022 bundled CMake
-	const vsEditions = ["Community", "Professional", "Enterprise", "BuildTools"];
-	for (const edition of vsEditions) {
-		const cmakePath = path.join(
-			"C:",
-			"Program Files",
-			"Microsoft Visual Studio",
-			"2022",
-			edition,
-			"Common7",
-			"IDE",
-			"CommonExtensions",
-			"Microsoft",
-			"CMake",
-			"CMake",
-			"bin",
-			"cmake.exe",
-		);
+	// Standalone CMake paths
+	const standaloneCmakePaths = [
+		path.join("C:", "Program Files", "CMake", "bin", "cmake.exe"),
+		path.join("C:", "Program Files (x86)", "CMake", "bin", "cmake.exe"),
+	];
+	for (const cmakePath of standaloneCmakePaths) {
 		if (existsSync(cmakePath)) {
 			return `"${cmakePath}"`;
+		}
+	}
+
+	// VS 2022/2019 bundled CMake
+	const vsRoots = [
+		path.join("C:", "Program Files", "Microsoft Visual Studio"),
+		path.join("C:", "Program Files (x86)", "Microsoft Visual Studio"),
+	];
+	const vsEditions = ["Community", "Professional", "Enterprise", "BuildTools"];
+	const vsVersions = ["2022", "2019"];
+	for (const root of vsRoots) {
+		for (const version of vsVersions) {
+			for (const edition of vsEditions) {
+				const cmakePath = path.join(
+					root,
+					version,
+					edition,
+					"Common7",
+					"IDE",
+					"CommonExtensions",
+					"Microsoft",
+					"CMake",
+					"CMake",
+					"bin",
+					"cmake.exe",
+				);
+				if (existsSync(cmakePath)) {
+					return `"${cmakePath}"`;
+				}
+			}
 		}
 	}
 
@@ -66,9 +84,17 @@ if (!cmake) {
 }
 
 mkdirSync(buildDir, { recursive: true });
+const cacheFile = path.join(buildDir, "CMakeCache.txt");
+const cacheDir = path.join(buildDir, "CMakeFiles");
+
+function clearCmakeCache() {
+	rmSync(cacheFile, { force: true });
+	rmSync(cacheDir, { recursive: true, force: true });
+}
 
 console.log("[build-cursor-monitor] Configuring CMake...");
 try {
+	clearCmakeCache();
 	execSync(`${cmake} .. -G "Visual Studio 17 2022" -A x64`, {
 		cwd: buildDir,
 		stdio: "inherit",
@@ -77,6 +103,7 @@ try {
 } catch {
 	console.log("[build-cursor-monitor] VS 2022 generator not found, trying VS 2019...");
 	try {
+		clearCmakeCache();
 		execSync(`${cmake} .. -G "Visual Studio 16 2019" -A x64`, {
 			cwd: buildDir,
 			stdio: "inherit",

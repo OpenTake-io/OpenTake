@@ -79,6 +79,7 @@ interface TimelineEditorProps {
   onCaptionSpanChange?: (id: string, span: Span) => void;
   selectedCaptionId?: string | null;
   onSelectCaption?: (id: string | null) => void;
+  onClearAutoCaptions?: () => void;
   aspectRatio: AspectRatio;
   onAspectRatioChange: (aspectRatio: AspectRatio) => void;
   onOpenCropEditor?: () => void;
@@ -816,6 +817,7 @@ export default function TimelineEditor({
   onCaptionSpanChange,
   selectedCaptionId,
   onSelectCaption,
+  onClearAutoCaptions,
   aspectRatio,
   onAspectRatioChange,
   onOpenCropEditor,
@@ -980,6 +982,7 @@ export default function TimelineEditor({
     speedIds.forEach((id) => onSpeedDelete?.(id));
     audioIds.forEach((id) => onAudioDelete?.(id));
 
+    onClearAutoCaptions?.();
     clearSelectedBlocks();
     setSelectedKeyframeId(null);
   }, [
@@ -988,6 +991,7 @@ export default function TimelineEditor({
     clearSelectedBlocks,
     onAnnotationDelete,
     onAudioDelete,
+    onClearAutoCaptions,
     onSpeedDelete,
     onTrimDelete,
     onZoomDelete,
@@ -999,33 +1003,80 @@ export default function TimelineEditor({
   const handleSelectZoom = useCallback((id: string | null) => {
     setSelectAllBlocksActive(false);
     onSelectZoom(id);
-  }, [onSelectZoom]);
+    if (id) {
+      onSelectTrim?.(null);
+      onSelectAnnotation?.(null);
+      onSelectSpeed?.(null);
+      onSelectAudio?.(null);
+      onSelectCaption?.(null);
+      onTimeSelectionChange?.(null);
+    }
+  }, [onSelectZoom, onSelectTrim, onSelectAnnotation, onSelectSpeed, onSelectAudio, onSelectCaption, onTimeSelectionChange]);
 
   const handleSelectTrim = useCallback((id: string | null) => {
     setSelectAllBlocksActive(false);
     onSelectTrim?.(id);
-  }, [onSelectTrim]);
+    if (id) {
+      onSelectZoom(null);
+      onSelectAnnotation?.(null);
+      onSelectSpeed?.(null);
+      onSelectAudio?.(null);
+      onSelectCaption?.(null);
+      onTimeSelectionChange?.(null);
+    }
+  }, [onSelectZoom, onSelectTrim, onSelectAnnotation, onSelectSpeed, onSelectAudio, onSelectCaption, onTimeSelectionChange]);
 
   const handleSelectAnnotation = useCallback((id: string | null) => {
     setSelectAllBlocksActive(false);
     onSelectAnnotation?.(id);
-  }, [onSelectAnnotation]);
+    if (id) {
+      onSelectZoom(null);
+      onSelectTrim?.(null);
+      onSelectSpeed?.(null);
+      onSelectAudio?.(null);
+      onSelectCaption?.(null);
+      onTimeSelectionChange?.(null);
+    }
+  }, [onSelectZoom, onSelectTrim, onSelectAnnotation, onSelectSpeed, onSelectAudio, onSelectCaption, onTimeSelectionChange]);
 
   const handleSelectSpeed = useCallback((id: string | null) => {
     setSelectAllBlocksActive(false);
     onSelectSpeed?.(id);
-  }, [onSelectSpeed]);
+    if (id) {
+      onSelectZoom(null);
+      onSelectTrim?.(null);
+      onSelectAnnotation?.(null);
+      onSelectAudio?.(null);
+      onSelectCaption?.(null);
+      onTimeSelectionChange?.(null);
+    }
+  }, [onSelectZoom, onSelectTrim, onSelectAnnotation, onSelectSpeed, onSelectAudio, onSelectCaption, onTimeSelectionChange]);
 
   const handleSelectAudio = useCallback((id: string | null) => {
     setSelectAllBlocksActive(false);
     onSelectAudio?.(id);
-  }, [onSelectAudio]);
-
+    if (id) {
+      onSelectZoom(null);
+      onSelectTrim?.(null);
+      onSelectAnnotation?.(null);
+      onSelectSpeed?.(null);
+      onSelectCaption?.(null);
+      onTimeSelectionChange?.(null);
+    }
+  }, [onSelectZoom, onSelectTrim, onSelectAnnotation, onSelectSpeed, onSelectAudio, onSelectCaption, onTimeSelectionChange]);
 
   const handleSelectCaption = useCallback((id: string | null) => {
     setSelectAllBlocksActive(false);
     onSelectCaption?.(id);
-  }, [onSelectCaption]);
+    if (id) {
+      onSelectZoom(null);
+      onSelectTrim?.(null);
+      onSelectAnnotation?.(null);
+      onSelectSpeed?.(null);
+      onSelectAudio?.(null);
+      onTimeSelectionChange?.(null);
+    }
+  }, [onSelectZoom, onSelectTrim, onSelectAnnotation, onSelectSpeed, onSelectAudio, onSelectCaption, onTimeSelectionChange]);
 
   useEffect(() => {
     setRange(createInitialRange(totalMs));

@@ -246,7 +246,9 @@ export function createHudOverlayWindow(): BrowserWindow {
 	}
 
 	win.webContents.on("did-finish-load", () => {
-		win?.webContents.send("main-process-message", new Date().toLocaleString());
+		if (!win.isDestroyed()) {
+			win.webContents.send("main-process-message", new Date().toLocaleString());
+		}
 		setTimeout(() => {
 			if (!win.isDestroyed()) {
 				win.show();
@@ -310,7 +312,9 @@ export function createEditorWindow(): BrowserWindow {
 	});
 
 	win.webContents.on("did-finish-load", () => {
-		win?.webContents.send("main-process-message", new Date().toLocaleString());
+		if (!win.isDestroyed()) {
+			win.webContents.send("main-process-message", new Date().toLocaleString());
+		}
 	});
 
 	if (VITE_DEV_SERVER_URL) {

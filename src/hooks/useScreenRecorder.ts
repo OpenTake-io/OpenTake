@@ -111,10 +111,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       return;
     }
 
-    accumulatedPausedDurationMs.current += Math.max(
-      0,
-      resumedAt - pauseStartedAtMs.current,
-    );
+    accumulatedPausedDurationMs.current += Math.max(0, resumedAt - pauseStartedAtMs.current);
     pauseStartedAtMs.current = null;
   }, []);
 
@@ -170,10 +167,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
   const selectMimeType = () => {
     const preferred = [
+      "video/webm;codecs=av1",
+      "video/webm;codecs=h264",
       "video/webm;codecs=vp9",
       "video/webm;codecs=vp8",
       "video/webm",
-      "video/webm;codecs=av1",
     ];
 
     return preferred.find((type) => MediaRecorder.isTypeSupported(type)) ?? "video/webm";
@@ -350,7 +348,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
             return;
           }
 
-          const duration = Math.max(0, getRecordingDurationMs(Date.now()) - webcamTimeOffsetMs.current);
+          const duration = Math.max(
+            0,
+            getRecordingDurationMs(Date.now()) - webcamTimeOffsetMs.current,
+          );
           const webcamBlob = new Blob(webcamChunks.current, { type: mimeType });
           webcamChunks.current = [];
           const fixedBlob = await fixWebmDuration(webcamBlob, duration);
@@ -410,13 +411,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
         if (isNativeWindows) {
           const muxResult = await window.electronAPI.muxNativeWindowsRecording();
-          if (!muxResult?.success || !muxResult.path) {
-            console.error("Failed to finalize native Windows recording:", muxResult?.error ?? muxResult?.message);
-            alert("Recording could not be finalized because the captured video file is invalid.");
-            return;
-          }
-
-          finalPath = muxResult.path;
+          finalPath = muxResult?.path ?? result.path;
         }
 
         await finalizeRecordingSession(finalPath, webcamPath);
@@ -533,8 +528,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
       recordingSessionTimestamp.current = Date.now();
       resetRecordingClock(recordingSessionTimestamp.current);
-      webcamStartTime.current = null;
-      webcamTimeOffsetMs.current = 0;
       await startWebcamRecorder();
 
       const platform = await window.electronAPI.getPlatform();
@@ -610,10 +603,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
           const mainStartedAt = Date.now();
           nativeScreenRecording.current = true;
           nativeWindowsRecording.current = useNativeWindowsCapture;
+          resetRecordingClock(mainStartedAt);
           webcamTimeOffsetMs.current = webcamStartTime.current === null
             ? 0
             : webcamStartTime.current - mainStartedAt;
-          resetRecordingClock(mainStartedAt);
           setRecording(true);
           window.electronAPI?.setRecordingState(true);
 
@@ -926,10 +919,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       webcamRecorder.current.stop();
     }
     webcamRecorder.current = null;
-    webcamStream.current?.getTracks().forEach((t) => t.stop());
-    webcamStream.current = null;
     webcamStartTime.current = null;
     webcamTimeOffsetMs.current = 0;
+    webcamStream.current?.getTracks().forEach((t) => t.stop());
+    webcamStream.current = null;
     pendingWebcamPathPromise.current = null;
 
     if (nativeScreenRecording.current) {

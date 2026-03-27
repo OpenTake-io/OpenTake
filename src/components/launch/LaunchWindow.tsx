@@ -111,12 +111,8 @@ function DropdownItem({
 	);
 }
 
-function BarSeparator() {
+function Separator() {
 	return <div className={styles.sep} />;
-}
-
-function DropdownSeparator() {
-	return <div className={styles.ddSeparator} />;
 }
 
 function MicDeviceRow({
@@ -639,7 +635,7 @@ export function LaunchWindow() {
 				{formatTime(elapsed)}
 			</span>
 
-			<BarSeparator />
+			<Separator />
 
 			<IconButton
 				title={
@@ -650,7 +646,7 @@ export function LaunchWindow() {
 				{microphoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
 			</IconButton>
 
-			<BarSeparator />
+			<Separator />
 
 			<IconButton
 				onClick={paused ? resumeRecording : pauseRecording}
@@ -695,7 +691,7 @@ export function LaunchWindow() {
 				/>
 			</button>
 
-			<BarSeparator />
+					<Separator />
 
 			<IconButton
 				onClick={toggleMicrophone}
@@ -723,7 +719,7 @@ export function LaunchWindow() {
 				<Timer size={18} />
 			</IconButton>
 
-			<BarSeparator />
+					<Separator />
 
 			<button
 				type="button"
@@ -735,7 +731,7 @@ export function LaunchWindow() {
 				<div className={styles.recDot} />
 			</button>
 
-			<BarSeparator />
+					<Separator />
 
 			<IconButton
 				buttonRef={moreButtonRef}
@@ -854,7 +850,7 @@ export function LaunchWindow() {
 											? t("recording.disableSystemAudio")
 											: t("recording.enableSystemAudio")}
 									</DropdownItem>
-									<DropdownSeparator />
+											<Separator />
 									{microphoneEnabled && (
 										<DropdownItem
 											icon={<MicOff size={16} />}
