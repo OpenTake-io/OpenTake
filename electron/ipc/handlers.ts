@@ -999,6 +999,43 @@ function getFfmpegBinaryPath() {
   return ffmpegStatic
 }
 
+function runWhisperWithProgress(
+	executablePath: string,
+	args: string[],
+	onProgress: (progress: number) => void,
+): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const proc = spawn(executablePath, args);
+		let output = "";
+
+		proc.stdout?.on("data", (data) => {
+			output += data.toString();
+		});
+
+		proc.stderr?.on("data", (data) => {
+			const text = data.toString();
+			output += text;
+			// whisper.cpp variants use this pattern on stderr
+			const match = text.match(/progress\s*=\s*(\d+)%/i);
+			if (match) {
+				onProgress(parseInt(match[1], 10));
+			}
+		});
+
+		proc.on("close", (code) => {
+			if (code === 0) {
+				resolve();
+			} else {
+				reject(new Error(output.trim() || `Whisper exited with code ${code}`));
+			}
+		});
+
+		proc.on("error", (err) => {
+			reject(err);
+		});
+	});
+}
+
 function sendWhisperModelDownloadProgress(
 	webContents: Electron.WebContents,
 	payload: {
@@ -1449,11 +1486,13 @@ async function extractCaptionAudioSource(options: {
   for (const candidate of candidates) {
     try {
       await ensureReadableFile(candidate.path, 'video file')
+      console.log('[auto-captions] Extracting audio from:', candidate.path)
       await execFileAsync(
         options.ffmpegPath,
         ['-y', '-i', candidate.path, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', options.wavPath],
         { timeout: 5 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 },
       )
+      console.log('[auto-captions] Audio extracted successfully to:', options.wavPath)
       attemptedCandidates.push({ ...candidate, readable: true, extractedAudio: true })
       return candidate
     } catch (error) {
@@ -1472,12 +1511,15 @@ async function extractCaptionAudioSource(options: {
   throw new Error('No audio was found to transcribe in the saved recording file. Captions need an audio track. If this recording should have contained sound, the recording was saved without an audio stream.')
 }
 
-async function generateAutoCaptionsFromVideo(options: {
-  videoPath: string
-  whisperExecutablePath?: string
-  whisperModelPath: string
-  language?: string
-}) {
+async function generateAutoCaptionsFromVideo(
+	webContents: Electron.WebContents,
+	options: {
+		videoPath: string;
+		whisperExecutablePath?: string;
+		whisperModelPath: string;
+		language?: string;
+	},
+) {
   const ffmpegPath = getFfmpegBinaryPath()
   const normalizedVideoPath = normalizeVideoSourcePath(options.videoPath)
   if (!normalizedVideoPath) {
@@ -1488,6 +1530,12 @@ async function generateAutoCaptionsFromVideo(options: {
   const whisperModelPath = path.resolve(options.whisperModelPath)
   await ensureReadableFile(whisperExecutablePath, 'whisper executable')
   await ensureReadableFile(whisperModelPath, 'whisper model')
+
+  console.log('[auto-captions] Starting caption generation sequence')
+  console.log('[auto-captions] Video:', normalizedVideoPath)
+  console.log('[auto-captions] Runtime:', whisperExecutablePath)
+  console.log('[auto-captions] Model:', whisperModelPath)
+  console.log('[auto-captions] Language:', options.language || 'auto')
 
   const tempBase = path.join(app.getPath('temp'), `recordly-captions-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
   const wavPath = `${tempBase}.wav`
@@ -1514,10 +1562,11 @@ async function generateAutoCaptionsFromVideo(options: {
 
     let jsonEnabled = true
     try {
-      await execFileAsync(whisperExecutablePath, [...whisperBaseArgs, '-ojf'], {
-        timeout: 30 * 60 * 1000,
-        maxBuffer: 20 * 1024 * 1024,
+      console.log('[auto-captions] Running Whisper with JSON output...')
+      await runWhisperWithProgress(whisperExecutablePath, [...whisperBaseArgs, '-ojf'], (progress) => {
+        webContents.send('auto-caption-progress', { progress })
       })
+      console.log('[auto-captions] Whisper JSON output generated.')
     } catch (error) {
       if (!shouldRetryWhisperWithoutJson(error)) {
         throw error
@@ -1525,10 +1574,11 @@ async function generateAutoCaptionsFromVideo(options: {
 
       jsonEnabled = false
       console.warn('[auto-captions] Whisper runtime does not support JSON full output, retrying with SRT only:', error)
-      await execFileAsync(whisperExecutablePath, whisperBaseArgs, {
-        timeout: 30 * 60 * 1000,
-        maxBuffer: 20 * 1024 * 1024,
+      console.log('[auto-captions] Running Whisper with SRT output...')
+      await runWhisperWithProgress(whisperExecutablePath, whisperBaseArgs, (progress) => {
+        webContents.send('auto-caption-progress', { progress })
       })
+      console.log('[auto-captions] Whisper SRT output generated.')
     }
 
     const timedCues = jsonEnabled
@@ -1538,8 +1588,11 @@ async function generateAutoCaptionsFromVideo(options: {
       ? timedCues
       : parseSrtCues(await fs.readFile(srtPath, 'utf-8'))
     if (cues.length === 0) {
+      console.error('[auto-captions] No cues were parsed from Whisper output.')
       throw new Error('Whisper completed, but no caption cues were produced.')
     }
+
+    console.log(`[auto-captions] Successfully generated ${cues.length} cues.`)
 
     return {
       cues,
@@ -3138,6 +3191,18 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           config.displayId = Number.isFinite(screenId) && screenId > 0
             ? screenId
             : Number(getScreen().getPrimaryDisplay().id)
+
+          // Include display bounds for more robust matching in the native helper
+          const allDisplays = getScreen().getAllDisplays()
+          const display = allDisplays.find((d) => String(d.id) === String(config.displayId))
+            || getScreen().getPrimaryDisplay()
+
+          if (display) {
+            config.displayX = Math.round(display.bounds.x)
+            config.displayY = Math.round(display.bounds.y)
+            config.displayW = Math.round(display.bounds.width)
+            config.displayH = Math.round(display.bounds.height)
+          }
         }
 
         windowsCaptureOutputBuffer = ''
@@ -4080,14 +4145,14 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
   })
 
-  ipcMain.handle('generate-auto-captions', async (_, options: {
+  ipcMain.handle('generate-auto-captions', async (event, options: {
     videoPath: string
     whisperExecutablePath: string
     whisperModelPath: string
     language?: string
   }) => {
     try {
-      const result = await generateAutoCaptionsFromVideo(options)
+      const result = await generateAutoCaptionsFromVideo(event.sender, options)
       return {
         success: true,
         cues: result.cues,

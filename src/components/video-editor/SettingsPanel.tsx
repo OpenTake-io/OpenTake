@@ -220,6 +220,7 @@ interface SettingsPanelProps {
 	onPickWhisperModel?: () => void;
 	onGenerateAutoCaptions?: () => void;
 	onClearAutoCaptions?: () => void;
+	autoCaptionProgress?: number;
 	onDownloadWhisperModel?: () => void;
 	onDeleteWhisperModel?: () => void;
 	selectedSpeedId?: string | null;
@@ -276,7 +277,7 @@ const CAPTION_LANGUAGE_OPTIONS = [
 ] as const;
 
 export type WhisperModelInfo = {
-	value: "tiny" | "base" | "small" | "medium" | "large";
+	value: "tiny" | "base" | "small" | "medium" | "large" | "custom";
 	label: string;
 	size: string;
 };
@@ -287,6 +288,7 @@ const WHISPER_MODEL_OPTIONS: WhisperModelInfo[] = [
 	{ value: "small", label: "Small", size: "466 MB" },
 	{ value: "medium", label: "Medium", size: "1.5 GB" },
 	{ value: "large", label: "Large (v3)", size: "2.9 GB" },
+	{ value: "custom", label: "Custom", size: "Local File" },
 ];
 
 function loadPreviewImage(url: string) {
@@ -530,6 +532,7 @@ export function SettingsPanel({
 	onSeek,
 	autoCaptions = [],
 	onAutoCaptionsChange,
+	autoCaptionProgress = 0,
 	autoCaptionSettings = DEFAULT_AUTO_CAPTION_SETTINGS,
 	whisperModelPath,
 	whisperModelDownloadStatus = "idle",
@@ -1363,16 +1366,6 @@ export function SettingsPanel({
 			</div>
 
 			<div className="rounded-lg bg-white/[0.03] px-2.5 py-2 space-y-3">
-				<div>
-					<Button
-						type="button"
-						variant="outline"
-						onClick={onPickWhisperModel}
-						className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
-					>
-						{tSettings("captions.selectModel", "Select Model")}
-					</Button>
-				</div>
 				<div className="flex items-center justify-between gap-3">
 					<div className="text-sm font-medium text-slate-200">
 						{tSettings("captions.language", "Language")}
@@ -1394,9 +1387,7 @@ export function SettingsPanel({
 					</Select>
 				</div>
 				<div className="flex items-center justify-between gap-3">
-					<div className="text-sm font-medium text-slate-200">
-						Model
-					</div>
+					<div className="text-sm font-medium text-slate-200">Model</div>
 					<Select
 						value={autoCaptionSettings.selectedModel || "small"}
 						onValueChange={(value) => updateAutoCaptionSettings({ selectedModel: value as any })}
@@ -1416,6 +1407,23 @@ export function SettingsPanel({
 						</SelectContent>
 					</Select>
 				</div>
+				{autoCaptionSettings.selectedModel === "custom" && (
+					<div>
+						<Button
+							type="button"
+							variant="outline"
+							onClick={onPickWhisperModel}
+							className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
+						>
+							{tSettings("captions.selectModel", "Select Model")}
+						</Button>
+						{whisperModelPath && (
+							<p className="mt-1 truncate px-1 text-[10px] text-slate-500">
+								{whisperModelPath.split(/[\\/]/).pop()}
+							</p>
+						)}
+					</div>
+				)}
 				<div className="flex flex-wrap items-center gap-2">
 					<div className="grid w-full grid-cols-2 gap-2">
 						{whisperModelDownloadStatus === "downloading" ? (
@@ -1436,7 +1444,7 @@ export function SettingsPanel({
 							>
 								{tSettings("captions.deleteModel", "Delete Model")}
 							</Button>
-						) : (
+						) : autoCaptionSettings.selectedModel !== "custom" ? (
 							<Button
 								type="button"
 								onClick={onDownloadWhisperModel}
@@ -1444,6 +1452,10 @@ export function SettingsPanel({
 							>
 								{tSettings("captions.downloadModel", "Download Model")}
 							</Button>
+						) : (
+							<div className="flex h-10 w-full items-center justify-center rounded-xl bg-white/5 px-4 text-[10px] text-slate-500 italic">
+								No local model selected
+							</div>
 						)}
 						<Button
 							type="button"
@@ -1460,14 +1472,22 @@ export function SettingsPanel({
 					<Button
 						type="button"
 						onClick={onGenerateAutoCaptions}
-						disabled={isGeneratingCaptions || !whisperModelPath}
-						className="h-10 w-full rounded-xl bg-[#2563EB] px-4 text-sm font-medium text-white hover:bg-[#2563EB]/90 disabled:opacity-60"
+						disabled={isGeneratingCaptions}
+						className="relative h-10 w-full overflow-hidden rounded-xl bg-[#2563EB] px-4 text-sm font-medium text-white hover:bg-[#2563EB]/90 disabled:bg-[#2563EB]/50"
 					>
-						{isGeneratingCaptions
-							? tSettings("captions.generating", "Generating...")
-							: captionCueCount > 0
-								? tSettings("captions.regenerateFull", "Regenerate Captions")
-								: tSettings("captions.generateFull", "Generate Captions")}
+						{isGeneratingCaptions && (
+							<motion.div
+								className="absolute inset-y-0 left-0 bg-white/20"
+								initial={{ width: 0 }}
+								animate={{ width: `${autoCaptionProgress}%` }}
+								transition={{ duration: 0.3 }}
+							/>
+						)}
+						<span className="relative z-10">
+							{isGeneratingCaptions
+								? `${tSettings("captions.generating", "Generating...")} (${autoCaptionProgress}%)`
+								: tSettings("captions.generateAutoCaptions", "Generate Captions")}
+						</span>
 					</Button>
 
 					{autoCaptions.length > 0 && (
