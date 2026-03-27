@@ -2997,6 +2997,7 @@ export default function VideoEditor() {
 						masterAudioVolume: masterAudioVolume ?? 1,
 						audioTrackVolume: audioTrackVolume ?? 1,
 						masterAudioMuted: masterAudioMuted ?? false,
+						masterAudioSoloed: masterAudioSoloed ?? false,
 						previewWidth,
 						previewHeight,
 						onProgress: (progress: ExportProgress) => {
