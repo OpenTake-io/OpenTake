@@ -16,5 +16,4 @@ struct MonitorInfo {
 
 std::vector<MonitorInfo> enumerateMonitors();
 HMONITOR findMonitorByDisplayId(int64_t displayId);
-HMONITOR findMonitorByBounds(int x, int y, int width, int height);
 MonitorInfo getMonitorInfo(HMONITOR monitor);

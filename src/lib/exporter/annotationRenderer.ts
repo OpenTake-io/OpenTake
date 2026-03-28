@@ -289,67 +289,6 @@ async function renderImage(
   });
 }
 
-function renderBlur(
-  ctx: CanvasRenderingContext2D,
-  annotation: AnnotationRegion,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  scaleFactor: number
-) {
-  // Get intensity scaled to canvas resolution
-  const intensity = (annotation.blurIntensity ?? 12) * scaleFactor;
-  if (intensity <= 0 || width <= 0 || height <= 0) return;
-
-  ctx.save();
-  try {
-    // Determine bounds and ensure they are within canvas to avoid ImageData errors
-    const srcX = Math.max(0, x);
-    const srcY = Math.max(0, y);
-    const srcWidth = Math.min(x + width, ctx.canvas.width) - srcX;
-    const srcHeight = Math.min(y + height, ctx.canvas.height) - srcY;
-
-    if (srcWidth <= 0 || srcHeight <= 0) {
-      ctx.restore();
-      return;
-    }
-
-    // Capture the current canvas region precisely for this intersection
-    const imageData = ctx.getImageData(srcX, srcY, srcWidth, srcHeight);
-    
-    let offscreen: HTMLCanvasElement | OffscreenCanvas;
-    if (typeof document !== 'undefined') {
-      offscreen = document.createElement('canvas');
-    } else {
-      offscreen = new OffscreenCanvas(srcWidth, srcHeight);
-    }
-    offscreen.width = srcWidth;
-    offscreen.height = srcHeight;
-    
-    const offCtx = offscreen.getContext('2d') as CanvasRenderingContext2D;
-    offCtx.putImageData(imageData, 0, 0);
-
-    // Create rounded rect clipping path (matches UI's rounded-lg approx 8px)
-    const radius = 8 * scaleFactor;
-    ctx.beginPath();
-    if (ctx.roundRect) {
-      ctx.roundRect(x, y, width, height, radius);
-    } else {
-      ctx.rect(x, y, width, height);
-    }
-    ctx.clip();
-
-    // Apply the blur filter and draw the captured region back at its source position
-    ctx.filter = `blur(${intensity}px)`;
-    ctx.drawImage(offscreen as any, srcX, srcY);
-
-  } catch (err) {
-    console.warn('[AnnotationRenderer] Blur annotation render failed:', err);
-  }
-  ctx.restore();
-}
-
 export async function renderAnnotations(
   ctx: CanvasRenderingContext2D,
   annotations: AnnotationRegion[],
@@ -395,10 +334,6 @@ export async function renderAnnotations(
             scaleFactor
           );
         }
-        break;
-        
-      case 'blur':
-        renderBlur(ctx, annotation, x, y, width, height, scaleFactor);
         break;
     }
   }

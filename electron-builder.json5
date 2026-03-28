@@ -9,7 +9,6 @@
     "electron/native/**"
   ],
   "productName": "Recordly",
-  "copyright": "Copyright (c) 2026 webadderall",
   "npmRebuild": true,
   "buildDependenciesFromSource": true,
   "compression": "normal",
@@ -63,8 +62,9 @@
     "target": [
       "nsis"
     ],
-    "icon": "icons/icons/win/icon.ico",
-    "executableName": "Recordly",
-    "artifactName": "Recordly.${ext}"
+    "icon": "icons/icons/win/icon.ico"
+    ,
+    "artifactName": "Recordly.exe"
   }
 }
+
