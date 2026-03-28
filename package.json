@@ -20,7 +20,6 @@
 		"build": "npm run build:platform-native-helpers && tsc && vite build && electron-builder",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
-		"typecheck": "tsc --noEmit",
 		"format": "biome format --write .",
 		"preview": "vite preview",
 		"rebuild:native": "node ./node_modules/electron-rebuild/lib/src/cli.js --force --only uiohook-napi",

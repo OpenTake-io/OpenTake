@@ -1,10 +1,10 @@
 import { useRef, useState, useEffect, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Trash2, Type, Image as ImageIcon, Upload, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, ChevronDown, Info, Droplets } from "lucide-react";
+import { Trash2, Type, Image as ImageIcon, Upload, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, ChevronDown, Info } from "lucide-react";
 import { toast } from "sonner";
 import Block from '@uiw/react-color-block';
-import { DEFAULT_BLUR_INTENSITY, type AnnotationRegion, type AnnotationType, type ArrowDirection, type FigureData } from "./types";
+import type { AnnotationRegion, AnnotationType, ArrowDirection, FigureData } from "./types";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -21,7 +21,6 @@ interface AnnotationSettingsPanelProps {
   onTypeChange: (type: AnnotationType) => void;
   onStyleChange: (style: Partial<AnnotationRegion['style']>) => void;
   onFigureDataChange?: (figureData: FigureData) => void;
-  onBlurIntensityChange?: (intensity: number) => void;
   onDelete: () => void;
 }
 
@@ -44,7 +43,6 @@ export function AnnotationSettingsPanel({
   onTypeChange,
   onStyleChange,
   onFigureDataChange,
-  onBlurIntensityChange,
   onDelete,
 }: AnnotationSettingsPanelProps) {
   const t = useScopedT('editor');
@@ -130,7 +128,7 @@ export function AnnotationSettingsPanel({
         
         {/* Type Selector */}
         <Tabs value={annotation.type} onValueChange={(value) => onTypeChange(value as AnnotationType)} className="mb-6">
-          <TabsList className="mb-4 bg-white/5 border border-white/5 p-1 w-full grid grid-cols-4 h-auto rounded-xl">
+          <TabsList className="mb-4 bg-white/5 border border-white/5 p-1 w-full grid grid-cols-3 h-auto rounded-xl">
             <TabsTrigger value="text" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 py-2 rounded-lg transition-all gap-2">
               <Type className="w-4 h-4" />
               {t('annotations.text')}
@@ -145,31 +143,7 @@ export function AnnotationSettingsPanel({
               </svg>
               {t('annotations.arrow')}
             </TabsTrigger>
-            <TabsTrigger value="blur" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 py-2 rounded-lg transition-all gap-2">
-              <Droplets className="w-4 h-4" />
-              Blur
-            </TabsTrigger>
           </TabsList>
-
-          <TabsContent value="blur" className="mt-0 space-y-4">
-            <div>
-              <label className="text-xs font-medium text-slate-200 mb-2 block">
-                Blur Intensity: {annotation.blurIntensity ?? DEFAULT_BLUR_INTENSITY}px
-              </label>
-              <Slider
-                value={[annotation.blurIntensity ?? DEFAULT_BLUR_INTENSITY]}
-                onValueChange={([value]) => {
-                  if (onBlurIntensityChange) {
-                    onBlurIntensityChange(value);
-                  }
-                }}
-                min={2}
-                max={50}
-                step={1}
-                className="w-full"
-              />
-            </div>
-          </TabsContent>
 
           {/* Text Content */}
           <TabsContent value="text" className="mt-0 space-y-4">

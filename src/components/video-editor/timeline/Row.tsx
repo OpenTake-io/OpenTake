@@ -7,10 +7,9 @@ interface RowProps extends RowDefinition {
   hint?: string;
   isEmpty?: boolean;
   labelColor?: string;
-  controls?: React.ReactNode;
 }
 
-export default function Row({ id, children, label, hint, isEmpty, labelColor = '#666', controls }: RowProps) {
+export default function Row({ id, children, label, hint, isEmpty, labelColor = '#666' }: RowProps) {
   const { setNodeRef, rowWrapperStyle, rowStyle } = useRow({ id });
 
   return (
@@ -18,20 +17,12 @@ export default function Row({ id, children, label, hint, isEmpty, labelColor = '
       className="border-b border-[#18181b] bg-[#18181b] relative flex-1 min-h-[26px]"
       style={{ ...rowWrapperStyle, marginBottom: 2 }}
     >
-      {(label || controls) && (
+      {label && (
         <div
-          className="absolute left-1.5 top-1/2 -translate-y-1/2 z-20 flex items-center gap-2"
-          style={{ writingMode: 'horizontal-tb' }}
+          className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] font-semibold uppercase tracking-widest z-20 pointer-events-none select-none"
+          style={{ color: labelColor, writingMode: 'horizontal-tb' }}
         >
-          {label && (
-            <div
-              className="text-[9px] font-semibold uppercase tracking-widest select-none pointer-events-none"
-              style={{ color: labelColor }}
-            >
-              {label}
-            </div>
-          )}
-          {controls}
+          {label}
         </div>
       )}
       {isEmpty && hint && (
