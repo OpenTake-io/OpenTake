@@ -43,6 +43,15 @@ interface NativeCaptureDiagnostics {
 	error?: string;
 }
 
+interface UpdateToastState {
+	version: string;
+	detail: string;
+	phase: "available" | "downloading" | "ready" | "error";
+	delayMs: number;
+	isPreview?: boolean;
+	progressPercent?: number;
+}
+
 interface Window {
 	electronAPI: {
 		hudOverlayHide: () => void;
@@ -280,11 +289,16 @@ interface Window {
 			error?: string;
 		}>;
 		installDownloadedUpdate: () => Promise<{ success: boolean }>;
+		downloadAvailableUpdate: () => Promise<{ success: boolean; message?: string }>;
 		deferDownloadedUpdate: (delayMs?: number) => Promise<{
 			success: boolean;
 			message?: string;
 		}>;
+		dismissUpdateToast: () => Promise<{ success: boolean }>;
+		skipUpdateVersion: () => Promise<{ success: boolean; message?: string }>;
+		getCurrentUpdateToastPayload: () => Promise<UpdateToastState | null>;
 		previewUpdateToast: () => Promise<{ success: boolean }>;
+		onUpdateToastStateChanged: (callback: (payload: UpdateToastState | null) => void) => () => void;
 		onUpdateReadyToast: (callback: (payload: {
 			version: string;
 			detail: string;

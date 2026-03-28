@@ -7,14 +7,21 @@ export const UPDATE_REMINDER_DELAY_MS = 3 * 60 * 60 * 1000;
 const AUTO_UPDATES_DISABLED = process.env.RECORDLY_DISABLE_AUTO_UPDATES === "1";
 const DEV_UPDATE_PREVIEW_INTERVAL_MS = 10 * 1000;
 
+export type UpdateToastPhase = "available" | "downloading" | "ready" | "error";
+
 export interface UpdateToastPayload {
 	version: string;
 	detail: string;
+	phase: UpdateToastPhase;
 	delayMs: number;
 	isPreview?: boolean;
+	progressPercent?: number;
 }
 
-type UpdateToastSender = (channel: "update-ready-toast", payload: UpdateToastPayload) => boolean;
+type UpdateToastSender = (
+	channel: "update-toast-state",
+	payload: UpdateToastPayload | null,
+) => boolean;
 
 let updaterInitialized = false;
 let updateCheckInProgress = false;
@@ -22,7 +29,11 @@ let manualCheckRequested = false;
 let periodicCheckTimer: NodeJS.Timeout | null = null;
 let deferredReminderTimer: NodeJS.Timeout | null = null;
 let devPreviewTimer: NodeJS.Timeout | null = null;
+let currentToastPayload: UpdateToastPayload | null = null;
+let availableVersion: string | null = null;
 let pendingDownloadedVersion: string | null = null;
+let downloadInProgress = false;
+let downloadToastDismissed = false;
 let skippedVersion: string | null = null;
 
 function canUseAutoUpdates() {
@@ -64,16 +75,80 @@ function clearDevPreviewTimer() {
 	}
 }
 
-function sendUpdateToast(sendToRenderer: UpdateToastSender, payload: UpdateToastPayload) {
-	return sendToRenderer("update-ready-toast", payload);
+function emitUpdateToastState(
+	sendToRenderer: UpdateToastSender | undefined,
+	payload: UpdateToastPayload | null,
+) {
+	currentToastPayload = payload;
+	if (!sendToRenderer) {
+		return false;
+	}
+
+	return sendToRenderer("update-toast-state", payload);
+}
+
+function createAvailableUpdateToastPayload(version: string): UpdateToastPayload {
+	return {
+		version,
+		phase: "available",
+		detail: "A new version is available. Download it now, or wait and we will remind you again in 3 hours.",
+		delayMs: UPDATE_REMINDER_DELAY_MS,
+	};
+}
+
+function createDownloadingUpdateToastPayload(
+	version: string,
+	progressPercent = 0,
+): UpdateToastPayload {
+	const normalizedProgress = Math.max(0, Math.min(100, progressPercent));
+	return {
+		version,
+		phase: "downloading",
+		detail:
+			normalizedProgress >= 100
+				? "Finishing the update download. You can keep using Recordly while this completes."
+				: `Downloading the update in the foreground: ${normalizedProgress.toFixed(0)}% complete.`,
+		delayMs: UPDATE_REMINDER_DELAY_MS,
+		progressPercent: normalizedProgress,
+	};
 }
 
 function createDownloadedUpdateToastPayload(version: string): UpdateToastPayload {
 	return {
 		version,
-		detail: "Restart now to install the update, or wait and we will remind you again in 3 hours.",
+		phase: "ready",
+		detail: "Install now to restart into the new version, or wait and we will remind you again in 3 hours.",
 		delayMs: UPDATE_REMINDER_DELAY_MS,
 	};
+}
+
+function createUpdateErrorToastPayload(version: string, error: unknown): UpdateToastPayload {
+	return {
+		version,
+		phase: "error",
+		detail: `The update download failed. ${String(error)}`,
+		delayMs: UPDATE_REMINDER_DELAY_MS,
+	};
+}
+
+function getReminderPayload(): UpdateToastPayload | null {
+	if (pendingDownloadedVersion) {
+		return createDownloadedUpdateToastPayload(pendingDownloadedVersion);
+	}
+
+	if (availableVersion && !downloadInProgress) {
+		return createAvailableUpdateToastPayload(availableVersion);
+	}
+
+	return null;
+}
+
+function clearVisibleUpdateToast(sendToRenderer?: UpdateToastSender) {
+	emitUpdateToastState(sendToRenderer, null);
+}
+
+export function getCurrentUpdateToastPayload() {
+	return currentToastPayload;
 }
 
 async function showNoUpdatesDialog(getMainWindow: () => BrowserWindow | null) {
@@ -102,45 +177,146 @@ function scheduleDevUpdatePreview(sendToRenderer: UpdateToastSender) {
 	}, DEV_UPDATE_PREVIEW_INTERVAL_MS);
 }
 
-export function installDownloadedUpdateNow() {
+export function dismissUpdateToast(sendToRenderer?: UpdateToastSender) {
+	if (downloadInProgress) {
+		downloadToastDismissed = true;
+	}
+
+	clearVisibleUpdateToast(sendToRenderer);
+	return { success: true };
+}
+
+export function installDownloadedUpdateNow(sendToRenderer?: UpdateToastSender) {
 	clearDeferredReminderTimer();
 	clearDevPreviewTimer();
+	downloadToastDismissed = false;
+	clearVisibleUpdateToast(sendToRenderer);
 	autoUpdater.quitAndInstall();
 }
 
-export function deferDownloadedUpdateReminder(
+export async function downloadAvailableUpdate(sendToRenderer?: UpdateToastSender) {
+	if (!availableVersion) {
+		return { success: false, message: "No update is ready to download." };
+	}
+
+	if (pendingDownloadedVersion === availableVersion) {
+		return { success: false, message: "This update has already been downloaded." };
+	}
+
+	if (downloadInProgress) {
+		return { success: false, message: "This update is already downloading." };
+	}
+
+	clearDeferredReminderTimer();
+	downloadInProgress = true;
+	downloadToastDismissed = false;
+	emitUpdateToastState(sendToRenderer, createDownloadingUpdateToastPayload(availableVersion, 0));
+
+	try {
+		await autoUpdater.downloadUpdate();
+		return { success: true };
+	} catch (error) {
+		downloadInProgress = false;
+		emitUpdateToastState(
+			sendToRenderer,
+			createUpdateErrorToastPayload(availableVersion, error),
+		);
+		return { success: false, message: String(error) };
+	}
+}
+
+export function deferUpdateReminder(
 	getMainWindow: () => BrowserWindow | null,
 	sendToRenderer?: UpdateToastSender,
 	delayMs = UPDATE_REMINDER_DELAY_MS,
 ) {
-	if (!pendingDownloadedVersion) {
-		return { success: false, message: "No downloaded update is ready yet." };
+	const payload = getReminderPayload();
+	if (!payload) {
+		return { success: false, message: "No update reminder is ready yet." };
 	}
 
 	clearDeferredReminderTimer();
+	clearVisibleUpdateToast(sendToRenderer);
 	deferredReminderTimer = setTimeout(() => {
-		if (pendingDownloadedVersion) {
-			if (sendToRenderer) {
-				const payload = createDownloadedUpdateToastPayload(pendingDownloadedVersion);
-				if (sendUpdateToast(sendToRenderer, payload)) {
-					return;
-				}
-			}
-
-			void showDownloadedUpdateDialog(getMainWindow, pendingDownloadedVersion);
+		const nextPayload = getReminderPayload();
+		if (!nextPayload) {
+			return;
 		}
+
+		if (sendToRenderer && emitUpdateToastState(sendToRenderer, nextPayload)) {
+			return;
+		}
+
+		if (nextPayload.phase === "ready") {
+			void showDownloadedUpdateDialog(getMainWindow, nextPayload.version);
+			return;
+		}
+
+		void showAvailableUpdateDialog(getMainWindow, nextPayload.version, sendToRenderer);
 	}, delayMs);
 
 	return { success: true };
 }
 
+export function skipAvailableUpdateVersion(sendToRenderer?: UpdateToastSender) {
+	const versionToSkip = pendingDownloadedVersion ?? availableVersion;
+	if (!versionToSkip) {
+		return { success: false, message: "No update is available to skip." };
+	}
+
+	skippedVersion = versionToSkip;
+	if (pendingDownloadedVersion === versionToSkip) {
+		pendingDownloadedVersion = null;
+	}
+	if (availableVersion === versionToSkip) {
+		availableVersion = null;
+	}
+	downloadInProgress = false;
+	downloadToastDismissed = false;
+	clearDeferredReminderTimer();
+	clearVisibleUpdateToast(sendToRenderer);
+
+	return { success: true };
+}
+
 export function previewUpdateToast(sendToRenderer: UpdateToastSender) {
-	return sendUpdateToast(sendToRenderer, {
+	downloadToastDismissed = false;
+	return emitUpdateToastState(sendToRenderer, {
 		version: "9.9.9",
+		phase: "available",
 		detail: "This is a development preview of the in-app update toast.",
 		delayMs: UPDATE_REMINDER_DELAY_MS,
 		isPreview: true,
 	});
+}
+
+async function showAvailableUpdateDialog(
+	getMainWindow: () => BrowserWindow | null,
+	version: string,
+	sendToRenderer?: UpdateToastSender,
+) {
+	const result = await showMessageBox(getMainWindow, {
+		type: "info",
+		title: "Update Available",
+		message: `Recordly ${version} is available.`,
+		detail: "Download now, remind me in 3 hours, or skip this version.",
+		buttons: ["Download Update", "Remind Me in 3 Hours", "Skip This Version"],
+		defaultId: 0,
+		cancelId: 1,
+		noLink: true,
+	});
+
+	if (result.response === 0) {
+		await downloadAvailableUpdate(sendToRenderer);
+		return;
+	}
+
+	if (result.response === 1) {
+		deferUpdateReminder(getMainWindow, sendToRenderer, UPDATE_REMINDER_DELAY_MS);
+		return;
+	}
+
+	skipAvailableUpdateVersion(sendToRenderer);
 }
 
 async function showDownloadedUpdateDialog(
@@ -158,7 +334,7 @@ async function showDownloadedUpdateDialog(
 		detail: isPreview
 			? "Development preview of the native update prompt. No real update will be installed."
 			: "Install now, remind me in 3 hours, or skip this version.",
-		buttons: ["Update Now", "Remind Me in 3 Hours", "Skip This Version"],
+		buttons: ["Install Update", "Remind Me in 3 Hours", "Skip This Version"],
 		defaultId: 0,
 		cancelId: 1,
 		noLink: true,
@@ -187,7 +363,7 @@ async function showDownloadedUpdateDialog(
 			return;
 		}
 
-		deferDownloadedUpdateReminder(getMainWindow, undefined, UPDATE_REMINDER_DELAY_MS);
+		deferUpdateReminder(getMainWindow, undefined, UPDATE_REMINDER_DELAY_MS);
 		return;
 	}
 
@@ -195,9 +371,7 @@ async function showDownloadedUpdateDialog(
 		return;
 	}
 
-	skippedVersion = version;
-	pendingDownloadedVersion = null;
-	clearDeferredReminderTimer();
+	skipAvailableUpdateVersion();
 }
 
 export async function checkForAppUpdates(
@@ -273,25 +447,39 @@ export function setupAutoUpdates(
 	}
 
 	updaterInitialized = true;
-	autoUpdater.autoDownload = true;
-	autoUpdater.autoInstallOnAppQuit = true;
+	autoUpdater.autoDownload = false;
+	autoUpdater.autoInstallOnAppQuit = false;
 
 	autoUpdater.on("update-available", (info) => {
 		updateCheckInProgress = false;
-		if (!manualCheckRequested) {
+		availableVersion = info.version;
+		pendingDownloadedVersion = null;
+		downloadInProgress = false;
+		downloadToastDismissed = false;
+		if (skippedVersion === info.version) {
+			manualCheckRequested = false;
 			return;
 		}
 
-		void showMessageBox(getMainWindow, {
-			type: "info",
-			title: "Update Available",
-			message: `Recordly ${info.version} is available.`,
-			detail: "The update is downloading in the background and you will see a native update prompt when it is ready.",
-		});
+		const payload = createAvailableUpdateToastPayload(info.version);
+		if (emitUpdateToastState(sendToRenderer, payload)) {
+			manualCheckRequested = false;
+			return;
+		}
+
+		if (manualCheckRequested) {
+			void showAvailableUpdateDialog(getMainWindow, info.version, sendToRenderer);
+			manualCheckRequested = false;
+		}
 	});
 
 	autoUpdater.on("update-not-available", () => {
 		updateCheckInProgress = false;
+		availableVersion = null;
+		pendingDownloadedVersion = null;
+		downloadInProgress = false;
+		downloadToastDismissed = false;
+		clearVisibleUpdateToast(sendToRenderer);
 		const shouldReport = manualCheckRequested;
 		manualCheckRequested = false;
 		if (shouldReport) {
@@ -299,11 +487,35 @@ export function setupAutoUpdates(
 		}
 	});
 
+	autoUpdater.on("download-progress", (progress) => {
+		if (!availableVersion) {
+			return;
+		}
+
+		downloadInProgress = true;
+		if (downloadToastDismissed) {
+			return;
+		}
+
+		emitUpdateToastState(
+			sendToRenderer,
+			createDownloadingUpdateToastPayload(availableVersion, progress.percent),
+		);
+	});
+
 	autoUpdater.on("error", (error) => {
 		updateCheckInProgress = false;
 		const shouldReport = manualCheckRequested;
 		manualCheckRequested = false;
 		console.error("Auto-updater error:", error);
+		if (downloadInProgress && availableVersion) {
+			downloadInProgress = false;
+			downloadToastDismissed = false;
+			emitUpdateToastState(
+				sendToRenderer,
+				createUpdateErrorToastPayload(availableVersion, error),
+			);
+		}
 		if (shouldReport) {
 			void showUpdateErrorDialog(getMainWindow, error);
 		}
@@ -312,13 +524,16 @@ export function setupAutoUpdates(
 	autoUpdater.on("update-downloaded", (info) => {
 		updateCheckInProgress = false;
 		manualCheckRequested = false;
+		downloadInProgress = false;
+		downloadToastDismissed = false;
 		if (skippedVersion === info.version) {
 			return;
 		}
+		availableVersion = info.version;
 		pendingDownloadedVersion = info.version;
 		clearDeferredReminderTimer();
 
-		if (sendUpdateToast(sendToRenderer, createDownloadedUpdateToastPayload(info.version))) {
+		if (emitUpdateToastState(sendToRenderer, createDownloadedUpdateToastPayload(info.version))) {
 			return;
 		}
 
