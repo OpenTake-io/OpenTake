@@ -21,16 +21,23 @@ import {
 } from "./ipc/handlers";
 import {
 	checkForAppUpdates,
-	deferDownloadedUpdateReminder,
+	dismissUpdateToast,
+	downloadAvailableUpdate,
+	deferUpdateReminder,
+	getCurrentUpdateToastPayload,
 	installDownloadedUpdateNow,
 	previewUpdateToast,
+	skipAvailableUpdateVersion,
 	setupAutoUpdates,
 } from "./updater";
 import {
 	createEditorWindow,
 	createHudOverlayWindow,
 	createSourceSelectorWindow,
+	getUpdateToastWindow,
 	getHudOverlayWindow,
+	hideUpdateToastWindow,
+	showUpdateToastWindow,
 } from "./windows";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -296,29 +303,28 @@ function syncDockIcon() {
 	}
 }
 
-function getUpdateWindowTargets() {
-	const targets: BrowserWindow[] = [];
-	const hudOverlayWindow = getHudOverlayWindow();
+function sendUpdateToastToWindows(channel: "update-toast-state", payload: unknown) {
+	if (!payload) {
+		const existingWindow = getUpdateToastWindow();
+		if (!existingWindow) {
+			return false;
+		}
 
-	if (hudOverlayWindow) {
-		targets.push(hudOverlayWindow);
+		existingWindow.webContents.send(channel, null);
+		hideUpdateToastWindow();
+		return true;
 	}
 
-	if (mainWindow && !mainWindow.isDestroyed() && mainWindow !== hudOverlayWindow) {
-		targets.push(mainWindow);
-	}
+	const toastWindow = showUpdateToastWindow();
+	const sendPayload = () => {
+		toastWindow.webContents.send(channel, payload);
+		showUpdateToastWindow();
+	};
 
-	return targets;
-}
-
-function sendUpdateToastToWindows(channel: "update-ready-toast", payload: unknown) {
-	const targets = getUpdateWindowTargets();
-	if (targets.length === 0) {
-		return false;
-	}
-
-	for (const target of targets) {
-		target.webContents.send(channel, payload);
+	if (toastWindow.webContents.isLoadingMainFrame()) {
+		toastWindow.webContents.once("did-finish-load", sendPayload);
+	} else {
+		sendPayload();
 	}
 
 	return true;
@@ -338,12 +344,28 @@ function getUpdateDialogWindow() {
 }
 
 ipcMain.handle("install-downloaded-update", () => {
-	installDownloadedUpdateNow();
+	installDownloadedUpdateNow(sendUpdateToastToWindows);
 	return { success: true };
 });
 
+ipcMain.handle("download-available-update", () => {
+	return downloadAvailableUpdate(sendUpdateToastToWindows);
+});
+
 ipcMain.handle("defer-downloaded-update", (_event, delayMs?: number) => {
-	return deferDownloadedUpdateReminder(getUpdateDialogWindow, sendUpdateToastToWindows, delayMs);
+	return deferUpdateReminder(getUpdateDialogWindow, sendUpdateToastToWindows, delayMs);
+});
+
+ipcMain.handle("dismiss-update-toast", () => {
+	return dismissUpdateToast(sendUpdateToastToWindows);
+});
+
+ipcMain.handle("skip-update-version", () => {
+	return skipAvailableUpdateVersion(sendUpdateToastToWindows);
+});
+
+ipcMain.handle("get-current-update-toast-payload", () => {
+	return getCurrentUpdateToastPayload();
 });
 
 ipcMain.handle("preview-update-toast", () => {
@@ -512,6 +534,7 @@ app.whenReady().then(async () => {
 		},
 	);
 
+	createWindow();
 	setupAutoUpdates(getUpdateDialogWindow, sendUpdateToastToWindows);
 
 	// Register the display media handler so that renderer's getDisplayMedia()
@@ -540,5 +563,8 @@ app.whenReady().then(async () => {
 		}
 	});
 
-	createWindow();
+	const currentToastPayload = getCurrentUpdateToastPayload();
+	if (currentToastPayload) {
+		sendUpdateToastToWindows("update-toast-state", currentToastPayload);
+	}
 });
