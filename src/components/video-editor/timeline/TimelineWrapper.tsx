@@ -20,7 +20,7 @@ interface TimelineWrapperProps {
   minItemDurationMs: number;
   minVisibleRangeMs: number;
   gridSizeMs?: number;
-  onItemSpanChange: (id: string, span: Span) => void;
+  onItemSpanChange: (id: string, span: Span, rowId: string) => void;
   allRegionSpans?: { id: string; start: number; end: number }[];
 }
 
@@ -133,6 +133,7 @@ export default function TimelineWrapper({
       if (!updatedSpan) return;
 
       const activeItemId = event.active.id as string;
+      const rowId = event.active.data.current.rowId as string;
       let clampedSpan = clampSpanToBounds(updatedSpan);
 
       const effectiveMinDuration = totalMs > 0
@@ -151,7 +152,7 @@ export default function TimelineWrapper({
         }
       }
 
-      onItemSpanChange(activeItemId, clampedSpan);
+      onItemSpanChange(activeItemId, clampedSpan, rowId);
     },
     [clampSpanToBounds, clampToNeighbours, hasOverlap, minItemDurationMs, onItemSpanChange, totalMs]
   );
@@ -163,6 +164,7 @@ export default function TimelineWrapper({
       if (!updatedSpan || !activeRowId) return;
 
       const activeItemId = event.active.id as string;
+      const rowId = event.active.data.current.rowId as string;
       let clampedSpan = clampSpanToBounds(updatedSpan);
 
       // Clamp to neighbour boundaries instead of rejecting
@@ -173,7 +175,7 @@ export default function TimelineWrapper({
         }
       }
 
-      onItemSpanChange(activeItemId, clampedSpan);
+      onItemSpanChange(activeItemId, clampedSpan, rowId);
     },
     [clampSpanToBounds, clampToNeighbours, hasOverlap, onItemSpanChange]
   );
