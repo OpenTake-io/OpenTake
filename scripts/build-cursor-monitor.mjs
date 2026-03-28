@@ -1,10 +1,18 @@
 import { execSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
 const projectRoot = process.cwd();
 const sourceDir = path.join(projectRoot, "electron", "native", "cursor-monitor");
 const buildDir = path.join(sourceDir, "build");
+const bundledDir = path.join(
+	projectRoot,
+	"electron",
+	"native",
+	"bin",
+	process.arch === "arm64" ? "win32-arm64" : "win32-x64",
+);
+const bundledExePath = path.join(bundledDir, "cursor-monitor.exe");
 
 if (process.platform !== "win32") {
 	console.log("[build-cursor-monitor] Skipping: host platform is not Windows.");
@@ -70,6 +78,11 @@ function findCmake() {
 
 const cmake = findCmake();
 if (!cmake) {
+	if (existsSync(bundledExePath)) {
+		console.log(`[build-cursor-monitor] Using bundled helper: ${bundledExePath}`);
+		process.exit(0);
+	}
+
 	console.error(
 		"[build-cursor-monitor] CMake not found. Install Visual Studio with C++ CMake tools or standalone CMake.",
 	);
@@ -123,6 +136,9 @@ try {
 const exePath = path.join(buildDir, "Release", "cursor-monitor.exe");
 if (existsSync(exePath)) {
 	console.log(`[build-cursor-monitor] Built successfully: ${exePath}`);
+	mkdirSync(bundledDir, { recursive: true });
+	copyFileSync(exePath, bundledExePath);
+	console.log(`[build-cursor-monitor] Staged bundled helper: ${bundledExePath}`);
 } else {
 	console.error("[build-cursor-monitor] Expected exe not found at", exePath);
 	process.exit(1);

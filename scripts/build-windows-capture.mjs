@@ -1,10 +1,18 @@
-import { execSync } from 'node:child_process';
-import { mkdirSync, existsSync, rmSync } from 'node:fs';
-import path from 'node:path';
+import { execSync } from "node:child_process";
+import { copyFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
+import path from "node:path";
 
 const projectRoot = process.cwd();
-const sourceDir = path.join(projectRoot, 'electron', 'native', 'wgc-capture');
-const buildDir = path.join(sourceDir, 'build');
+const sourceDir = path.join(projectRoot, "electron", "native", "wgc-capture");
+const buildDir = path.join(sourceDir, "build");
+const bundledDir = path.join(
+	projectRoot,
+	"electron",
+	"native",
+	"bin",
+	process.arch === "arm64" ? "win32-arm64" : "win32-x64",
+);
+const bundledExePath = path.join(bundledDir, "wgc-capture.exe");
 
 if (process.platform !== 'win32') {
   console.log('[build-windows-capture] Skipping native Windows capture build: host platform is not Windows.');
@@ -70,8 +78,15 @@ function findCmake() {
 
 const cmake = findCmake();
 if (!cmake) {
-  console.error('[build-windows-capture] CMake not found. Install Visual Studio with C++ CMake tools or standalone CMake.');
-  process.exit(1);
+	if (existsSync(bundledExePath)) {
+		console.log(`[build-windows-capture] Using bundled helper: ${bundledExePath}`);
+		process.exit(0);
+	}
+
+	console.error(
+		"[build-windows-capture] CMake not found. Install Visual Studio with C++ CMake tools or standalone CMake.",
+	);
+	process.exit(1);
 }
 
 mkdirSync(buildDir, { recursive: true });
@@ -120,7 +135,10 @@ try {
 
 const exePath = path.join(buildDir, 'Release', 'wgc-capture.exe');
 if (existsSync(exePath)) {
-  console.log(`[build-windows-capture] Built successfully: ${exePath}`);
+	console.log(`[build-windows-capture] Built successfully: ${exePath}`);
+	mkdirSync(bundledDir, { recursive: true });
+	copyFileSync(exePath, bundledExePath);
+	console.log(`[build-windows-capture] Staged bundled helper: ${bundledExePath}`);
 } else {
   console.error('[build-windows-capture] Expected exe not found at', exePath);
   process.exit(1);

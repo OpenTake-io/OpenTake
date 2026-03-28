@@ -69,6 +69,7 @@
     @apply bg-background text-foreground;
     -webkit-user-select: none;
     user-select: none;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   }
 
   button,
