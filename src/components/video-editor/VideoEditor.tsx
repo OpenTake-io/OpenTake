@@ -67,7 +67,6 @@ import {
 } from "./TutorialHelp";
 import TimelineEditor from "./timeline/TimelineEditor";
 import {
-	detectInteractionCandidates,
 	normalizeCursorTelemetry,
 } from "./timeline/zoomSuggestionUtils";
 import {
@@ -418,6 +417,7 @@ export default function VideoEditor() {
 	const [showCropModal, setShowCropModal] = useState(false);
 	const [previewVersion, setPreviewVersion] = useState(0);
 	const [isPreviewReady, setIsPreviewReady] = useState(false);
+	const [autoSuggestZoomsTrigger, setAutoSuggestZoomsTrigger] = useState(0);
 	const headerLeftControlsPaddingClass = appPlatform === "darwin" ? "pl-[76px]" : "";
 
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
@@ -1845,7 +1845,6 @@ export default function VideoEditor() {
 	const effectiveZoomRegions = zoomRegions;
 
 	useEffect(() => {
-		const suggestionTelemetry = effectiveCursorTelemetry;
 		if (
 			!videoPath ||
 			loading ||
@@ -1853,7 +1852,7 @@ export default function VideoEditor() {
 			duration <= 0 ||
 			loopCursor ||
 			zoomRegions.length > 0 ||
-			suggestionTelemetry.length < 2
+			effectiveCursorTelemetry.length < 2
 		) {
 			return;
 		}
@@ -1867,71 +1866,10 @@ export default function VideoEditor() {
 			return;
 		}
 
-		const totalMs = Math.max(0, Math.round(duration * 1000));
-		if (totalMs <= 0) {
-			return;
-		}
-
-		const candidates = detectInteractionCandidates(suggestionTelemetry);
-		if (candidates.length === 0) {
-			autoSuggestedVideoPathRef.current = videoPath;
-			pendingFreshRecordingAutoZoomPathRef.current = null;
-			return;
-		}
-
-		const DEFAULT_DURATION_MS = 1100;
-		const MIN_SPACING_MS = 1800;
-		const sortedCandidates = [...candidates].sort((a, b) => b.strength - a.strength);
-		const acceptedCenters: number[] = [];
-
-		setZoomRegions((prev) => {
-			if (prev.length > 0) {
-				return prev;
-			}
-
-			const reservedSpans: Array<{ start: number; end: number }> = [];
-			const additions: ZoomRegion[] = [];
-			let nextId = nextZoomIdRef.current;
-
-			sortedCandidates.forEach((candidate) => {
-				const tooCloseToAccepted = acceptedCenters.some(
-					(center) => Math.abs(center - candidate.centerTimeMs) < MIN_SPACING_MS,
-				);
-				if (tooCloseToAccepted) {
-					return;
-				}
-
-				const centeredStart = Math.round(candidate.centerTimeMs - DEFAULT_DURATION_MS / 2);
-				const startMs = Math.max(0, Math.min(centeredStart, totalMs - DEFAULT_DURATION_MS));
-				const endMs = Math.min(totalMs, startMs + DEFAULT_DURATION_MS);
-
-				const hasOverlap = reservedSpans.some((span) => endMs > span.start && startMs < span.end);
-				if (hasOverlap) {
-					return;
-				}
-
-				additions.push({
-					id: `zoom-${nextId++}`,
-					startMs,
-					endMs,
-					depth: DEFAULT_ZOOM_DEPTH,
-					focus: clampFocusToDepth(candidate.focus, DEFAULT_ZOOM_DEPTH),
-				});
-				reservedSpans.push({ start: startMs, end: endMs });
-				acceptedCenters.push(candidate.centerTimeMs);
-			});
-
-			if (additions.length === 0) {
-				return prev;
-			}
-
-			nextZoomIdRef.current = nextId;
-			return [...prev, ...additions];
-		});
-
 		autoSuggestedVideoPathRef.current = videoPath;
 		pendingFreshRecordingAutoZoomPathRef.current = null;
-	}, [videoPath, loading, isPreviewReady, duration, effectiveCursorTelemetry, loopCursor, zoomRegions.length]);
+		setAutoSuggestZoomsTrigger((value) => value + 1);
+	}, [videoPath, loading, isPreviewReady, duration, effectiveCursorTelemetry.length, loopCursor, zoomRegions.length]);
 
 	function togglePlayPause() {
 		const playback = videoPlaybackRef.current;
@@ -3404,6 +3342,7 @@ export default function VideoEditor() {
 									currentTime={currentTime}
 									onSeek={handleSeek}
 									cursorTelemetry={normalizedCursorTelemetry}
+									autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
 									zoomRegions={effectiveZoomRegions}
 									onZoomAdded={handleZoomAdded}
 									onZoomSuggested={handleZoomSuggested}
