@@ -360,7 +360,7 @@ export function skipAvailableUpdateVersion(sendToRenderer?: UpdateToastSender) {
 }
 
 export function previewUpdateToast(sendToRenderer: UpdateToastSender) {
-	clearDevPreviewTimer();
+	clearDeferredReminderTimer();
 	clearDevPreviewProgressTimer();
 	availableVersion = DEV_UPDATE_PREVIEW_VERSION;
 	pendingDownloadedVersion = null;
