@@ -261,17 +261,6 @@ function setupApplicationMenu() {
 						void checkForAppUpdates(getUpdateDialogWindow, { manual: true });
 					},
 				},
-				...(!app.isPackaged
-					? [
-						{ type: "separator" as const },
-						{
-							label: "Preview Update Toast",
-							click: () => {
-								previewUpdateToast(sendUpdateToastToWindows);
-							},
-						},
-					]
-					: []),
 			],
 		},
 	);

@@ -6,7 +6,6 @@ const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 export const UPDATE_REMINDER_DELAY_MS = 3 * 60 * 60 * 1000;
 const DISMISSED_READY_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const AUTO_UPDATES_DISABLED = process.env.RECORDLY_DISABLE_AUTO_UPDATES === "1";
-const DEV_UPDATE_PREVIEW_INTERVAL_MS = 10 * 1000;
 const DEV_UPDATE_PREVIEW_VERSION = "9.9.9";
 const DEV_UPDATE_PREVIEW_PROGRESS_STEP_MS = 300;
 const DEV_UPDATE_PREVIEW_PROGRESS_INCREMENT = 20;
@@ -32,7 +31,6 @@ let updateCheckInProgress = false;
 let manualCheckRequested = false;
 let periodicCheckTimer: NodeJS.Timeout | null = null;
 let deferredReminderTimer: NodeJS.Timeout | null = null;
-let devPreviewTimer: NodeJS.Timeout | null = null;
 let devPreviewProgressTimer: NodeJS.Timeout | null = null;
 let currentToastPayload: UpdateToastPayload | null = null;
 let availableVersion: string | null = null;
@@ -43,10 +41,6 @@ let skippedVersion: string | null = null;
 
 function canUseAutoUpdates() {
 	return !AUTO_UPDATES_DISABLED && app.isPackaged && !process.mas;
-}
-
-function canUseDevUpdatePreview() {
-	return !app.isPackaged && Boolean(process.env.VITE_DEV_SERVER_URL);
 }
 
 export function isAutoUpdateFeatureEnabled() {
@@ -70,13 +64,6 @@ function clearDeferredReminderTimer() {
 	if (deferredReminderTimer) {
 		clearTimeout(deferredReminderTimer);
 		deferredReminderTimer = null;
-	}
-}
-
-function clearDevPreviewTimer() {
-	if (devPreviewTimer) {
-		clearTimeout(devPreviewTimer);
-		devPreviewTimer = null;
 	}
 }
 
@@ -181,13 +168,6 @@ async function showUpdateErrorDialog(getMainWindow: () => BrowserWindow | null, 
 	});
 }
 
-function scheduleDevUpdatePreview(sendToRenderer: UpdateToastSender) {
-	clearDevPreviewTimer();
-	devPreviewTimer = setTimeout(() => {
-		previewUpdateToast(sendToRenderer);
-	}, DEV_UPDATE_PREVIEW_INTERVAL_MS);
-}
-
 function resetDevPreviewState(sendToRenderer?: UpdateToastSender) {
 	clearDevPreviewProgressTimer();
 	availableVersion = null;
@@ -204,7 +184,6 @@ function simulateDevPreviewDownload(sendToRenderer?: UpdateToastSender) {
 	downloadInProgress = true;
 	downloadToastDismissed = false;
 	clearDeferredReminderTimer();
-	clearDevPreviewTimer();
 	clearDevPreviewProgressTimer();
 
 	let progressPercent = 0;
@@ -254,9 +233,6 @@ export function dismissUpdateToast(
 ) {
 	if (currentToastPayload?.isPreview) {
 		resetDevPreviewState(sendToRenderer);
-		if (sendToRenderer) {
-			scheduleDevUpdatePreview(sendToRenderer);
-		}
 		return { success: true };
 	}
 
@@ -285,14 +261,10 @@ export function dismissUpdateToast(
 export function installDownloadedUpdateNow(sendToRenderer?: UpdateToastSender) {
 	if (currentToastPayload?.isPreview) {
 		resetDevPreviewState(sendToRenderer);
-		if (sendToRenderer) {
-			scheduleDevUpdatePreview(sendToRenderer);
-		}
 		return;
 	}
 
 	clearDeferredReminderTimer();
-	clearDevPreviewTimer();
 	downloadToastDismissed = false;
 	clearVisibleUpdateToast(sendToRenderer);
 	autoUpdater.quitAndInstall();
@@ -459,7 +431,7 @@ async function showDownloadedUpdateDialog(
 				type: "info",
 				title: "Preview Only",
 				message: "No real update was installed.",
-				detail: "The development preview will appear again in 10 seconds.",
+				detail: "This was only a manual development preview of the update prompt.",
 			});
 			return;
 		}
@@ -537,22 +509,6 @@ export function setupAutoUpdates(
 	sendToRenderer: UpdateToastSender,
 ) {
 	if (updaterInitialized) {
-		return;
-	}
-
-	if (canUseDevUpdatePreview()) {
-		updaterInitialized = true;
-		scheduleDevUpdatePreview(sendToRenderer);
-
-		app.on("before-quit", () => {
-			clearDeferredReminderTimer();
-			clearDevPreviewTimer();
-			clearDevPreviewProgressTimer();
-			if (periodicCheckTimer) {
-				clearInterval(periodicCheckTimer);
-				periodicCheckTimer = null;
-			}
-		});
 		return;
 	}
 
@@ -661,7 +617,7 @@ export function setupAutoUpdates(
 
 	app.on("before-quit", () => {
 		clearDeferredReminderTimer();
-		clearDevPreviewTimer();
+		clearDevPreviewProgressTimer();
 		if (periodicCheckTimer) {
 			clearInterval(periodicCheckTimer);
 			periodicCheckTimer = null;
