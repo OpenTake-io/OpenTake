@@ -1,6 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { execFile, spawn, spawnSync } from 'node:child_process'
-import { createWriteStream, constants as fsConstants } from 'node:fs'
+import { createWriteStream, constants as fsConstants, existsSync } from 'node:fs'
 import fs from 'node:fs/promises'
 import { get as httpsGet } from 'node:https'
 import { createRequire } from 'node:module'
@@ -710,6 +710,28 @@ function getNativeArchTag() {
 
 function getPrebundledNativeHelperPath(binaryName: string) {
   return resolveUnpackedAppPath('electron', 'native', 'bin', getNativeArchTag(), binaryName)
+}
+
+function resolvePreferredWindowsNativeHelperPath(helperDirectory: string, binaryName: string) {
+  const buildOutputPath = resolveUnpackedAppPath(
+    'electron',
+    'native',
+    helperDirectory,
+    'build',
+    'Release',
+    binaryName,
+  )
+  const prebundledPath = getPrebundledNativeHelperPath(binaryName)
+
+  if (existsSync(buildOutputPath)) {
+    return buildOutputPath
+  }
+
+  if (existsSync(prebundledPath)) {
+    return prebundledPath
+  }
+
+  return buildOutputPath
 }
 
 function getBundledWhisperExecutableCandidates() {
@@ -1666,11 +1688,11 @@ async function buildFfmpegCaptureArgs(source: SelectedSource, outputPath: string
 }
 
 function getWindowsCaptureExePath() {
-  return resolveUnpackedAppPath('electron', 'native', 'wgc-capture', 'build', 'Release', 'wgc-capture.exe')
+  return resolvePreferredWindowsNativeHelperPath('wgc-capture', 'wgc-capture.exe')
 }
 
 function getCursorMonitorExePath() {
-  return resolveUnpackedAppPath('electron', 'native', 'cursor-monitor', 'build', 'Release', 'cursor-monitor.exe')
+  return resolvePreferredWindowsNativeHelperPath('cursor-monitor', 'cursor-monitor.exe')
 }
 
 async function isNativeWindowsCaptureAvailable(): Promise<boolean> {
