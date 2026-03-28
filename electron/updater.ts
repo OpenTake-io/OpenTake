@@ -7,6 +7,9 @@ export const UPDATE_REMINDER_DELAY_MS = 3 * 60 * 60 * 1000;
 const DISMISSED_READY_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const AUTO_UPDATES_DISABLED = process.env.RECORDLY_DISABLE_AUTO_UPDATES === "1";
 const DEV_UPDATE_PREVIEW_INTERVAL_MS = 10 * 1000;
+const DEV_UPDATE_PREVIEW_VERSION = "9.9.9";
+const DEV_UPDATE_PREVIEW_PROGRESS_STEP_MS = 300;
+const DEV_UPDATE_PREVIEW_PROGRESS_INCREMENT = 20;
 
 export type UpdateToastPhase = "available" | "downloading" | "ready" | "error";
 
@@ -30,6 +33,7 @@ let manualCheckRequested = false;
 let periodicCheckTimer: NodeJS.Timeout | null = null;
 let deferredReminderTimer: NodeJS.Timeout | null = null;
 let devPreviewTimer: NodeJS.Timeout | null = null;
+let devPreviewProgressTimer: NodeJS.Timeout | null = null;
 let currentToastPayload: UpdateToastPayload | null = null;
 let availableVersion: string | null = null;
 let pendingDownloadedVersion: string | null = null;
@@ -73,6 +77,13 @@ function clearDevPreviewTimer() {
 	if (devPreviewTimer) {
 		clearTimeout(devPreviewTimer);
 		devPreviewTimer = null;
+	}
+}
+
+function clearDevPreviewProgressTimer() {
+	if (devPreviewProgressTimer) {
+		clearInterval(devPreviewProgressTimer);
+		devPreviewProgressTimer = null;
 	}
 }
 
@@ -174,8 +185,66 @@ function scheduleDevUpdatePreview(sendToRenderer: UpdateToastSender) {
 	clearDevPreviewTimer();
 	devPreviewTimer = setTimeout(() => {
 		previewUpdateToast(sendToRenderer);
-		scheduleDevUpdatePreview(sendToRenderer);
 	}, DEV_UPDATE_PREVIEW_INTERVAL_MS);
+}
+
+function resetDevPreviewState(sendToRenderer?: UpdateToastSender) {
+	clearDevPreviewProgressTimer();
+	availableVersion = null;
+	pendingDownloadedVersion = null;
+	downloadInProgress = false;
+	downloadToastDismissed = false;
+	skippedVersion = null;
+	clearVisibleUpdateToast(sendToRenderer);
+}
+
+function simulateDevPreviewDownload(sendToRenderer?: UpdateToastSender) {
+	availableVersion = DEV_UPDATE_PREVIEW_VERSION;
+	pendingDownloadedVersion = null;
+	downloadInProgress = true;
+	downloadToastDismissed = false;
+	clearDeferredReminderTimer();
+	clearDevPreviewTimer();
+	clearDevPreviewProgressTimer();
+
+	let progressPercent = 0;
+	emitUpdateToastState(
+		sendToRenderer,
+		{
+			...createDownloadingUpdateToastPayload(DEV_UPDATE_PREVIEW_VERSION, progressPercent),
+			isPreview: true,
+		},
+	);
+
+	devPreviewProgressTimer = setInterval(() => {
+		progressPercent = Math.min(100, progressPercent + DEV_UPDATE_PREVIEW_PROGRESS_INCREMENT);
+
+		if (progressPercent >= 100) {
+			clearDevPreviewProgressTimer();
+			downloadInProgress = false;
+			pendingDownloadedVersion = DEV_UPDATE_PREVIEW_VERSION;
+			emitUpdateToastState(sendToRenderer, {
+				...createDownloadedUpdateToastPayload(DEV_UPDATE_PREVIEW_VERSION),
+				isPreview: true,
+				detail: "Development preview: the update is ready to install. No real update will be installed.",
+			});
+			return;
+		}
+
+		if (downloadToastDismissed) {
+			return;
+		}
+
+		emitUpdateToastState(
+			sendToRenderer,
+			{
+				...createDownloadingUpdateToastPayload(DEV_UPDATE_PREVIEW_VERSION, progressPercent),
+				isPreview: true,
+			},
+		);
+	}, DEV_UPDATE_PREVIEW_PROGRESS_STEP_MS);
+
+	return { success: true };
 }
 
 
@@ -184,7 +253,10 @@ export function dismissUpdateToast(
 	sendToRenderer?: UpdateToastSender,
 ) {
 	if (currentToastPayload?.isPreview) {
-		clearVisibleUpdateToast(sendToRenderer);
+		resetDevPreviewState(sendToRenderer);
+		if (sendToRenderer) {
+			scheduleDevUpdatePreview(sendToRenderer);
+		}
 		return { success: true };
 	}
 
@@ -211,6 +283,14 @@ export function dismissUpdateToast(
 }
 
 export function installDownloadedUpdateNow(sendToRenderer?: UpdateToastSender) {
+	if (currentToastPayload?.isPreview) {
+		resetDevPreviewState(sendToRenderer);
+		if (sendToRenderer) {
+			scheduleDevUpdatePreview(sendToRenderer);
+		}
+		return;
+	}
+
 	clearDeferredReminderTimer();
 	clearDevPreviewTimer();
 	downloadToastDismissed = false;
@@ -219,6 +299,10 @@ export function installDownloadedUpdateNow(sendToRenderer?: UpdateToastSender) {
 }
 
 export async function downloadAvailableUpdate(sendToRenderer?: UpdateToastSender) {
+	if (currentToastPayload?.isPreview) {
+		return simulateDevPreviewDownload(sendToRenderer);
+	}
+
 	if (!availableVersion) {
 		return { success: false, message: "No update is ready to download." };
 	}
@@ -304,9 +388,14 @@ export function skipAvailableUpdateVersion(sendToRenderer?: UpdateToastSender) {
 }
 
 export function previewUpdateToast(sendToRenderer: UpdateToastSender) {
+	clearDevPreviewTimer();
+	clearDevPreviewProgressTimer();
+	availableVersion = DEV_UPDATE_PREVIEW_VERSION;
+	pendingDownloadedVersion = null;
+	downloadInProgress = false;
 	downloadToastDismissed = false;
 	return emitUpdateToastState(sendToRenderer, {
-		version: "9.9.9",
+		version: DEV_UPDATE_PREVIEW_VERSION,
 		phase: "available",
 		detail: "This is a development preview of the in-app update toast.",
 		delayMs: UPDATE_REMINDER_DELAY_MS,
@@ -458,6 +547,7 @@ export function setupAutoUpdates(
 		app.on("before-quit", () => {
 			clearDeferredReminderTimer();
 			clearDevPreviewTimer();
+			clearDevPreviewProgressTimer();
 			if (periodicCheckTimer) {
 				clearInterval(periodicCheckTimer);
 				periodicCheckTimer = null;
