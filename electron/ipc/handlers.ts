@@ -84,6 +84,27 @@ type WindowBounds = {
   height: number
 }
 
+type NativeCaptureDiagnostics = {
+  backend: 'windows-wgc' | 'mac-screencapturekit' | 'browser-store' | 'ffmpeg'
+  phase: 'availability' | 'start' | 'stop' | 'mux'
+  timestamp: string
+  sourceId?: string | null
+  sourceType?: SelectedSource['sourceType'] | 'unknown'
+  displayId?: number | null
+  displayBounds?: WindowBounds | null
+  windowHandle?: number | null
+  helperPath?: string | null
+  outputPath?: string | null
+  systemAudioPath?: string | null
+  microphonePath?: string | null
+  osRelease?: string
+  supported?: boolean
+  helperExists?: boolean
+  fileSizeBytes?: number | null
+  processOutput?: string
+  error?: string
+}
+
 type RecordingSessionData = {
   videoPath: string
   webcamPath?: string | null
@@ -129,6 +150,7 @@ let windowsCapturePaused = false
 let windowsSystemAudioPath: string | null = null
 let windowsMicAudioPath: string | null = null
 let windowsPendingVideoPath: string | null = null
+let lastNativeCaptureDiagnostics: NativeCaptureDiagnostics | null = null
 let ffmpegScreenRecordingActive = false
 let ffmpegCaptureProcess: ChildProcessWithoutNullStreams | null = null
 let ffmpegCaptureOutputBuffer = ''
@@ -236,6 +258,30 @@ async function getRecordingsDir() {
   const targetDir = customRecordingsDir ?? RECORDINGS_DIR
   await fs.mkdir(targetDir, { recursive: true })
   return targetDir
+}
+
+function recordNativeCaptureDiagnostics(
+  diagnostics: Omit<NativeCaptureDiagnostics, 'timestamp'>,
+) {
+  lastNativeCaptureDiagnostics = {
+    timestamp: new Date().toISOString(),
+    ...diagnostics,
+  }
+
+  return lastNativeCaptureDiagnostics
+}
+
+async function getFileSizeIfPresent(filePath: string | null | undefined) {
+  if (!filePath) {
+    return null
+  }
+
+  try {
+    const stat = await fs.stat(filePath)
+    return stat.size
+  } catch {
+    return null
+  }
 }
 
 async function getProjectsDir() {
@@ -1698,15 +1744,38 @@ function getCursorMonitorExePath() {
 async function isNativeWindowsCaptureAvailable(): Promise<boolean> {
   if (process.platform !== 'win32') return false
 
+  const helperPath = getWindowsCaptureExePath()
+  const os = await import('node:os')
+  const [major, , build] = os.release().split('.').map(Number)
+  const supported = major >= 10 && build >= 19041
+  let helperExists = false
+
   try {
-    await fs.access(getWindowsCaptureExePath(), fsConstants.X_OK)
+    await fs.access(helperPath, fsConstants.X_OK)
+    helperExists = true
   } catch {
+    recordNativeCaptureDiagnostics({
+      backend: 'windows-wgc',
+      phase: 'availability',
+      helperPath,
+      helperExists,
+      osRelease: os.release(),
+      supported,
+      error: 'Native Windows capture helper is missing or not executable.',
+    })
     return false
   }
 
-  const os = await import('node:os')
-  const [major, , build] = os.release().split('.').map(Number)
-  return major >= 10 && build >= 19041
+  recordNativeCaptureDiagnostics({
+    backend: 'windows-wgc',
+    phase: 'availability',
+    helperPath,
+    helperExists,
+    osRelease: os.release(),
+    supported,
+  })
+
+  return supported
 }
 
 function waitForWindowsCaptureStart(proc: ChildProcessWithoutNullStreams) {
@@ -3024,6 +3093,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         const recordingsDir = await getRecordingsDir()
         const timestamp = Date.now()
         const outputPath = path.join(recordingsDir, `recording-${timestamp}.mp4`)
+        const displayBounds = source?.id?.startsWith('window:') ? null : getDisplayBoundsForSource(source)
 
         const config: Record<string, unknown> = {
           outputPath,
@@ -3070,6 +3140,20 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           }
         }
 
+        recordNativeCaptureDiagnostics({
+          backend: 'windows-wgc',
+          phase: 'start',
+          sourceId: source?.id ?? null,
+          sourceType: source?.sourceType ?? 'unknown',
+          displayId: typeof config.displayId === 'number' ? config.displayId : null,
+          displayBounds,
+          windowHandle: typeof config.windowHandle === 'number' ? config.windowHandle : null,
+          helperPath: exePath,
+          outputPath,
+          systemAudioPath: windowsSystemAudioPath,
+          microphonePath: windowsMicAudioPath,
+        })
+
         windowsCaptureOutputBuffer = ''
         windowsCaptureTargetPath = outputPath
         windowsCaptureStopRequested = false
@@ -3090,8 +3174,34 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         await waitForWindowsCaptureStart(windowsCaptureProcess)
         windowsNativeCaptureActive = true
         nativeScreenRecordingActive = true
+        recordNativeCaptureDiagnostics({
+          backend: 'windows-wgc',
+          phase: 'start',
+          sourceId: source?.id ?? null,
+          sourceType: source?.sourceType ?? 'unknown',
+          displayId: typeof config.displayId === 'number' ? config.displayId : null,
+          displayBounds,
+          windowHandle: typeof config.windowHandle === 'number' ? config.windowHandle : null,
+          helperPath: exePath,
+          outputPath,
+          systemAudioPath: windowsSystemAudioPath,
+          microphonePath: windowsMicAudioPath,
+          processOutput: windowsCaptureOutputBuffer.trim() || undefined,
+        })
         return { success: true }
       } catch (error) {
+        recordNativeCaptureDiagnostics({
+          backend: 'windows-wgc',
+          phase: 'start',
+          sourceId: source?.id ?? null,
+          sourceType: source?.sourceType ?? 'unknown',
+          helperPath: windowsCaptureTargetPath ? getWindowsCaptureExePath() : null,
+          outputPath: windowsCaptureTargetPath,
+          systemAudioPath: windowsSystemAudioPath,
+          microphonePath: windowsMicAudioPath,
+          processOutput: windowsCaptureOutputBuffer.trim() || undefined,
+          error: String(error),
+        })
         console.error('Failed to start native Windows capture:', error)
         try { windowsCaptureProcess?.kill() } catch { /* ignore */ }
         windowsNativeCaptureActive = false
@@ -3255,6 +3365,15 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         }
 
         windowsPendingVideoPath = finalVideoPath
+        recordNativeCaptureDiagnostics({
+          backend: 'windows-wgc',
+          phase: 'stop',
+          outputPath: finalVideoPath,
+          systemAudioPath: windowsSystemAudioPath,
+          microphonePath: windowsMicAudioPath,
+          processOutput: windowsCaptureOutputBuffer.trim() || undefined,
+          fileSizeBytes: await getFileSizeIfPresent(finalVideoPath),
+        })
         return { success: true, path: finalVideoPath }
       } catch (error) {
         console.error('Failed to stop native Windows capture:', error)
@@ -3273,11 +3392,31 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           try {
             await fs.access(fallbackPath)
             windowsPendingVideoPath = fallbackPath
+            recordNativeCaptureDiagnostics({
+              backend: 'windows-wgc',
+              phase: 'stop',
+              outputPath: fallbackPath,
+              systemAudioPath: windowsSystemAudioPath,
+              microphonePath: windowsMicAudioPath,
+              processOutput: windowsCaptureOutputBuffer.trim() || undefined,
+              fileSizeBytes: await getFileSizeIfPresent(fallbackPath),
+              error: String(error),
+            })
             return { success: true, path: fallbackPath }
           } catch {
             // File doesn't exist
           }
         }
+
+        recordNativeCaptureDiagnostics({
+          backend: 'windows-wgc',
+          phase: 'stop',
+          outputPath: fallbackPath,
+          systemAudioPath: windowsSystemAudioPath,
+          microphonePath: windowsMicAudioPath,
+          processOutput: windowsCaptureOutputBuffer.trim() || undefined,
+          error: String(error),
+        })
 
         return {
           success: false,
@@ -3452,6 +3591,10 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     return { available: await isNativeWindowsCaptureAvailable() }
   })
 
+  ipcMain.handle('get-last-native-capture-diagnostics', async () => {
+    return { success: true, diagnostics: lastNativeCaptureDiagnostics }
+  })
+
   ipcMain.handle('mux-native-windows-recording', async () => {
     const videoPath = windowsPendingVideoPath
     windowsPendingVideoPath = null
@@ -3467,9 +3610,24 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         windowsMicAudioPath = null
       }
 
+      recordNativeCaptureDiagnostics({
+        backend: 'windows-wgc',
+        phase: 'mux',
+        outputPath: videoPath,
+        fileSizeBytes: await getFileSizeIfPresent(videoPath),
+      })
       return await finalizeStoredVideo(videoPath)
     } catch (error) {
       console.error('Failed to mux native Windows recording:', error)
+      recordNativeCaptureDiagnostics({
+        backend: 'windows-wgc',
+        phase: 'mux',
+        outputPath: videoPath,
+        systemAudioPath: windowsSystemAudioPath,
+        microphonePath: windowsMicAudioPath,
+        fileSizeBytes: await getFileSizeIfPresent(videoPath),
+        error: String(error),
+      })
       windowsSystemAudioPath = null
       windowsMicAudioPath = null
       try {

@@ -22,6 +22,27 @@ declare namespace NodeJS {
 }
 
 // Used in Renderer process, expose in `preload.ts`
+interface NativeCaptureDiagnostics {
+	backend: "windows-wgc" | "mac-screencapturekit" | "browser-store" | "ffmpeg";
+	phase: "availability" | "start" | "stop" | "mux";
+	timestamp: string;
+	sourceId?: string | null;
+	sourceType?: "screen" | "window" | "unknown";
+	displayId?: number | null;
+	displayBounds?: { x: number; y: number; width: number; height: number } | null;
+	windowHandle?: number | null;
+	helperPath?: string | null;
+	outputPath?: string | null;
+	systemAudioPath?: string | null;
+	microphonePath?: string | null;
+	osRelease?: string;
+	supported?: boolean;
+	helperExists?: boolean;
+	fileSizeBytes?: number | null;
+	processOutput?: string;
+	error?: string;
+}
+
 interface Window {
 	electronAPI: {
 		hudOverlayHide: () => void;
@@ -54,6 +75,10 @@ interface Window {
 			path?: string;
 			message?: string;
 			error?: string;
+		}>;
+		getLastNativeCaptureDiagnostics: () => Promise<{
+			success: boolean;
+			diagnostics?: NativeCaptureDiagnostics | null;
 		}>;
 		pauseNativeScreenRecording: () => Promise<{
 			success: boolean;
