@@ -850,7 +850,6 @@ export function LaunchWindow() {
 											? t("recording.disableSystemAudio")
 											: t("recording.enableSystemAudio")}
 									</DropdownItem>
-											<Separator />
 									{microphoneEnabled && (
 										<DropdownItem
 											icon={<MicOff size={16} />}
