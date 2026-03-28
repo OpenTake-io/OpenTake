@@ -179,24 +179,26 @@ function sendEditorMenuAction(
 
 function setupApplicationMenu() {
 	const isMac = process.platform === "darwin";
-	const template: Electron.MenuItemConstructorOptions[] = [];
-
-	if (isMac) {
-		template.push({
-			label: app.name,
-			submenu: [
-				{ role: "about" },
-				{ type: "separator" },
-				{ role: "services" },
-				{ type: "separator" },
-				{ role: "hide" },
-				{ role: "hideOthers" },
-				{ role: "unhide" },
-				{ type: "separator" },
-				{ role: "quit" },
-			],
-		});
+	if (!isMac) {
+		Menu.setApplicationMenu(null);
+		return;
 	}
+
+	const template: Electron.MenuItemConstructorOptions[] = [];
+	template.push({
+		label: app.name,
+		submenu: [
+			{ role: "about" },
+			{ type: "separator" },
+			{ role: "services" },
+			{ type: "separator" },
+			{ role: "hide" },
+			{ role: "hideOthers" },
+			{ role: "unhide" },
+			{ type: "separator" },
+			{ role: "quit" },
+		],
+	});
 
 	template.push(
 		{

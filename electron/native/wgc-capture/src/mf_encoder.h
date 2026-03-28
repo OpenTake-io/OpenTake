@@ -6,6 +6,7 @@
 #include <mfreadwrite.h>
 #include <d3d11.h>
 #include <wrl/client.h>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -32,4 +33,5 @@ private:
     int height_ = 0;
     int fps_ = 60;
     bool initialized_ = false;
+    std::mutex mutex_;
 };

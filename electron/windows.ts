@@ -397,11 +397,17 @@ export function hideUpdateToastWindow(): void {
 
 export function createEditorWindow(): BrowserWindow {
 	const isMac = process.platform === "darwin";
-	const { width, height } = getScreen().getPrimaryDisplay().workAreaSize;
+	const { workArea, workAreaSize } = getScreen().getPrimaryDisplay();
+	const initialWidth = isMac ? Math.round(workAreaSize.width * 0.85) : workArea.width;
+	const initialHeight = isMac ? Math.round(workAreaSize.height * 0.85) : workArea.height;
 
 	const win = new BrowserWindow({
-		width: Math.round(width * 0.85),
-		height: Math.round(height * 0.85),
+		width: initialWidth,
+		height: initialHeight,
+		...(!isMac && {
+			x: workArea.x,
+			y: workArea.y,
+		}),
 		minWidth: 800,
 		minHeight: 600,
 		...(process.platform !== "darwin" && {
@@ -411,6 +417,7 @@ export function createEditorWindow(): BrowserWindow {
 			titleBarStyle: "hiddenInset",
 			trafficLightPosition: { x: 12, y: 12 },
 		}),
+		autoHideMenuBar: !isMac,
 		transparent: false,
 		resizable: true,
 		alwaysOnTop: false,
