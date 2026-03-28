@@ -19,8 +19,19 @@ import {
 	killWindowsCaptureProcess,
 	registerIpcHandlers,
 } from "./ipc/handlers";
-import { checkForAppUpdates, setupAutoUpdates } from "./updater";
-import { createEditorWindow, createHudOverlayWindow, createSourceSelectorWindow } from "./windows";
+import {
+	checkForAppUpdates,
+	deferDownloadedUpdateReminder,
+	installDownloadedUpdateNow,
+	previewUpdateToast,
+	setupAutoUpdates,
+} from "./updater";
+import {
+	createEditorWindow,
+	createHudOverlayWindow,
+	createSourceSelectorWindow,
+	getHudOverlayWindow,
+} from "./windows";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -231,9 +242,20 @@ function setupApplicationMenu() {
 				{
 					label: "Check for Updates…",
 					click: () => {
-						void checkForAppUpdates(() => mainWindow, { manual: true });
+						void checkForAppUpdates(getUpdateDialogWindow, { manual: true });
 					},
 				},
+				...(!app.isPackaged
+					? [
+						{ type: "separator" as const },
+						{
+							label: "Preview Update Toast",
+							click: () => {
+								previewUpdateToast(sendUpdateToastToWindows);
+							},
+						},
+					]
+					: []),
 			],
 		},
 	);
@@ -273,6 +295,60 @@ function syncDockIcon() {
 		app.dock.setIcon(dockIcon);
 	}
 }
+
+function getUpdateWindowTargets() {
+	const targets: BrowserWindow[] = [];
+	const hudOverlayWindow = getHudOverlayWindow();
+
+	if (hudOverlayWindow) {
+		targets.push(hudOverlayWindow);
+	}
+
+	if (mainWindow && !mainWindow.isDestroyed() && mainWindow !== hudOverlayWindow) {
+		targets.push(mainWindow);
+	}
+
+	return targets;
+}
+
+function sendUpdateToastToWindows(channel: "update-ready-toast", payload: unknown) {
+	const targets = getUpdateWindowTargets();
+	if (targets.length === 0) {
+		return false;
+	}
+
+	for (const target of targets) {
+		target.webContents.send(channel, payload);
+	}
+
+	return true;
+}
+
+function getUpdateDialogWindow() {
+	const focusedWindow = BrowserWindow.getFocusedWindow();
+	if (focusedWindow && !focusedWindow.isDestroyed()) {
+		return focusedWindow;
+	}
+
+	if (mainWindow && !mainWindow.isDestroyed()) {
+		return mainWindow;
+	}
+
+	return getHudOverlayWindow();
+}
+
+ipcMain.handle("install-downloaded-update", () => {
+	installDownloadedUpdateNow();
+	return { success: true };
+});
+
+ipcMain.handle("defer-downloaded-update", (_event, delayMs?: number) => {
+	return deferDownloadedUpdateReminder(getUpdateDialogWindow, sendUpdateToastToWindows, delayMs);
+});
+
+ipcMain.handle("preview-update-toast", () => {
+	return { success: previewUpdateToast(sendUpdateToastToWindows) };
+});
 
 function updateTrayMenu(recording: boolean = false) {
 	if (!tray) return;
@@ -436,7 +512,7 @@ app.whenReady().then(async () => {
 		},
 	);
 
-	setupAutoUpdates(() => mainWindow);
+	setupAutoUpdates(getUpdateDialogWindow, sendUpdateToastToWindows);
 
 	// Register the display media handler so that renderer's getDisplayMedia()
 	// calls land on the pre-selected source without showing a system picker.

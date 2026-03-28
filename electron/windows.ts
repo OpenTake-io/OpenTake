@@ -273,6 +273,10 @@ export function createHudOverlayWindow(): BrowserWindow {
 	return win;
 }
 
+export function getHudOverlayWindow(): BrowserWindow | null {
+	return hudOverlayWindow && !hudOverlayWindow.isDestroyed() ? hudOverlayWindow : null;
+}
+
 export function createEditorWindow(): BrowserWindow {
 	const isMac = process.platform === "darwin";
 	const { width, height } = getScreen().getPrimaryDisplay().workAreaSize;
