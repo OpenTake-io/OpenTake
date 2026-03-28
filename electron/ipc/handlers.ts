@@ -2621,6 +2621,34 @@ async function finalizeStoredVideo(videoPath: string) {
   }
 }
 
+async function recoverNativeMacCaptureOutput() {
+  const diagnosticsPath =
+    lastNativeCaptureDiagnostics?.backend === 'mac-screencapturekit'
+      ? lastNativeCaptureDiagnostics.outputPath ?? null
+      : null
+  const candidatePath = nativeCaptureTargetPath ?? diagnosticsPath
+
+  if (!candidatePath) {
+    return null
+  }
+
+  try {
+    return await finalizeStoredVideo(candidatePath)
+  } catch (error) {
+    recordNativeCaptureDiagnostics({
+      backend: 'mac-screencapturekit',
+      phase: 'stop',
+      outputPath: candidatePath,
+      systemAudioPath: nativeCaptureSystemAudioPath,
+      microphonePath: nativeCaptureMicrophonePath,
+      processOutput: nativeCaptureOutputBuffer.trim() || undefined,
+      fileSizeBytes: await getFileSizeIfPresent(candidatePath),
+      error: String(error),
+    })
+    return null
+  }
+}
+
 async function startInteractionCapture() {
   if (!isCursorCaptureActive) {
     return
@@ -3370,9 +3398,34 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
       await waitForNativeCaptureStart(nativeCaptureProcess)
       nativeScreenRecordingActive = true
+      recordNativeCaptureDiagnostics({
+        backend: 'mac-screencapturekit',
+        phase: 'start',
+        sourceId: source?.id ?? null,
+        sourceType: source?.sourceType ?? 'unknown',
+        displayId: typeof config.displayId === 'number' ? config.displayId : null,
+        helperPath,
+        outputPath,
+        systemAudioPath: systemAudioOutputPath,
+        microphonePath: microphoneOutputPath,
+        processOutput: nativeCaptureOutputBuffer.trim() || undefined,
+      })
       return { success: true }
     } catch (error) {
       console.error('Failed to start native ScreenCaptureKit recording:', error)
+      recordNativeCaptureDiagnostics({
+        backend: 'mac-screencapturekit',
+        phase: 'start',
+        sourceId: source?.id ?? null,
+        sourceType: source?.sourceType ?? 'unknown',
+        helperPath: getNativeCaptureHelperBinaryPath(),
+        outputPath: nativeCaptureTargetPath,
+        systemAudioPath: nativeCaptureSystemAudioPath,
+        microphonePath: nativeCaptureMicrophonePath,
+        processOutput: nativeCaptureOutputBuffer.trim() || undefined,
+        fileSizeBytes: await getFileSizeIfPresent(nativeCaptureTargetPath),
+        error: String(error),
+      })
       try {
         nativeCaptureProcess?.kill()
       } catch {
@@ -3485,6 +3538,11 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
 
     if (!nativeScreenRecordingActive) {
+      const recovered = await recoverNativeMacCaptureOutput()
+      if (recovered) {
+        return recovered
+      }
+
       return { success: false, message: 'No native screen recording is active.' }
     }
 
@@ -3525,6 +3583,8 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     } catch (error) {
       console.error('Failed to stop native ScreenCaptureKit recording:', error)
       const fallbackPath = nativeCaptureTargetPath
+      const fallbackSystemAudioPath = nativeCaptureSystemAudioPath
+      const fallbackMicrophonePath = nativeCaptureMicrophonePath
       nativeScreenRecordingActive = false
       nativeCaptureProcess = null
       nativeCaptureTargetPath = null
@@ -3538,10 +3598,26 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         try {
           await fs.access(fallbackPath)
           console.log('[stop-native-screen-recording] Recovering with fallback path:', fallbackPath)
+          if (fallbackSystemAudioPath || fallbackMicrophonePath) {
+            try {
+              await muxNativeMacRecordingWithAudio(
+                fallbackPath,
+                fallbackSystemAudioPath,
+                fallbackMicrophonePath,
+              )
+            } catch (muxError) {
+              console.warn('Failed to mux recovered native macOS audio into capture:', muxError)
+            }
+          }
           return await finalizeStoredVideo(fallbackPath)
         } catch {
           // File doesn't exist or isn't accessible
         }
+      }
+
+      const recovered = await recoverNativeMacCaptureOutput()
+      if (recovered) {
+        return recovered
       }
 
       return {
@@ -3549,6 +3625,22 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         message: 'Failed to stop native ScreenCaptureKit recording',
         error: String(error),
       }
+    }
+  })
+
+  ipcMain.handle('recover-native-screen-recording', async () => {
+    if (process.platform !== 'darwin') {
+      return { success: false, message: 'Native screen recording recovery is only available on macOS.' }
+    }
+
+    const recovered = await recoverNativeMacCaptureOutput()
+    if (recovered) {
+      return recovered
+    }
+
+    return {
+      success: false,
+      message: 'No recoverable native macOS recording output was found.',
     }
   })
 

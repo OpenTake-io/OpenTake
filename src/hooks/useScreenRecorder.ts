@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from "react";
 import { fixWebmDuration } from "@fix-webm-duration/fix";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getEffectiveRecordingDurationMs } from "@/lib/mediaTiming";
 
@@ -91,6 +91,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const pendingWebcamPathPromise = useRef<Promise<string | null> | null>(null);
   const webcamStopPromise = useRef<Promise<string | null> | null>(null);
   const webcamStopResolver = useRef<((path: string | null) => void) | null>(null);
+  const resolvedWebcamPath = useRef<string | null>(null);
   const accumulatedPausedDurationMs = useRef(0);
   const pauseStartedAtMs = useRef<number | null>(null);
 
@@ -312,12 +313,29 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     }
 
     const result = pending ? await pending : null;
+    resolvedWebcamPath.current = result;
     pendingWebcamPathPromise.current = null;
     return result;
   }, []);
 
+  const recoverNativeRecordingSession = useCallback(async () => {
+    if (typeof window.electronAPI?.recoverNativeScreenRecording !== "function") {
+      return null;
+    }
+
+    const result = await window.electronAPI.recoverNativeScreenRecording();
+    if (!result.success || !result.path) {
+      return null;
+    }
+
+    const webcamPath = await stopWebcamRecorder();
+    await finalizeRecordingSession(result.path, webcamPath);
+    return result.path;
+  }, [finalizeRecordingSession, stopWebcamRecorder]);
+
   const startWebcamRecorder = useCallback(async () => {
     if (!webcamEnabled) {
+      resolvedWebcamPath.current = null;
       pendingWebcamPathPromise.current = Promise.resolve(null);
       webcamStartTime.current = null;
       webcamTimeOffsetMs.current = 0;
@@ -343,6 +361,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
       const mimeType = selectMimeType();
       webcamChunks.current = [];
+      resolvedWebcamPath.current = null;
       webcamStopPromise.current = new Promise((resolve) => {
         webcamStopResolver.current = resolve;
       });
@@ -401,6 +420,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       recorder.start(RECORDER_TIMESLICE_MS);
     } catch (error) {
       console.warn("Failed to start webcam recording; continuing without webcam layer:", error);
+      resolvedWebcamPath.current = null;
       pendingWebcamPathPromise.current = Promise.resolve(null);
       webcamStopPromise.current = Promise.resolve(null);
       webcamRecorder.current = null;
@@ -430,6 +450,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         if (!result.success || !result.path) {
           console.error("Failed to stop native screen recording:", result.error ?? result.message);
           void logNativeCaptureDiagnostics("stop-native-screen-recording");
+          try {
+            const recoveredPath = await recoverNativeRecordingSession();
+            if (recoveredPath) {
+              return;
+            }
+          } catch (recoveryError) {
+            console.error("Failed to recover native screen recording:", recoveryError);
+          }
           return;
         }
 
@@ -501,19 +529,32 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     });
 
     const removeRecordingInterruptedListener = window.electronAPI?.onRecordingInterrupted?.((state) => {
-      setRecording(false);
-      nativeScreenRecording.current = false;
-      cleanupCapturedMedia();
-      void window.electronAPI.setRecordingState(false);
+      void (async () => {
+        setRecording(false);
+        nativeScreenRecording.current = false;
+        cleanupCapturedMedia();
+        await window.electronAPI.setRecordingState(false);
 
-      if (state.reason === "window-unavailable" && !hasPromptedForReselect.current) {
-        hasPromptedForReselect.current = true;
-        alert(state.message);
-        void window.electronAPI.openSourceSelector();
-      } else {
-        console.error(state.message);
-        toast.error(state.message);
-      }
+        if (state.reason !== "window-unavailable") {
+          try {
+            const recoveredPath = await recoverNativeRecordingSession();
+            if (recoveredPath) {
+              return;
+            }
+          } catch (recoveryError) {
+            console.error("Failed to recover interrupted native screen recording:", recoveryError);
+          }
+        }
+
+        if (state.reason === "window-unavailable" && !hasPromptedForReselect.current) {
+          hasPromptedForReselect.current = true;
+          alert(state.message);
+          await window.electronAPI.openSourceSelector();
+        } else {
+          console.error(state.message);
+          toast.error(state.message);
+        }
+      })();
     });
 
     return () => {
@@ -532,7 +573,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
       cleanupCapturedMedia();
     };
-  }, [cleanupCapturedMedia]);
+  }, [cleanupCapturedMedia, recoverNativeRecordingSession]);
 
   const startRecording = async () => {
     if (startInFlight.current) {
@@ -853,7 +894,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
           }
 
           if (videoResult.path) {
-            const webcamPath = await (pendingWebcamPathPromise.current ?? Promise.resolve(null));
+            const webcamPath = pendingWebcamPathPromise.current
+              ? await pendingWebcamPathPromise.current
+              : resolvedWebcamPath.current;
             await finalizeRecordingSession(videoResult.path, webcamPath);
           }
         } catch (error) {
@@ -955,6 +998,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     webcamStream.current?.getTracks().forEach((t) => t.stop());
     webcamStream.current = null;
     pendingWebcamPathPromise.current = null;
+    resolvedWebcamPath.current = null;
 
     if (nativeScreenRecording.current) {
       nativeScreenRecording.current = false;

@@ -85,6 +85,12 @@ interface Window {
 			message?: string;
 			error?: string;
 		}>;
+		recoverNativeScreenRecording: () => Promise<{
+			success: boolean;
+			path?: string;
+			message?: string;
+			error?: string;
+		}>;
 		getLastNativeCaptureDiagnostics: () => Promise<{
 			success: boolean;
 			diagnostics?: NativeCaptureDiagnostics | null;
