@@ -148,6 +148,7 @@ function getEffectiveNativeAspectRatio(
 interface VideoPlaybackProps {
   videoPath: string;
   onDurationChange: (duration: number) => void;
+  onPreviewReadyChange?: (ready: boolean) => void;
   onTimeUpdate: (time: number) => void;
   currentTime: number;
   onPlayStateChange: (playing: boolean) => void;
@@ -220,6 +221,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     {
       videoPath,
       onDurationChange,
+      onPreviewReadyChange,
       onTimeUpdate,
       currentTime,
       onPlayStateChange,
@@ -1118,6 +1120,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         videoReadyRafRef.current = null;
       }
     }, [videoPath]);
+
+    useEffect(() => {
+      onPreviewReadyChange?.(videoReady);
+    }, [onPreviewReadyChange, videoReady]);
 
     useEffect(() => {
       if (!pixiReady || !videoReady) return;
