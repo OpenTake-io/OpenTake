@@ -284,6 +284,63 @@ async function getFileSizeIfPresent(filePath: string | null | undefined) {
   }
 }
 
+function parseFfmpegDurationSeconds(stderr: string) {
+  const match = stderr.match(/Duration:\s+(\d+):(\d+):(\d+(?:\.\d+)?)/i)
+  if (!match) {
+    return null
+  }
+
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  const seconds = Number(match[3])
+  if (![hours, minutes, seconds].every(Number.isFinite)) {
+    return null
+  }
+
+  return hours * 3600 + minutes * 60 + seconds
+}
+
+async function validateRecordedVideo(videoPath: string) {
+  const stat = await fs.stat(videoPath)
+  if (!stat.isFile()) {
+    throw new Error(`Recorded output is not a file: ${videoPath}`)
+  }
+
+  if (stat.size <= 0) {
+    throw new Error(`Recorded output is empty: ${videoPath}`)
+  }
+
+  const ffmpegPath = getFfmpegBinaryPath()
+  let stderr = ''
+
+  try {
+    const result = await execFileAsync(
+      ffmpegPath,
+      ['-hide_banner', '-i', videoPath, '-map', '0:v:0', '-frames:v', '1', '-f', 'null', '-'],
+      { timeout: 20000, maxBuffer: 10 * 1024 * 1024 },
+    )
+    stderr = result.stderr
+  } catch (error) {
+    const execError = error as NodeJS.ErrnoException & { stderr?: string }
+    const output = execError.stderr?.trim()
+    throw new Error(output || `Recorded output could not be decoded: ${videoPath}`)
+  }
+
+  if (!/Stream #.*Video:/i.test(stderr)) {
+    throw new Error(`Recorded output does not contain a readable video stream: ${videoPath}`)
+  }
+
+  const durationSeconds = parseFfmpegDurationSeconds(stderr)
+  if (durationSeconds !== null && durationSeconds <= 0) {
+    throw new Error(`Recorded output has an invalid duration: ${videoPath}`)
+  }
+
+  return {
+    fileSizeBytes: stat.size,
+    durationSeconds,
+  }
+}
+
 async function getProjectsDir() {
   const projectsDir = path.join(await getRecordingsDir(), PROJECTS_DIRECTORY_NAME)
   await fs.mkdir(projectsDir, { recursive: true })
@@ -2548,6 +2605,8 @@ function snapshotCursorTelemetryForPersistence() {
 }
 
 async function finalizeStoredVideo(videoPath: string) {
+  const validation = await validateRecordedVideo(videoPath)
+
   snapshotCursorTelemetryForPersistence()
   currentVideoPath = videoPath
   currentProjectPath = null
@@ -2559,7 +2618,9 @@ async function finalizeStoredVideo(videoPath: string) {
   return {
     success: true,
     path: videoPath,
-    message: 'Video stored successfully'
+    message: validation.durationSeconds !== null
+      ? `Video stored successfully (${validation.fileSizeBytes} bytes, ${validation.durationSeconds.toFixed(2)}s)`
+      : `Video stored successfully (${validation.fileSizeBytes} bytes)`
   }
 }
 
