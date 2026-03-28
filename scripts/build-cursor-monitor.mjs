@@ -25,13 +25,6 @@ function findCmake() {
 		// not on PATH
 	}
 
-	// Local .cmake_ext path
-	const localCmake = path.join(projectRoot, ".cmake_ext", "cmake-4.3.0-windows-x86_64", "bin", "cmake.exe");
-	if (existsSync(localCmake)) {
-		return `"${localCmake}"`;
-	}
-
-	// Standalone CMake paths
 	const standaloneCmakePaths = [
 		path.join("C:", "Program Files", "CMake", "bin", "cmake.exe"),
 		path.join("C:", "Program Files (x86)", "CMake", "bin", "cmake.exe"),
@@ -42,7 +35,7 @@ function findCmake() {
 		}
 	}
 
-	// VS 2022/2019 bundled CMake
+	// VS 2022 bundled CMake
 	const vsRoots = [
 		path.join("C:", "Program Files", "Microsoft Visual Studio"),
 		path.join("C:", "Program Files (x86)", "Microsoft Visual Studio"),
