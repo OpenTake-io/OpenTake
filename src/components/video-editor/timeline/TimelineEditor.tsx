@@ -41,6 +41,7 @@ interface TimelineEditorProps {
   currentTime: number;
   onSeek?: (time: number) => void;
   cursorTelemetry?: CursorTelemetryPoint[];
+  autoSuggestZoomsTrigger?: number;
   disableSuggestedZooms?: boolean;
   zoomRegions: ZoomRegion[];
   onZoomAdded: (span: Span) => void;
@@ -631,6 +632,7 @@ export default function TimelineEditor({
   currentTime,
   onSeek,
   cursorTelemetry = [],
+  autoSuggestZoomsTrigger = 0,
   disableSuggestedZooms = false,
   zoomRegions,
   onZoomAdded,
@@ -1108,6 +1110,14 @@ export default function TimelineEditor({
     onZoomSuggested,
     cursorTelemetry,
   ]);
+
+  useEffect(() => {
+    if (autoSuggestZoomsTrigger <= 0) {
+      return;
+    }
+
+    handleSuggestZooms();
+  }, [autoSuggestZoomsTrigger, handleSuggestZooms]);
 
   const handleAddTrim = useCallback(() => {
     if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onTrimAdded) {
