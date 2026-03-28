@@ -71,7 +71,7 @@
       "AppImage"
     ],
     "icon": "icons/icons/png",
-    "artifactName": "${productName}-linux-${arch}.${ext}",
+    "artifactName": "${productName}-linux-x64.${ext}",
     "category": "AudioVideo"
   },
   "win": {
