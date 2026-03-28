@@ -59,6 +59,10 @@ interface VideoExporterConfig extends ExportConfig {
 	previewWidth?: number;
 	previewHeight?: number;
 	onProgress?: (progress: ExportProgress) => void;
+	masterAudioVolume?: number;
+	masterAudioMuted?: boolean;
+	masterAudioSoloed?: boolean;
+	audioTrackVolume?: number;
 }
 
 export class VideoExporter {
@@ -207,6 +211,10 @@ export class VideoExporter {
 							this.config.speedRegions,
 							undefined,
 							this.config.audioRegions,
+							this.config.masterAudioVolume,
+							this.config.audioTrackVolume,
+							this.config.masterAudioMuted,
+							this.config.masterAudioSoloed,
 						),
 						"audio processing",
 					);

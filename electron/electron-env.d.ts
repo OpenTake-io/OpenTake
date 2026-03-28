@@ -147,23 +147,28 @@ interface Window {
 			canceled?: boolean;
 			error?: string;
 		}>;
-		getWhisperSmallModelStatus: () => Promise<{
+		getWhisperModelStatus: (
+			modelName: string,
+		) => Promise<{
 			success: boolean;
 			exists: boolean;
 			path?: string | null;
 			error?: string;
 		}>;
-		downloadWhisperSmallModel: () => Promise<{
+		downloadWhisperModel: (
+			modelName: string,
+		) => Promise<{
 			success: boolean;
 			path?: string;
 			alreadyDownloaded?: boolean;
 			error?: string;
 		}>;
-		deleteWhisperSmallModel: () => Promise<{ success: boolean; error?: string }>;
-		onWhisperSmallModelDownloadProgress: (
+		deleteWhisperModel: (modelName: string) => Promise<{ success: boolean; error?: string }>;
+		onWhisperModelDownloadProgress: (
 			callback: (state: {
 				status: "idle" | "downloading" | "downloaded" | "error";
 				progress: number;
+				model: string;
 				path?: string | null;
 				error?: string;
 			}) => void,
@@ -173,9 +178,11 @@ interface Window {
 			whisperExecutablePath?: string;
 			whisperModelPath: string;
 			language?: string;
+			durationMs?: number;
+			startTimeMs?: number;
 		}) => Promise<{
 			success: boolean;
-			cues?: AutoCaptionCue[];
+			cues?: CaptionCue[];
 			message?: string;
 			error?: string;
 		}>;
@@ -297,6 +304,8 @@ interface Window {
 		startCountdown: (seconds: number) => Promise<{ success: boolean; cancelled?: boolean }>;
 		cancelCountdown: () => Promise<{ success: boolean }>;
 		getActiveCountdown: () => Promise<{ success: boolean; seconds: number | null }>;
+		onAutoCaptionProgress: (callback: (payload: { progress: number }) => void) => () => void;
+		onAutoCaptionChunk: (callback: (payload: { cues: CaptionCue[] }) => void) => () => void;
 		onCountdownTick: (callback: (seconds: number) => void) => () => void;
 	};
 }
@@ -338,7 +347,7 @@ interface SystemCursorAsset {
 	height: number;
 }
 
-interface AutoCaptionCue {
+interface CaptionCue {
 	id: string;
 	startMs: number;
 	endMs: number;
