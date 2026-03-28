@@ -12,9 +12,7 @@ interface VideoEventHandlersParams {
   onTimeUpdate: (time: number) => void;
   trimRegionsRef: React.MutableRefObject<TrimRegion[]>;
   speedRegionsRef: React.MutableRefObject<SpeedRegion[]>;
-  timeSelectionRef: React.MutableRefObject<import('../types').TimeSelection | null>;
 }
-
 
 export function createVideoEventHandlers(params: VideoEventHandlersParams) {
   const {
@@ -28,9 +26,7 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
     onTimeUpdate,
     trimRegionsRef,
     speedRegionsRef,
-    timeSelectionRef,
   } = params;
-
 
   const emitTime = (timeValue: number) => {
     currentTimeRef.current = timeValue * 1000;
@@ -56,20 +52,7 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
     if (!video) return;
 
     const currentTimeMs = video.currentTime * 1000;
-
-    // Selection awareness: stop playback at the end of selection range
-    const selection = timeSelectionRef.current;
-    if (selection && !video.paused && !isSeekingRef.current) {
-      if (currentTimeMs >= selection.endMs) {
-        video.pause();
-        video.currentTime = selection.startMs / 1000;
-        emitTime(selection.startMs / 1000);
-        return; // Selection boundary reached, stop update loop
-      }
-    }
-
     const activeTrimRegion = findActiveTrimRegion(currentTimeMs);
-
 
     // If we're in a trim region during playback, skip to the end of it
     if (activeTrimRegion && !video.paused && !video.ended) {

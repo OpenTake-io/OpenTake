@@ -111,17 +111,6 @@ export function AnnotationOverlay({
           </div>
         );
 
-      case 'blur':
-        return (
-          <div 
-            className="w-full h-full rounded-lg backdrop-blur-md"
-            style={{ 
-              backdropFilter: `blur(${annotation.blurIntensity ?? 12}px)`,
-              WebkitBackdropFilter: `blur(${annotation.blurIntensity ?? 12}px)`
-            }} 
-          />
-        );
-
       default:
         return null;
     }
@@ -219,7 +208,6 @@ export function AnnotationOverlay({
           annotation.type === 'text' && "bg-transparent",
           annotation.type === 'image' && "bg-transparent",
           annotation.type === 'figure' && "bg-transparent",
-          annotation.type === 'blur' && "bg-transparent",
           isSelected && "shadow-lg"
         )}
       >

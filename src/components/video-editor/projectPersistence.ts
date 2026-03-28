@@ -94,11 +94,6 @@ export interface ProjectEditorState {
 	gifFrameRate: GifFrameRate;
 	gifLoop: boolean;
 	gifSizePreset: GifSizePreset;
-	masterAudioMuted: boolean;
-	masterAudioSoloed: boolean;
-	masterAudioVolume: number;
-	audioTrackVolume: number;
-	isMasterSelected?: boolean;
 }
 
 export interface EditorProjectData {
@@ -341,10 +336,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						id: region.id,
 						startMs,
 						endMs,
-						type:
-							region.type === "image" || region.type === "figure" || region.type === "blur"
-								? region.type
-								: "text",
+						type: region.type === "image" || region.type === "figure" ? region.type : "text",
 						content: typeof region.content === "string" ? region.content : "",
 						textContent: typeof region.textContent === "string" ? region.textContent : undefined,
 						imageContent: typeof region.imageContent === "string" ? region.imageContent : undefined,
@@ -387,11 +379,10 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						zIndex: isFiniteNumber(region.zIndex) ? region.zIndex : index + 1,
 						figureData: region.figureData
 							? {
-								...DEFAULT_FIGURE_DATA,
-								...region.figureData,
-							}
+									...DEFAULT_FIGURE_DATA,
+									...region.figureData,
+								}
 							: undefined,
-						blurIntensity: isFiniteNumber(region.blurIntensity) ? region.blurIntensity : undefined,
 					};
 				})
 		: [];
@@ -412,11 +403,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						startMs,
 						endMs,
 						audioPath: typeof region.audioPath === "string" ? region.audioPath : "",
-						volume: isFiniteNumber(region.volume) ? clamp(region.volume, 0, 2) : 1,
-						muted: typeof region.muted === "boolean" ? region.muted : false,
-						soloed: typeof region.soloed === "boolean" ? region.soloed : false,
-						fadeInMs: isFiniteNumber(region.fadeInMs) ? clamp(region.fadeInMs, 0, 10000) : 0,
-						fadeOutMs: isFiniteNumber(region.fadeOutMs) ? clamp(region.fadeOutMs, 0, 10000) : 0,
+						volume: isFiniteNumber(region.volume) ? clamp(region.volume, 0, 1) : 1,
 					};
 				})
 		: [];
@@ -513,14 +500,6 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		backgroundOpacity: isFiniteNumber(rawAutoCaptionSettings.backgroundOpacity)
 			? clamp(rawAutoCaptionSettings.backgroundOpacity, 0, 1)
 			: DEFAULT_AUTO_CAPTION_SETTINGS.backgroundOpacity,
-		selectedModel: typeof rawAutoCaptionSettings.selectedModel === "string"
-			? rawAutoCaptionSettings.selectedModel
-			: DEFAULT_AUTO_CAPTION_SETTINGS.selectedModel,
-		generationRange:
-			rawAutoCaptionSettings.generationRange === "full" ||
-			rawAutoCaptionSettings.generationRange === "selected"
-				? rawAutoCaptionSettings.generationRange
-				: "full",
 	};
 
 	const rawCropX = isFiniteNumber(editor.cropRegion?.x)
@@ -696,11 +675,6 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			editor.gifSizePreset === "original"
 				? editor.gifSizePreset
 				: "medium",
-		masterAudioMuted: typeof editor.masterAudioMuted === "boolean" ? editor.masterAudioMuted : false,
-		masterAudioSoloed: typeof editor.masterAudioSoloed === "boolean" ? editor.masterAudioSoloed : false,
-		masterAudioVolume: isFiniteNumber(editor.masterAudioVolume) ? clamp(editor.masterAudioVolume, 0, 2) : 1,
-		audioTrackVolume: isFiniteNumber(editor.audioTrackVolume) ? clamp(editor.audioTrackVolume, 0, 2) : 1,
-		isMasterSelected: Boolean(editor.isMasterSelected),
 	};
 }
 

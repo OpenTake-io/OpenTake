@@ -23,7 +23,7 @@ const KeyframeMarkers: React.FC<KeyframeMarkersProps> = ({
   videoDurationMs,
   timelineRef
 }) => {
-  const { sidebarWidth = 0, range, valueToPixels, pixelsToValue } = useTimelineContext();
+  const { sidebarWidth, range, valueToPixels, pixelsToValue } = useTimelineContext();
   const [draggingKeyframeId, setDraggingKeyframeId] = useState<string | null>(null);
 
   useEffect(() => {
