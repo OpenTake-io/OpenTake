@@ -94,6 +94,21 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const accumulatedPausedDurationMs = useRef(0);
   const pauseStartedAtMs = useRef<number | null>(null);
 
+  const logNativeCaptureDiagnostics = useCallback(async (context: string) => {
+    if (typeof window.electronAPI?.getLastNativeCaptureDiagnostics !== "function") {
+      return;
+    }
+
+    try {
+      const result = await window.electronAPI.getLastNativeCaptureDiagnostics();
+      if (result.success && result.diagnostics) {
+        console.warn(`[NativeCaptureDiagnostics:${context}]`, result.diagnostics);
+      }
+    } catch (error) {
+      console.warn("Failed to load native capture diagnostics:", error);
+    }
+  }, []);
+
   const resetRecordingClock = useCallback((startedAt: number) => {
     startTime.current = startedAt;
     accumulatedPausedDurationMs.current = 0;
@@ -404,6 +419,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
         if (!result.success || !result.path) {
           console.error("Failed to stop native screen recording:", result.error ?? result.message);
+          void logNativeCaptureDiagnostics("stop-native-screen-recording");
           return;
         }
 
@@ -411,6 +427,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
         if (isNativeWindows) {
           const muxResult = await window.electronAPI.muxNativeWindowsRecording();
+          if (!muxResult?.success) {
+            void logNativeCaptureDiagnostics("mux-native-windows-recording");
+          }
           finalPath = muxResult?.path ?? result.path;
         }
 
@@ -546,6 +565,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
           const nativeWindowsResult = await window.electronAPI.isNativeWindowsCaptureAvailable();
           useNativeWindowsCapture = nativeWindowsResult.available;
           if (!useNativeWindowsCapture && !hasShownNativeWindowsFallbackToast.current) {
+            void logNativeCaptureDiagnostics("is-native-windows-capture-available");
             hasShownNativeWindowsFallbackToast.current = true;
             toast.info(
               "Native Windows capture is unavailable. Falling back to browser capture.",
@@ -586,6 +606,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         if (!nativeResult.success) {
           if (useNativeWindowsCapture) {
             console.warn("Native Windows capture failed, falling back to browser capture:", nativeResult.error ?? nativeResult.message);
+            void logNativeCaptureDiagnostics("start-native-screen-recording");
             if (!hasShownNativeWindowsFallbackToast.current) {
               hasShownNativeWindowsFallbackToast.current = true;
               toast.warning(
