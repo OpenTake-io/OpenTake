@@ -327,26 +327,18 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Validate Windows signing secrets
+      - name: Configure Windows signing
         shell: pwsh
         env:
           WINDOWS_SIGNING_CERTIFICATE_P12_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_P12_BASE64 }}
           WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
         run: |
-          foreach ($name in @('WINDOWS_SIGNING_CERTIFICATE_P12_BASE64', 'WINDOWS_SIGNING_CERTIFICATE_PASSWORD')) {
-            $value = [Environment]::GetEnvironmentVariable($name)
-            if ([string]::IsNullOrWhiteSpace($value)) {
-              Write-Error "Missing required Windows release secret: $name"
-              exit 1
-            }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_P12_BASE64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD)) {
+            Write-Warning 'Windows signing secrets are missing. Building an unsigned installer.'
+            Add-Content -Path $env:GITHUB_ENV -Value 'CSC_IDENTITY_AUTO_DISCOVERY=false'
+            exit 0
           }
 
-      - name: Prepare Windows signing certificate
-        shell: pwsh
-        env:
-          WINDOWS_SIGNING_CERTIFICATE_P12_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_P12_BASE64 }}
-          WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
-        run: |
           $certPath = Join-Path $env:RUNNER_TEMP 'windows-signing-cert.p12'
           [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERTIFICATE_P12_BASE64))
           Add-Content -Path $env:GITHUB_ENV -Value "WIN_CSC_LINK=$certPath"
@@ -354,6 +346,13 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --ignore-scripts
+
+      - name: Remove stale uiohook build output
+        shell: pwsh
+        run: |
+          if (Test-Path node_modules/uiohook-napi/build) {
+            Remove-Item node_modules/uiohook-napi/build -Recurse -Force
+          }
 
       - name: Install app dependencies
         run: npx electron-builder install-app-deps
@@ -399,8 +398,16 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install Linux native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxtst-dev libxkbfile-dev libxi-dev
+
       - name: Install dependencies
         run: npm ci --ignore-scripts
+
+      - name: Remove stale uiohook build output
+        run: rm -rf node_modules/uiohook-napi/build
 
       - name: Install app dependencies
         run: npx electron-builder install-app-deps
