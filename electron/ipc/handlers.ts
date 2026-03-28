@@ -12,6 +12,7 @@ import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, shell, systemPref
 import { hideCursor, showCursor } from '../cursorHider'
 import { RECORDINGS_DIR } from '../main'
 import { closeCountdownWindow, createCountdownWindow, getCountdownWindow } from '../windows'
+import { resolveWindowsCaptureDisplay } from './windowsCaptureSelection'
 
 const execFileAsync = promisify(execFile)
 const nodeRequire = createRequire(import.meta.url)
@@ -1678,15 +1679,11 @@ function waitForFfmpegCaptureStop(process: ChildProcessWithoutNullStreams, outpu
 }
 
 function getDisplayBoundsForSource(source: SelectedSource) {
-  const sourceDisplayId = Number(source?.display_id)
-  if (Number.isFinite(sourceDisplayId)) {
-    const matched = getScreen().getAllDisplays().find((display) => display.id === sourceDisplayId)
-    if (matched) {
-      return matched.bounds
-    }
-  }
-
-  return getScreen().getPrimaryDisplay().bounds
+  return resolveWindowsCaptureDisplay(
+    source,
+    getScreen().getAllDisplays(),
+    getScreen().getPrimaryDisplay(),
+  ).bounds
 }
 
 function parseXwininfoBounds(stdout: string): WindowBounds | null {
@@ -3182,23 +3179,19 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         if (windowId && source?.id?.startsWith('window:')) {
           config.windowHandle = windowId
         } else {
-          const screenId = Number(source?.display_id)
-          config.displayId = Number.isFinite(screenId) && screenId > 0
-            ? screenId
-            : Number(getScreen().getPrimaryDisplay().id)
+          const resolvedDisplay = resolveWindowsCaptureDisplay(
+            source,
+            getScreen().getAllDisplays(),
+            getScreen().getPrimaryDisplay(),
+          )
+          config.displayId = resolvedDisplay.displayId
 
           // Monitor handle IDs can drift across Electron/Windows capture boundaries,
           // so also provide display bounds for a coordinate-based native fallback.
-          const allDisplays = getScreen().getAllDisplays()
-          const display = allDisplays.find((candidate) => String(candidate.id) === String(config.displayId))
-            ?? getScreen().getPrimaryDisplay()
-
-          if (display) {
-            config.displayX = Math.round(display.bounds.x)
-            config.displayY = Math.round(display.bounds.y)
-            config.displayW = Math.round(display.bounds.width)
-            config.displayH = Math.round(display.bounds.height)
-          }
+          config.displayX = Math.round(resolvedDisplay.bounds.x)
+          config.displayY = Math.round(resolvedDisplay.bounds.y)
+          config.displayW = Math.round(resolvedDisplay.bounds.width)
+          config.displayH = Math.round(resolvedDisplay.bounds.height)
         }
 
         recordNativeCaptureDiagnostics({
