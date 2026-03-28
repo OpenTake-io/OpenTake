@@ -13,6 +13,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <chrono>
+#include <cstdio>
 
 static std::atomic<bool> g_stopRequested{false};
 static std::atomic<bool> g_pauseRequested{false};
@@ -249,6 +250,7 @@ int main(int argc, char* argv[]) {
 
     // Set up frame callback
     std::atomic<int64_t> frameCount{0};
+    std::atomic<bool> recordingStartedAnnounced{false};
     session.setFrameCallback([&](ID3D11Texture2D* texture, int64_t timestampHns) {
         g_lastFrameTimestampHns = timestampHns;
         if (g_stopRequested) return;
@@ -269,7 +271,11 @@ int main(int argc, char* argv[]) {
         }
 
         if (encoder.writeFrame(texture, adjustedTimestampHns)) {
-            frameCount++;
+            const int64_t writtenFrames = frameCount.fetch_add(1) + 1;
+            if (writtenFrames == 1 && !recordingStartedAnnounced.exchange(true)) {
+                std::cout << "Recording started" << std::endl;
+                std::cout.flush();
+            }
         }
     });
 
@@ -312,9 +318,6 @@ int main(int argc, char* argv[]) {
         micActive = micCapture.start();
     }
 
-    std::cout << "Recording started" << std::endl;
-    std::cout.flush();
-
     // Wait for stop signal while pausing/resuming audio tracks in lockstep.
     while (!g_stopRequested) {
         if (g_pauseRequested) {
@@ -333,7 +336,17 @@ int main(int argc, char* argv[]) {
     session.stopCapture();
     if (audioActive) loopback.stop();
     if (micActive) micCapture.stop();
-    encoder.finalize();
+
+    if (frameCount.load() <= 0) {
+        std::cerr << "ERROR: No video frames were captured before stop" << std::endl;
+        DeleteFileW(outputPathW.c_str());
+        return 1;
+    }
+
+    if (!encoder.finalize()) {
+        std::cerr << "ERROR: Failed to finalize Media Foundation encoder" << std::endl;
+        return 1;
+    }
 
     std::cout << "Recording stopped. Output path: " << config.outputPath << std::endl;
     if (audioActive) {
