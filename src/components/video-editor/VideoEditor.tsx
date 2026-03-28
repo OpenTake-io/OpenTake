@@ -439,6 +439,7 @@ export default function VideoEditor() {
 	const historyCurrentRef = useRef<EditorHistorySnapshot | null>(null);
 	const applyingHistoryRef = useRef(false);
 	const pendingExportSaveRef = useRef<PendingExportSave | null>(null);
+	const pendingTelemetryRetryTimeoutRef = useRef<number | null>(null);
 	const cropSnapshotRef = useRef<CropRegion | null>(null);
 	const mp4SupportRequestRef = useRef(0);
 	const [historyVersion, setHistoryVersion] = useState(0);
@@ -662,6 +663,10 @@ export default function VideoEditor() {
 			exporterRef.current?.cancel();
 			exporterRef.current = null;
 			pendingExportSaveRef.current = null;
+			if (pendingTelemetryRetryTimeoutRef.current !== null) {
+				window.clearTimeout(pendingTelemetryRetryTimeoutRef.current);
+				pendingTelemetryRetryTimeoutRef.current = null;
+			}
 		};
 	}, []);
 
@@ -1734,6 +1739,7 @@ export default function VideoEditor() {
 
 	useEffect(() => {
 		let mounted = true;
+		let retryAttempts = 0;
 
 		async function loadCursorTelemetry() {
 			if (!videoPath) {
@@ -1746,20 +1752,57 @@ export default function VideoEditor() {
 			try {
 				const result = await window.electronAPI.getCursorTelemetry(fromFileUrl(videoPath));
 				if (mounted) {
-					setCursorTelemetry(result.success ? result.samples : []);
+					const samples = result.success ? result.samples : [];
+					setCursorTelemetry(samples);
+
+					const shouldRetryFreshRecordingTelemetry =
+						samples.length < 2 &&
+						pendingFreshRecordingAutoZoomPathRef.current === videoPath &&
+						retryAttempts < 12;
+
+					if (shouldRetryFreshRecordingTelemetry) {
+						retryAttempts += 1;
+						pendingTelemetryRetryTimeoutRef.current = window.setTimeout(() => {
+							pendingTelemetryRetryTimeoutRef.current = null;
+							if (mounted) {
+								void loadCursorTelemetry();
+							}
+						}, 350);
+					}
 				}
 			} catch (telemetryError) {
 				console.warn("Unable to load cursor telemetry:", telemetryError);
 				if (mounted) {
 					setCursorTelemetry([]);
+					if (
+						pendingFreshRecordingAutoZoomPathRef.current === videoPath &&
+						retryAttempts < 12
+					) {
+						retryAttempts += 1;
+						pendingTelemetryRetryTimeoutRef.current = window.setTimeout(() => {
+							pendingTelemetryRetryTimeoutRef.current = null;
+							if (mounted) {
+								void loadCursorTelemetry();
+							}
+						}, 350);
+					}
 				}
 			}
+		}
+
+		if (pendingTelemetryRetryTimeoutRef.current !== null) {
+			window.clearTimeout(pendingTelemetryRetryTimeoutRef.current);
+			pendingTelemetryRetryTimeoutRef.current = null;
 		}
 
 		loadCursorTelemetry();
 
 		return () => {
 			mounted = false;
+			if (pendingTelemetryRetryTimeoutRef.current !== null) {
+				window.clearTimeout(pendingTelemetryRetryTimeoutRef.current);
+				pendingTelemetryRetryTimeoutRef.current = null;
+			}
 		};
 	}, [videoPath]);
 
