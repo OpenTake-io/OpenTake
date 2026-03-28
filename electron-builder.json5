@@ -58,7 +58,7 @@
       }
     ],
     "icon": "icons/icons/mac/icon.icns",
-    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "artifactName": "${productName}-${arch}.${ext}",
     "extendInfo": {
       "NSAudioCaptureUsageDescription": "Recordly needs audio capture permission to record system audio.",
       "NSMicrophoneUsageDescription": "Recordly needs microphone access to record voice audio.",
@@ -71,7 +71,7 @@
       "AppImage"
     ],
     "icon": "icons/icons/png",
-    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "artifactName": "${productName}-linux-${arch}.${ext}",
     "category": "AudioVideo"
   },
   "win": {
@@ -81,7 +81,7 @@
     "icon": "icons/icons/win/icon.ico"
     ,
     "executableName": "Recordly",
-    "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+    "artifactName": "${productName}-windows-${arch}.${ext}"
   }
 }
 
