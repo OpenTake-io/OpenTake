@@ -1,5 +1,6 @@
 #include "monitor_utils.h"
 #include <ShellScalingApi.h>
+#include <iostream>
 
 static BOOL CALLBACK enumMonitorCallback(HMONITOR hMonitor, HDC, LPRECT, LPARAM lParam) {
     auto* monitors = reinterpret_cast<std::vector<MonitorInfo>*>(lParam);
@@ -34,6 +35,33 @@ HMONITOR findMonitorByDisplayId(int64_t displayId) {
         if (static_cast<int64_t>(reinterpret_cast<intptr_t>(m.handle)) == displayId) {
             return m.handle;
         }
+    }
+
+    return nullptr;
+}
+
+HMONITOR findMonitorByBounds(int x, int y, int width, int height) {
+    auto monitors = enumerateMonitors();
+
+    for (const auto& m : monitors) {
+        if (m.x == x && m.y == y && m.width == width && m.height == height) {
+            std::cerr << "Found monitor by exact bounds: " << x << "," << y << " " << width << "x" << height << std::endl;
+            return m.handle;
+        }
+    }
+
+    for (const auto& m : monitors) {
+        if (m.x == x && m.y == y) {
+            std::cerr << "Found monitor by top-left point match: " << x << "," << y << std::endl;
+            return m.handle;
+        }
+    }
+
+    RECT rect = { x, y, x + width, y + height };
+    HMONITOR monitor = MonitorFromRect(&rect, MONITOR_DEFAULTTONULL);
+    if (monitor) {
+        std::cerr << "Found monitor via Windows OS MonitorFromRect fallback" << std::endl;
+        return monitor;
     }
 
     return nullptr;

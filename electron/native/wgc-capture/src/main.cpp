@@ -33,6 +33,11 @@ struct CaptureConfig {
     int fps = 60;
     int width = 0;
     int height = 0;
+    int displayX = 0;
+    int displayY = 0;
+    int displayW = 0;
+    int displayH = 0;
+    bool hasDisplayBounds = false;
     bool captureSystemAudio = false;
     bool captureMic = false;
 };
@@ -127,6 +132,18 @@ static bool parseSimpleJson(const std::string& json, CaptureConfig& config) {
     config.captureSystemAudio = findBool("captureSystemAudio");
     config.captureMic = findBool("captureMic");
 
+    int dx = findInt("displayX");
+    int dy = findInt("displayY");
+    int dw = findInt("displayW");
+    int dh = findInt("displayH");
+    if (dw > 0 && dh > 0) {
+        config.displayX = dx;
+        config.displayY = dy;
+        config.displayW = dw;
+        config.displayH = dh;
+        config.hasDisplayBounds = true;
+    }
+
     return true;
 }
 
@@ -198,6 +215,12 @@ int main(int argc, char* argv[]) {
         }
     } else {
         HMONITOR monitor = findMonitorByDisplayId(config.displayId);
+        if (!monitor && config.hasDisplayBounds) {
+            std::cerr << "Monitor ID match failed, attempting coordinate-based match: "
+                      << config.displayX << "," << config.displayY << " " << config.displayW << "x" << config.displayH << std::endl;
+            monitor = findMonitorByBounds(config.displayX, config.displayY, config.displayW, config.displayH);
+        }
+
         if (!monitor) {
             std::cerr << "ERROR: Could not find monitor for displayId " << config.displayId << std::endl;
             return 1;
