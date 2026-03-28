@@ -642,6 +642,10 @@ export default function VideoEditor() {
 		}));
 	}, []);
 
+	const remountPreview = useCallback(() => {
+		setPreviewVersion((version) => version + 1);
+	}, []);
+
 	useEffect(() => {
 		return () => {
 			exporterRef.current?.cancel();
@@ -1576,53 +1580,57 @@ export default function VideoEditor() {
 				return false;
 			}
 
-			const projectData =
-				currentProjectSnapshot?.videoPath === currentSourcePath
-					? currentProjectSnapshot
-					: createProjectData(currentSourcePath, currentPersistedEditorState);
+			try {
+				const projectData =
+					currentProjectSnapshot?.videoPath === currentSourcePath
+						? currentProjectSnapshot
+						: createProjectData(currentSourcePath, currentPersistedEditorState);
 
-			const fileNameBase =
-				currentSourcePath
-					.split(/[\\/]/)
-					.pop()
-					?.replace(/\.[^.]+$/, "") || `project-${Date.now()}`;
-			let targetProjectPath = forceSaveAs ? undefined : (currentProjectPath ?? undefined);
+				const fileNameBase =
+					currentSourcePath
+						.split(/[\\/]/)
+						.pop()
+						?.replace(/\.[^.]+$/, "") || `project-${Date.now()}`;
+				let targetProjectPath = forceSaveAs ? undefined : (currentProjectPath ?? undefined);
 
-			if (!forceSaveAs && !targetProjectPath) {
-				const activeProjectResult = await window.electronAPI.loadCurrentProjectFile();
-				if (activeProjectResult.success && activeProjectResult.path) {
-					targetProjectPath = activeProjectResult.path;
-					setCurrentProjectPath(activeProjectResult.path);
+				if (!forceSaveAs && !targetProjectPath) {
+					const activeProjectResult = await window.electronAPI.loadCurrentProjectFile();
+					if (activeProjectResult.success && activeProjectResult.path) {
+						targetProjectPath = activeProjectResult.path;
+						setCurrentProjectPath(activeProjectResult.path);
+					}
 				}
+
+				const thumbnailDataUrl = await captureProjectThumbnail();
+
+				const result = await window.electronAPI.saveProjectFile(
+					projectData,
+					fileNameBase,
+					targetProjectPath,
+					thumbnailDataUrl,
+				);
+
+				if (result.canceled) {
+					toast.info("Project save canceled");
+					return false;
+				}
+
+				if (!result.success) {
+					toast.error(result.message || "Failed to save project");
+					return false;
+				}
+
+				if (result.path) {
+					setCurrentProjectPath(result.path);
+				}
+				setLastSavedSnapshot(cloneStructured(projectData));
+				await refreshProjectLibrary();
+
+				toast.success(`Project saved to ${result.path}`);
+				return true;
+			} finally {
+				remountPreview();
 			}
-
-			const thumbnailDataUrl = await captureProjectThumbnail();
-
-			const result = await window.electronAPI.saveProjectFile(
-				projectData,
-				fileNameBase,
-				targetProjectPath,
-				thumbnailDataUrl,
-			);
-
-			if (result.canceled) {
-				toast.info("Project save canceled");
-				return false;
-			}
-
-			if (!result.success) {
-				toast.error(result.message || "Failed to save project");
-				return false;
-			}
-
-			if (result.path) {
-				setCurrentProjectPath(result.path);
-			}
-			setLastSavedSnapshot(cloneStructured(projectData));
-			await refreshProjectLibrary();
-
-			toast.success(`Project saved to ${result.path}`);
-			return true;
 		},
 		[
 			captureProjectThumbnail,
@@ -1631,6 +1639,7 @@ export default function VideoEditor() {
 			currentProjectSnapshot,
 			currentPersistedEditorState,
 			refreshProjectLibrary,
+			remountPreview,
 		],
 	);
 
@@ -2677,7 +2686,7 @@ export default function VideoEditor() {
 				exporterRef.current = null;
 				setShowExportDropdown(keepExportDialogOpen);
 				setExportProgress(null);
-				setPreviewVersion((version) => version + 1);
+				remountPreview();
 			}
 		},
 		[
@@ -2720,6 +2729,7 @@ export default function VideoEditor() {
 			effectiveZoomRegions,
 			ensureSupportedMp4SourceDimensions,
 			markExportAsSaving,
+			remountPreview,
 			showExportSuccessToast,
 		],
 	);
