@@ -2,6 +2,12 @@ import { execSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
+import {
+	formatNativeHelperManifestWarning,
+	updateNativeHelperManifest,
+	verifyNativeHelperManifest,
+} from "./native-helper-manifest.mjs";
+
 const projectRoot = process.cwd();
 const sourceDir = path.join(projectRoot, "electron", "native", "cursor-monitor");
 const buildDir = path.join(sourceDir, "build");
@@ -13,6 +19,7 @@ const bundledDir = path.join(
 	process.arch === "arm64" ? "win32-arm64" : "win32-x64",
 );
 const bundledExePath = path.join(bundledDir, "cursor-monitor.exe");
+const helperId = "cursor-monitor";
 
 if (process.platform !== "win32") {
 	console.log("[build-cursor-monitor] Skipping: host platform is not Windows.");
@@ -79,6 +86,16 @@ function findCmake() {
 const cmake = findCmake();
 if (!cmake) {
 	if (existsSync(bundledExePath)) {
+		const verification = verifyNativeHelperManifest({
+			projectRoot,
+			helperId,
+			sourceDir,
+			binaryPath: bundledExePath,
+			binaryName: "cursor-monitor.exe",
+		});
+		if (!verification.ok) {
+			console.warn(formatNativeHelperManifestWarning("build-cursor-monitor", verification));
+		}
 		console.log(`[build-cursor-monitor] Using bundled helper: ${bundledExePath}`);
 		process.exit(0);
 	}
@@ -139,6 +156,14 @@ if (existsSync(exePath)) {
 	mkdirSync(bundledDir, { recursive: true });
 	copyFileSync(exePath, bundledExePath);
 	console.log(`[build-cursor-monitor] Staged bundled helper: ${bundledExePath}`);
+	const manifestPath = updateNativeHelperManifest({
+		projectRoot,
+		helperId,
+		sourceDir,
+		binaryPath: bundledExePath,
+		binaryName: "cursor-monitor.exe",
+	});
+	console.log(`[build-cursor-monitor] Updated helper manifest: ${manifestPath}`);
 } else {
 	console.error("[build-cursor-monitor] Expected exe not found at", exePath);
 	process.exit(1);

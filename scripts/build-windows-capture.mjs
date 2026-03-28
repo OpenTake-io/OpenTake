@@ -2,6 +2,12 @@ import { execSync } from "node:child_process";
 import { copyFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import path from "node:path";
 
+import {
+  formatNativeHelperManifestWarning,
+  updateNativeHelperManifest,
+  verifyNativeHelperManifest,
+} from "./native-helper-manifest.mjs";
+
 const projectRoot = process.cwd();
 const sourceDir = path.join(projectRoot, "electron", "native", "wgc-capture");
 const buildDir = path.join(sourceDir, "build");
@@ -13,6 +19,7 @@ const bundledDir = path.join(
 	process.arch === "arm64" ? "win32-arm64" : "win32-x64",
 );
 const bundledExePath = path.join(bundledDir, "wgc-capture.exe");
+const helperId = "wgc-capture";
 
 if (process.platform !== 'win32') {
   console.log('[build-windows-capture] Skipping native Windows capture build: host platform is not Windows.');
@@ -79,6 +86,16 @@ function findCmake() {
 const cmake = findCmake();
 if (!cmake) {
 	if (existsSync(bundledExePath)) {
+    const verification = verifyNativeHelperManifest({
+      projectRoot,
+      helperId,
+      sourceDir,
+      binaryPath: bundledExePath,
+      binaryName: "wgc-capture.exe",
+    });
+    if (!verification.ok) {
+      console.warn(formatNativeHelperManifestWarning("build-windows-capture", verification));
+    }
 		console.log(`[build-windows-capture] Using bundled helper: ${bundledExePath}`);
 		process.exit(0);
 	}
@@ -139,6 +156,14 @@ if (existsSync(exePath)) {
 	mkdirSync(bundledDir, { recursive: true });
 	copyFileSync(exePath, bundledExePath);
 	console.log(`[build-windows-capture] Staged bundled helper: ${bundledExePath}`);
+  const manifestPath = updateNativeHelperManifest({
+    projectRoot,
+    helperId,
+    sourceDir,
+    binaryPath: bundledExePath,
+    binaryName: "wgc-capture.exe",
+  });
+  console.log(`[build-windows-capture] Updated helper manifest: ${manifestPath}`);
 } else {
   console.error('[build-windows-capture] Expected exe not found at', exePath);
   process.exit(1);
