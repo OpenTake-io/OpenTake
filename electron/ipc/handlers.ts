@@ -9,8 +9,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import type { SaveDialogOptions } from 'electron'
 import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, shell, systemPreferences } from 'electron'
+import { RECORDINGS_DIR, USER_DATA_PATH } from '../appPaths'
 import { hideCursor, showCursor } from '../cursorHider'
-import { RECORDINGS_DIR } from '../main'
 import { closeCountdownWindow, createCountdownWindow, getCountdownWindow } from '../windows'
 import { resolveWindowsCaptureDisplay } from './windowsCaptureSelection'
 
@@ -21,18 +21,18 @@ const PROJECT_FILE_EXTENSION = 'recordly'
 const LEGACY_PROJECT_FILE_EXTENSIONS = ['openscreen']
 const PROJECTS_DIRECTORY_NAME = 'Projects'
 const PROJECT_THUMBNAIL_SUFFIX = '.preview.png'
-const RECENT_PROJECTS_FILE = path.join(app.getPath('userData'), 'recent-projects.json')
+const RECENT_PROJECTS_FILE = path.join(USER_DATA_PATH, 'recent-projects.json')
 const MAX_RECENT_PROJECTS = 16
-const SHORTCUTS_FILE = path.join(app.getPath('userData'), 'shortcuts.json')
-const RECORDINGS_SETTINGS_FILE = path.join(app.getPath('userData'), 'recordings-settings.json')
-const COUNTDOWN_SETTINGS_FILE = path.join(app.getPath('userData'), 'countdown-settings.json')
+const SHORTCUTS_FILE = path.join(USER_DATA_PATH, 'shortcuts.json')
+const RECORDINGS_SETTINGS_FILE = path.join(USER_DATA_PATH, 'recordings-settings.json')
+const COUNTDOWN_SETTINGS_FILE = path.join(USER_DATA_PATH, 'countdown-settings.json')
 const AUTO_RECORDING_PREFIX = 'recording-'
 const AUTO_RECORDING_RETENTION_COUNT = 20
 const AUTO_RECORDING_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000
 const ALLOW_RECORDLY_WINDOW_CAPTURE = Boolean(process.env['VITE_DEV_SERVER_URL'])
 const RECORDING_SESSION_MANIFEST_SUFFIX = '.recordly-session.json'
 const WHISPER_MODEL_DOWNLOAD_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin'
-const WHISPER_MODEL_DIR = path.join(app.getPath('userData'), 'whisper')
+const WHISPER_MODEL_DIR = path.join(USER_DATA_PATH, 'whisper')
 const WHISPER_SMALL_MODEL_PATH = path.join(WHISPER_MODEL_DIR, 'ggml-small.bin')
 
 function getAssetRootPath() {

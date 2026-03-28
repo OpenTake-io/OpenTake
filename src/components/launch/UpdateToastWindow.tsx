@@ -191,11 +191,6 @@ export function UpdateToastWindow() {
 							<button
 								type="button"
 								onClick={async () => {
-									if (payload.isPreview) {
-										await window.electronAPI.dismissUpdateToast();
-										return;
-									}
-
 									await window.electronAPI.downloadAvailableUpdate();
 								}}
 								className="rounded-xl bg-sky-400 px-3 py-2 text-xs font-semibold text-[#031a2c] transition-colors hover:bg-sky-300"
