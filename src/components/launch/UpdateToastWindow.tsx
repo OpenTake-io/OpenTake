@@ -1,5 +1,5 @@
 import { AlertCircle, Download, LoaderCircle, Rocket } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type UpdateToastPayload = {
 	version: string;
@@ -9,6 +9,8 @@ type UpdateToastPayload = {
 	isPreview?: boolean;
 	progressPercent?: number;
 };
+
+const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
 function formatDelayHours(delayMs: number) {
 	const hours = Math.max(1, Math.round(delayMs / (60 * 60 * 1000)));
@@ -47,6 +49,16 @@ function getIcon(payload: UpdateToastPayload) {
 
 export function UpdateToastWindow() {
 	const [payload, setPayload] = useState<UpdateToastPayload | null>(null);
+	const [dragOffsetX, setDragOffsetX] = useState(0);
+	const dragState = useRef<{
+		pointerId: number | null;
+		startX: number;
+		active: boolean;
+	}>({
+		pointerId: null,
+		startX: 0,
+		active: false,
+	});
 
 	useEffect(() => {
 		let mounted = true;
@@ -67,15 +79,87 @@ export function UpdateToastWindow() {
 		};
 	}, []);
 
+	useEffect(() => {
+		setDragOffsetX(0);
+		dragState.current = {
+			pointerId: null,
+			startX: 0,
+			active: false,
+		};
+	}, [payload?.phase, payload?.version, payload?.progressPercent]);
+
 	if (!payload) {
 		return <div className="h-full w-full bg-transparent" />;
 	}
 
 	const normalizedProgress = Math.max(0, Math.min(100, Math.round(payload.progressPercent ?? 0)));
+	const swipeThreshold = 96;
+	const handleSwipeDismiss = async () => {
+		setDragOffsetX(0);
+		dragState.current = {
+			pointerId: null,
+			startX: 0,
+			active: false,
+		};
+		await window.electronAPI.dismissUpdateToast();
+	};
 
 	return (
 		<div className="flex h-full w-full items-center justify-center bg-transparent p-2">
-			<div className="pointer-events-auto flex w-full max-w-[404px] items-start gap-3 rounded-[24px] border border-sky-300/20 bg-[#0d1117]/95 p-4 text-white shadow-2xl shadow-black/45 backdrop-blur-xl">
+			<div
+				className="pointer-events-auto flex w-full max-w-[404px] items-start gap-3 rounded-[24px] border border-sky-300/20 bg-[#0d1117]/95 p-4 text-white shadow-2xl shadow-black/45 backdrop-blur-xl transition-transform duration-150 ease-out select-none"
+				style={{
+					transform: `translateX(${dragOffsetX}px) rotate(${dragOffsetX / 30}deg)`,
+					opacity: Math.max(0.35, 1 - Math.min(1, Math.abs(dragOffsetX) / 180)),
+				}}
+				onPointerDown={(event) => {
+					const target = event.target as HTMLElement | null;
+					if (target?.closest("button")) {
+						return;
+					}
+
+					dragState.current = {
+						pointerId: event.pointerId,
+						startX: event.clientX,
+						active: true,
+					};
+					event.currentTarget.setPointerCapture(event.pointerId);
+				}}
+				onPointerMove={(event) => {
+					if (!dragState.current.active || dragState.current.pointerId !== event.pointerId) {
+						return;
+					}
+
+					setDragOffsetX(event.clientX - dragState.current.startX);
+				}}
+				onPointerUp={async (event) => {
+					if (!dragState.current.active || dragState.current.pointerId !== event.pointerId) {
+						return;
+					}
+
+					const nextOffset = event.clientX - dragState.current.startX;
+					dragState.current = {
+						pointerId: null,
+						startX: 0,
+						active: false,
+					};
+
+					if (Math.abs(nextOffset) >= swipeThreshold) {
+						await handleSwipeDismiss();
+						return;
+					}
+
+					setDragOffsetX(0);
+				}}
+				onPointerCancel={() => {
+					dragState.current = {
+						pointerId: null,
+						startX: 0,
+						active: false,
+					};
+					setDragOffsetX(0);
+				}}
+			>
 				<div className="mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-sky-400/15 text-sky-300">
 					{getIcon(payload)}
 				</div>
@@ -158,6 +242,23 @@ export function UpdateToastWindow() {
 								className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/85 transition-colors hover:bg-white/10"
 							>
 								Later ({formatDelayHours(payload.delayMs)})
+							</button>
+						) : null}
+
+						{payload.phase !== "downloading" ? (
+							<button
+								type="button"
+								onClick={async () => {
+									if (payload.isPreview) {
+										await window.electronAPI.dismissUpdateToast();
+										return;
+									}
+
+									await window.electronAPI.deferDownloadedUpdate(THREE_DAYS_MS);
+								}}
+								className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/85 transition-colors hover:bg-white/10"
+							>
+								Later (3 days)
 							</button>
 						) : null}
 
