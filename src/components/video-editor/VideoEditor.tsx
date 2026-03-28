@@ -417,6 +417,7 @@ export default function VideoEditor() {
 	const [lastSavedSnapshot, setLastSavedSnapshot] = useState<EditorProjectData | null>(null);
 	const [showCropModal, setShowCropModal] = useState(false);
 	const [previewVersion, setPreviewVersion] = useState(0);
+	const [isPreviewReady, setIsPreviewReady] = useState(false);
 	const headerLeftControlsPaddingClass = appPlatform === "darwin" ? "pl-[76px]" : "";
 
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
@@ -432,6 +433,7 @@ export default function VideoEditor() {
 	const nextAnnotationZIndexRef = useRef(1); // Track z-index for stacking order
 	const exporterRef = useRef<VideoExporter | null>(null);
 	const autoSuggestedVideoPathRef = useRef<string | null>(null);
+	const pendingFreshRecordingAutoZoomPathRef = useRef<string | null>(null);
 	const historyPastRef = useRef<EditorHistorySnapshot[]>([]);
 	const historyFutureRef = useRef<EditorHistorySnapshot[]>([]);
 	const historyCurrentRef = useRef<EditorHistorySnapshot | null>(null);
@@ -651,6 +653,7 @@ export default function VideoEditor() {
 	}, []);
 
 	const remountPreview = useCallback(() => {
+		setIsPreviewReady(false);
 		setPreviewVersion((version) => version + 1);
 	}, []);
 
@@ -1083,6 +1086,7 @@ export default function VideoEditor() {
 			setVideoSourcePath(sourcePath);
 			setVideoPath(toFileUrl(sourcePath));
 			setCurrentProjectPath(path ?? null);
+			pendingFreshRecordingAutoZoomPathRef.current = null;
 			if (normalizedEditor.webcam.sourcePath) {
 				await window.electronAPI.setCurrentRecordingSession?.({
 					videoPath: sourcePath,
@@ -1299,10 +1303,12 @@ export default function VideoEditor() {
 				const sessionResult = await window.electronAPI.getCurrentRecordingSession?.();
 				if (sessionResult?.success && sessionResult.session?.videoPath) {
 					const sourcePath = fromFileUrl(sessionResult.session.videoPath);
+					const sourceVideoUrl = toFileUrl(sourcePath);
 					setVideoSourcePath(sourcePath);
-					setVideoPath(toFileUrl(sourcePath));
+					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
 					setLastSavedSnapshot(null);
+					pendingFreshRecordingAutoZoomPathRef.current = sourceVideoUrl;
 					setWebcam((prev) => ({
 						...prev,
 						enabled: Boolean(sessionResult.session?.webcamPath),
@@ -1314,10 +1320,12 @@ export default function VideoEditor() {
 				const result = await window.electronAPI.getCurrentVideoPath();
 				if (result.success && result.path) {
 					const sourcePath = fromFileUrl(result.path);
+					const sourceVideoUrl = toFileUrl(sourcePath);
 					setVideoSourcePath(sourcePath);
-					setVideoPath(toFileUrl(sourcePath));
+					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
 					setLastSavedSnapshot(null);
+					pendingFreshRecordingAutoZoomPathRef.current = sourceVideoUrl;
 					setWebcam((prev) => ({
 						...prev,
 						enabled: false,
@@ -1797,6 +1805,8 @@ export default function VideoEditor() {
 		const suggestionTelemetry = effectiveCursorTelemetry;
 		if (
 			!videoPath ||
+			loading ||
+			!isPreviewReady ||
 			duration <= 0 ||
 			loopCursor ||
 			zoomRegions.length > 0 ||
@@ -1805,7 +1815,12 @@ export default function VideoEditor() {
 			return;
 		}
 
+		if (pendingFreshRecordingAutoZoomPathRef.current !== videoPath) {
+			return;
+		}
+
 		if (autoSuggestedVideoPathRef.current === videoPath) {
+			pendingFreshRecordingAutoZoomPathRef.current = null;
 			return;
 		}
 
@@ -1817,6 +1832,7 @@ export default function VideoEditor() {
 		const candidates = detectInteractionCandidates(suggestionTelemetry);
 		if (candidates.length === 0) {
 			autoSuggestedVideoPathRef.current = videoPath;
+			pendingFreshRecordingAutoZoomPathRef.current = null;
 			return;
 		}
 
@@ -1871,7 +1887,8 @@ export default function VideoEditor() {
 		});
 
 		autoSuggestedVideoPathRef.current = videoPath;
-	}, [videoPath, duration, effectiveCursorTelemetry, loopCursor, zoomRegions.length]);
+		pendingFreshRecordingAutoZoomPathRef.current = null;
+	}, [videoPath, loading, isPreviewReady, duration, effectiveCursorTelemetry, loopCursor, zoomRegions.length]);
 
 	function togglePlayPause() {
 		const playback = videoPlaybackRef.current;
@@ -3255,6 +3272,7 @@ export default function VideoEditor() {
 												ref={videoPlaybackRef}
 												videoPath={videoPath || ""}
 												onDurationChange={setDuration}
+												onPreviewReadyChange={setIsPreviewReady}
 												onTimeUpdate={setCurrentTime}
 												currentTime={currentTime}
 												onPlayStateChange={setIsPlaying}
