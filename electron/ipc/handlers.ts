@@ -3055,6 +3055,19 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
           config.displayId = Number.isFinite(screenId) && screenId > 0
             ? screenId
             : Number(getScreen().getPrimaryDisplay().id)
+
+          // Monitor handle IDs can drift across Electron/Windows capture boundaries,
+          // so also provide display bounds for a coordinate-based native fallback.
+          const allDisplays = getScreen().getAllDisplays()
+          const display = allDisplays.find((candidate) => String(candidate.id) === String(config.displayId))
+            ?? getScreen().getPrimaryDisplay()
+
+          if (display) {
+            config.displayX = Math.round(display.bounds.x)
+            config.displayY = Math.round(display.bounds.y)
+            config.displayW = Math.round(display.bounds.width)
+            config.displayH = Math.round(display.bounds.height)
+          }
         }
 
         windowsCaptureOutputBuffer = ''
