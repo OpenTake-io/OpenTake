@@ -13,6 +13,7 @@ import {
 	systemPreferences,
 	Tray,
 } from "electron";
+import { RECORDINGS_DIR } from "./appPaths";
 import { showCursor } from "./cursorHider";
 import {
 	getSelectedSourceId,
@@ -42,17 +43,9 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-if (process.env["VITE_DEV_SERVER_URL"]) {
-	const devUserDataPath = path.join(app.getPath("appData"), "Recordly-dev");
-	app.setPath("userData", devUserDataPath);
-	app.setPath("sessionData", path.join(devUserDataPath, "session"));
-}
-
 if (process.platform === "darwin") {
 	app.commandLine.appendSwitch("disable-features", "MacCatapLoopbackAudioForScreenShare");
 }
-
-export const RECORDINGS_DIR = path.join(app.getPath("userData"), "recordings");
 
 async function ensureRecordingsDir() {
 	try {
