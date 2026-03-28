@@ -19,6 +19,7 @@ const RECORDLY_ISSUES_URL = "https://github.com/webadderall/Recordly/issues";
 const RECORDLY_X_URL = "https://x.com/webadderall";
 const CONTACT_EMAIL = "youngchen3442@gmail.com";
 export const APP_HEADER_ACTION_BUTTON_CLASS = "h-7 px-2 text-xs text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all gap-1.5";
+export const APP_HEADER_ICON_BUTTON_CLASS = "h-7 w-7 p-0 text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all";
 
 async function openExternalLink(url: string, errorMessage: string) {
 	try {
@@ -40,10 +41,11 @@ export function FeedbackDialog() {
 				<Button
 					variant="ghost"
 					size="sm"
-					className={APP_HEADER_ACTION_BUTTON_CLASS}
+					className={APP_HEADER_ICON_BUTTON_CLASS}
+					title={t("feedback.trigger", "Feedback")}
+					aria-label={t("feedback.trigger", "Feedback")}
 				>
 					<MessageSquareMore className="h-3.5 w-3.5" />
-					<span className="font-medium">{t("feedback.trigger", "Feedback")}</span>
 				</Button>
 			</DialogTrigger>
 			<DialogContent className="max-w-lg bg-[#09090b] border-white/10 [&>button]:text-slate-400 [&>button:hover]:text-white">
@@ -129,10 +131,11 @@ export function KeyboardShortcutsDialog() {
 				<Button
 					variant="ghost"
 					size="sm"
-					className={APP_HEADER_ACTION_BUTTON_CLASS}
+					className={APP_HEADER_ICON_BUTTON_CLASS}
+					title={t("keyboardShortcuts.trigger", "Shortcuts")}
+					aria-label={t("keyboardShortcuts.trigger", "Shortcuts")}
 				>
 					<Keyboard className="h-3.5 w-3.5" />
-					<span className="font-medium">{t("keyboardShortcuts.trigger", "Shortcuts")}</span>
 				</Button>
 			</DialogTrigger>
 			<DialogContent className="max-w-lg bg-[#09090b] border-white/10 [&>button]:text-slate-400 [&>button:hover]:text-white">

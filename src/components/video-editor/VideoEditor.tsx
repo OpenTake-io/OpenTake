@@ -4,7 +4,6 @@ import {
 	Captions,
 	Download,
 	FolderOpen,
-	Languages,
 	MousePointer2,
 	Redo2,
 	Save,
@@ -62,7 +61,7 @@ import {
 } from "./projectPersistence";
 import { type EditorEffectSection, SettingsPanel } from "./SettingsPanel";
 import {
-	APP_HEADER_ACTION_BUTTON_CLASS,
+	APP_HEADER_ICON_BUTTON_CLASS,
 	FeedbackDialog,
 	KeyboardShortcutsDialog,
 } from "./TutorialHelp";
@@ -289,18 +288,20 @@ function LanguageSwitcher() {
 			variant="ghost"
 			size="sm"
 			onClick={() => setLocale(next)}
-			className={APP_HEADER_ACTION_BUTTON_CLASS}
+			className="h-7 rounded-[5px] px-2 text-[11px] font-semibold leading-none text-slate-300 hover:bg-white/10 hover:text-white transition-all"
 			title={t("common.app.language", "Language")}
 			aria-label={t("common.app.language", "Language")}
 		>
-			<Languages className="h-4 w-4" />
-			<span className="font-medium">{labels[locale] ?? locale.toUpperCase()}</span>
+			<span className="leading-none">{labels[locale] ?? locale.toUpperCase()}</span>
 		</Button>
 	);
 }
 
 export default function VideoEditor() {
 	const { t } = useI18n();
+	const [appPlatform, setAppPlatform] = useState<string>(
+		typeof navigator !== "undefined" && /Mac/i.test(navigator.platform) ? "darwin" : "",
+	);
 	const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
 	const [videoPath, setVideoPath] = useState<string | null>(null);
 	const [videoSourcePath, setVideoSourcePath] = useState<string | null>(null);
@@ -416,6 +417,7 @@ export default function VideoEditor() {
 	const [lastSavedSnapshot, setLastSavedSnapshot] = useState<EditorProjectData | null>(null);
 	const [showCropModal, setShowCropModal] = useState(false);
 	const [previewVersion, setPreviewVersion] = useState(0);
+	const headerLeftControlsPaddingClass = appPlatform === "darwin" ? "pl-[76px]" : "";
 
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
 	const projectBrowserTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -438,6 +440,12 @@ export default function VideoEditor() {
 	const cropSnapshotRef = useRef<CropRegion | null>(null);
 	const mp4SupportRequestRef = useRef(0);
 	const [historyVersion, setHistoryVersion] = useState(0);
+
+	useEffect(() => {
+		void window.electronAPI.getPlatform().then((platform) => {
+			setAppPlatform(platform);
+		});
+	}, []);
 	const [supportedMp4SourceDimensions, setSupportedMp4SourceDimensions] =
 		useState<SupportedMp4Dimensions>({
 			width: 1920,
@@ -2949,17 +2957,11 @@ export default function VideoEditor() {
 	return (
 		<div className="flex flex-col h-screen bg-[#111113] text-slate-200 overflow-hidden selection:bg-[#2563EB]/30">
 			<div
-				className="relative h-11 flex-shrink-0 bg-[#151518]/88 backdrop-blur-md border-b border-white/10 flex items-center justify-center px-8 z-50"
+				className="relative flex h-11 flex-shrink-0 items-center justify-between bg-[#151518]/88 px-5 backdrop-blur-md border-b border-white/10 z-50"
 				style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
 			>
-				<div className="flex items-baseline gap-0">
-					<span className="text-sm font-semibold tracking-tight text-white/90">
-						{projectDisplayName}
-					</span>
-					<span className="text-xs font-medium tracking-tight text-slate-500">.recordly</span>
-				</div>
 				<div
-					className="absolute left-[88px] flex items-center gap-2"
+					className={`flex items-center gap-1.5 justify-self-start ${headerLeftControlsPaddingClass}`}
 					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
 				>
 					<LanguageSwitcher />
@@ -2968,7 +2970,7 @@ export default function VideoEditor() {
 						variant="ghost"
 						size="sm"
 						onClick={() => void openRecordingsFolder()}
-						className={`${APP_HEADER_ACTION_BUTTON_CLASS} px-2.5`}
+						className={APP_HEADER_ICON_BUTTON_CLASS}
 						title={t("common.app.manageRecordings", "Open recordings folder")}
 						aria-label={t("common.app.manageRecordings", "Open recordings folder")}
 					>
@@ -2977,11 +2979,6 @@ export default function VideoEditor() {
 					<KeyboardShortcutsDialog />
 					<FeedbackDialog />
 					<div className="ml-1 h-5 w-px bg-white/10" />
-				</div>
-				<div
-					className="absolute right-5 flex items-center gap-2 pr-3"
-					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-				>
 					<Button
 						type="button"
 						variant="ghost"
@@ -3004,7 +3001,20 @@ export default function VideoEditor() {
 					>
 						<Redo2 className="h-4 w-4" />
 					</Button>
-					<div className="mx-1 h-5 w-px bg-white/10" />
+				</div>
+				<div
+					className="pointer-events-none absolute left-1/2 flex min-w-0 -translate-x-1/2 items-baseline justify-center gap-0"
+					style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+				>
+					<span className="text-sm font-semibold tracking-tight text-white/90">
+						{projectDisplayName}
+					</span>
+					<span className="text-xs font-medium tracking-tight text-slate-500">.recordly</span>
+				</div>
+				<div
+					className="flex items-center gap-2 justify-self-end pr-3"
+					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+				>
 					<Button
 						ref={projectBrowserTriggerRef}
 						type="button"
