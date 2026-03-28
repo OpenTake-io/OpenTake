@@ -357,7 +357,7 @@ ipcMain.handle("defer-downloaded-update", (_event, delayMs?: number) => {
 });
 
 ipcMain.handle("dismiss-update-toast", () => {
-	return dismissUpdateToast(sendUpdateToastToWindows);
+	return dismissUpdateToast(getUpdateDialogWindow, sendUpdateToastToWindows);
 });
 
 ipcMain.handle("skip-update-version", () => {
