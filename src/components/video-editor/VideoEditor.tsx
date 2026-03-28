@@ -1883,6 +1883,10 @@ export default function VideoEditor() {
 		}
 	}
 
+	const handleAutoSuggestZoomsConsumed = useCallback(() => {
+		setAutoSuggestZoomsTrigger(0);
+	}, []);
+
 	function handleSeek(time: number) {
 		const video = videoPlaybackRef.current?.video;
 		if (!video) return;
@@ -3343,6 +3347,7 @@ export default function VideoEditor() {
 									onSeek={handleSeek}
 									cursorTelemetry={normalizedCursorTelemetry}
 									autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
+									onAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
 									zoomRegions={effectiveZoomRegions}
 									onZoomAdded={handleZoomAdded}
 									onZoomSuggested={handleZoomSuggested}
