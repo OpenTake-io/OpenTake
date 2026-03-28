@@ -4,6 +4,7 @@ import type { MessageBoxOptions, MessageBoxReturnValue } from "electron";
 
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 export const UPDATE_REMINDER_DELAY_MS = 3 * 60 * 60 * 1000;
+const DISMISSED_READY_REMINDER_DELAY_MS = 5 * 60 * 1000;
 const AUTO_UPDATES_DISABLED = process.env.RECORDLY_DISABLE_AUTO_UPDATES === "1";
 const DEV_UPDATE_PREVIEW_INTERVAL_MS = 10 * 1000;
 
@@ -177,9 +178,32 @@ function scheduleDevUpdatePreview(sendToRenderer: UpdateToastSender) {
 	}, DEV_UPDATE_PREVIEW_INTERVAL_MS);
 }
 
-export function dismissUpdateToast(sendToRenderer?: UpdateToastSender) {
+
+export function dismissUpdateToast(
+	getMainWindow: () => BrowserWindow | null,
+	sendToRenderer?: UpdateToastSender,
+) {
+	if (currentToastPayload?.isPreview) {
+		clearVisibleUpdateToast(sendToRenderer);
+		return { success: true };
+	}
+
 	if (downloadInProgress) {
 		downloadToastDismissed = true;
+		clearVisibleUpdateToast(sendToRenderer);
+		return { success: true };
+	}
+
+	if (currentToastPayload?.phase === "ready") {
+		return deferUpdateReminder(
+			getMainWindow,
+			sendToRenderer,
+			DISMISSED_READY_REMINDER_DELAY_MS,
+		);
+	}
+
+	if (currentToastPayload?.phase === "available" || currentToastPayload?.phase === "error") {
+		return deferUpdateReminder(getMainWindow, sendToRenderer, UPDATE_REMINDER_DELAY_MS);
 	}
 
 	clearVisibleUpdateToast(sendToRenderer);
