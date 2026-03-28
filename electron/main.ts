@@ -109,10 +109,26 @@ ipcMain.on("set-has-unsaved-changes", (_event, hasChanges: boolean) => {
 });
 
 function createWindow() {
+	if (!app.isReady()) {
+		void app.whenReady().then(() => {
+			if (!mainWindow || mainWindow.isDestroyed()) {
+				createWindow();
+			}
+		});
+		return;
+	}
+
 	mainWindow = createHudOverlayWindow();
 }
 
 function focusOrCreateMainWindow() {
+	if (!app.isReady()) {
+		void app.whenReady().then(() => {
+			focusOrCreateMainWindow();
+		});
+		return;
+	}
+
 	if (BrowserWindow.getAllWindows().length === 0) {
 		createWindow();
 		return;
