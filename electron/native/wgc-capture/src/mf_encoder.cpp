@@ -22,6 +22,8 @@ MFEncoder::~MFEncoder() {
 
 bool MFEncoder::initialize(const std::wstring& outputPath, int width, int height, int fps,
                            ID3D11Device* device, ID3D11DeviceContext* context) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
     if (initialized_) return false;
 
     if (width % 2 != 0 || height % 2 != 0) {
@@ -124,6 +126,8 @@ bool MFEncoder::initialize(const std::wstring& outputPath, int width, int height
 }
 
 bool MFEncoder::writeFrame(ID3D11Texture2D* texture, int64_t timestampHns) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
     if (!initialized_ || !sinkWriter_) return false;
 
     context_->CopyResource(stagingTexture_.Get(), texture);
@@ -186,20 +190,28 @@ bool MFEncoder::writeFrame(ID3D11Texture2D* texture, int64_t timestampHns) {
     sample->SetSampleDuration(10000000LL / fps_);
 
     hr = sinkWriter_->WriteSample(streamIndex_, sample.Get());
+    if (FAILED(hr)) {
+        std::cerr << "ERROR: WriteSample failed: 0x" << std::hex << hr << std::endl;
+    }
     return SUCCEEDED(hr);
 }
 
 bool MFEncoder::finalize() {
-    if (!initialized_) return false;
-    initialized_ = false;
+    std::lock_guard<std::mutex> lock(mutex_);
 
+    if (!initialized_) return false;
+    if (!sinkWriter_) return false;
+
+    HRESULT hr = sinkWriter_->Finalize();
+    if (FAILED(hr)) {
+        std::cerr << "ERROR: SinkWriter Finalize failed: 0x" << std::hex << hr << std::endl;
+    }
+
+    initialized_ = false;
+    sinkWriter_.Reset();
     stagingTexture_.Reset();
     nv12Buffer_.clear();
     nv12Buffer_.shrink_to_fit();
-
-    if (!sinkWriter_) return false;
-    HRESULT hr = sinkWriter_->Finalize();
-    sinkWriter_.Reset();
     MFShutdown();
     return SUCCEEDED(hr);
 }
