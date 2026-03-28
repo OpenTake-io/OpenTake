@@ -24,6 +24,12 @@ import { createEditorWindow, createHudOverlayWindow, createSourceSelectorWindow 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+if (process.env["VITE_DEV_SERVER_URL"]) {
+	const devUserDataPath = path.join(app.getPath("appData"), "Recordly-dev");
+	app.setPath("userData", devUserDataPath);
+	app.setPath("sessionData", path.join(devUserDataPath, "session"));
+}
+
 if (process.platform === "darwin") {
 	app.commandLine.appendSwitch("disable-features", "MacCatapLoopbackAudioForScreenShare");
 }
