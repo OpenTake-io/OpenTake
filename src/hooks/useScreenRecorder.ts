@@ -276,14 +276,24 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   }, []);
 
   const finalizeRecordingSession = useCallback(async (videoPath: string, webcamPath: string | null) => {
-    if (webcamPath) {
-      await window.electronAPI.setCurrentRecordingSession({
-        videoPath,
-        webcamPath,
-        timeOffsetMs: webcamTimeOffsetMs.current,
-      });
-    } else {
-      await window.electronAPI.setCurrentVideoPath(videoPath);
+    try {
+      if (webcamPath) {
+        await window.electronAPI.setCurrentRecordingSession({
+          videoPath,
+          webcamPath,
+          timeOffsetMs: webcamTimeOffsetMs.current,
+        });
+      } else {
+        await window.electronAPI.setCurrentVideoPath(videoPath);
+      }
+    } catch (error) {
+      console.error("Failed to persist recording session metadata:", error);
+
+      try {
+        await window.electronAPI.setCurrentVideoPath(videoPath);
+      } catch (fallbackError) {
+        console.error("Failed to persist fallback video path:", fallbackError);
+      }
     }
 
     await window.electronAPI.switchToEditor();
