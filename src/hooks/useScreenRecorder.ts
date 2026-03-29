@@ -706,10 +706,15 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
                 "Native Windows capture failed to start. Falling back to browser capture.",
               );
             }
-          } else {
+          } else if (!nativeResult.userNotified) {
             throw new Error(
               nativeResult.error ?? nativeResult.message ?? "Failed to start native screen recording",
             );
+          } else {
+            setRecording(false);
+            cleanupCapturedMedia();
+            await stopWebcamRecorder();
+            return;
           }
         }
 

@@ -587,6 +587,42 @@ guard CommandLine.arguments.count >= 2 else {
 // CGS_REQUIRE_INIT because CGS is never initialised in a CLI tool.
 let _ = CGMainDisplayID()
 
+// Pre-flight check: ensure screen recording permission is granted before
+// attempting capture. On macOS 15+, a one-session grant may expire after the
+// parent app restarts.  CGRequestScreenCaptureAccess() will trigger the
+// system-level permission dialog (or open System Settings) when not yet granted.
+if !CGPreflightScreenCaptureAccess() {
+	let granted = CGRequestScreenCaptureAccess()
+	if !granted {
+		fputs("SCREEN_RECORDING_PERMISSION_DENIED\n", stderr)
+		fflush(stderr)
+		exit(1)
+	}
+}
+
+// Pre-flight check for microphone access when mic capture is requested.
+if let configData = CommandLine.arguments[1].data(using: .utf8),
+   let config = try? JSONDecoder().decode(CaptureConfig.self, from: configData),
+   config.capturesMicrophone == true {
+	switch AVCaptureDevice.authorizationStatus(for: .audio) {
+	case .authorized:
+		break
+	case .notDetermined:
+		let sem = DispatchSemaphore(value: 0)
+		AVCaptureDevice.requestAccess(for: .audio) { _ in sem.signal() }
+		sem.wait()
+		if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
+			fputs("MICROPHONE_PERMISSION_DENIED\n", stderr)
+			fflush(stderr)
+			exit(1)
+		}
+	default:
+		fputs("MICROPHONE_PERMISSION_DENIED\n", stderr)
+		fflush(stderr)
+		exit(1)
+	}
+}
+
 let service = RecorderService()
 service.start(configJSON: CommandLine.arguments[1])
 
