@@ -326,6 +326,11 @@ export function getHudOverlayWindow(): BrowserWindow | null {
 
 export function createUpdateToastWindow(): BrowserWindow {
 	const initialBounds = getUpdateToastBounds();
+	const parentWindow =
+		process.platform === "darwin" && hudOverlayWindow && !hudOverlayWindow.isDestroyed()
+			? hudOverlayWindow
+			: undefined;
+	const useTransparentToastWindow = process.platform !== "win32";
 
 	const win = new BrowserWindow({
 		width: initialBounds.width,
@@ -333,15 +338,15 @@ export function createUpdateToastWindow(): BrowserWindow {
 		x: initialBounds.x,
 		y: initialBounds.y,
 		frame: false,
-		transparent: true,
+		transparent: useTransparentToastWindow,
 		resizable: false,
 		alwaysOnTop: true,
 		skipTaskbar: true,
 		hasShadow: false,
 		show: false,
 		focusable: true,
-		...(hudOverlayWindow && !hudOverlayWindow.isDestroyed() ? { parent: hudOverlayWindow } : {}),
-		backgroundColor: "#00000000",
+		...(parentWindow ? { parent: parentWindow } : {}),
+		backgroundColor: useTransparentToastWindow ? "#00000000" : "#101418",
 		webPreferences: {
 			preload: path.join(__dirname, "preload.mjs"),
 			nodeIntegration: false,
@@ -382,7 +387,12 @@ export function showUpdateToastWindow(): BrowserWindow {
 	const win = getUpdateToastWindow() ?? createUpdateToastWindow();
 	positionUpdateToastWindow();
 	if (!win.isVisible()) {
-		win.showInactive();
+		if (process.platform === "win32") {
+			win.show();
+			win.moveTop();
+		} else {
+			win.showInactive();
+		}
 	} else {
 		win.moveTop();
 	}
