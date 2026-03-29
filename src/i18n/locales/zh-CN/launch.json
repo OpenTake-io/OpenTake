@@ -37,7 +37,18 @@
 		"pause": "暂停",
 		"stop": "停止",
 		"cancel": "取消",
-		"more": "更多"
+		"more": "更多",
+		"update": {
+			"update": "更新",
+			"updated": "已是最新",
+			"idleTitle": "检查更新。",
+			"checkingTitle": "正在检查更新...",
+			"downloadingTitle": "正在下载更新...",
+			"errorTitle": "检查更新失败。点击重试。",
+			"upToDateTitle": "Recordly {{version}} 已是最新版本。",
+			"availableTitle": "Recordly {{version}} 可更新。",
+			"availableGenericTitle": "有可用更新。"
+		}
 	},
 	"sourceSelector": {
 		"loadingSources": "正在加载源...",

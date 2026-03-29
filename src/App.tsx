@@ -17,13 +17,14 @@ export default function App() {
 	useEffect(() => {
 		const params = new URLSearchParams(window.location.search);
 		const type = params.get("windowType") || "";
+		const isMacOS = /mac/i.test(navigator.platform);
 		setWindowType(type);
 
 		if (
 			type === "hud-overlay" ||
 			type === "source-selector" ||
 			type === "countdown" ||
-			type === "update-toast"
+			(type === "update-toast" && isMacOS)
 		) {
 			document.body.style.background = "transparent";
 			document.documentElement.style.background = "transparent";
