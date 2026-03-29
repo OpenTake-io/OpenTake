@@ -2612,6 +2612,27 @@ async function finalizeStoredVideo(videoPath: string) {
     await pruneAutoRecordings([videoPath])
   }
 
+  if (lastNativeCaptureDiagnostics?.backend === 'mac-screencapturekit') {
+    recordNativeCaptureDiagnostics({
+      backend: 'mac-screencapturekit',
+      phase: 'stop',
+      sourceId: lastNativeCaptureDiagnostics.sourceId ?? null,
+      sourceType: lastNativeCaptureDiagnostics.sourceType ?? 'unknown',
+      displayId: lastNativeCaptureDiagnostics.displayId ?? null,
+      displayBounds: lastNativeCaptureDiagnostics.displayBounds ?? null,
+      windowHandle: lastNativeCaptureDiagnostics.windowHandle ?? null,
+      helperPath: lastNativeCaptureDiagnostics.helperPath ?? null,
+      outputPath: videoPath,
+      systemAudioPath: lastNativeCaptureDiagnostics.systemAudioPath ?? null,
+      microphonePath: lastNativeCaptureDiagnostics.microphonePath ?? null,
+      osRelease: lastNativeCaptureDiagnostics.osRelease,
+      supported: lastNativeCaptureDiagnostics.supported,
+      helperExists: lastNativeCaptureDiagnostics.helperExists,
+      processOutput: lastNativeCaptureDiagnostics.processOutput,
+      fileSizeBytes: validation.fileSizeBytes,
+    })
+  }
+
   return {
     success: true,
     path: videoPath,
@@ -2771,7 +2792,7 @@ async function startInteractionCapture() {
 export function registerIpcHandlers(
   createEditorWindow: () => void,
   createSourceSelectorWindow: () => BrowserWindow,
-  getMainWindow: () => BrowserWindow | null,
+  _getMainWindow: () => BrowserWindow | null,
   getSourceSelectorWindow: () => BrowserWindow | null,
   onRecordingStateChange?: (recording: boolean, sourceName: string) => void
 ) {
@@ -3148,10 +3169,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
   })
 
   ipcMain.handle('switch-to-editor', () => {
-    const mainWin = getMainWindow()
-    if (mainWin) {
-      mainWin.close()
-    }
+    console.log('[switch-to-editor] Opening editor window')
     createEditorWindow()
   })
 
@@ -3585,6 +3603,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       const fallbackPath = nativeCaptureTargetPath
       const fallbackSystemAudioPath = nativeCaptureSystemAudioPath
       const fallbackMicrophonePath = nativeCaptureMicrophonePath
+      const fallbackFileSizeBytes = await getFileSizeIfPresent(fallbackPath)
       nativeScreenRecordingActive = false
       nativeCaptureProcess = null
       nativeCaptureTargetPath = null
@@ -3592,6 +3611,26 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       nativeCaptureMicrophonePath = null
       nativeCaptureStopRequested = false
       nativeCapturePaused = false
+
+      recordNativeCaptureDiagnostics({
+        backend: 'mac-screencapturekit',
+        phase: 'stop',
+        sourceId: lastNativeCaptureDiagnostics?.sourceId ?? null,
+        sourceType: lastNativeCaptureDiagnostics?.sourceType ?? 'unknown',
+        displayId: lastNativeCaptureDiagnostics?.displayId ?? null,
+        displayBounds: lastNativeCaptureDiagnostics?.displayBounds ?? null,
+        windowHandle: lastNativeCaptureDiagnostics?.windowHandle ?? null,
+        helperPath: lastNativeCaptureDiagnostics?.helperPath ?? null,
+        outputPath: fallbackPath,
+        systemAudioPath: fallbackSystemAudioPath,
+        microphonePath: fallbackMicrophonePath,
+        osRelease: lastNativeCaptureDiagnostics?.osRelease,
+        supported: lastNativeCaptureDiagnostics?.supported,
+        helperExists: lastNativeCaptureDiagnostics?.helperExists,
+        processOutput: nativeCaptureOutputBuffer.trim() || undefined,
+        fileSizeBytes: fallbackFileSizeBytes,
+        error: String(error),
+      })
 
       // Try to recover: if the target file exists on disk, finalize with it
       if (fallbackPath) {

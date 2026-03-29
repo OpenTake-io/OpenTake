@@ -435,16 +435,39 @@ export function createEditorWindow(): BrowserWindow {
 	});
 
 	win.once("ready-to-show", () => {
+		console.log("[editor-window] ready-to-show");
 		win.show();
 	});
 
 	win.webContents.on("did-finish-load", () => {
+		console.log("[editor-window] did-finish-load", win.webContents.getURL());
 		win?.webContents.send("main-process-message", new Date().toLocaleString());
+	});
+
+	win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+		console.error("[editor-window] did-fail-load", {
+			errorCode,
+			errorDescription,
+			validatedURL,
+		});
+	});
+
+	win.webContents.on("render-process-gone", (_event, details) => {
+		console.error("[editor-window] render-process-gone", details);
+	});
+
+	win.on("show", () => {
+		console.log("[editor-window] show");
+	});
+
+	win.on("focus", () => {
+		console.log("[editor-window] focus");
 	});
 
 	if (VITE_DEV_SERVER_URL) {
 		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=editor");
 	} else {
+		console.log("[editor-window] load-file", path.join(RENDERER_DIST, "index.html"));
 		win.loadFile(path.join(RENDERER_DIST, "index.html"), {
 			query: { windowType: "editor" },
 		});

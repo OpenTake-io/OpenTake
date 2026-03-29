@@ -110,6 +110,40 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     }
   }, []);
 
+  const buildNativeCaptureFailureMessage = useCallback(
+    async (context: string, fallbackMessage: string) => {
+      if (typeof window.electronAPI?.getLastNativeCaptureDiagnostics !== "function") {
+        return fallbackMessage;
+      }
+
+      try {
+        const result = await window.electronAPI.getLastNativeCaptureDiagnostics();
+        const diagnostics = result.success ? result.diagnostics ?? null : null;
+        if (!diagnostics) {
+          return fallbackMessage;
+        }
+
+        console.warn(`[NativeCaptureDiagnostics:${context}]`, diagnostics);
+
+        const details: string[] = [];
+        if (diagnostics.error) {
+          details.push(diagnostics.error);
+        }
+        if (diagnostics.outputPath) {
+          details.push(`Saved file: ${diagnostics.outputPath}`);
+        }
+
+        return details.length > 0
+          ? `${fallbackMessage} ${details.join(". ")}`
+          : fallbackMessage;
+      } catch (error) {
+        console.warn("Failed to load native capture diagnostics:", error);
+        return fallbackMessage;
+      }
+    },
+    [],
+  );
+
   const resetRecordingClock = useCallback((startedAt: number) => {
     startTime.current = startedAt;
     accumulatedPausedDurationMs.current = 0;
@@ -458,6 +492,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
           } catch (recoveryError) {
             console.error("Failed to recover native screen recording:", recoveryError);
           }
+
+          const failureMessage = await buildNativeCaptureFailureMessage(
+            "stop-native-screen-recording",
+            isMacOS
+              ? "Failed to finish the macOS recording, so the editor was not opened."
+              : "Failed to finish the recording, so the editor was not opened.",
+          );
+          toast.error(failureMessage, { duration: 10000 });
           return;
         }
 
