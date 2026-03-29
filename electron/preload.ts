@@ -265,8 +265,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	getCurrentUpdateToastPayload: () => {
 		return ipcRenderer.invoke("get-current-update-toast-payload");
 	},
+	getUpdateStatusSummary: () => {
+		return ipcRenderer.invoke("get-update-status-summary");
+	},
 	previewUpdateToast: () => {
 		return ipcRenderer.invoke("preview-update-toast");
+	},
+	checkForAppUpdates: () => {
+		return ipcRenderer.invoke("check-for-app-updates");
 	},
 	onUpdateToastStateChanged: (
 		callback: (payload: {
@@ -276,6 +282,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 			delayMs: number;
 			isPreview?: boolean;
 			progressPercent?: number;
+			primaryAction?: "download-update" | "install-update" | "retry-check";
 		} | null) => void,
 	) => {
 		const listener = (
@@ -288,6 +295,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 						delayMs: number;
 						isPreview?: boolean;
 						progressPercent?: number;
+						primaryAction?: "download-update" | "install-update" | "retry-check";
 				  }
 				| null,
 		) => callback(payload);
