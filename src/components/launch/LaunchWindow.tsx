@@ -111,8 +111,8 @@ function DropdownItem({
 	);
 }
 
-function Separator() {
-	return <div className={styles.sep} />;
+function Separator({ dropdown = false }: { dropdown?: boolean }) {
+	return <div className={dropdown ? styles.ddSep : styles.sep} />;
 }
 
 function MicDeviceRow({
@@ -196,6 +196,7 @@ export function LaunchWindow() {
 	const showWebcamControls = webcamEnabled && !recording;
 	const { devices, selectedDeviceId, setSelectedDeviceId } = useMicrophoneDevices(
 		microphoneEnabled || micDropdownOpen,
+		microphoneDeviceId,
 	);
 	const {
 		devices: videoDevices,
@@ -206,9 +207,11 @@ export function LaunchWindow() {
 	const supportsHudCaptureProtection = platform !== "linux";
 
 	useEffect(() => {
-		if (selectedDeviceId && selectedDeviceId !== "default") {
-			setMicrophoneDeviceId(selectedDeviceId);
+		if (!selectedDeviceId) {
+			return;
 		}
+
+		setMicrophoneDeviceId(selectedDeviceId === "default" ? undefined : selectedDeviceId);
 	}, [selectedDeviceId, setMicrophoneDeviceId]);
 
 	useEffect(() => {
@@ -691,7 +694,7 @@ export function LaunchWindow() {
 				/>
 			</button>
 
-					<Separator />
+			<Separator />
 
 			<IconButton
 				onClick={toggleMicrophone}
@@ -719,7 +722,7 @@ export function LaunchWindow() {
 				<Timer size={18} />
 			</IconButton>
 
-					<Separator />
+			<Separator />
 
 			<button
 				type="button"
@@ -731,7 +734,7 @@ export function LaunchWindow() {
 				<div className={styles.recDot} />
 			</button>
 
-					<Separator />
+			<Separator />
 
 			<IconButton
 				buttonRef={moreButtonRef}
@@ -878,7 +881,9 @@ export function LaunchWindow() {
 											onSelect={() => {
 												setMicrophoneEnabled(true);
 												setSelectedDeviceId(device.deviceId);
-												setMicrophoneDeviceId(device.deviceId);
+												setMicrophoneDeviceId(
+													device.deviceId === "default" ? undefined : device.deviceId,
+												);
 											}}
 										/>
 									))}
