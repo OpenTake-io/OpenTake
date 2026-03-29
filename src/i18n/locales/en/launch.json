@@ -37,7 +37,18 @@
 		"pause": "Pause",
 		"stop": "Stop",
 		"cancel": "Cancel",
-		"more": "More"
+		"more": "More",
+		"update": {
+			"update": "Update",
+			"updated": "Updated",
+			"idleTitle": "Check for updates.",
+			"checkingTitle": "Checking for updates...",
+			"downloadingTitle": "Downloading update...",
+			"errorTitle": "Update check failed. Click to retry.",
+			"upToDateTitle": "Recordly {{version}} is up to date.",
+			"availableTitle": "Recordly {{version}} is available.",
+			"availableGenericTitle": "An update is available."
+		}
 	},
 	"sourceSelector": {
 		"loadingSources": "Loading sources...",

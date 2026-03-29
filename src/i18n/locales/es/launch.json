@@ -37,7 +37,18 @@
 		"pause": "Pausa",
 		"stop": "Detener",
 		"cancel": "Cancelar",
-		"more": "Más"
+		"more": "Más",
+		"update": {
+			"update": "Actualizar",
+			"updated": "Actualizado",
+			"idleTitle": "Buscar actualizaciones.",
+			"checkingTitle": "Buscando actualizaciones...",
+			"downloadingTitle": "Descargando actualización...",
+			"errorTitle": "La comprobación de actualizaciones falló. Haz clic para reintentar.",
+			"upToDateTitle": "Recordly {{version}} está actualizado.",
+			"availableTitle": "Recordly {{version}} está disponible.",
+			"availableGenericTitle": "Hay una actualización disponible."
+		}
 	},
 	"sourceSelector": {
 		"loadingSources": "Cargando fuentes...",
