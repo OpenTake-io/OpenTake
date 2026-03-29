@@ -50,6 +50,14 @@ interface UpdateToastState {
 	delayMs: number;
 	isPreview?: boolean;
 	progressPercent?: number;
+	primaryAction?: "download-update" | "install-update" | "retry-check";
+}
+
+interface UpdateStatusSummary {
+	status: "idle" | "checking" | "up-to-date" | "available" | "downloading" | "ready" | "error";
+	currentVersion: string;
+	availableVersion: string | null;
+	detail?: string;
 }
 
 interface Window {
@@ -303,7 +311,9 @@ interface Window {
 		dismissUpdateToast: () => Promise<{ success: boolean }>;
 		skipUpdateVersion: () => Promise<{ success: boolean; message?: string }>;
 		getCurrentUpdateToastPayload: () => Promise<UpdateToastState | null>;
+		getUpdateStatusSummary: () => Promise<UpdateStatusSummary>;
 		previewUpdateToast: () => Promise<{ success: boolean }>;
+		checkForAppUpdates: () => Promise<{ success: boolean; logPath: string }>;
 		onUpdateToastStateChanged: (callback: (payload: UpdateToastState | null) => void) => () => void;
 		onUpdateReadyToast: (callback: (payload: {
 			version: string;
