@@ -100,9 +100,23 @@ function closeEditorWindowBypassingUnsavedPrompt(window: BrowserWindow | null) {
 	window.close();
 }
 
-// Tray Icons
-const defaultTrayIcon = getTrayIcon("app-icons/recordly-32.png");
-const recordingTrayIcon = getTrayIcon("rec-button.png");
+// Tray Icons (lazily created after app is ready to avoid accessing Electron APIs too early)
+let defaultTrayIcon: ReturnType<typeof getTrayIcon> | null = null;
+let recordingTrayIcon: ReturnType<typeof getTrayIcon> | null = null;
+
+function getDefaultTrayIcon() {
+	if (!defaultTrayIcon) {
+		defaultTrayIcon = getTrayIcon("app-icons/recordly-32.png");
+	}
+	return defaultTrayIcon;
+}
+
+function getRecordingTrayIcon() {
+	if (!recordingTrayIcon) {
+		recordingTrayIcon = getTrayIcon("rec-button.png");
+	}
+	return recordingTrayIcon;
+}
 
 ipcMain.on("set-has-unsaved-changes", (_event, hasChanges: boolean) => {
 	editorHasUnsavedChanges = hasChanges;
@@ -272,7 +286,7 @@ function setupApplicationMenu() {
 }
 
 function createTray() {
-	tray = new Tray(defaultTrayIcon);
+	tray = new Tray(getDefaultTrayIcon());
 	tray.on("click", () => focusOrCreateMainWindow());
 }
 
@@ -374,7 +388,7 @@ ipcMain.handle("preview-update-toast", () => {
 
 function updateTrayMenu(recording: boolean = false) {
 	if (!tray) return;
-	const trayIcon = recording ? recordingTrayIcon : defaultTrayIcon;
+	const trayIcon = recording ? getRecordingTrayIcon() : getDefaultTrayIcon();
 	const trayToolTip = recording ? `Recording: ${selectedSourceName}` : "Recordly";
 	const menuTemplate = recording
 		? [
@@ -493,16 +507,21 @@ app.on("second-instance", () => {
 // Register all IPC handlers when app is ready
 app.whenReady().then(async () => {
 	session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-		const allowed = ["media", "audioCapture", "microphone"];
+		const allowed = ["media", "audioCapture", "microphone", "camera", "videoCapture"];
 		return allowed.includes(permission);
 	});
 
 	session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-		const allowed = ["media", "audioCapture", "microphone"];
+		const allowed = ["media", "audioCapture", "microphone", "camera", "videoCapture"];
 		callback(allowed.includes(permission));
 	});
 
 	if (process.platform === "darwin") {
+		const cameraStatus = systemPreferences.getMediaAccessStatus("camera");
+		if (cameraStatus !== "granted") {
+			await systemPreferences.askForMediaAccess("camera");
+		}
+
 		const micStatus = systemPreferences.getMediaAccessStatus("microphone");
 		if (micStatus !== "granted") {
 			await systemPreferences.askForMediaAccess("microphone");

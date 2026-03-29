@@ -44,6 +44,9 @@ function getAssetRootPath() {
 }
 
 function getScreen() {
+  if (!app.isReady()) {
+    throw new Error("getScreen() called before app is ready. Ensure all screen access happens after app.whenReady().")
+  }
   return nodeRequire('electron').screen as typeof import('electron').screen
 }
 
@@ -222,10 +225,10 @@ function hasUsableSourceThumbnail(
   return size.width > 1 && size.height > 1
 }
 
-function getMacPrivacySettingsUrl(pane: 'screen' | 'accessibility') {
-  return pane === 'screen'
-    ? 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
-    : 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
+function getMacPrivacySettingsUrl(pane: 'screen' | 'accessibility' | 'microphone') {
+  if (pane === 'screen') return 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
+  if (pane === 'microphone') return 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
+  return 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
 }
 
 function isAutoRecordingPath(filePath: string) {
@@ -3339,6 +3342,25 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
     try {
       const recordingsDir = await getRecordingsDir()
+
+      // Warm up TCC: trigger an Electron-level screen capture API call so macOS
+      // activates the screen-recording grant for this process tree before the
+      // native helper binary spawns and calls SCStream.startCapture().
+      try {
+        await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } })
+      } catch {
+        // non-fatal – the helper will report its own TCC status
+      }
+
+      // Ensure microphone TCC is granted for this process tree when mic capture
+      // is requested, so the child helper inherits the grant.
+      if (options?.capturesMicrophone) {
+        const micStatus = systemPreferences.getMediaAccessStatus('microphone')
+        if (micStatus !== 'granted') {
+          await systemPreferences.askForMediaAccess('microphone')
+        }
+      }
+
       const appName = normalizeDesktopSourceName(String(source?.appName ?? ''))
       const ownAppName = normalizeDesktopSourceName(app.getName())
       if (
@@ -3431,6 +3453,65 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       return { success: true }
     } catch (error) {
       console.error('Failed to start native ScreenCaptureKit recording:', error)
+      const errorStr = String(error)
+
+      // Detect TCC (screen recording permission) errors and show a helpful dialog
+      if (errorStr.includes('declined TCC') || errorStr.includes('declined TCCs') || errorStr.includes('SCREEN_RECORDING_PERMISSION_DENIED')) {
+        const { response } = await dialog.showMessageBox({
+          type: 'warning',
+          title: 'Screen Recording Permission Required',
+          message: 'Recordly needs screen recording permission to capture your screen.',
+          detail: 'Please open System Settings > Privacy & Security > Screen Recording, make sure Recordly is toggled ON, then try recording again.',
+          buttons: ['Open System Settings', 'Cancel'],
+          defaultId: 0,
+          cancelId: 1,
+        })
+        if (response === 0) {
+          await shell.openExternal(getMacPrivacySettingsUrl('screen'))
+        }
+        try { nativeCaptureProcess?.kill() } catch { /* ignore */ }
+        nativeScreenRecordingActive = false
+        nativeCaptureProcess = null
+        nativeCaptureTargetPath = null
+        nativeCaptureSystemAudioPath = null
+        nativeCaptureMicrophonePath = null
+        nativeCaptureStopRequested = false
+        nativeCapturePaused = false
+        return {
+          success: false,
+          message: 'Screen recording permission not granted. Please allow access in System Settings and restart the app.',
+          userNotified: true,
+        }
+      }
+
+      if (errorStr.includes('MICROPHONE_PERMISSION_DENIED')) {
+        const { response } = await dialog.showMessageBox({
+          type: 'warning',
+          title: 'Microphone Permission Required',
+          message: 'Recordly needs microphone permission to record audio.',
+          detail: 'Please open System Settings > Privacy & Security > Microphone, make sure Recordly is toggled ON, then try recording again.',
+          buttons: ['Open System Settings', 'Cancel'],
+          defaultId: 0,
+          cancelId: 1,
+        })
+        if (response === 0) {
+          await shell.openExternal(getMacPrivacySettingsUrl('microphone'))
+        }
+        try { nativeCaptureProcess?.kill() } catch { /* ignore */ }
+        nativeScreenRecordingActive = false
+        nativeCaptureProcess = null
+        nativeCaptureTargetPath = null
+        nativeCaptureSystemAudioPath = null
+        nativeCaptureMicrophonePath = null
+        nativeCaptureStopRequested = false
+        nativeCapturePaused = false
+        return {
+          success: false,
+          message: 'Microphone permission not granted. Please allow access in System Settings.',
+          userNotified: true,
+        }
+      }
+
       recordNativeCaptureDiagnostics({
         backend: 'mac-screencapturekit',
         phase: 'start',

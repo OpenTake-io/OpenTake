@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 import { USER_DATA_PATH } from "./appPaths";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -82,6 +82,9 @@ function persistHudOverlayCaptureProtectionSetting(enabled: boolean): void {
 }
 
 function getScreen() {
+	if (!app.isReady()) {
+		throw new Error("getScreen() called before app is ready. Ensure all screen access happens after app.whenReady().");
+	}
 	return nodeRequire("electron").screen as typeof import("electron").screen;
 }
 

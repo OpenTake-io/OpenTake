@@ -78,7 +78,7 @@ interface Window {
 				microphoneDeviceId?: string;
 				microphoneLabel?: string;
 			},
-		) => Promise<{ success: boolean; path?: string; message?: string; error?: string }>;
+		) => Promise<{ success: boolean; path?: string; message?: string; error?: string; userNotified?: boolean }>;
 		stopNativeScreenRecording: () => Promise<{
 			success: boolean;
 			path?: string;
