@@ -3,6 +3,14 @@
 @tailwind utilities;
 
 @layer base {
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+  }
+
   :root {
     --brand-accent: #2563eb;
     --brand-accent-rgb: 37, 99, 235;
