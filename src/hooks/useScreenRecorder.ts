@@ -479,7 +479,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         nativeWindowsRecording.current = false;
 
         const result = await window.electronAPI.stopNativeScreenRecording();
-        window.electronAPI?.setRecordingState(false);
+        await window.electronAPI?.setRecordingState(false);
 
         if (!result.success || !result.path) {
           console.error("Failed to stop native screen recording:", result.error ?? result.message);
