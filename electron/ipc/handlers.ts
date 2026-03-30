@@ -2815,6 +2815,9 @@ export function registerIpcHandlers(
       ? await desktopCapturer.getSources({
           ...opts,
           types: electronTypes,
+        }).catch((error) => {
+          console.warn('desktopCapturer.getSources failed (screen recording permission may be missing):', error)
+          return []
         })
       : []
     const ownWindowNames = new Set(
