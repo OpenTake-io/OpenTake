@@ -49,7 +49,14 @@ group.enter()
 Task {
 	do {
 		let shareableContent = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-		let entries = shareableContent.windows.compactMap { window -> WindowListEntry? in
+
+		struct RawWindowEntry {
+			let entry: WindowListEntry
+			let hasRawTitle: Bool
+			let bundleId: String?
+		}
+
+		let rawEntries = shareableContent.windows.compactMap { window -> RawWindowEntry? in
 			let appName = normalize(window.owningApplication?.applicationName)
 			let windowTitle = normalize(window.title)
 			let bundleId = normalize(window.owningApplication?.bundleIdentifier)
@@ -59,7 +66,7 @@ Task {
 				return nil
 			}
 
-			guard frame.width > 1, frame.height > 1 else {
+			guard frame.width >= 50, frame.height >= 50 else {
 				return nil
 			}
 
@@ -87,7 +94,7 @@ Task {
 				resolvedName = resolvedWindowTitle
 			}
 
-			return WindowListEntry(
+			let entry = WindowListEntry(
 				id: "window:\(window.windowID):0",
 				name: resolvedName,
 				display_id: matchedDisplay.map { String($0.displayID) } ?? "",
@@ -99,7 +106,29 @@ Task {
 				width: Double(frame.width),
 				height: Double(frame.height)
 			)
+
+			return RawWindowEntry(entry: entry, hasRawTitle: windowTitle != nil, bundleId: bundleId)
 		}
+
+		// For apps with multiple windows, drop auxiliary windows that lack a
+		// distinct title (e.g. Arc's sidebar/tab-bar chrome). If ALL windows
+		// from an app lack titles, keep them all.
+		var titledCountByBundle: [String: Int] = [:]
+		for raw in rawEntries {
+			if let bid = raw.bundleId, raw.hasRawTitle {
+				titledCountByBundle[bid, default: 0] += 1
+			}
+		}
+
+		let entries = rawEntries
+			.filter { raw in
+				guard let bid = raw.bundleId else { return true }
+				if let titled = titledCountByBundle[bid], titled > 0 {
+					return raw.hasRawTitle
+				}
+				return true
+			}
+			.map { $0.entry }
 		.sorted { lhs, rhs in
 			let lhsApp = lhs.appName ?? lhs.name
 			let rhsApp = rhs.appName ?? rhs.name
