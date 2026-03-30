@@ -3006,41 +3006,16 @@ export function registerIpcHandlers(
       const isWindow = source.id?.startsWith('window:')
       const windowId = isWindow ? parseWindowId(source.id) : null
 
-      // ── 1. Bring window to front & get its bounds via AppleScript ──
-      let asBounds: { x: number; y: number; width: number; height: number } | null = null
-
+      // ── 1. Bring window to front ──
       if (isWindow && process.platform === 'darwin') {
         const appName = source.appName || source.name?.split(' — ')[0]?.trim()
         if (appName) {
-          // Single AppleScript: activate AND return window bounds
           try {
-            const { stdout } = await execFileAsync('osascript', ['-e',
-              `tell application "${appName}"\n` +
-              `  activate\n` +
-              `end tell\n` +
-              `delay 0.3\n` +
-              `tell application "System Events"\n` +
-              `  tell process "${appName}"\n` +
-              `    set frontWindow to front window\n` +
-              `    set {x1, y1} to position of frontWindow\n` +
-              `    set {w1, h1} to size of frontWindow\n` +
-              `    return (x1 as text) & "," & (y1 as text) & "," & (w1 as text) & "," & (h1 as text)\n` +
-              `  end tell\n` +
-              `end tell`
-            ], { timeout: 4000 })
-            const parts = stdout.trim().split(',').map(Number)
-            if (parts.length === 4 && parts.every(n => Number.isFinite(n))) {
-              asBounds = { x: parts[0], y: parts[1], width: parts[2], height: parts[3] }
-            }
-          } catch {
-            // Fallback: just activate without bounds
-            try {
-              await execFileAsync('osascript', ['-e',
-                `tell application "${appName}" to activate`
-              ], { timeout: 2000 })
-              await new Promise((resolve) => setTimeout(resolve, 350))
-            } catch { /* ignore */ }
-          }
+            await execFileAsync('osascript', ['-e',
+              `tell application "${appName}" to activate`
+            ], { timeout: 2000 })
+            await new Promise((resolve) => setTimeout(resolve, 350))
+          } catch { /* ignore */ }
         }
       } else if (windowId && process.platform === 'linux') {
         try {
@@ -3054,17 +3029,15 @@ export function registerIpcHandlers(
       }
 
       // ── 2. Resolve bounds ──
-      let bounds = asBounds
+      let bounds: { x: number; y: number; width: number; height: number } | null = null
 
-      if (!bounds) {
-        if (source.id?.startsWith('screen:')) {
-          bounds = getDisplayBoundsForSource(source)
-        } else if (isWindow) {
-          if (process.platform === 'darwin') {
-            bounds = await resolveMacWindowBounds(source)
-          } else if (process.platform === 'linux') {
-            bounds = await resolveLinuxWindowBounds(source)
-          }
+      if (source.id?.startsWith('screen:')) {
+        bounds = getDisplayBoundsForSource(source)
+      } else if (isWindow) {
+        if (process.platform === 'darwin') {
+          bounds = await resolveMacWindowBounds(source)
+        } else if (process.platform === 'linux') {
+          bounds = await resolveLinuxWindowBounds(source)
         }
       }
 
