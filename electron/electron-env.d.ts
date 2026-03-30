@@ -360,6 +360,9 @@ interface Window {
 		getAppVersion: () => Promise<string>;
 		/** Hide the OS cursor before browser capture starts. */
 		hideOsCursor: () => Promise<{ success: boolean }>;
+		/** Recording preferences (mic, system audio) */
+		getRecordingPreferences: () => Promise<{ success: boolean; microphoneEnabled: boolean; microphoneDeviceId?: string; systemAudioEnabled: boolean }>;
+		setRecordingPreferences: (prefs: { microphoneEnabled?: boolean; microphoneDeviceId?: string; systemAudioEnabled?: boolean }) => Promise<{ success: boolean; error?: string }>;
 		/** Countdown timer before recording */
 		getCountdownDelay: () => Promise<{ success: boolean; delay: number }>;
 		setCountdownDelay: (delay: number) => Promise<{ success: boolean; error?: string }>;

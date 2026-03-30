@@ -88,6 +88,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const hasPromptedForReselect = useRef(false);
   const hasShownNativeWindowsFallbackToast = useRef(false);
   const countdownDelayLoaded = useRef(false);
+  const recordingPrefsLoaded = useRef(false);
   const pendingWebcamPathPromise = useRef<Promise<string | null> | null>(null);
   const webcamStopPromise = useRef<Promise<string | null> | null>(null);
   const webcamStopResolver = useRef<((path: string | null) => void) | null>(null);
@@ -555,6 +556,37 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const setCountdownDelay = useCallback((delay: number) => {
     setCountdownDelayState(delay);
     void window.electronAPI.setCountdownDelay(delay);
+  }, []);
+
+  useEffect(() => {
+    if (recordingPrefsLoaded.current) return;
+    recordingPrefsLoaded.current = true;
+
+    void (async () => {
+      const result = await window.electronAPI.getRecordingPreferences();
+      if (result.success) {
+        setMicrophoneEnabled(result.microphoneEnabled);
+        if (result.microphoneDeviceId) {
+          setMicrophoneDeviceId(result.microphoneDeviceId);
+        }
+        setSystemAudioEnabled(result.systemAudioEnabled);
+      }
+    })();
+  }, []);
+
+  const persistMicrophoneEnabled = useCallback((enabled: boolean) => {
+    setMicrophoneEnabled(enabled);
+    void window.electronAPI.setRecordingPreferences({ microphoneEnabled: enabled });
+  }, []);
+
+  const persistMicrophoneDeviceId = useCallback((deviceId: string | undefined) => {
+    setMicrophoneDeviceId(deviceId);
+    void window.electronAPI.setRecordingPreferences({ microphoneDeviceId: deviceId });
+  }, []);
+
+  const persistSystemAudioEnabled = useCallback((enabled: boolean) => {
+    setSystemAudioEnabled(enabled);
+    void window.electronAPI.setRecordingPreferences({ systemAudioEnabled: enabled });
   }, []);
 
   useEffect(() => {
@@ -1113,11 +1145,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     preparePermissions,
     isMacOS,
     microphoneEnabled,
-    setMicrophoneEnabled,
+  	setMicrophoneEnabled: persistMicrophoneEnabled,
     microphoneDeviceId,
-    setMicrophoneDeviceId,
+  	setMicrophoneDeviceId: persistMicrophoneDeviceId,
     systemAudioEnabled,
-    setSystemAudioEnabled,
+  	setSystemAudioEnabled: persistSystemAudioEnabled,
     webcamEnabled,
     setWebcamEnabled,
     webcamDeviceId,
