@@ -62,6 +62,7 @@ interface UpdateStatusSummary {
 
 interface Window {
 	electronAPI: {
+		hudOverlaySetIgnoreMouse: (ignore: boolean) => void;
 		hudOverlayHide: () => void;
 		hudOverlayClose: () => void;
 		setHudOverlayExpanded: (expanded: boolean) => void;

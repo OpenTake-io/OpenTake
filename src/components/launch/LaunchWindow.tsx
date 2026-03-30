@@ -873,7 +873,12 @@ export function LaunchWindow() {
 			style={{ height: "100vh" }}
 			ref={dropdownRef}
 		>
-			<div ref={hudContentRef} className="flex flex-col items-center overflow-visible">
+			<div
+				ref={hudContentRef}
+				className="flex flex-col items-center overflow-visible"
+				onMouseEnter={() => window.electronAPI?.hudOverlaySetIgnoreMouse?.(false)}
+				onMouseLeave={() => window.electronAPI?.hudOverlaySetIgnoreMouse?.(true)}
+			>
 				{/* Only the visible HUD content should become interactive. */}
 				<div className={styles.menuArea}>
 					{projectBrowserOpen ? (
