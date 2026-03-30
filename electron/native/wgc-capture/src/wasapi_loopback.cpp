@@ -215,6 +215,12 @@ bool WasapiCapture::writeWavHeader(HANDLE file, DWORD dataSize) {
 }
 
 void WasapiCapture::captureThread() {
+    // COM must be initialized on every thread that uses COM objects.
+    // The main thread calls winrt::init_apartment(MTA) but that only covers
+    // the main thread.  Windows 11 enforces per-thread COM init more strictly
+    // than Windows 10, causing silent audio capture failures without this.
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
     WORD channels = static_cast<WORD>(mixFormat_->nChannels);
     bool isFloat = (mixFormat_->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) ||
         (mixFormat_->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
@@ -235,7 +241,10 @@ void WasapiCapture::captureThread() {
 
         UINT32 packetLength = 0;
         HRESULT hr = captureClient_->GetNextPacketSize(&packetLength);
-        if (FAILED(hr)) break;
+        if (FAILED(hr)) {
+            std::cerr << "WASAPI: GetNextPacketSize failed hr=0x" << std::hex << hr << std::dec << std::endl;
+            break;
+        }
 
         while (packetLength > 0) {
             BYTE* data = nullptr;
@@ -243,7 +252,10 @@ void WasapiCapture::captureThread() {
             DWORD flags = 0;
 
             hr = captureClient_->GetBuffer(&data, &numFrames, &flags, nullptr, nullptr);
-            if (FAILED(hr)) break;
+            if (FAILED(hr)) {
+                std::cerr << "WASAPI: GetBuffer failed hr=0x" << std::hex << hr << std::dec << std::endl;
+                break;
+            }
 
             UINT32 totalSamples = numFrames * channels;
 
@@ -268,7 +280,12 @@ void WasapiCapture::captureThread() {
             totalDataBytes_ += written;
 
             hr = captureClient_->GetNextPacketSize(&packetLength);
-            if (FAILED(hr)) break;
+            if (FAILED(hr)) {
+                std::cerr << "WASAPI: GetNextPacketSize failed hr=0x" << std::hex << hr << std::dec << std::endl;
+                break;
+            }
         }
     }
+
+    CoUninitialize();
 }
