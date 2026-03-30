@@ -115,6 +115,11 @@ type RecordingSessionData = {
   timeOffsetMs?: number
 }
 
+type PauseSegment = {
+  startMs: number
+  endMs: number
+}
+
 type RecordingSessionManifest = {
   version: 1 | 2
   videoFileName: string
@@ -1931,7 +1936,7 @@ function attachWindowsCaptureLifecycle(proc: ChildProcessWithoutNullStreams) {
   })
 }
 
-async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath: string | null, micAudioPath: string | null) {
+async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath: string | null, micAudioPath: string | null, pauseSegments: PauseSegment[] = []) {
   const ffmpegPath = getFfmpegBinaryPath()
   const inputs: string[] = ['-i', videoPath]
   const audioInputs: string[] = []
@@ -1959,15 +1964,30 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
   if (audioInputs.length === 0) return
 
   const mixedOutputPath = `${videoPath}.muxed.mp4`
+  const normalizedPauseSegments = normalizePauseSegments(pauseSegments)
 
   if (audioInputs.length === 2) {
     // Both system + mic audio: mix them
+    const filterParts: string[] = []
+    const systemPauseFilter = buildPausedAudioFilter('1:a', 'system_trimmed', normalizedPauseSegments)
+    const micPauseFilter = buildPausedAudioFilter('2:a', 'mic_trimmed', normalizedPauseSegments)
+
+    if (systemPauseFilter) {
+      filterParts.push(systemPauseFilter)
+    }
+    if (micPauseFilter) {
+      filterParts.push(micPauseFilter)
+    }
+
+    filterParts.push(`${micPauseFilter ? '[mic_trimmed]' : '[2:a]'}atrim=start=0.10,asetpts=PTS-STARTPTS[m]`)
+    filterParts.push(`${systemPauseFilter ? '[system_trimmed]' : '[1:a]'}[m]amix=inputs=2:duration=longest:normalize=0[aout]`)
+
     await execFileAsync(
       ffmpegPath,
       [
         '-y',
         ...inputs,
-        '-filter_complex', '[2:a]atrim=start=0.10,asetpts=PTS-STARTPTS[m];[1:a][m]amix=inputs=2:duration=longest:normalize=0[aout]',
+        '-filter_complex', filterParts.join(';'),
         '-map', '0:v:0',
         '-map', '[aout]',
         '-c:v', 'copy',
@@ -1980,19 +2000,34 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
     )
   } else {
     // Single audio track
+    const pauseFilter = buildPausedAudioFilter('1:a', 'aout', normalizedPauseSegments)
+
     await execFileAsync(
       ffmpegPath,
-      [
-        '-y',
-        ...inputs,
-        '-map', '0:v:0',
-        '-map', '1:a:0',
-        '-c:v', 'copy',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-shortest',
-        mixedOutputPath,
-      ],
+      pauseFilter
+        ? [
+            '-y',
+            ...inputs,
+            '-filter_complex', pauseFilter,
+            '-map', '0:v:0',
+            '-map', '[aout]',
+            '-c:v', 'copy',
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-shortest',
+            mixedOutputPath,
+          ]
+        : [
+            '-y',
+            ...inputs,
+            '-map', '0:v:0',
+            '-map', '1:a:0',
+            '-c:v', 'copy',
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-shortest',
+            mixedOutputPath,
+          ],
       { timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
     )
   }
@@ -2005,6 +2040,100 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
       await fs.rm(audioPath, { force: true }).catch(() => {})
     }
   }
+}
+
+function normalizePauseSegments(pauseSegments: PauseSegment[] | undefined): PauseSegment[] {
+  if (!Array.isArray(pauseSegments) || pauseSegments.length === 0) {
+    return []
+  }
+
+  const normalized = pauseSegments
+    .map((segment) => {
+      const startMs = Number(segment?.startMs)
+      const endMs = Number(segment?.endMs)
+
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+        return null
+      }
+
+      const clampedStart = Math.max(0, Math.round(startMs))
+      const clampedEnd = Math.max(0, Math.round(endMs))
+      if (clampedEnd <= clampedStart) {
+        return null
+      }
+
+      return { startMs: clampedStart, endMs: clampedEnd }
+    })
+    .filter((segment): segment is PauseSegment => !!segment)
+    .sort((left, right) => left.startMs - right.startMs)
+
+  if (normalized.length <= 1) {
+    return normalized
+  }
+
+  const merged: PauseSegment[] = [{ ...normalized[0] }]
+
+  for (const segment of normalized.slice(1)) {
+    const previous = merged[merged.length - 1]
+    if (segment.startMs <= previous.endMs) {
+      previous.endMs = Math.max(previous.endMs, segment.endMs)
+    } else {
+      merged.push({ ...segment })
+    }
+  }
+
+  return merged
+}
+
+function formatFfmpegSeconds(milliseconds: number) {
+  return (milliseconds / 1000).toFixed(3)
+}
+
+function buildPausedAudioFilter(inputLabel: string, outputLabel: string, pauseSegments: PauseSegment[]) {
+  if (pauseSegments.length === 0) {
+    return null
+  }
+
+  const activeSegments: Array<{ startMs: number, endMs?: number }> = []
+  let cursorMs = 0
+
+  for (const pauseSegment of pauseSegments) {
+    if (pauseSegment.startMs > cursorMs) {
+      activeSegments.push({ startMs: cursorMs, endMs: pauseSegment.startMs })
+    }
+    cursorMs = Math.max(cursorMs, pauseSegment.endMs)
+  }
+
+  activeSegments.push({ startMs: cursorMs })
+
+  const filterParts: string[] = []
+  const segmentLabels: string[] = []
+
+  activeSegments.forEach((segment, index) => {
+    if (typeof segment.endMs === 'number' && segment.endMs <= segment.startMs) {
+      return
+    }
+
+    const segmentLabel = `${outputLabel}_part${index}`
+    const trimArgs = typeof segment.endMs === 'number'
+      ? `start=${formatFfmpegSeconds(segment.startMs)}:end=${formatFfmpegSeconds(segment.endMs)}`
+      : `start=${formatFfmpegSeconds(segment.startMs)}`
+
+    filterParts.push(`[${inputLabel}]atrim=${trimArgs},asetpts=PTS-STARTPTS[${segmentLabel}]`)
+    segmentLabels.push(`[${segmentLabel}]`)
+  })
+
+  if (segmentLabels.length === 0) {
+    return null
+  }
+
+  if (segmentLabels.length === 1) {
+    filterParts.push(`${segmentLabels[0]}anull[${outputLabel}]`)
+  } else {
+    filterParts.push(`${segmentLabels.join('')}concat=n=${segmentLabels.length}:v=0:a=1[${outputLabel}]`)
+  }
+
+  return filterParts.join(';')
 }
 
 function waitForNativeCaptureStart(process: ChildProcessWithoutNullStreams) {
@@ -3852,7 +3981,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     return { success: true, diagnostics: lastNativeCaptureDiagnostics }
   })
 
-  ipcMain.handle('mux-native-windows-recording', async () => {
+  ipcMain.handle('mux-native-windows-recording', async (_event, pauseSegments?: PauseSegment[]) => {
     const videoPath = windowsPendingVideoPath
     windowsPendingVideoPath = null
 
@@ -3862,7 +3991,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
     try {
       if (windowsSystemAudioPath || windowsMicAudioPath) {
-        await muxNativeWindowsVideoWithAudio(videoPath, windowsSystemAudioPath, windowsMicAudioPath)
+        await muxNativeWindowsVideoWithAudio(videoPath, windowsSystemAudioPath, windowsMicAudioPath, pauseSegments ?? [])
         windowsSystemAudioPath = null
         windowsMicAudioPath = null
       }

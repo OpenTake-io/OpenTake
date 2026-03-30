@@ -33,6 +33,11 @@ const WEBCAM_HEIGHT = 720;
 const WEBCAM_FRAME_RATE = 30;
 const WEBCAM_SUFFIX = "-webcam";
 
+type PauseSegment = {
+  startMs: number;
+  endMs: number;
+};
+
 type UseScreenRecorderReturn = {
   recording: boolean;
   paused: boolean;
@@ -95,6 +100,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const resolvedWebcamPath = useRef<string | null>(null);
   const accumulatedPausedDurationMs = useRef(0);
   const pauseStartedAtMs = useRef<number | null>(null);
+  const pauseSegmentsRef = useRef<PauseSegment[]>([]);
 
   const logNativeCaptureDiagnostics = useCallback(async (context: string) => {
     if (typeof window.electronAPI?.getLastNativeCaptureDiagnostics !== "function") {
@@ -149,6 +155,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     startTime.current = startedAt;
     accumulatedPausedDurationMs.current = 0;
     pauseStartedAtMs.current = null;
+    pauseSegmentsRef.current = [];
   }, []);
 
   const markRecordingPaused = useCallback((pausedAt: number) => {
@@ -162,7 +169,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       return;
     }
 
-    accumulatedPausedDurationMs.current += Math.max(0, resumedAt - pauseStartedAtMs.current);
+    const pauseStart = pauseStartedAtMs.current;
+    const pauseDurationMs = Math.max(0, resumedAt - pauseStart);
+    accumulatedPausedDurationMs.current += pauseDurationMs;
+    if (pauseDurationMs > 0) {
+      pauseSegmentsRef.current.push({ startMs: pauseStart, endMs: resumedAt });
+    }
     pauseStartedAtMs.current = null;
   }, []);
 
@@ -477,6 +489,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       void (async () => {
         const webcamPath = await stopWebcamRecorder();
         const isNativeWindows = nativeWindowsRecording.current;
+        markRecordingResumed(Date.now());
+        const pauseSegments = pauseSegmentsRef.current.slice();
         nativeWindowsRecording.current = false;
 
         const result = await window.electronAPI.stopNativeScreenRecording();
@@ -507,7 +521,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         let finalPath = result.path;
 
         if (isNativeWindows) {
-          const muxResult = await window.electronAPI.muxNativeWindowsRecording();
+          const muxResult = await window.electronAPI.muxNativeWindowsRecording(pauseSegments);
           if (!muxResult?.success) {
             void logNativeCaptureDiagnostics("mux-native-windows-recording");
           }

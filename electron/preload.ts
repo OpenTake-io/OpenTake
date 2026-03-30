@@ -376,7 +376,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		return () => ipcRenderer.removeListener("request-save-before-close", listener);
 	},
 	isNativeWindowsCaptureAvailable: () => ipcRenderer.invoke("is-native-windows-capture-available"),
-	muxNativeWindowsRecording: () => ipcRenderer.invoke("mux-native-windows-recording"),
+	muxNativeWindowsRecording: (pauseSegments?: Array<{ startMs: number; endMs: number }>) => ipcRenderer.invoke("mux-native-windows-recording", pauseSegments),
 	hideOsCursor: () => ipcRenderer.invoke("hide-cursor"),
 	getAppVersion: () => ipcRenderer.invoke("app:getVersion"),
 	getRecordingPreferences: () => ipcRenderer.invoke("get-recording-preferences"),

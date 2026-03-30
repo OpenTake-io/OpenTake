@@ -350,7 +350,7 @@ interface Window {
 		setHasUnsavedChanges: (hasChanges: boolean) => void;
 		onRequestSaveBeforeClose: (callback: () => Promise<boolean>) => () => void;
 		isNativeWindowsCaptureAvailable: () => Promise<{ available: boolean }>;
-		muxNativeWindowsRecording: () => Promise<{
+		muxNativeWindowsRecording: (pauseSegments?: Array<{ startMs: number; endMs: number }>) => Promise<{
 			success: boolean;
 			path?: string;
 			message?: string;
