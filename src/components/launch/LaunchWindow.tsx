@@ -169,6 +169,7 @@ export function LaunchWindow() {
 		setWebcamDeviceId,
 		countdownDelay,
 		setCountdownDelay,
+		preparePermissions,
 	} = useScreenRecorder();
 
 	const [recordingStart, setRecordingStart] = useState<number | null>(null);
@@ -204,6 +205,7 @@ export function LaunchWindow() {
 	const hudBarRef = useRef<HTMLDivElement>(null);
 	const moreButtonRef = useRef<HTMLButtonElement | null>(null);
 	const webcamPreviewRef = useRef<HTMLVideoElement | null>(null);
+	const isDraggingRef = useRef(false);
 
 	const micDropdownOpen = activeDropdown === "mic";
 	const webcamDropdownOpen = activeDropdown === "webcam";
@@ -385,6 +387,10 @@ export function LaunchWindow() {
 			cancelled = true;
 		};
 	}, []);
+
+	useEffect(() => {
+		void preparePermissions({ startup: true });
+	}, [preparePermissions]);
 
 	useEffect(() => {
 		let mounted = true;
@@ -877,7 +883,11 @@ export function LaunchWindow() {
 				ref={hudContentRef}
 				className="flex flex-col items-center overflow-visible"
 				onMouseEnter={() => window.electronAPI?.hudOverlaySetIgnoreMouse?.(false)}
-				onMouseLeave={() => window.electronAPI?.hudOverlaySetIgnoreMouse?.(true)}
+				onMouseLeave={() => {
+					if (!isDraggingRef.current) {
+						window.electronAPI?.hudOverlaySetIgnoreMouse?.(true);
+					}
+				}}
 			>
 				{/* Only the visible HUD content should become interactive. */}
 				<div className={styles.menuArea}>
@@ -1160,9 +1170,27 @@ export function LaunchWindow() {
 						ref={hudBarRef}
 						layout
 						transition={hudStateTransition}
-						className={`${styles.bar} ${styles.electronDrag} mb-2`}
+						className={`${styles.bar} mb-2`}
 					>
-						<div className={`flex items-center px-0.5 ${styles.electronDrag}`}>
+						<div
+							className="flex items-center px-0.5 cursor-grab active:cursor-grabbing"
+							onMouseDown={(e) => {
+								e.preventDefault();
+								isDraggingRef.current = true;
+								window.electronAPI?.hudOverlayDrag?.("start", e.screenX, e.screenY);
+								const handleMove = (ev: MouseEvent) => {
+									window.electronAPI?.hudOverlayDrag?.("move", ev.screenX, ev.screenY);
+								};
+								const handleUp = () => {
+									isDraggingRef.current = false;
+									window.electronAPI?.hudOverlayDrag?.("end", 0, 0);
+									document.removeEventListener("mousemove", handleMove);
+									document.removeEventListener("mouseup", handleUp);
+								};
+								document.addEventListener("mousemove", handleMove);
+								document.addEventListener("mouseup", handleUp);
+							}}
+						>
 							<RxDragHandleDots2 size={14} className="text-[#6b6b78]" />
 						</div>
 
