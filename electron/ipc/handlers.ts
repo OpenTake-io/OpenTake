@@ -4811,6 +4811,39 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
   // ---------------------------------------------------------------------------
   // Countdown timer before recording
   // ---------------------------------------------------------------------------
+    ipcMain.handle('get-recording-preferences', async () => {
+      try {
+        const content = await fs.readFile(RECORDINGS_SETTINGS_FILE, 'utf-8')
+        const parsed = JSON.parse(content) as Record<string, unknown>
+        return {
+          success: true,
+          microphoneEnabled: parsed.microphoneEnabled === true,
+          microphoneDeviceId: typeof parsed.microphoneDeviceId === 'string' ? parsed.microphoneDeviceId : undefined,
+          systemAudioEnabled: parsed.systemAudioEnabled !== false,
+        }
+      } catch {
+        return { success: true, microphoneEnabled: false, microphoneDeviceId: undefined, systemAudioEnabled: true }
+      }
+    })
+
+    ipcMain.handle('set-recording-preferences', async (_, prefs: { microphoneEnabled?: boolean; microphoneDeviceId?: string; systemAudioEnabled?: boolean }) => {
+      try {
+        let existing: Record<string, unknown> = {}
+        try {
+          const content = await fs.readFile(RECORDINGS_SETTINGS_FILE, 'utf-8')
+          existing = JSON.parse(content) as Record<string, unknown>
+        } catch {
+          // file doesn't exist yet
+        }
+        const merged = { ...existing, ...prefs }
+        await fs.writeFile(RECORDINGS_SETTINGS_FILE, JSON.stringify(merged, null, 2), 'utf-8')
+        return { success: true }
+      } catch (error) {
+        console.error('Failed to save recording preferences:', error)
+        return { success: false, error: String(error) }
+      }
+    })
+
   ipcMain.handle('get-countdown-delay', async () => {
     try {
       const content = await fs.readFile(COUNTDOWN_SETTINGS_FILE, 'utf-8')

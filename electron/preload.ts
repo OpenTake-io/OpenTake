@@ -379,6 +379,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	muxNativeWindowsRecording: () => ipcRenderer.invoke("mux-native-windows-recording"),
 	hideOsCursor: () => ipcRenderer.invoke("hide-cursor"),
 	getAppVersion: () => ipcRenderer.invoke("app:getVersion"),
+	getRecordingPreferences: () => ipcRenderer.invoke("get-recording-preferences"),
+	setRecordingPreferences: (prefs: { microphoneEnabled?: boolean; microphoneDeviceId?: string; systemAudioEnabled?: boolean }) => ipcRenderer.invoke("set-recording-preferences", prefs),
 	getCountdownDelay: () => ipcRenderer.invoke("get-countdown-delay"),
 	setCountdownDelay: (delay: number) => ipcRenderer.invoke("set-countdown-delay", delay),
 	startCountdown: (seconds: number) => ipcRenderer.invoke("start-countdown", seconds),
