@@ -2605,7 +2605,12 @@ function snapshotCursorTelemetryForPersistence() {
 }
 
 async function finalizeStoredVideo(videoPath: string) {
-  const validation = await validateRecordedVideo(videoPath)
+  let validation: { fileSizeBytes: number; durationSeconds: number | null } | null = null
+  try {
+    validation = await validateRecordedVideo(videoPath)
+  } catch (error) {
+    console.warn('Video validation failed (proceeding anyway):', error)
+  }
 
   snapshotCursorTelemetryForPersistence()
   currentVideoPath = videoPath
@@ -2632,16 +2637,16 @@ async function finalizeStoredVideo(videoPath: string) {
       supported: lastNativeCaptureDiagnostics.supported,
       helperExists: lastNativeCaptureDiagnostics.helperExists,
       processOutput: lastNativeCaptureDiagnostics.processOutput,
-      fileSizeBytes: validation.fileSizeBytes,
+      fileSizeBytes: validation?.fileSizeBytes ?? null,
     })
   }
 
   return {
     success: true,
     path: videoPath,
-    message: validation.durationSeconds !== null
+    message: validation?.durationSeconds !== null && validation !== null
       ? `Video stored successfully (${validation.fileSizeBytes} bytes, ${validation.durationSeconds.toFixed(2)}s)`
-      : `Video stored successfully (${validation.fileSizeBytes} bytes)`
+      : `Video stored successfully`
   }
 }
 
@@ -3374,14 +3379,15 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       }
 
       const helperPath = await ensureNativeCaptureHelperBinary()
-      const outputPath = path.join(recordingsDir, `recording-${Date.now()}.mp4`)
+      const timestamp = Date.now()
+      const outputPath = path.join(recordingsDir, `recording-${timestamp}.mp4`)
       const capturesSystemAudio = Boolean(options?.capturesSystemAudio)
       const capturesMicrophone = Boolean(options?.capturesMicrophone)
       const systemAudioOutputPath = capturesSystemAudio
-        ? path.join(recordingsDir, `recording-${Date.now()}.system.m4a`)
+        ? path.join(recordingsDir, `recording-${timestamp}.system.m4a`)
         : null
       const microphoneOutputPath = capturesMicrophone
-        ? path.join(recordingsDir, `recording-${Date.now()}.mic.m4a`)
+        ? path.join(recordingsDir, `recording-${timestamp}.mic.m4a`)
         : null
       const config: Record<string, unknown> = {
         fps: 60,
