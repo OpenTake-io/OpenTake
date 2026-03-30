@@ -2950,7 +2950,6 @@ export function registerIpcHandlers(
             sourceType: 'window' as const,
           }
         })
-        .filter((source) => Boolean(source.thumbnail))
 
       return [...screenSources, ...mergedWindowSources]
     } catch (error) {
@@ -2958,7 +2957,6 @@ export function registerIpcHandlers(
 
       const windowSources = electronSources
         .filter((source) => source.id.startsWith('window:'))
-        .filter((source) => hasUsableSourceThumbnail(source.thumbnail))
         .filter((source) => {
           const normalizedName = normalizeDesktopSourceName(source.name)
           if (!normalizedName) {
