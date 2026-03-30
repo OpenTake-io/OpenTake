@@ -627,6 +627,8 @@ app.whenReady().then(async () => {
 		callback(allowed.includes(permission));
 	});
 
+	session.defaultSession.setDevicePermissionHandler((_details) => true);
+
 	if (process.platform === "darwin") {
 		const cameraStatus = systemPreferences.getMediaAccessStatus("camera");
 		if (cameraStatus !== "granted") {
