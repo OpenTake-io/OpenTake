@@ -182,6 +182,24 @@ ipcMain.on("hud-overlay-set-ignore-mouse", (_event, ignore: boolean) => {
 	}
 });
 
+let hudDragOffset: { x: number; y: number } | null = null;
+
+ipcMain.on("hud-overlay-drag", (_event, phase: string, screenX: number, screenY: number) => {
+	if (!hudOverlayWindow || hudOverlayWindow.isDestroyed()) return;
+
+	if (phase === "start") {
+		const bounds = hudOverlayWindow.getBounds();
+		hudDragOffset = { x: screenX - bounds.x, y: screenY - bounds.y };
+	} else if (phase === "move" && hudDragOffset) {
+		hudOverlayWindow.setPosition(
+			Math.round(screenX - hudDragOffset.x),
+			Math.round(screenY - hudDragOffset.y),
+		);
+	} else if (phase === "end") {
+		hudDragOffset = null;
+	}
+});
+
 ipcMain.on("hud-overlay-hide", () => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
 		hudOverlayWindow.minimize();
