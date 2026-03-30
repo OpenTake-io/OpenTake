@@ -637,6 +637,15 @@ app.whenReady().then(async () => {
 		if (micStatus !== "granted") {
 			await systemPreferences.askForMediaAccess("microphone");
 		}
+	} else if (process.platform === "win32") {
+		const cameraStatus = systemPreferences.getMediaAccessStatus("camera");
+		const micStatus = systemPreferences.getMediaAccessStatus("microphone");
+		if (cameraStatus !== "granted") {
+			console.warn(`[permissions] Camera access is "${cameraStatus}" — webcam may not work. Check Windows Settings > Privacy > Camera.`);
+		}
+		if (micStatus !== "granted") {
+			console.warn(`[permissions] Microphone access is "${micStatus}" — mic recording may not work. Check Windows Settings > Privacy > Microphone.`);
+		}
 	}
 
 	ipcMain.on("hud-overlay-close", () => {
