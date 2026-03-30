@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("electronAPI", {
+	hudOverlaySetIgnoreMouse: (ignore: boolean) => {
+		ipcRenderer.send("hud-overlay-set-ignore-mouse", ignore);
+	},
 	hudOverlayHide: () => {
 		ipcRenderer.send("hud-overlay-hide");
 	},

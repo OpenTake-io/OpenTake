@@ -172,6 +172,16 @@ function positionUpdateToastWindow() {
 	updateToastWindow.moveTop();
 }
 
+ipcMain.on("hud-overlay-set-ignore-mouse", (_event, ignore: boolean) => {
+	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
+		if (ignore) {
+			hudOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
+		} else {
+			hudOverlayWindow.setIgnoreMouseEvents(false);
+		}
+	}
+});
+
 ipcMain.on("hud-overlay-hide", () => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
 		hudOverlayWindow.minimize();
@@ -291,6 +301,8 @@ export function createHudOverlayWindow(): BrowserWindow {
 	if (isHudOverlayCaptureProtectionSupported()) {
 		win.setContentProtection(hudOverlayHiddenFromCapture);
 	}
+
+	win.setIgnoreMouseEvents(true, { forward: true });
 
 	win.webContents.on("did-finish-load", () => {
 		win?.webContents.send("main-process-message", new Date().toLocaleString());
