@@ -62,6 +62,7 @@ import {
 import { type EditorEffectSection, SettingsPanel } from "./SettingsPanel";
 import {
 	APP_HEADER_ICON_BUTTON_CLASS,
+	DiscordLinkButton,
 	FeedbackDialog,
 	KeyboardShortcutsDialog,
 } from "./TutorialHelp";
@@ -2978,6 +2979,7 @@ export default function VideoEditor() {
 					>
 						<FolderOpen className="h-4 w-4" />
 					</Button>
+					<DiscordLinkButton />
 					<KeyboardShortcutsDialog />
 					<FeedbackDialog />
 					<div className="ml-1 h-5 w-px bg-white/10" />
