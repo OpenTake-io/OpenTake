@@ -14,6 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
+import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
 import { ASPECT_RATIOS, type AspectRatio, getAspectRatioLabel, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
 import { formatShortcut } from "@/utils/platformUtils";
 import { loadEditorPreferences, saveEditorPreferences } from "../editorPreferences";
@@ -24,7 +25,6 @@ import Item from "./Item";
 import KeyframeMarkers from "./KeyframeMarkers";
 import type { Range, Span } from "dnd-timeline";
 import type { ZoomRegion, TrimRegion, AnnotationRegion, SpeedRegion, AudioRegion, CursorTelemetryPoint, ZoomFocus } from "../types";
-import { toFileUrl } from "../projectPersistence";
 import { detectInteractionCandidates, normalizeCursorTelemetry } from "./zoomSuggestionUtils";
 
 const ZOOM_ROW_ID = "row-zoom";
@@ -1196,14 +1196,24 @@ export default function TimelineEditor({
       const audioPath = result.path;
 
     // Load the audio file to get its full duration
+    const audioSource = await resolveMediaElementSource(audioPath);
     const audioDurationMs = await new Promise<number>((resolve) => {
-        const audio = new Audio(toFileUrl(audioPath));
+      const audio = new Audio();
+      const finish = (durationMs: number) => {
+        audio.pause();
+        audio.src = "";
+        audioSource.revoke();
+        resolve(durationMs);
+      };
+
+      audio.preload = "metadata";
       audio.addEventListener('loadedmetadata', () => {
-        resolve(Math.round(audio.duration * 1000));
-      });
+        finish(Math.round(audio.duration * 1000));
+      }, { once: true });
       audio.addEventListener('error', () => {
-        resolve(0);
-      });
+        finish(0);
+      }, { once: true });
+      audio.src = audioSource.src;
     });
 
     if (audioDurationMs <= 0) {
