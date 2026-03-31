@@ -1934,7 +1934,7 @@ export function SettingsPanel({
 	})();
 
 	return (
-		<div className="flex-[2] min-w-[280px] max-w-[332px] bg-[#161619] border border-white/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
+		<div className="basis-[332px] min-w-[280px] max-w-[332px] bg-[#161619] border border-white/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden shrink-0">
 			<div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pb-0">
 				<AnimatePresence mode="wait" initial={false}>
 					<motion.div
