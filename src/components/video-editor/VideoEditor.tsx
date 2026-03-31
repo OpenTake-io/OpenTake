@@ -42,6 +42,7 @@ import {
 	type SupportedMp4Dimensions,
 	VideoExporter,
 } from "@/lib/exporter";
+import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { type AspectRatio, getAspectRatioValue } from "@/utils/aspectRatioUtils";
 import { resolveAutoCaptionSourcePath } from "./autoCaptionSource";
@@ -2371,8 +2372,11 @@ export default function VideoEditor() {
 
 	// Audio playback sync: manage Audio elements that play in sync with video
 	const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+	const audioElementRevokersRef = useRef<Map<string, () => void>>(new Map());
+	const audioElementResourcesRef = useRef<Map<string, string>>(new Map());
 
 	useEffect(() => {
+		let cancelled = false;
 		const existing = audioElementsRef.current;
 		const currentIds = new Set(audioRegions.map((r) => r.id));
 
@@ -2381,6 +2385,9 @@ export default function VideoEditor() {
 			if (!currentIds.has(id)) {
 				audio.pause();
 				audio.src = "";
+				audioElementRevokersRef.current.get(id)?.();
+				audioElementRevokersRef.current.delete(id);
+				audioElementResourcesRef.current.delete(id);
 				existing.delete(id);
 			}
 		}
@@ -2393,21 +2400,54 @@ export default function VideoEditor() {
 				audio.preload = "auto";
 				existing.set(region.id, audio);
 			}
-			const expectedSrc = toFileUrl(region.audioPath);
-			if (audio.src !== expectedSrc) {
-				audio.src = expectedSrc;
+
+			if (audioElementResourcesRef.current.get(region.id) !== region.audioPath) {
+				audio.pause();
+				audio.src = "";
+				audioElementRevokersRef.current.get(region.id)?.();
+				audioElementRevokersRef.current.delete(region.id);
+				audioElementResourcesRef.current.set(region.id, region.audioPath);
+
+				void (async () => {
+					const resolved = await resolveMediaElementSource(region.audioPath);
+					const latestAudio = existing.get(region.id);
+
+					if (
+						cancelled ||
+						latestAudio !== audio ||
+						audioElementResourcesRef.current.get(region.id) !== region.audioPath
+					) {
+						resolved.revoke();
+						return;
+					}
+
+					audioElementRevokersRef.current.set(region.id, resolved.revoke);
+					latestAudio.src = resolved.src;
+				})();
 			}
+
 			audio.volume = Math.max(0, Math.min(1, region.volume * previewVolume));
 		}
 
 		return () => {
-			for (const audio of existing.values()) {
+			cancelled = true;
+		};
+	}, [audioRegions, previewVolume]);
+
+	useEffect(() => {
+		return () => {
+			for (const audio of audioElementsRef.current.values()) {
 				audio.pause();
 				audio.src = "";
 			}
-			existing.clear();
+			for (const revoke of audioElementRevokersRef.current.values()) {
+				revoke();
+			}
+			audioElementsRef.current.clear();
+			audioElementRevokersRef.current.clear();
+			audioElementResourcesRef.current.clear();
 		};
-	}, [audioRegions, previewVolume]);
+	}, []);
 
 	// Sync audio playback with video currentTime and isPlaying state
 	useEffect(() => {
