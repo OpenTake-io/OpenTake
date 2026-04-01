@@ -780,6 +780,11 @@ async function pruneAutoRecordings(exemptPaths: string[] = []) {
     try {
       await fs.rm(entry.filePath, { force: true })
       await fs.rm(getTelemetryPathForVideo(entry.filePath), { force: true })
+      // Clean up companion audio files left from recording (macOS .m4a, Windows .wav)
+      const base = entry.filePath.replace(/\.(mp4|mov|webm)$/i, '')
+      for (const suffix of ['.system.m4a', '.mic.m4a', '.system.wav', '.mic.wav']) {
+        await fs.rm(base + suffix, { force: true }).catch(() => {})
+      }
     } catch (error) {
       console.warn('Failed to prune old auto recording:', entry.filePath, error)
     }
@@ -2000,23 +2005,19 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
   const inputs: string[] = ['-i', videoPath]
   const audioInputs: string[] = []
 
-  if (systemAudioPath) {
+  for (const [label, audioPath] of [['system', systemAudioPath], ['mic', micAudioPath]] as const) {
+    if (!audioPath) continue
     try {
-      await fs.access(systemAudioPath)
-      inputs.push('-i', systemAudioPath)
-      audioInputs.push('system')
+      const stat = await fs.stat(audioPath)
+      if (stat.size <= 0) {
+        console.warn(`[mux-win] Skipping ${label} audio: file is empty (${audioPath})`)
+        await fs.rm(audioPath, { force: true }).catch(() => {})
+        continue
+      }
+      inputs.push('-i', audioPath)
+      audioInputs.push(label)
     } catch {
-      // system audio file not available
-    }
-  }
-
-  if (micAudioPath) {
-    try {
-      await fs.access(micAudioPath)
-      inputs.push('-i', micAudioPath)
-      audioInputs.push('mic')
-    } catch {
-      // mic audio file not available
+      console.warn(`[mux-win] Skipping ${label} audio: file not accessible (${audioPath})`)
     }
   }
 
@@ -2278,27 +2279,24 @@ async function muxNativeMacRecordingWithAudio(
   const inputs = ['-i', videoPath]
   const availableAudioInputs: string[] = []
 
-  if (systemAudioPath) {
+  for (const [label, audioPath] of [['system', systemAudioPath], ['microphone', microphonePath]] as const) {
+    if (!audioPath) continue
     try {
-      await fs.access(systemAudioPath)
-      inputs.push('-i', systemAudioPath)
-      availableAudioInputs.push('system')
+      const stat = await fs.stat(audioPath)
+      if (stat.size <= 0) {
+        console.warn(`[mux] Skipping ${label} audio: file is empty (${audioPath})`)
+        await fs.rm(audioPath, { force: true }).catch(() => {})
+        continue
+      }
+      inputs.push('-i', audioPath)
+      availableAudioInputs.push(label)
     } catch {
-      // system audio file not available
-    }
-  }
-
-  if (microphonePath) {
-    try {
-      await fs.access(microphonePath)
-      inputs.push('-i', microphonePath)
-      availableAudioInputs.push('microphone')
-    } catch {
-      // microphone audio file not available
+      console.warn(`[mux] Skipping ${label} audio: file not accessible (${audioPath})`)
     }
   }
 
   if (availableAudioInputs.length === 0) {
+    console.warn('[mux] No valid audio files to mux')
     return
   }
 
@@ -2327,13 +2325,22 @@ async function muxNativeMacRecordingWithAudio(
         mixedOutputPath,
       ]
 
-  await execFileAsync(
-    ffmpegPath,
-    args,
-    { timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
-  )
+  console.log('[mux] Running ffmpeg:', ffmpegPath, args.join(' '))
+
+  try {
+    await execFileAsync(
+      ffmpegPath,
+      args,
+      { timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
+    )
+  } catch (error) {
+    const execError = error as NodeJS.ErrnoException & { stderr?: string }
+    console.error('[mux] ffmpeg failed:', execError.stderr || execError.message)
+    throw error
+  }
 
   await moveFileWithOverwrite(mixedOutputPath, videoPath)
+  console.log('[mux] Successfully muxed audio into video:', videoPath)
 
   for (const audioPath of [systemAudioPath, microphonePath]) {
     if (audioPath) {
@@ -2795,6 +2802,44 @@ function snapshotCursorTelemetryForPersistence() {
 }
 
 async function finalizeStoredVideo(videoPath: string) {
+  // Safety net: if companion audio files still exist, the mux was skipped — attempt it now
+  if (videoPath.endsWith('.mp4')) {
+    const base = videoPath.replace(/\.mp4$/i, '')
+    // macOS uses .m4a, Windows uses .wav
+    const candidates = [
+      { system: `${base}.system.m4a`, mic: `${base}.mic.m4a`, platform: 'mac' as const },
+      { system: `${base}.system.wav`, mic: `${base}.mic.wav`, platform: 'win' as const },
+    ]
+    for (const { system, mic, platform } of candidates) {
+      let hasUnmuxedAudio = false
+      for (const siblingPath of [system, mic]) {
+        try {
+          const stat = await fs.stat(siblingPath)
+          if (stat.size > 0) {
+            hasUnmuxedAudio = true
+            break
+          }
+        } catch {
+          // file doesn't exist — expected if mux already succeeded or audio wasn't enabled
+        }
+      }
+      if (hasUnmuxedAudio) {
+        console.log(`[finalize] Detected un-muxed ${platform} audio files alongside video — attempting safety-net mux`)
+        try {
+          if (platform === 'win') {
+            await muxNativeWindowsVideoWithAudio(videoPath, system, mic)
+          } else {
+            await muxNativeMacRecordingWithAudio(videoPath, system, mic)
+          }
+          console.log('[finalize] Safety-net mux completed successfully')
+        } catch (error) {
+          console.warn('[finalize] Safety-net mux failed:', error)
+        }
+        break
+      }
+    }
+  }
+
   let validation: { fileSizeBytes: number; durationSeconds: number | null } | null = null
   try {
     validation = await validateRecordedVideo(videoPath)
@@ -3837,9 +3882,11 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       const preferredVideoPath = nativeCaptureTargetPath
       const preferredSystemAudioPath = nativeCaptureSystemAudioPath
       const preferredMicrophonePath = nativeCaptureMicrophonePath
+      console.log('[stop-native] Audio paths — system:', preferredSystemAudioPath, 'mic:', preferredMicrophonePath)
       nativeCaptureStopRequested = true
       process.stdin.write('stop\n')
       const tempVideoPath = await waitForNativeCaptureStop(process)
+      console.log('[stop-native] Helper stopped, tempVideoPath:', tempVideoPath)
       nativeCaptureProcess = null
       nativeScreenRecordingActive = false
       nativeCaptureTargetPath = null
@@ -3854,11 +3901,15 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       }
 
       if (preferredSystemAudioPath || preferredMicrophonePath) {
+        console.log('[stop-native] Attempting audio mux (merging separate tracks) into:', finalVideoPath)
         try {
           await muxNativeMacRecordingWithAudio(finalVideoPath, preferredSystemAudioPath, preferredMicrophonePath)
+          console.log('[stop-native] Audio mux completed successfully')
         } catch (error) {
-          console.warn('Failed to mux native macOS audio into capture:', error)
+          console.warn('[stop-native] Audio mux failed (video still has inline audio):', error)
         }
+      } else {
+        console.log('[stop-native] No separate audio tracks to mux')
       }
 
       return await finalizeStoredVideo(finalVideoPath)

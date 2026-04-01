@@ -44,6 +44,8 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private var microphoneOutputURL: URL?
 	private var trackedWindowId: UInt32?
 	private var windowValidationTask: Task<Void, Never>?
+	private var inlineAudioInput: AVAssetWriterInput?
+	private var firstInlineAudioSampleTime: CMTime?
 	private var capturesSystemAudio = false
 	private var capturesMicrophone = false
 	private var writesSystemAudioToSeparateTrack = false
@@ -172,6 +174,17 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
 		assetWriter.add(videoInput)
 		self.videoInput = videoInput
+
+		// Add inline audio track directly to the video so the .mp4 always contains audio.
+		// This eliminates the dependency on the post-recording ffmpeg mux step.
+		if capturesSystemAudio || capturesMicrophone {
+			let inlineAudio = AVAssetWriterInput(mediaType: .audio, outputSettings: Self.audioOutputSettings(bitRate: 192_000))
+			inlineAudio.expectsMediaDataInRealTime = true
+			if assetWriter.canAdd(inlineAudio) {
+				assetWriter.add(inlineAudio)
+				self.inlineAudioInput = inlineAudio
+			}
+		}
 
 		if writesSystemAudioToSeparateTrack {
 			guard let systemAudioOutputPath = config.systemAudioOutputPath, !systemAudioOutputPath.isEmpty else {
@@ -316,12 +329,20 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		if outputType == .audio {
 			guard let systemAudioInput else { return }
 			appendAudioSampleBuffer(sampleBuffer, to: systemAudioInput, firstSampleTime: &firstSystemAudioSampleTime, presentationTime: presentationTime)
+			// Also write system audio to the inline video track
+			if let inlineAudioInput, inlineAudioInput.isReadyForMoreMediaData {
+				appendAudioSampleBuffer(sampleBuffer, to: inlineAudioInput, firstSampleTime: &firstInlineAudioSampleTime, presentationTime: presentationTime)
+			}
 			return
 		}
 
 		if outputType.rawValue == microphoneOutputTypeRawValue {
 			if let microphoneOnlyInput {
 				appendAudioSampleBuffer(sampleBuffer, to: microphoneOnlyInput, firstSampleTime: &firstMicrophoneSampleTime, presentationTime: presentationTime)
+			}
+			// Write mic to inline video track only if there's no system audio (avoids double-writing)
+			if !capturesSystemAudio, let inlineAudioInput, inlineAudioInput.isReadyForMoreMediaData {
+				appendAudioSampleBuffer(sampleBuffer, to: inlineAudioInput, firstSampleTime: &firstInlineAudioSampleTime, presentationTime: presentationTime)
 			}
 			return
 		}
@@ -359,6 +380,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
 		assetWriter?.endSession(atSourceTime: lastSampleBuffer?.presentationTimeStamp ?? .zero)
 		videoInput?.markAsFinished()
+		inlineAudioInput?.markAsFinished()
 		await assetWriter?.finishWriting()
 
 		systemAudioInput?.markAsFinished()
@@ -374,12 +396,14 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		systemAudioInput = nil
 		microphoneOnlyWriter = nil
 		microphoneOnlyInput = nil
+		inlineAudioInput = nil
 		outputURL = nil
 		microphoneOutputURL = nil
 		sessionStarted = false
 		firstSampleTime = .zero
 		firstSystemAudioSampleTime = nil
 		firstMicrophoneSampleTime = nil
+		firstInlineAudioSampleTime = nil
 		lastSampleBuffer = nil
 		lastVideoPresentationTime = .zero
 		lastVideoDuration = .zero
