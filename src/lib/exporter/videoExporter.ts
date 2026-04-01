@@ -56,6 +56,7 @@ interface VideoExporterConfig extends ExportConfig {
 	cursorClickBounceDuration?: number;
 	cursorSway?: number;
 	audioRegions?: AudioRegion[];
+	sourceAudioFallbackPaths?: string[];
 	previewWidth?: number;
 	previewHeight?: number;
 	onProgress?: (progress: ExportProgress) => void;
@@ -139,7 +140,8 @@ export class VideoExporter {
 			await this.initializeEncoder();
 
 			const hasAudioRegions = (this.config.audioRegions ?? []).length > 0;
-			const hasAudio = videoInfo.hasAudio || hasAudioRegions;
+			const hasSourceAudioFallback = (this.config.sourceAudioFallbackPaths ?? []).length > 0;
+			const hasAudio = videoInfo.hasAudio || hasAudioRegions || hasSourceAudioFallback;
 
 			// Initialize muxer
 			this.muxer = new VideoMuxer(this.config, hasAudio);
@@ -196,17 +198,18 @@ export class VideoExporter {
 
 			if (hasAudio && !this.cancelled) {
 				const demuxer = this.streamingDecoder.getDemuxer();
-				if (demuxer || hasAudioRegions) {
+				if (demuxer || hasAudioRegions || hasSourceAudioFallback) {
 					this.audioProcessor = new AudioProcessor();
 					await this.awaitWithWindowsTimeout(
 						this.audioProcessor.process(
-							demuxer!,
+							demuxer,
 							this.muxer!,
 							this.config.videoUrl,
 							this.config.trimRegions,
 							this.config.speedRegions,
 							undefined,
 							this.config.audioRegions,
+							this.config.sourceAudioFallbackPaths,
 						),
 						"audio processing",
 					);

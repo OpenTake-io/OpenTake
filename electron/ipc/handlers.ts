@@ -34,6 +34,10 @@ const RECORDING_SESSION_MANIFEST_SUFFIX = '.recordly-session.json'
 const WHISPER_MODEL_DOWNLOAD_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin'
 const WHISPER_MODEL_DIR = path.join(USER_DATA_PATH, 'whisper')
 const WHISPER_SMALL_MODEL_PATH = path.join(WHISPER_MODEL_DIR, 'ggml-small.bin')
+const COMPANION_AUDIO_LAYOUTS = [
+  { platform: 'mac' as const, systemSuffix: '.system.m4a', micSuffix: '.mic.m4a' },
+  { platform: 'win' as const, systemSuffix: '.system.wav', micSuffix: '.mic.wav' },
+]
 
 function getAssetRootPath() {
   if (app.isPackaged) {
@@ -307,6 +311,77 @@ function parseFfmpegDurationSeconds(stderr: string) {
   }
 
   return hours * 3600 + minutes * 60 + seconds
+}
+
+type CompanionAudioCandidate = {
+  platform: (typeof COMPANION_AUDIO_LAYOUTS)[number]['platform']
+  systemPath: string
+  micPath: string
+  usablePaths: string[]
+}
+
+async function getUsableCompanionAudioCandidates(videoPath: string): Promise<CompanionAudioCandidate[]> {
+  const basePath = videoPath.replace(/\.[^.]+$/u, '')
+  const candidates: CompanionAudioCandidate[] = []
+
+  for (const layout of COMPANION_AUDIO_LAYOUTS) {
+    const systemPath = `${basePath}${layout.systemSuffix}`
+    const micPath = `${basePath}${layout.micSuffix}`
+    const usablePaths: string[] = []
+
+    for (const companionPath of [systemPath, micPath]) {
+      try {
+        const stat = await fs.stat(companionPath)
+        if (stat.size > 0) {
+          usablePaths.push(companionPath)
+        }
+      } catch {
+        // Missing companion audio is expected for many recordings.
+      }
+    }
+
+    if (usablePaths.length > 0) {
+      candidates.push({
+        platform: layout.platform,
+        systemPath,
+        micPath,
+        usablePaths,
+      })
+    }
+  }
+
+  return candidates
+}
+
+async function hasEmbeddedAudioStream(videoPath: string) {
+  const ffmpegPath = getFfmpegBinaryPath()
+  let stderr = ''
+
+  try {
+    const result = await execFileAsync(
+      ffmpegPath,
+      ['-hide_banner', '-i', videoPath, '-map', '0:a:0', '-frames:a', '1', '-f', 'null', '-'],
+      { timeout: 20000, maxBuffer: 10 * 1024 * 1024 },
+    )
+    stderr = result.stderr
+  } catch (error) {
+    stderr = (error as NodeJS.ErrnoException & { stderr?: string }).stderr ?? ''
+  }
+
+  return /Stream #.*Audio:/i.test(stderr)
+}
+
+async function getCompanionAudioFallbackPaths(videoPath: string) {
+  const companionCandidates = await getUsableCompanionAudioCandidates(videoPath)
+  if (companionCandidates.length === 0) {
+    return []
+  }
+
+  if (await hasEmbeddedAudioStream(videoPath)) {
+    return []
+  }
+
+  return companionCandidates.flatMap((candidate) => candidate.usablePaths)
 }
 
 async function validateRecordedVideo(videoPath: string) {
@@ -2804,32 +2879,15 @@ function snapshotCursorTelemetryForPersistence() {
 async function finalizeStoredVideo(videoPath: string) {
   // Safety net: if companion audio files still exist, the mux was skipped — attempt it now
   if (videoPath.endsWith('.mp4')) {
-    const base = videoPath.replace(/\.mp4$/i, '')
-    // macOS uses .m4a, Windows uses .wav
-    const candidates = [
-      { system: `${base}.system.m4a`, mic: `${base}.mic.m4a`, platform: 'mac' as const },
-      { system: `${base}.system.wav`, mic: `${base}.mic.wav`, platform: 'win' as const },
-    ]
-    for (const { system, mic, platform } of candidates) {
-      let hasUnmuxedAudio = false
-      for (const siblingPath of [system, mic]) {
-        try {
-          const stat = await fs.stat(siblingPath)
-          if (stat.size > 0) {
-            hasUnmuxedAudio = true
-            break
-          }
-        } catch {
-          // file doesn't exist — expected if mux already succeeded or audio wasn't enabled
-        }
-      }
-      if (hasUnmuxedAudio) {
+    const companionCandidates = await getUsableCompanionAudioCandidates(videoPath)
+    for (const { systemPath, micPath, platform } of companionCandidates) {
+      if (platform === 'mac' || platform === 'win') {
         console.log(`[finalize] Detected un-muxed ${platform} audio files alongside video — attempting safety-net mux`)
         try {
           if (platform === 'win') {
-            await muxNativeWindowsVideoWithAudio(videoPath, system, mic)
+            await muxNativeWindowsVideoWithAudio(videoPath, systemPath, micPath)
           } else {
-            await muxNativeMacRecordingWithAudio(videoPath, system, mic)
+            await muxNativeMacRecordingWithAudio(videoPath, systemPath, micPath)
           }
           console.log('[finalize] Safety-net mux completed successfully')
         } catch (error) {
@@ -4093,6 +4151,19 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
   ipcMain.handle('get-last-native-capture-diagnostics', async () => {
     return { success: true, diagnostics: lastNativeCaptureDiagnostics }
+  })
+
+  ipcMain.handle('get-video-audio-fallback-paths', async (_event, videoPath: string) => {
+    if (!videoPath) {
+      return { success: true, paths: [] }
+    }
+
+    try {
+      return { success: true, paths: await getCompanionAudioFallbackPaths(videoPath) }
+    } catch (error) {
+      console.error('Failed to resolve companion audio fallback paths:', error)
+      return { success: false, paths: [], error: String(error) }
+    }
   })
 
   ipcMain.handle('mux-native-windows-recording', async (_event, pauseSegments?: PauseSegment[]) => {

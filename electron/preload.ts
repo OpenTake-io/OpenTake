@@ -37,6 +37,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	readLocalFile: (filePath: string) => {
 		return ipcRenderer.invoke("read-local-file", filePath);
 	},
+	getVideoAudioFallbackPaths: (videoPath: string) => {
+		return ipcRenderer.invoke("get-video-audio-fallback-paths", videoPath);
+	},
 	getSources: async (opts: Electron.SourcesOptions) => {
 		return await ipcRenderer.invoke("get-sources", opts);
 	},
