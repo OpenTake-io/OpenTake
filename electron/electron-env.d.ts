@@ -137,6 +137,9 @@ interface Window {
 		readLocalFile: (
 			filePath: string,
 		) => Promise<{ success: boolean; data?: Uint8Array; error?: string }>;
+		getVideoAudioFallbackPaths: (
+			videoPath: string,
+		) => Promise<{ success: boolean; paths: string[]; error?: string }>;
 		setRecordingState: (recording: boolean) => Promise<void>;
 		getCursorTelemetry: (videoPath?: string) => Promise<{
 			success: boolean;
