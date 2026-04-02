@@ -74,7 +74,7 @@ export default function AudioWaveform({ peaks }: AudioWaveformProps) {
 			ctx.lineTo(px, midY + barHeight);
 		}
 
-		ctx.strokeStyle = "rgba(6, 182, 212, 0.25)";
+		ctx.strokeStyle = "rgba(59, 130, 246, 0.45)";
 		ctx.lineWidth = dpr;
 		ctx.stroke();
 	}, [peaks, range.start, range.end, resizeKey]);
@@ -83,7 +83,7 @@ export default function AudioWaveform({ peaks }: AudioWaveformProps) {
 		<canvas
 			ref={setCanvasRef}
 			className="absolute inset-0 w-full h-full pointer-events-none"
-			style={{ zIndex: 0, opacity: 0.9 }}
+			style={{ zIndex: 0 }}
 		/>
 	);
 }

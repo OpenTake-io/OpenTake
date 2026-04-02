@@ -61,7 +61,7 @@ export default function Item({
   const isAudio = variant === 'audio';
 
   const glassClass = isZoom
-    ? glassStyles.glassGreen
+    ? glassStyles.glassPurple
     : isTrim
     ? glassStyles.glassRed
     : isClip
@@ -69,11 +69,11 @@ export default function Item({
     : isSpeed
     ? glassStyles.glassAmber
     : isAudio
-    ? glassStyles.glassPurple
+    ? glassStyles.glassDarkGreen
     : glassStyles.glassYellow;
 
   const endCapColor = isZoom
-    ? '#2563EB'
+    ? '#a855f7'
     : isTrim
     ? '#ef4444'
     : isClip
@@ -81,7 +81,7 @@ export default function Item({
     : isSpeed
     ? '#d97706'
     : isAudio
-    ? '#a855f7'
+    ? '#166534'
     : '#B4A046';
 
 	const timeLabel = useMemo(
