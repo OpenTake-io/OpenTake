@@ -127,6 +127,51 @@ export interface TrimRegion {
 	endMs: number;
 }
 
+export interface ClipRegion {
+	id: string;
+	startMs: number;
+	endMs: number;
+	speed: number;
+}
+
+/** Convert clip regions (kept segments) to trim regions (gaps to remove). */
+export function clipsToTrims(clips: ClipRegion[], totalDurationMs: number): TrimRegion[] {
+	if (clips.length === 0) return [];
+	const sorted = [...clips].sort((a, b) => a.startMs - b.startMs);
+	const trims: TrimRegion[] = [];
+	let cursor = 0;
+	let trimId = 1;
+	for (const clip of sorted) {
+		if (clip.startMs > cursor) {
+			trims.push({ id: `trim-gap-${trimId++}`, startMs: cursor, endMs: clip.startMs });
+		}
+		cursor = clip.endMs;
+	}
+	if (cursor < totalDurationMs) {
+		trims.push({ id: `trim-gap-${trimId++}`, startMs: cursor, endMs: totalDurationMs });
+	}
+	return trims;
+}
+
+/** Convert legacy trim regions to clip regions (complement). */
+export function trimsToClips(trims: TrimRegion[], totalDurationMs: number): ClipRegion[] {
+	if (trims.length === 0) return [{ id: "clip-1", startMs: 0, endMs: totalDurationMs, speed: 1 }];
+	const sorted = [...trims].sort((a, b) => a.startMs - b.startMs);
+	const clips: ClipRegion[] = [];
+	let cursor = 0;
+	let clipId = 1;
+	for (const trim of sorted) {
+		if (trim.startMs > cursor) {
+			clips.push({ id: `clip-${clipId++}`, startMs: cursor, endMs: trim.startMs, speed: 1 });
+		}
+		cursor = trim.endMs;
+	}
+	if (cursor < totalDurationMs) {
+		clips.push({ id: `clip-${clipId++}`, startMs: cursor, endMs: totalDurationMs, speed: 1 });
+	}
+	return clips;
+}
+
 export type AnnotationType = "text" | "image" | "figure";
 
 export type ArrowDirection =
