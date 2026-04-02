@@ -15,7 +15,6 @@ import {
   DEFAULT_WALLPAPER_RELATIVE_PATH,
   isVideoWallpaperSource,
 } from "@/lib/wallpapers";
-import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
 import {
   Application,
   Container,
@@ -329,6 +328,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const trimRegionsRef = useRef<TrimRegion[]>([]);
     const speedRegionsRef = useRef<SpeedRegion[]>([]);
     const lastWebcamSyncTimeRef = useRef<number | null>(null);
+    const bgVideoRef = useRef<HTMLVideoElement | null>(null);
     const zoomMotionBlurRef = useRef(zoomMotionBlur);
     const connectZoomsRef = useRef(connectZooms);
     const zoomInDurationMsRef = useRef(zoomInDurationMs);
@@ -753,7 +753,24 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
     useEffect(() => {
       isPlayingRef.current = isPlaying;
+      const bgVideo = bgVideoRef.current;
+      if (bgVideo) {
+        if (isPlaying) {
+          bgVideo.play().catch(() => {});
+        } else {
+          bgVideo.pause();
+        }
+      }
     }, [isPlaying]);
+
+    // Sync background video wallpaper with timeline scrubbing
+    useEffect(() => {
+      const bgVideo = bgVideoRef.current;
+      if (!bgVideo) return;
+      if (!isPlaying && bgVideo.duration && Number.isFinite(bgVideo.duration)) {
+        bgVideo.currentTime = currentTime % bgVideo.duration;
+      }
+    }, [currentTime, isPlaying]);
 
     useEffect(() => {
       trimRegionsRef.current = trimRegions;
@@ -1506,10 +1523,12 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
           }
 
           if (isVideoWallpaperSource(wallpaper)) {
-            const resolved = await resolveMediaElementSource(wallpaper);
-            revokeResolvedWallpaper = resolved.revoke;
+            let videoSrc = wallpaper;
+            if (wallpaper.startsWith("/") && !wallpaper.startsWith("//")) {
+              videoSrc = await getAssetPath(wallpaper.replace(/^\//, ""));
+            }
             if (mounted) {
-              setResolvedWallpaper(resolved.src);
+              setResolvedWallpaper(videoSrc);
               setResolvedWallpaperKind("video");
             }
             return;
@@ -1610,11 +1629,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         {resolvedWallpaperKind === "video" && resolvedWallpaper ? (
           <video
             key={resolvedWallpaper}
+            ref={bgVideoRef}
             className="absolute inset-0 h-full w-full object-cover"
             src={resolvedWallpaper}
             muted
             loop
-            autoPlay
             playsInline
             style={{
               filter: backgroundBlur > 0 ? `blur(${backgroundBlur}px)` : "none",
