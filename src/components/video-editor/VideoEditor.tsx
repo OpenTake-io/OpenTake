@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { Panel, PanelGroup } from "react-resizable-panels";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -103,6 +103,8 @@ import {
 	type PlaybackSpeed,
 	type SpeedRegion,
 	type TrimRegion,
+	type ClipRegion,
+	clipsToTrims,
 	type WebcamOverlaySettings,
 	type ZoomDepth,
 	type ZoomFocus,
@@ -118,12 +120,14 @@ import {
 type EditorHistorySnapshot = {
 	zoomRegions: ZoomRegion[];
 	trimRegions: TrimRegion[];
+	clipRegions: ClipRegion[];
 	speedRegions: SpeedRegion[];
 	annotationRegions: AnnotationRegion[];
 	audioRegions: AudioRegion[];
 	autoCaptions: CaptionCue[];
 	selectedZoomId: string | null;
 	selectedTrimId: string | null;
+	selectedClipId: string | null;
 	selectedSpeedId: string | null;
 	selectedAnnotationId: string | null;
 	selectedAudioId: string | null;
@@ -372,6 +376,8 @@ export default function VideoEditor() {
 	const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
 	const [trimRegions, setTrimRegions] = useState<TrimRegion[]>([]);
 	const [selectedTrimId, setSelectedTrimId] = useState<string | null>(null);
+	const [clipRegions, setClipRegions] = useState<ClipRegion[]>([]);
+	const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
 	const [speedRegions, setSpeedRegions] = useState<SpeedRegion[]>([]);
 	const [selectedSpeedId, setSelectedSpeedId] = useState<string | null>(null);
 	const [annotationRegions, setAnnotationRegions] = useState<AnnotationRegion[]>([]);
@@ -429,6 +435,7 @@ export default function VideoEditor() {
 	const projectBrowserFallbackTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const nextZoomIdRef = useRef(1);
 	const nextTrimIdRef = useRef(1);
+	const nextClipIdRef = useRef(1);
 	const nextSpeedIdRef = useRef(1);
 	const nextAudioIdRef = useRef(1);
 
@@ -860,6 +867,7 @@ export default function VideoEditor() {
 				webcam: WebcamOverlaySettings;
 				zoomRegions: ZoomRegion[];
 				trimRegions: TrimRegion[];
+				clipRegions: ClipRegion[];
 				speedRegions: SpeedRegion[];
 				annotationRegions: AnnotationRegion[];
 				audioRegions: AudioRegion[];
@@ -951,6 +959,7 @@ export default function VideoEditor() {
 				webcam,
 				zoomRegions,
 				trimRegions,
+				clipRegions,
 				speedRegions,
 				annotationRegions,
 				audioRegions,
@@ -992,6 +1001,7 @@ export default function VideoEditor() {
 			webcam,
 			zoomRegions,
 			trimRegions,
+			clipRegions,
 			speedRegions,
 			annotationRegions,
 			audioRegions,
@@ -1010,12 +1020,14 @@ export default function VideoEditor() {
 		return {
 			zoomRegions,
 			trimRegions,
+			clipRegions,
 			speedRegions,
 			annotationRegions,
 			audioRegions,
 			autoCaptions,
 			selectedZoomId,
 			selectedTrimId,
+			selectedClipId,
 			selectedSpeedId,
 			selectedAnnotationId,
 			selectedAudioId,
@@ -1023,12 +1035,14 @@ export default function VideoEditor() {
 	}, [
 		zoomRegions,
 		trimRegions,
+		clipRegions,
 		speedRegions,
 		annotationRegions,
 		audioRegions,
 		autoCaptions,
 		selectedZoomId,
 		selectedTrimId,
+		selectedClipId,
 		selectedSpeedId,
 		selectedAnnotationId,
 		selectedAudioId,
@@ -1040,12 +1054,14 @@ export default function VideoEditor() {
 			const cloned = cloneSnapshot(snapshot);
 			setZoomRegions(cloned.zoomRegions);
 			setTrimRegions(cloned.trimRegions);
+			setClipRegions(cloned.clipRegions);
 			setSpeedRegions(cloned.speedRegions);
 			setAnnotationRegions(cloned.annotationRegions);
 			setAudioRegions(cloned.audioRegions);
 			setAutoCaptions(cloned.autoCaptions);
 			setSelectedZoomId(cloned.selectedZoomId);
 			setSelectedTrimId(cloned.selectedTrimId);
+			setSelectedClipId(cloned.selectedClipId);
 			setSelectedSpeedId(cloned.selectedSpeedId);
 			setSelectedAnnotationId(cloned.selectedAnnotationId);
 			setSelectedAudioId(cloned.selectedAudioId);
@@ -1057,6 +1073,10 @@ export default function VideoEditor() {
 			nextTrimIdRef.current = deriveNextId(
 				"trim",
 				cloned.trimRegions.map((region) => region.id),
+			);
+			nextClipIdRef.current = deriveNextId(
+				"clip",
+				cloned.clipRegions.map((region) => region.id),
 			);
 			nextSpeedIdRef.current = deriveNextId(
 				"speed",
@@ -1163,6 +1183,8 @@ export default function VideoEditor() {
 			setWebcam(normalizedEditor.webcam);
 			setZoomRegions(normalizedEditor.zoomRegions);
 			setTrimRegions(normalizedEditor.trimRegions);
+			setClipRegions((normalizedEditor as any).clipRegions ?? []);
+			clipInitializedRef.current = ((normalizedEditor as any).clipRegions ?? []).length > 0;
 			setSpeedRegions(normalizedEditor.speedRegions);
 			setAnnotationRegions(normalizedEditor.annotationRegions);
 			setAudioRegions(normalizedEditor.audioRegions);
@@ -1177,6 +1199,7 @@ export default function VideoEditor() {
 
 			setSelectedZoomId(null);
 			setSelectedTrimId(null);
+			setSelectedClipId(null);
 			setSelectedSpeedId(null);
 			setSelectedAnnotationId(null);
 			setSelectedAudioId(null);
@@ -1188,6 +1211,10 @@ export default function VideoEditor() {
 			nextTrimIdRef.current = deriveNextId(
 				"trim",
 				normalizedEditor.trimRegions.map((region) => region.id),
+			);
+			nextClipIdRef.current = deriveNextId(
+				"clip",
+				((normalizedEditor as any).clipRegions ?? []).map((region: ClipRegion) => region.id),
 			);
 			nextSpeedIdRef.current = deriveNextId(
 				"speed",
@@ -1876,6 +1903,25 @@ export default function VideoEditor() {
 		);
 	}, [loopCursor, normalizedCursorTelemetry, displayedTimelineWindow]);
 
+	// Initialize a full-track clip when duration is first known
+	const clipInitializedRef = useRef(false);
+	useEffect(() => {
+		const totalMs = Math.round(duration * 1000);
+		if (totalMs <= 0 || clipInitializedRef.current) return;
+		if (clipRegions.length === 0) {
+			const id = `clip-${nextClipIdRef.current++}`;
+			setClipRegions([{ id, startMs: 0, endMs: totalMs, speed: 1 }]);
+		}
+		clipInitializedRef.current = true;
+	}, [duration, clipRegions.length]);
+
+	// Derive trimRegions from clipRegions so export/playback pipelines stay unchanged
+	useEffect(() => {
+		const totalMs = Math.round(duration * 1000);
+		if (totalMs <= 0 || clipRegions.length === 0) return;
+		setTrimRegions(clipsToTrims(clipRegions, totalMs));
+	}, [clipRegions, duration]);
+
 	const effectiveZoomRegions = zoomRegions;
 
 	useEffect(() => {
@@ -2073,6 +2119,91 @@ export default function VideoEditor() {
 			}
 		},
 		[selectedTrimId],
+	);
+
+	const handleSelectClip = useCallback((id: string | null) => {
+		setSelectedClipId(id);
+		if (id) {
+			setSelectedZoomId(null);
+			setSelectedAnnotationId(null);
+			setSelectedAudioId(null);
+		}
+	}, []);
+
+	const handleClipSplit = useCallback(
+		(splitMs: number) => {
+			setClipRegions((prev) => {
+				const target = prev.find((c) => splitMs > c.startMs && splitMs < c.endMs);
+				if (!target) return prev;
+				const leftId = `clip-${nextClipIdRef.current++}`;
+				const rightId = `clip-${nextClipIdRef.current++}`;
+				const left: ClipRegion = { id: leftId, startMs: target.startMs, endMs: Math.round(splitMs), speed: target.speed };
+				const right: ClipRegion = { id: rightId, startMs: Math.round(splitMs), endMs: target.endMs, speed: target.speed };
+				return prev.flatMap((c) => (c.id === target.id ? [left, right] : [c]));
+			});
+		},
+		[],
+	);
+
+	const handleClipSpanChange = useCallback((id: string, span: Span) => {
+		const oldClip = clipRegions.find((c) => c.id === id);
+		const newStart = Math.round(span.start);
+		const newEnd = Math.round(span.end);
+
+		if (oldClip) {
+			const startDelta = newStart - oldClip.startMs;
+			const endDelta = newEnd - oldClip.endMs;
+			const isMove = Math.abs(startDelta - endDelta) < 1 && Math.abs(startDelta) > 0;
+
+			if (isMove) {
+				const delta = startDelta;
+				setZoomRegions((prev) =>
+					prev.map((zoom) => {
+						const overlaps = zoom.startMs < oldClip.endMs && zoom.endMs > oldClip.startMs;
+						if (overlaps) {
+							return {
+								...zoom,
+								startMs: zoom.startMs + delta,
+								endMs: zoom.endMs + delta,
+							};
+						}
+						return zoom;
+					}),
+				);
+			}
+		}
+
+		setClipRegions((prev) =>
+			prev.map((clip) =>
+				clip.id === id
+					? { ...clip, startMs: newStart, endMs: newEnd }
+					: clip,
+			),
+		);
+	}, [clipRegions]);
+
+	const handleClipSpeedChange = useCallback(
+		(speed: number) => {
+			if (!selectedClipId) return;
+			setClipRegions((prev) =>
+				prev.map((clip) =>
+					clip.id === selectedClipId
+						? { ...clip, speed }
+						: clip,
+				),
+			);
+		},
+		[selectedClipId],
+	);
+
+	const handleClipDelete = useCallback(
+		(id: string) => {
+			setClipRegions((prev) => prev.filter((clip) => clip.id !== id));
+			if (selectedClipId === id) {
+				setSelectedClipId(null);
+			}
+		},
+		[selectedClipId],
 	);
 
 	const handleSelectSpeed = useCallback((id: string | null) => {
@@ -3529,10 +3660,6 @@ export default function VideoEditor() {
 							</div>
 						</Panel>
 
-						<PanelResizeHandle className="h-3 bg-transparent transition-colors mx-4 flex items-center justify-center">
-							<div className="w-8 h-1 bg-white/20 rounded-full"></div>
-						</PanelResizeHandle>
-
 						{/* Timeline section */}
 						<Panel defaultSize={33} minSize={20}>
 							<div className="h-full min-h-0 bg-[#17171a] rounded-2xl border border-white/10 shadow-lg overflow-auto flex flex-col">
@@ -3540,6 +3667,7 @@ export default function VideoEditor() {
 									videoDuration={duration}
 									currentTime={currentTime}
 									onSeek={handleSeek}
+									videoPath={videoPath}
 									cursorTelemetry={normalizedCursorTelemetry}
 									autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
 									onAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
@@ -3556,6 +3684,11 @@ export default function VideoEditor() {
 									onTrimDelete={handleTrimDelete}
 									selectedTrimId={selectedTrimId}
 									onSelectTrim={handleSelectTrim}
+									clipRegions={clipRegions}
+									onClipSplit={handleClipSplit}
+									onClipSpanChange={handleClipSpanChange}
+									selectedClipId={selectedClipId}
+									onSelectClip={handleSelectClip}
 									speedRegions={speedRegions}
 									onSpeedAdded={handleSpeedAdded}
 									onSpeedSpanChange={handleSpeedSpanChange}
@@ -3599,6 +3732,12 @@ export default function VideoEditor() {
 						onZoomDelete={handleZoomDelete}
 						selectedTrimId={selectedTrimId}
 						onTrimDelete={handleTrimDelete}
+						selectedClipId={selectedClipId}
+						selectedClipSpeed={
+							selectedClipId ? (clipRegions.find((c) => c.id === selectedClipId)?.speed ?? 1) : null
+						}
+						onClipSpeedChange={(speed) => selectedClipId && handleClipSpeedChange(speed)}
+						onClipDelete={handleClipDelete}
 						shadowIntensity={shadowIntensity}
 						onShadowChange={setShadowIntensity}
 						backgroundBlur={backgroundBlur}

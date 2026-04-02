@@ -148,6 +148,10 @@ interface SettingsPanelProps {
 	onZoomDelete?: (id: string) => void;
 	selectedTrimId?: string | null;
 	onTrimDelete?: (id: string) => void;
+	selectedClipId?: string | null;
+	selectedClipSpeed?: number | null;
+	onClipSpeedChange?: (speed: number) => void;
+	onClipDelete?: (id: string) => void;
 	shadowIntensity?: number;
 	onShadowChange?: (intensity: number) => void;
 	backgroundBlur?: number;
@@ -503,6 +507,10 @@ export function SettingsPanel({
 	onZoomDelete,
 	selectedTrimId,
 	onTrimDelete,
+	selectedClipId,
+	selectedClipSpeed,
+	onClipSpeedChange,
+	onClipDelete,
 	shadowIntensity = 0.67,
 	onShadowChange,
 	backgroundBlur = 0,
@@ -803,6 +811,12 @@ export function SettingsPanel({
 	const handleTrimDeleteClick = () => {
 		if (selectedTrimId && onTrimDelete) {
 			onTrimDelete(selectedTrimId);
+		}
+	};
+
+	const handleClipDeleteClick = () => {
+		if (selectedClipId && onClipDelete) {
+			onClipDelete(selectedClipId);
 		}
 	};
 
@@ -1184,7 +1198,7 @@ export function SettingsPanel({
 
 	if (isBackgroundPanel) {
 		return (
-			<div className="flex-[2] min-w-[280px] max-w-[332px] bg-[#161619] border border-white/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
+			<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-[#161619] border border-white/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
 				<div className="flex-1 overflow-y-auto custom-scrollbar p-4">
 					<div className="mb-4 flex items-center gap-2">
 						<Palette className="w-4 h-4 text-[#2563EB]" />
@@ -1934,8 +1948,8 @@ export function SettingsPanel({
 	})();
 
 	return (
-		<div className="basis-[332px] min-w-[280px] max-w-[332px] bg-[#161619] border border-white/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden shrink-0">
-			<div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pb-0">
+		<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-[#161619] border border-white/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
+			<div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pb-0" style={{ scrollbarGutter: 'stable' }}>
 				<AnimatePresence mode="wait" initial={false}>
 					<motion.div
 						key={activeEffectSection}
@@ -1951,7 +1965,7 @@ export function SettingsPanel({
 
 			<div className={cn(
 				"flex-shrink-0 border-t border-white/10 bg-[#151518] p-4 pt-3",
-				!selectedZoomId && !selectedTrimId && !selectedSpeedId && "hidden"
+				!selectedZoomId && !selectedTrimId && !selectedSpeedId && !selectedClipId && "hidden"
 			)}>
 				{selectedZoomId && (
 					<div className="mb-4">
@@ -2052,6 +2066,57 @@ export function SettingsPanel({
 						>
 							<Trash2 className="h-3 w-3" />
 							{tSettings("speed.deleteRegion")}
+						</Button>
+					</div>
+				)}
+
+				{selectedClipId && (
+					<div className="mb-4">
+						<div className="mb-3 flex items-center justify-between">
+							<span className="text-sm font-medium text-slate-200">Clip Speed</span>
+							{selectedClipSpeed != null && selectedClipSpeed !== 1 && (
+								<span className="rounded-full bg-[#06b6d4]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#06b6d4]">
+									{selectedClipSpeed}×
+								</span>
+							)}
+						</div>
+						<div className="grid grid-cols-8 gap-1.5">
+							{[
+								{ speed: 0.25, label: "0.25×" },
+								{ speed: 0.5, label: "0.5×" },
+								{ speed: 0.75, label: "0.75×" },
+								{ speed: 1, label: "1×" },
+								{ speed: 1.25, label: "1.25×" },
+								{ speed: 1.5, label: "1.5×" },
+								{ speed: 1.75, label: "1.75×" },
+								{ speed: 2, label: "2×" },
+							].map((option) => {
+								const isActive = selectedClipSpeed === option.speed;
+								return (
+									<Button
+										key={option.speed}
+										type="button"
+										onClick={() => onClipSpeedChange?.(option.speed)}
+										className={cn(
+											"h-auto w-full rounded-lg border px-0.5 py-2 text-center shadow-sm transition-all duration-200 ease-out cursor-pointer",
+											isActive
+												? "border-[#06b6d4] bg-[#06b6d4] text-white"
+												: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
+										)}
+									>
+										<span className="text-[10px] font-semibold">{option.label}</span>
+									</Button>
+								);
+							})}
+						</div>
+						<Button
+							onClick={handleClipDeleteClick}
+							variant="destructive"
+							size="sm"
+							className="mt-2 h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
+						>
+							<Trash2 className="h-3 w-3" />
+							Delete Clip
 						</Button>
 					</div>
 				)}

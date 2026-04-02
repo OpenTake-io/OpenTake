@@ -1,6 +1,6 @@
 import type { Span } from "dnd-timeline";
 import { useItem } from "dnd-timeline";
-import { Gauge, MessageSquare, Music, Scissors, ZoomIn } from "lucide-react";
+import { Film, Gauge, MessageSquare, Music, Scissors, ZoomIn } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import glassStyles from "./ItemGlass.module.css";
@@ -14,7 +14,7 @@ interface ItemProps {
   onSelect?: () => void;
   zoomDepth?: number;
   speedValue?: number;
-  variant?: 'zoom' | 'trim' | 'annotation' | 'speed' | 'audio';
+  variant?: 'zoom' | 'trim' | 'clip' | 'annotation' | 'speed' | 'audio';
 }
 
 // Map zoom depth to multiplier labels
@@ -56,6 +56,7 @@ export default function Item({
 
   const isZoom = variant === 'zoom';
   const isTrim = variant === 'trim';
+  const isClip = variant === 'clip';
   const isSpeed = variant === 'speed';
   const isAudio = variant === 'audio';
 
@@ -63,6 +64,8 @@ export default function Item({
     ? glassStyles.glassGreen
     : isTrim
     ? glassStyles.glassRed
+    : isClip
+    ? glassStyles.glassCyan
     : isSpeed
     ? glassStyles.glassAmber
     : isAudio
@@ -73,6 +76,8 @@ export default function Item({
     ? '#2563EB'
     : isTrim
     ? '#ef4444'
+    : isClip
+    ? '#06b6d4'
     : isSpeed
     ? '#d97706'
     : isAudio
@@ -134,6 +139,13 @@ export default function Item({
                   <Scissors className="w-3.5 h-3.5 shrink-0" />
                   <span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
                     Trim
+                  </span>
+                </>
+              ) : isClip ? (
+                <>
+                  <Film className="w-3.5 h-3.5 shrink-0" />
+                  <span className="text-[11px] font-semibold tracking-tight whitespace-nowrap">
+                    Clip
                   </span>
                 </>
               ) : isSpeed ? (
