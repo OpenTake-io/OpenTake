@@ -166,11 +166,46 @@ function focusOrCreateMainWindow() {
 			win.destroy();
 			return;
 		}
+
+		// On Win32, calling show/moveTop/focus on the transparent HUD overlay
+		// permanently corrupts setIgnoreMouseEvents forwarding, making it
+		// click-through.  Only focus the editor window; the HUD is alwaysOnTop
+		// so it doesn't need explicit focus.
+		if (process.platform === "win32" && !isEditorWindow(mainWindow)) {
+			return;
+		}
+
 		mainWindow.show();
 		if (mainWindow.isMinimized()) mainWindow.restore();
 		mainWindow.moveTop();
 		mainWindow.focus();
 	}
+}
+
+/**
+ * On Windows 10, focus changes and native notifications can break
+ * {@link BrowserWindow.setIgnoreMouseEvents} forwarding on the transparent HUD
+ * overlay, causing it to become permanently click-through.  Call this after any
+ * operation that may alter focus or z-order so that hover detection keeps working.
+ */
+function reassertHudOverlayMouseState() {
+	if (process.platform !== "win32") {
+		return;
+	}
+
+	const hud = getHudOverlayWindow();
+	if (!hud) {
+		return;
+	}
+
+	// Toggle off then back on so the native WS_EX_TRANSPARENT flag is fully
+	// re-initialised rather than merely re-asserted in a potentially broken state.
+	hud.setIgnoreMouseEvents(false);
+	setTimeout(() => {
+		if (!hud.isDestroyed()) {
+			hud.setIgnoreMouseEvents(true, { forward: true });
+		}
+	}, 50);
 }
 
 function isEditorWindow(window: BrowserWindow) {
@@ -411,6 +446,10 @@ function sendUpdateToastToWindows(channel: "update-toast-state", payload: unknow
 		});
 
 		notification.show();
+		// On Win10, showing a native notification can break setIgnoreMouseEvents
+		// forwarding on the transparent HUD overlay.  Re-assert it after a short
+		// delay so the renderer's hover detection keeps working.
+		reassertHudOverlayMouseState();
 		activeUpdateNotification = notification;
 		activeUpdateNotificationKey = notificationKey;
 		return true;

@@ -322,6 +322,24 @@ export function createHudOverlayWindow(): BrowserWindow {
 
 	win.setIgnoreMouseEvents(true, { forward: true });
 
+	// On Windows 10, focus changes (e.g. showing a native notification) can break
+	// setIgnoreMouseEvents forwarding on a transparent always-on-top window, making
+	// it permanently click-through without hover detection.  Re-initialise the
+	// pass-through-with-forwarding state whenever the window gains focus by toggling
+	// the flag off then back on so the native WS_EX_TRANSPARENT flag is fully reset.
+	if (process.platform === "win32") {
+		win.on("focus", () => {
+			if (!win.isDestroyed()) {
+				win.setIgnoreMouseEvents(false);
+				setTimeout(() => {
+					if (!win.isDestroyed()) {
+						win.setIgnoreMouseEvents(true, { forward: true });
+					}
+				}, 50);
+			}
+		});
+	}
+
 	win.webContents.on("did-finish-load", () => {
 		win?.webContents.send("main-process-message", new Date().toLocaleString());
 		setTimeout(() => {
