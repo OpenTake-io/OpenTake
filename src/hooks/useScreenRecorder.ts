@@ -380,7 +380,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     return result.path;
   }, [finalizeRecordingSession, stopWebcamRecorder]);
 
-  const startWebcamRecorder = useCallback(async () => {
+  /**
+   * Acquire the webcam stream and prepare the MediaRecorder, but do NOT start
+   * recording yet. Call {@link beginWebcamCapture} after the main recording
+   * has started so both begin at approximately the same time.
+   */
+  const prepareWebcamRecorder = useCallback(async () => {
     if (!webcamEnabled) {
       resolvedWebcamPath.current = null;
       pendingWebcamPathPromise.current = Promise.resolve(null);
@@ -462,9 +467,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
           }
         }
       };
-
-      webcamStartTime.current = Date.now();
-      recorder.start(RECORDER_TIMESLICE_MS);
     } catch (error) {
       console.warn("Failed to start webcam recording; continuing without webcam layer:", error);
       resolvedWebcamPath.current = null;
@@ -479,6 +481,15 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       }
     }
   }, [getRecordingDurationMs, webcamDeviceId, webcamEnabled]);
+
+  /** Start the prepared webcam MediaRecorder. Call after main recording begins. */
+  const beginWebcamCapture = useCallback(() => {
+    const recorder = webcamRecorder.current;
+    if (recorder && recorder.state === "inactive") {
+      webcamStartTime.current = Date.now();
+      recorder.start(RECORDER_TIMESLICE_MS);
+    }
+  }, []);
 
   const stopRecording = useRef(() => {
     setPaused(false);
@@ -686,7 +697,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
       recordingSessionTimestamp.current = Date.now();
       resetRecordingClock(recordingSessionTimestamp.current);
-      await startWebcamRecorder();
+      await prepareWebcamRecorder();
 
       const platform = await window.electronAPI.getPlatform();
       const useNativeMacScreenCapture =
@@ -766,6 +777,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
         if (nativeResult.success) {
           const mainStartedAt = Date.now();
+          beginWebcamCapture();
           nativeScreenRecording.current = true;
           nativeWindowsRecording.current = useNativeWindowsCapture;
           resetRecordingClock(mainStartedAt);
@@ -1000,6 +1012,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         setRecording(false);
       };
       const mainStartedAt = Date.now();
+      beginWebcamCapture();
       resetRecordingClock(mainStartedAt);
       webcamTimeOffsetMs.current = webcamStartTime.current === null
         ? 0
