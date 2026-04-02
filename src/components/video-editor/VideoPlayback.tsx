@@ -13,7 +13,9 @@ import { clampMediaTimeToDuration } from "@/lib/mediaTiming";
 import {
   DEFAULT_WALLPAPER_PATH,
   DEFAULT_WALLPAPER_RELATIVE_PATH,
+  isVideoWallpaperSource,
 } from "@/lib/wallpapers";
+import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
 import {
   Application,
   Container,
@@ -1473,14 +1475,21 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const [resolvedWallpaper, setResolvedWallpaper] = useState<string | null>(
       null,
     );
+    const [resolvedWallpaperKind, setResolvedWallpaperKind] = useState<
+      "image" | "video" | "style"
+    >("image");
 
     useEffect(() => {
       let mounted = true;
+      let revokeResolvedWallpaper = () => {};
       (async () => {
         try {
           if (!wallpaper) {
             const def = await getAssetPath(DEFAULT_WALLPAPER_RELATIVE_PATH);
-            if (mounted) setResolvedWallpaper(def);
+            if (mounted) {
+              setResolvedWallpaper(def);
+              setResolvedWallpaperKind("image");
+            }
             return;
           }
 
@@ -1489,13 +1498,29 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
             wallpaper.startsWith("linear-gradient") ||
             wallpaper.startsWith("radial-gradient")
           ) {
-            if (mounted) setResolvedWallpaper(wallpaper);
+            if (mounted) {
+              setResolvedWallpaper(wallpaper);
+              setResolvedWallpaperKind("style");
+            }
+            return;
+          }
+
+          if (isVideoWallpaperSource(wallpaper)) {
+            const resolved = await resolveMediaElementSource(wallpaper);
+            revokeResolvedWallpaper = resolved.revoke;
+            if (mounted) {
+              setResolvedWallpaper(resolved.src);
+              setResolvedWallpaperKind("video");
+            }
             return;
           }
 
           // If it's a data URL (custom uploaded image), use as-is
           if (wallpaper.startsWith("data:")) {
-            if (mounted) setResolvedWallpaper(wallpaper);
+            if (mounted) {
+              setResolvedWallpaper(wallpaper);
+              setResolvedWallpaperKind("image");
+            }
             return;
           }
 
@@ -1505,20 +1530,31 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
             wallpaper.startsWith("/")
           ) {
             const renderable = await getRenderableAssetUrl(wallpaper);
-            if (mounted) setResolvedWallpaper(renderable);
+            if (mounted) {
+              setResolvedWallpaper(renderable);
+              setResolvedWallpaperKind("image");
+            }
             return;
           }
           const p = await getRenderableAssetUrl(
             await getAssetPath(wallpaper.replace(/^\//, "")),
           );
-          if (mounted) setResolvedWallpaper(p);
+          if (mounted) {
+            setResolvedWallpaper(p);
+            setResolvedWallpaperKind("image");
+          }
         } catch (err) {
-          if (mounted)
+          if (mounted) {
             setResolvedWallpaper(wallpaper || DEFAULT_WALLPAPER_PATH);
+            setResolvedWallpaperKind(
+              isVideoWallpaperSource(wallpaper || "") ? "video" : "image",
+            );
+          }
         }
       })();
       return () => {
         mounted = false;
+        revokeResolvedWallpaper();
       };
     }, [wallpaper]);
 
@@ -1531,7 +1567,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       };
     }, []);
 
-    const isImageUrl = Boolean(
+    const isImageUrl = resolvedWallpaperKind === "image" && Boolean(
       resolvedWallpaper &&
       (resolvedWallpaper.startsWith("file://") ||
         resolvedWallpaper.startsWith("http") ||
@@ -1540,7 +1576,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     );
     const backgroundStyle = isImageUrl
       ? { backgroundImage: `url(${resolvedWallpaper || ""})` }
-      : { background: resolvedWallpaper || "" };
+      : resolvedWallpaperKind === "video"
+        ? {}
+        : { background: resolvedWallpaper || "" };
 
     const nativeAspectRatio = (() => {
       const locked = lockedVideoDimensionsRef.current;
@@ -1569,13 +1607,28 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         }}
       >
         {/* Background layer */}
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{
-            ...backgroundStyle,
-            filter: backgroundBlur > 0 ? `blur(${backgroundBlur}px)` : "none",
-          }}
-        />
+        {resolvedWallpaperKind === "video" && resolvedWallpaper ? (
+          <video
+            key={resolvedWallpaper}
+            className="absolute inset-0 h-full w-full object-cover"
+            src={resolvedWallpaper}
+            muted
+            loop
+            autoPlay
+            playsInline
+            style={{
+              filter: backgroundBlur > 0 ? `blur(${backgroundBlur}px)` : "none",
+            }}
+          />
+        ) : (
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{
+              ...backgroundStyle,
+              filter: backgroundBlur > 0 ? `blur(${backgroundBlur}px)` : "none",
+            }}
+          />
+        )}
         <div
           ref={containerRef}
           className="absolute inset-0"

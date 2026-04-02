@@ -1,4 +1,4 @@
-import { Palette, Trash2, Upload, X } from "lucide-react";
+import { Film, Palette, Trash2, Upload, X } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -15,7 +15,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
 import { cn } from "@/lib/utils";
 import type { BuiltInWallpaper } from "@/lib/wallpapers";
-import { BUILT_IN_WALLPAPERS, getAvailableWallpapers } from "@/lib/wallpapers";
+import { BUILT_IN_WALLPAPERS, getAvailableWallpapers, isVideoWallpaperSource } from "@/lib/wallpapers";
 import { type AspectRatio } from "@/utils/aspectRatioUtils";
 import minimalCursorUrl from "../../../Minimal Cursor.svg";
 import amongusCursorUrl from "../../assets/cursors/amongus/default.png";
@@ -105,7 +105,7 @@ const CAPTION_ANIMATION_OPTIONS: Array<{ value: AutoCaptionAnimation; label: str
 	{ value: "pop", label: "Pop" },
 ];
 
-type BackgroundTab = "image" | "color" | "gradient";
+type BackgroundTab = "image" | "video" | "color" | "gradient";
 export type EditorEffectSection =
 	| "scene"
 	| "cursor"
@@ -126,6 +126,10 @@ function getBackgroundTabForWallpaper(value: string): BackgroundTab {
 
 	if (isHexWallpaper(value)) {
 		return "color";
+	}
+
+	if (isVideoWallpaperSource(value)) {
+		return "video";
 	}
 
 	return "image";
@@ -713,7 +717,18 @@ export function SettingsPanel({
 		if (selected.startsWith("data:image") && !customImages.includes(selected)) {
 			setCustomImages((prev) => [selected, ...prev]);
 		}
-	}, [customImages, selected]);
+
+		const isBuiltInWallpaper =
+			builtInWallpaperPaths.includes(selected) || wallpaperPreviewPaths.includes(selected);
+
+		if (
+			!isBuiltInWallpaper &&
+			isVideoWallpaperSource(selected) &&
+			!customImages.includes(selected)
+		) {
+			setCustomImages((prev) => [selected, ...prev]);
+		}
+	}, [builtInWallpaperPaths, customImages, selected, wallpaperPreviewPaths]);
 
 	useEffect(() => {
 		saveEditorPreferences({ customWallpapers: customImages });
@@ -767,7 +782,7 @@ export function SettingsPanel({
 		);
 
 	const renderWallpaperImageTile = (
-		imageUrl: string,
+		wallpaperUrl: string,
 		isSelected: boolean,
 		props?: {
 			key?: string;
@@ -786,16 +801,25 @@ export function SettingsPanel({
 			role="button"
 		>
 			<div className="absolute inset-[1px] overflow-hidden rounded-[8px] bg-[#0d0e11]">
-				<img
-					src={imageUrl}
-					alt={
-						props?.title ??
-						props?.ariaLabel ??
-						tSettings("background.wallpaperPreview", "Wallpaper preview")
-					}
-					className="h-full w-full select-none object-cover [transform:translateZ(0)]"
-					draggable={false}
-				/>
+				{isVideoWallpaperSource(wallpaperUrl) ? (
+					<div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-[radial-gradient(circle_at_top,#1f3b68,transparent_58%),linear-gradient(135deg,#0f172a,#111827_48%,#1d4ed8)] px-1 text-center text-white">
+						<Film className="h-4 w-4 opacity-90" />
+						<span className="line-clamp-2 text-[8px] font-medium leading-tight text-white/80">
+							{props?.title ?? props?.ariaLabel ?? tSettings("background.video", "Video background")}
+						</span>
+					</div>
+				) : (
+					<img
+						src={wallpaperUrl}
+						alt={
+							props?.title ??
+							props?.ariaLabel ??
+							tSettings("background.wallpaperPreview", "Wallpaper preview")
+						}
+						className="h-full w-full select-none object-cover [transform:translateZ(0)]"
+						draggable={false}
+					/>
+				)}
 			</div>
 			{props?.children}
 		</div>
@@ -1000,10 +1024,11 @@ export function SettingsPanel({
 
 			<div className="w-full">
 				<LayoutGroup id="background-picker-switcher">
-					<div className="grid h-8 w-full grid-cols-3 rounded-xl border border-white/10 bg-white/[0.04] p-1">
+					<div className="grid h-8 w-full grid-cols-4 rounded-xl border border-white/10 bg-white/[0.04] p-1">
 						{(
 							[
 								{ value: "image", label: tSettings("background.image") },
+								{ value: "video", label: tSettings("background.video", "Video") },
 								{ value: "color", label: tSettings("background.color") },
 								{ value: "gradient", label: tSettings("background.gradient") },
 							] as const
@@ -1069,6 +1094,12 @@ export function SettingsPanel({
 											const isSelected = getWallpaperTileState(imageUrl);
 											return renderWallpaperImageTile(imageUrl, isSelected, {
 												key: `custom-${idx}`,
+												ariaLabel: isVideoWallpaperSource(imageUrl)
+													? imageUrl.split(/[\\/]/).pop() ?? tSettings("background.video", "Video background")
+													: undefined,
+												title: isVideoWallpaperSource(imageUrl)
+													? imageUrl.split(/[\\/]/).pop()
+													: undefined,
 												onClick: () => onWallpaperChange(imageUrl),
 												children: (
 													<button
@@ -1097,6 +1128,10 @@ export function SettingsPanel({
 											});
 										})}
 									</div>
+								</div>
+							) : backgroundTab === "video" ? (
+								<div className="mt-0 flex min-h-24 items-center justify-center rounded-xl border border-dashed border-white/10 bg-white/[0.03] text-[11px] text-slate-400">
+									Video backgrounds coming next.
 								</div>
 							) : backgroundTab === "color" ? (
 								<div className="mt-0 space-y-2">
