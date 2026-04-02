@@ -32,6 +32,7 @@ export const BUILT_IN_WALLPAPERS: BuiltInWallpaper[] = [
   { id: 'levels', label: 'Levels', relativePath: 'wallpapers/levels.jpg', publicPath: '/wallpapers/levels.jpg' },
   { id: 'mountaintrees', label: 'Mountain Trees', relativePath: 'wallpapers/mountaintrees.jpg', publicPath: '/wallpapers/mountaintrees.jpg' },
   { id: 'luisdelrio', label: 'Luis Del Rio', relativePath: 'wallpapers/luisdelrio.jpg', publicPath: '/wallpapers/luisdelrio.jpg' },
+  { id: 'wispysky', label: 'Wispy Sky', relativePath: 'wallpapers/wispysky.mp4', publicPath: '/wallpapers/wispysky.mp4' },
 ];
 
 export const WALLPAPER_PATHS = BUILT_IN_WALLPAPERS.map((wallpaper) => wallpaper.publicPath);
@@ -99,7 +100,7 @@ export async function getAvailableWallpapers(): Promise<BuiltInWallpaper[]> {
     }
 
     const discoveredFiles = sortWallpaperFiles(
-      result.files.filter((fileName) => IMAGE_FILE_PATTERN.test(fileName)),
+      result.files.filter((fileName) => IMAGE_FILE_PATTERN.test(fileName) || VIDEO_FILE_PATTERN.test(fileName)),
     );
 
     if (discoveredFiles.length === 0) {

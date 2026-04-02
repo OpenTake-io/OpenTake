@@ -1,4 +1,4 @@
-import { Film, Palette, Trash2, Upload, X } from "lucide-react";
+import { Palette, Trash2, Upload, X } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -802,12 +802,16 @@ export function SettingsPanel({
 		>
 			<div className="absolute inset-[1px] overflow-hidden rounded-[8px] bg-[#0d0e11]">
 				{isVideoWallpaperSource(wallpaperUrl) ? (
-					<div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-[radial-gradient(circle_at_top,#1f3b68,transparent_58%),linear-gradient(135deg,#0f172a,#111827_48%,#1d4ed8)] px-1 text-center text-white">
-						<Film className="h-4 w-4 opacity-90" />
-						<span className="line-clamp-2 text-[8px] font-medium leading-tight text-white/80">
-							{props?.title ?? props?.ariaLabel ?? tSettings("background.video", "Video background")}
-						</span>
-					</div>
+					<video
+						src={wallpaperUrl}
+						muted
+						playsInline
+						preload="metadata"
+						className="h-full w-full select-none object-cover [transform:translateZ(0)]"
+						draggable={false}
+						onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
+						onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+					/>
 				) : (
 					<img
 						src={wallpaperUrl}
@@ -982,6 +986,23 @@ export function SettingsPanel({
 		event.target.value = "";
 	};
 
+	const handleVideoUpload = async () => {
+		try {
+			const result = await (window as any).electronAPI.openVideoFilePicker();
+			if (!result?.success || !result.path) return;
+			const filePath = result.path as string;
+			if (!isVideoWallpaperSource(filePath)) {
+				toast.error("Unsupported format", { description: "Please select a video file (mp4, webm, mov, etc.)" });
+				return;
+			}
+			setCustomImages((prev) => [filePath, ...prev]);
+			onWallpaperChange(filePath);
+			toast.success("Video background added");
+		} catch {
+			toast.error("Failed to import video background");
+		}
+	};
+
 	const handleRemoveCustomImage = (imageUrl: string, event: React.MouseEvent) => {
 		event.stopPropagation();
 		setCustomImages((prev) => prev.filter((img) => img !== imageUrl));
@@ -1115,23 +1136,62 @@ export function SettingsPanel({
 										{(wallpaperPreviewPaths.length > 0
 											? wallpaperPreviewPaths
 											: builtInWallpaperPaths
-										).map((previewPath, index) => {
-											const wallpaper = builtInWallpapers[index] ?? BUILT_IN_WALLPAPERS[index];
+										).filter(p => !isVideoWallpaperSource(p)).map((previewPath, filteredIndex) => {
+											const imageWallpapers = builtInWallpapers.filter(w => !isVideoWallpaperSource(w.publicPath));
+											const wallpaper = imageWallpapers[filteredIndex];
 											const wallpaperValue =
-												wallpaper?.publicPath ?? builtInWallpaperPaths[index] ?? previewPath;
+												wallpaper?.publicPath ?? previewPath;
 											const isSelected = getWallpaperTileState(wallpaperValue, previewPath);
 											return renderWallpaperImageTile(previewPath, isSelected, {
 												key: wallpaperValue,
-												ariaLabel: wallpaper?.label ?? `Wallpaper ${index + 1}`,
-												title: wallpaper?.label ?? `Wallpaper ${index + 1}`,
+												ariaLabel: wallpaper?.label ?? `Wallpaper ${filteredIndex + 1}`,
+												title: wallpaper?.label ?? `Wallpaper ${filteredIndex + 1}`,
 												onClick: () => onWallpaperChange(wallpaperValue),
 											});
 										})}
 									</div>
 								</div>
 							) : backgroundTab === "video" ? (
-								<div className="mt-0 flex min-h-24 items-center justify-center rounded-xl border border-dashed border-white/10 bg-white/[0.03] text-[11px] text-slate-400">
-									Video backgrounds coming next.
+								<div className="mt-0 space-y-2">
+									<Button
+										onClick={handleVideoUpload}
+										variant="outline"
+										className="w-full gap-2 bg-white/5 text-slate-200 border-white/10 hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] transition-all h-7 text-[10px]"
+									>
+										<Upload className="w-3 h-3" />
+										{tSettings("background.uploadCustomVideo", "Upload Video")}
+									</Button>
+
+									<div className="grid grid-cols-8 gap-1.5">
+										{customImages.filter(isVideoWallpaperSource).map((videoUrl, idx) => {
+											const isSelected = getWallpaperTileState(videoUrl);
+											return renderWallpaperImageTile(videoUrl, isSelected, {
+												key: `custom-video-${idx}`,
+												ariaLabel: videoUrl.split(/[\\/]/).pop() ?? "Video background",
+												title: videoUrl.split(/[\\/]/).pop(),
+												onClick: () => onWallpaperChange(videoUrl),
+												children: (
+													<button
+														onClick={(e) => handleRemoveCustomImage(videoUrl, e)}
+														className="absolute top-0.5 right-0.5 w-3 h-3 bg-red-500/90 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+													>
+														<X className="w-2 h-2 text-white" />
+													</button>
+												),
+											});
+										})}
+
+										{BUILT_IN_WALLPAPERS.filter(w => isVideoWallpaperSource(w.publicPath)).map((wallpaper) => {
+											const wallpaperValue = wallpaper.publicPath;
+											const isSelected = selected === wallpaperValue;
+											return renderWallpaperImageTile(wallpaperValue, isSelected, {
+												key: wallpaperValue,
+												ariaLabel: wallpaper.label,
+												title: wallpaper.label,
+												onClick: () => onWallpaperChange(wallpaperValue),
+											});
+										})}
+									</div>
 								</div>
 							) : backgroundTab === "color" ? (
 								<div className="mt-0 space-y-2">

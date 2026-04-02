@@ -47,6 +47,7 @@ import { getWebcamOverlayPosition, getWebcamOverlaySizePx } from "@/components/v
 import { drawSquircleOnCanvas, drawSquircleOnGraphics } from "@/lib/geometry/squircle";
 import { ForwardFrameSource } from "./forwardFrameSource";
 import { resolveMediaElementSource } from "./localMediaSource";
+import { isVideoWallpaperSource } from "@/lib/wallpapers";
 
 interface FrameRenderConfig {
   width: number;
@@ -143,6 +144,7 @@ export class FrameRenderer {
   private compositeCanvas: HTMLCanvasElement | null = null;
   private compositeCtx: CanvasRenderingContext2D | null = null;
   private backgroundVideoElement: HTMLVideoElement | null = null;
+  private backgroundCtx: CanvasRenderingContext2D | null = null;
   private cleanupBackgroundSource: (() => void) | null = null;
   private config: FrameRenderConfig;
   private animationState: AnimationState;
@@ -301,7 +303,34 @@ export class FrameRenderer {
       throw new Error("Failed to get 2D context for background canvas");
     }
 
+    this.backgroundCtx = bgCtx;
+
     try {
+      // Check for video wallpaper first
+      if (isVideoWallpaperSource(wallpaper)) {
+        let videoSrc = wallpaper;
+        if (wallpaper.startsWith("/") && !wallpaper.startsWith("//")) {
+          videoSrc = await getAssetPath(wallpaper.replace(/^\//, ""));
+        }
+
+        const video = document.createElement("video");
+        video.muted = true;
+        video.loop = true;
+        video.playsInline = true;
+        video.preload = "auto";
+        video.src = videoSrc;
+
+        await new Promise<void>((resolve, reject) => {
+          video.onloadeddata = () => resolve();
+          video.onerror = () => reject(new Error(`Failed to load video wallpaper: ${wallpaper}`));
+        });
+
+        this.backgroundVideoElement = video;
+        this.drawVideoFrameToBackground();
+        this.backgroundSprite = bgCanvas as any;
+        return;
+      }
+
       // Render background based on type
       if (
         wallpaper.startsWith("file://") ||
@@ -425,6 +454,53 @@ export class FrameRenderer {
 
     // Store the background canvas for compositing
     this.backgroundSprite = bgCanvas as any;
+  }
+
+  private drawVideoFrameToBackground(): void {
+    const video = this.backgroundVideoElement;
+    const ctx = this.backgroundCtx;
+    if (!video || !ctx) return;
+
+    const w = this.config.width;
+    const h = this.config.height;
+    const videoAspect = video.videoWidth / video.videoHeight;
+    const canvasAspect = w / h;
+
+    let drawWidth: number, drawHeight: number, drawX: number, drawY: number;
+    if (videoAspect > canvasAspect) {
+      drawHeight = h;
+      drawWidth = drawHeight * videoAspect;
+      drawX = (w - drawWidth) / 2;
+      drawY = 0;
+    } else {
+      drawWidth = w;
+      drawHeight = drawWidth / videoAspect;
+      drawX = 0;
+      drawY = (h - drawHeight) / 2;
+    }
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
+  }
+
+  private async syncBackgroundVideo(timeSeconds: number): Promise<void> {
+    const video = this.backgroundVideoElement;
+    if (!video) return;
+
+    if (video.duration && Number.isFinite(video.duration)) {
+      const targetTime = timeSeconds % video.duration;
+      if (Math.abs(video.currentTime - targetTime) > 0.01) {
+        video.currentTime = targetTime;
+        await new Promise<void>((resolve) => {
+          const onSeeked = () => {
+            video.removeEventListener("seeked", onSeeked);
+            resolve();
+          };
+          video.addEventListener("seeked", onSeeked);
+        });
+      }
+    }
+    this.drawVideoFrameToBackground();
   }
 
   private async resolveWallpaperImageUrl(wallpaper: string): Promise<string> {
@@ -729,6 +805,11 @@ export class FrameRenderer {
     if (this.webcamForwardFrameSource || this.webcamVideoElement) {
       const targetTime = Math.max(0, this.currentVideoTime);
       await this.syncWebcamFrame(targetTime);
+    }
+
+    // Sync video wallpaper frame
+    if (this.backgroundVideoElement) {
+      await this.syncBackgroundVideo(this.currentVideoTime);
     }
 
     // Create or update video sprite from VideoFrame
@@ -1306,6 +1387,7 @@ export class FrameRenderer {
     this.shadowCtx = null;
     this.compositeCanvas = null;
     this.compositeCtx = null;
+    this.backgroundCtx = null;
     if (this.backgroundVideoElement) {
       this.backgroundVideoElement.pause();
       this.backgroundVideoElement.src = "";
