@@ -187,6 +187,7 @@ export function LaunchWindow() {
 	const [sources, setSources] = useState<DesktopSource[]>([]);
 	const [sourcesLoading, setSourcesLoading] = useState(false);
 	const [hideHudFromCapture, setHideHudFromCapture] = useState(true);
+	const [webcamPreviewOffset, setWebcamPreviewOffset] = useState({ x: 0, y: 0 });
 	const [platform, setPlatform] = useState<string | null>(null);
 	const [appVersion, setAppVersion] = useState<string | null>(null);
 	const [updateStatus, setUpdateStatus] = useState<{
@@ -205,11 +206,21 @@ export function LaunchWindow() {
 	const hudBarRef = useRef<HTMLDivElement>(null);
 	const moreButtonRef = useRef<HTMLButtonElement | null>(null);
 	const webcamPreviewRef = useRef<HTMLVideoElement | null>(null);
+	const recordingWebcamPreviewRef = useRef<HTMLVideoElement | null>(null);
+	const webcamPreviewDragStartRef = useRef<{
+		pointerId: number;
+		startX: number;
+		startY: number;
+		originX: number;
+		originY: number;
+	} | null>(null);
 	const isDraggingRef = useRef(false);
 
 	const micDropdownOpen = activeDropdown === "mic";
 	const webcamDropdownOpen = activeDropdown === "webcam";
-	const showWebcamControls = webcamEnabled && !recording;
+	const showWebcamControls = webcamEnabled;
+	const showRecordingWebcamPreview = webcamEnabled;
+	const shouldStreamWebcamPreview = webcamEnabled;
 	const { devices, selectedDeviceId, setSelectedDeviceId } = useMicrophoneDevices(
 		microphoneEnabled || micDropdownOpen,
 		microphoneDeviceId,
@@ -237,11 +248,64 @@ export function LaunchWindow() {
 	}, [selectedVideoDeviceId, setWebcamDeviceId]);
 
 	useEffect(() => {
+		if (!webcamEnabled) {
+			setWebcamPreviewOffset({ x: 0, y: 0 });
+		}
+	}, [webcamEnabled]);
+
+	const handleWebcamPreviewPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+		if (event.button !== 0) {
+			return;
+		}
+
+		event.preventDefault();
+		isDraggingRef.current = true;
+		webcamPreviewDragStartRef.current = {
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			startY: event.clientY,
+			originX: webcamPreviewOffset.x,
+			originY: webcamPreviewOffset.y,
+		};
+		event.currentTarget.setPointerCapture(event.pointerId);
+	};
+
+	const handleWebcamPreviewPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+		const dragState = webcamPreviewDragStartRef.current;
+		if (!dragState || dragState.pointerId !== event.pointerId) {
+			return;
+		}
+
+		const deltaX = event.clientX - dragState.startX;
+		const deltaY = event.clientY - dragState.startY;
+		setWebcamPreviewOffset({
+			x: dragState.originX + deltaX,
+			y: dragState.originY + deltaY,
+		});
+	};
+
+	const handleWebcamPreviewPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+		const dragState = webcamPreviewDragStartRef.current;
+		if (!dragState || dragState.pointerId !== event.pointerId) {
+			return;
+		}
+
+		webcamPreviewDragStartRef.current = null;
+		isDraggingRef.current = false;
+		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+			event.currentTarget.releasePointerCapture(event.pointerId);
+		}
+	};
+
+	useEffect(() => {
 		let mounted = true;
 		let previewStream: MediaStream | null = null;
 
 		const startPreview = async () => {
-			if (!showWebcamControls || !webcamPreviewRef.current) {
+			if (
+				!shouldStreamWebcamPreview ||
+				(!webcamPreviewRef.current && !recordingWebcamPreviewRef.current)
+			) {
 				return;
 			}
 
@@ -262,18 +326,22 @@ export function LaunchWindow() {
 					audio: false,
 				});
 
-				if (!mounted || !webcamPreviewRef.current) {
+				if (!mounted) {
 					previewStream.getTracks().forEach((track) => track.stop());
 					return;
 				}
 
-				webcamPreviewRef.current.srcObject = previewStream;
-				const playPromise = webcamPreviewRef.current.play();
-				if (playPromise) {
-					playPromise.catch(() => {
-						// Ignore autoplay interruptions while the preview element mounts.
+				[webcamPreviewRef.current, recordingWebcamPreviewRef.current]
+					.filter((node): node is HTMLVideoElement => Boolean(node))
+					.forEach((videoElement) => {
+						videoElement.srcObject = previewStream;
+						const playPromise = videoElement.play();
+						if (playPromise) {
+							playPromise.catch(() => {
+								// Ignore autoplay interruptions while the preview element mounts.
+							});
+						}
 					});
-				}
 			} catch (error) {
 				console.warn("Failed to start live webcam preview:", error);
 			}
@@ -283,13 +351,15 @@ export function LaunchWindow() {
 
 		return () => {
 			mounted = false;
-			if (webcamPreviewRef.current) {
-				webcamPreviewRef.current.pause();
-				webcamPreviewRef.current.srcObject = null;
-			}
+			[webcamPreviewRef.current, recordingWebcamPreviewRef.current]
+				.filter((node): node is HTMLVideoElement => Boolean(node))
+				.forEach((videoElement) => {
+					videoElement.pause();
+					videoElement.srcObject = null;
+				});
 			previewStream?.getTracks().forEach((track) => track.stop());
 		};
-	}, [showWebcamControls, webcamDeviceId]);
+	}, [shouldStreamWebcamPreview, webcamDeviceId]);
 
 	useEffect(() => {
 		let timer: NodeJS.Timeout | null = null;
@@ -452,13 +522,13 @@ export function LaunchWindow() {
 	}, []);
 
 	useEffect(() => {
-		const expanded = activeDropdown !== "none" || projectBrowserOpen;
+		const expanded = activeDropdown !== "none" || projectBrowserOpen || showRecordingWebcamPreview;
 		window.electronAPI.setHudOverlayExpanded(expanded);
 
 		return () => {
 			window.electronAPI.setHudOverlayExpanded(false);
 		};
-	}, [activeDropdown, projectBrowserOpen]);
+	}, [activeDropdown, projectBrowserOpen, showRecordingWebcamPreview]);
 
 	useEffect(() => {
 		const hudContent = hudContentRef.current;
@@ -470,21 +540,26 @@ export function LaunchWindow() {
 		let frameId = 0;
 		const reportHudSize = () => {
 			frameId = 0;
-			const measuredWidth = Math.ceil(
-				Math.max(
-					hudBar.getBoundingClientRect().width,
-					hudBar.scrollWidth,
-					hudContent.getBoundingClientRect().width,
-					hudContent.scrollWidth,
-				) + 24,
-			);
-			const measuredHeight = Math.ceil(
-				Math.max(hudContent.getBoundingClientRect().height, hudContent.scrollHeight) + 24,
-			);
+			const hasFloatingWebcamPreview = showRecordingWebcamPreview;
+			const measuredWidth = hasFloatingWebcamPreview
+				? 100000
+				: Math.ceil(
+					Math.max(
+						hudBar.getBoundingClientRect().width,
+						hudBar.scrollWidth,
+						hudContent.getBoundingClientRect().width,
+						hudContent.scrollWidth,
+					) + 24,
+				);
+			const measuredHeight = hasFloatingWebcamPreview
+				? 100000
+				: Math.ceil(
+					Math.max(hudContent.getBoundingClientRect().height, hudContent.scrollHeight) + 24,
+				);
 			window.electronAPI.setHudOverlayCompactWidth(measuredWidth);
 			window.electronAPI.setHudOverlayMeasuredHeight(
 				measuredHeight,
-				activeDropdown !== "none" || projectBrowserOpen,
+				hasFloatingWebcamPreview || activeDropdown !== "none" || projectBrowserOpen,
 			);
 		};
 
@@ -509,7 +584,7 @@ export function LaunchWindow() {
 				cancelAnimationFrame(frameId);
 			}
 		};
-	}, [activeDropdown, projectBrowserOpen]);
+	}, [activeDropdown, projectBrowserOpen, showRecordingWebcamPreview]);
 
 	useEffect(() => {
 		const handleClick = (e: MouseEvent) => {
@@ -1223,6 +1298,27 @@ export function LaunchWindow() {
 							</AnimatePresence>
 						</div>
 					</motion.div>
+					{showRecordingWebcamPreview && (
+						<div
+							className={`${styles.recordingWebcamPreview} ${styles.electronNoDrag}`}
+							title={t("recording.webcam")}
+							style={{
+								transform: `translate(${webcamPreviewOffset.x}px, ${webcamPreviewOffset.y}px)`,
+							}}
+							onPointerDown={handleWebcamPreviewPointerDown}
+							onPointerMove={handleWebcamPreviewPointerMove}
+							onPointerUp={handleWebcamPreviewPointerUp}
+							onPointerCancel={handleWebcamPreviewPointerUp}
+						>
+							<video
+								ref={recordingWebcamPreviewRef}
+								className={styles.recordingWebcamPreviewVideo}
+								muted
+								playsInline
+								style={{ transform: "scaleX(-1)" }}
+							/>
+						</div>
+					)}
 				</div>
 			</div>
 		</div>
