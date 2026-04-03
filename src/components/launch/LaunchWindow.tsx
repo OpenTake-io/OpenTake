@@ -57,7 +57,7 @@ interface DesktopSource {
 const LOCALE_LABELS: Record<string, string> = {
 	en: "EN",
 	es: "ES",
-	"zh-CN": "中文",
+	"zh-CN": "??",
 };
 
 const COUNTDOWN_OPTIONS = [0, 3, 5, 10];
@@ -207,6 +207,7 @@ export function LaunchWindow() {
 	const moreButtonRef = useRef<HTMLButtonElement | null>(null);
 	const webcamPreviewRef = useRef<HTMLVideoElement | null>(null);
 	const recordingWebcamPreviewRef = useRef<HTMLVideoElement | null>(null);
+	const previewStreamRef = useRef<MediaStream | null>(null);
 	const webcamPreviewDragStartRef = useRef<{
 		pointerId: number;
 		startX: number;
@@ -290,29 +291,58 @@ export function LaunchWindow() {
 			return;
 		}
 
+		const wasDragging = isDraggingRef.current;
 		webcamPreviewDragStartRef.current = null;
 		isDraggingRef.current = false;
 		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
 			event.currentTarget.releasePointerCapture(event.pointerId);
 		}
+		if (wasDragging) {
+			window.electronAPI?.hudOverlaySetIgnoreMouse?.(true);
+		}
 	};
+
+	const attachPreviewStreamToNode = useCallback((videoElement: HTMLVideoElement | null) => {
+		const previewStream = previewStreamRef.current;
+		if (!videoElement || !previewStream || videoElement.srcObject === previewStream) {
+			return;
+		}
+
+		videoElement.srcObject = previewStream;
+		const playPromise = videoElement.play();
+		if (playPromise) {
+			playPromise.catch(() => {
+				// Ignore autoplay interruptions while the preview element mounts.
+			});
+		}
+	}, []);
+
+	const setWebcamPreviewNode = useCallback(
+		(node: HTMLVideoElement | null) => {
+			webcamPreviewRef.current = node;
+			attachPreviewStreamToNode(node);
+		},
+		[attachPreviewStreamToNode],
+	);
+
+	const setRecordingWebcamPreviewNode = useCallback(
+		(node: HTMLVideoElement | null) => {
+			recordingWebcamPreviewRef.current = node;
+			attachPreviewStreamToNode(node);
+		},
+		[attachPreviewStreamToNode],
+	);
 
 	useEffect(() => {
 		let mounted = true;
-		let previewStream: MediaStream | null = null;
-		const initialWebcam = webcamPreviewRef.current;
-		const initialRecordingWebcam = recordingWebcamPreviewRef.current;
 
 		const startPreview = async () => {
-			if (
-				!shouldStreamWebcamPreview ||
-				(!initialWebcam && !initialRecordingWebcam)
-			) {
+			if (!shouldStreamWebcamPreview) {
 				return;
 			}
 
 			try {
-				previewStream = await navigator.mediaDevices.getUserMedia({
+				const previewStream = await navigator.mediaDevices.getUserMedia({
 					video: webcamDeviceId
 						? {
 								deviceId: { exact: webcamDeviceId },
@@ -333,17 +363,9 @@ export function LaunchWindow() {
 					return;
 				}
 
-				[initialWebcam, initialRecordingWebcam]
-					.filter((node): node is HTMLVideoElement => Boolean(node))
-					.forEach((videoElement) => {
-						videoElement.srcObject = previewStream;
-						const playPromise = videoElement.play();
-						if (playPromise) {
-							playPromise.catch(() => {
-								// Ignore autoplay interruptions while the preview element mounts.
-							});
-						}
-					});
+				previewStreamRef.current = previewStream;
+				attachPreviewStreamToNode(webcamPreviewRef.current);
+				attachPreviewStreamToNode(recordingWebcamPreviewRef.current);
 			} catch (error) {
 				console.warn("Failed to start live webcam preview:", error);
 			}
@@ -353,15 +375,16 @@ export function LaunchWindow() {
 
 		return () => {
 			mounted = false;
-			[initialWebcam, initialRecordingWebcam]
+			[webcamPreviewRef.current, recordingWebcamPreviewRef.current]
 				.filter((node): node is HTMLVideoElement => Boolean(node))
 				.forEach((videoElement) => {
 					videoElement.pause();
 					videoElement.srcObject = null;
 				});
-			previewStream?.getTracks().forEach((track) => track.stop());
+			previewStreamRef.current?.getTracks().forEach((track) => track.stop());
+			previewStreamRef.current = null;
 		};
-	}, [shouldStreamWebcamPreview, webcamDeviceId]);
+	}, [attachPreviewStreamToNode, shouldStreamWebcamPreview, webcamDeviceId]);
 
 	useEffect(() => {
 		let timer: NodeJS.Timeout | null = null;
@@ -614,10 +637,10 @@ export function LaunchWindow() {
 					const type = s.sourceType ?? (isWindow ? "window" : "screen");
 					let displayName = s.name;
 					let appName = s.appName;
-					if (isWindow && !appName && s.name.includes(" — ")) {
-						const parts = s.name.split(" — ");
+					if (isWindow && !appName && s.name.includes(" ? ")) {
+						const parts = s.name.split(" ? ");
 						appName = parts[0]?.trim();
-						displayName = parts.slice(1).join(" — ").trim() || s.name;
+						displayName = parts.slice(1).join(" ? ").trim() || s.name;
 					} else if (isWindow && s.windowTitle) {
 						displayName = s.windowTitle;
 					}
@@ -1117,7 +1140,7 @@ export function LaunchWindow() {
 										<div className="flex justify-center px-3 py-2">
 											<div className="h-24 w-24 overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/10">
 												<video
-													ref={webcamPreviewRef}
+													ref={setWebcamPreviewNode}
 													className="h-full w-full object-cover"
 													muted
 													playsInline
@@ -1259,8 +1282,12 @@ export function LaunchWindow() {
 									window.electronAPI?.hudOverlayDrag?.("move", ev.screenX, ev.screenY);
 								};
 								const handleUp = () => {
+									const wasDragging = isDraggingRef.current;
 									isDraggingRef.current = false;
 									window.electronAPI?.hudOverlayDrag?.("end", 0, 0);
+									if (wasDragging) {
+										window.electronAPI?.hudOverlaySetIgnoreMouse?.(true);
+									}
 									document.removeEventListener("mousemove", handleMove);
 									document.removeEventListener("mouseup", handleUp);
 								};
@@ -1313,7 +1340,7 @@ export function LaunchWindow() {
 							onPointerCancel={handleWebcamPreviewPointerUp}
 						>
 							<video
-								ref={recordingWebcamPreviewRef}
+								ref={setRecordingWebcamPreviewNode}
 								className={styles.recordingWebcamPreviewVideo}
 								muted
 								playsInline
