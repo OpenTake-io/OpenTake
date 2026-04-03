@@ -300,11 +300,13 @@ export function LaunchWindow() {
 	useEffect(() => {
 		let mounted = true;
 		let previewStream: MediaStream | null = null;
+		const initialWebcam = webcamPreviewRef.current;
+		const initialRecordingWebcam = recordingWebcamPreviewRef.current;
 
 		const startPreview = async () => {
 			if (
 				!shouldStreamWebcamPreview ||
-				(!webcamPreviewRef.current && !recordingWebcamPreviewRef.current)
+				(!initialWebcam && !initialRecordingWebcam)
 			) {
 				return;
 			}
@@ -331,7 +333,7 @@ export function LaunchWindow() {
 					return;
 				}
 
-				[webcamPreviewRef.current, recordingWebcamPreviewRef.current]
+				[initialWebcam, initialRecordingWebcam]
 					.filter((node): node is HTMLVideoElement => Boolean(node))
 					.forEach((videoElement) => {
 						videoElement.srcObject = previewStream;
@@ -351,7 +353,7 @@ export function LaunchWindow() {
 
 		return () => {
 			mounted = false;
-			[webcamPreviewRef.current, recordingWebcamPreviewRef.current]
+			[initialWebcam, initialRecordingWebcam]
 				.filter((node): node is HTMLVideoElement => Boolean(node))
 				.forEach((videoElement) => {
 					videoElement.pause();
