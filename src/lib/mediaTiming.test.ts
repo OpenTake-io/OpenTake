@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   clampMediaTimeToDuration,
+  getEffectiveVideoStreamDurationSeconds,
   getEffectiveRecordingDurationMs,
+  getMediaSyncPlaybackRate,
 } from "./mediaTiming";
 
 describe("clampMediaTimeToDuration", () => {
@@ -37,5 +39,74 @@ describe("getEffectiveRecordingDurationMs", () => {
         pauseStartedAtMs: 9_000,
       }),
     ).toBe(6_000);
+  });
+});
+
+describe("getMediaSyncPlaybackRate", () => {
+  it("returns the base rate when drift is within tolerance", () => {
+    expect(
+      getMediaSyncPlaybackRate({
+        basePlaybackRate: 1,
+        currentTime: 10,
+        targetTime: 10.01,
+      }),
+    ).toBe(1);
+  });
+
+  it("nudges playback rate toward the target time", () => {
+    expect(
+      getMediaSyncPlaybackRate({
+        basePlaybackRate: 1,
+        currentTime: 10,
+        targetTime: 10.1,
+      }),
+    ).toBeCloseTo(1.05);
+
+    expect(
+      getMediaSyncPlaybackRate({
+        basePlaybackRate: 1,
+        currentTime: 10.1,
+        targetTime: 10,
+      }),
+    ).toBeCloseTo(0.95);
+  });
+
+  it("clamps oversized corrections", () => {
+    expect(
+      getMediaSyncPlaybackRate({
+        basePlaybackRate: 1,
+        currentTime: 10,
+        targetTime: 10.5,
+      }),
+    ).toBeCloseTo(1.08);
+  });
+});
+
+describe("getEffectiveVideoStreamDurationSeconds", () => {
+  it("prefers the video stream duration when present", () => {
+    expect(
+      getEffectiveVideoStreamDurationSeconds({
+        duration: 12,
+        streamDuration: 11.2,
+      }),
+    ).toBe(11.2);
+  });
+
+  it("falls back to the container duration when stream duration is missing", () => {
+    expect(
+      getEffectiveVideoStreamDurationSeconds({
+        duration: 12,
+        streamDuration: undefined,
+      }),
+    ).toBe(12);
+  });
+
+  it("returns zero when neither duration is usable", () => {
+    expect(
+      getEffectiveVideoStreamDurationSeconds({
+        duration: Number.NaN,
+        streamDuration: 0,
+      }),
+    ).toBe(0);
   });
 });

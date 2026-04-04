@@ -48,7 +48,7 @@ import {
 	VideoExporter,
 } from "@/lib/exporter";
 import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
-import { clampMediaTimeToDuration } from "@/lib/mediaTiming";
+import { clampMediaTimeToDuration, getMediaSyncPlaybackRate } from "@/lib/mediaTiming";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { type AspectRatio, getAspectRatioValue } from "@/utils/aspectRatioUtils";
 import { resolveAutoCaptionSourcePath } from "./autoCaptionSource";
@@ -2961,11 +2961,16 @@ export default function VideoEditor() {
 
 	// Sync audio playback with video currentTime and isPlaying state
 	useEffect(() => {
+		const currentTimeMs = currentTime * 1000;
+		const activeSpeedRegion = speedRegions.find(
+			(region) => currentTimeMs >= region.startMs && currentTimeMs < region.endMs,
+		);
+		const targetPlaybackRate = activeSpeedRegion ? activeSpeedRegion.speed : 1;
+
 		for (const region of audioRegions) {
 			const audio = audioElementsRef.current.get(region.id);
 			if (!audio) continue;
 
-			const currentTimeMs = currentTime * 1000;
 			const isInRegion = currentTimeMs >= region.startMs && currentTimeMs < region.endMs;
 
 			if (isPlaying && isInRegion) {
@@ -2973,6 +2978,14 @@ export default function VideoEditor() {
 				// Only seek if significantly out of sync (> 200ms)
 				if (Math.abs(audio.currentTime - audioOffset) > 0.2) {
 					audio.currentTime = audioOffset;
+				}
+				const syncedPlaybackRate = getMediaSyncPlaybackRate({
+					basePlaybackRate: targetPlaybackRate,
+					currentTime: audio.currentTime,
+					targetTime: audioOffset,
+				});
+				if (Math.abs(audio.playbackRate - syncedPlaybackRate) > 0.001) {
+					audio.playbackRate = syncedPlaybackRate;
 				}
 				if (audio.paused) {
 					audio.play().catch(() => undefined);
@@ -2983,7 +2996,7 @@ export default function VideoEditor() {
 				}
 			}
 		}
-	}, [isPlaying, currentTime, audioRegions]);
+	}, [isPlaying, currentTime, audioRegions, speedRegions]);
 
 	useEffect(() => {
 		if (sourceAudioFallbackPaths.length === 0) {
@@ -3001,14 +3014,8 @@ export default function VideoEditor() {
 		const driftThreshold = isPlaying ? 0.35 : 0.01;
 
 		for (const audio of sourceAudioElementsRef.current.values()) {
-			const targetTime = clampMediaTimeToDuration(
-				currentTime,
-				Number.isFinite(audio.duration) ? audio.duration : null,
-			);
-
-			if (Math.abs(audio.playbackRate - targetPlaybackRate) > 0.001) {
-				audio.playbackRate = targetPlaybackRate;
-			}
+			const audioDuration = Number.isFinite(audio.duration) ? audio.duration : null;
+			const targetTime = clampMediaTimeToDuration(currentTime, audioDuration);
 
 			if (timelineJumped || Math.abs(audio.currentTime - targetTime) > driftThreshold) {
 				try {
@@ -3018,7 +3025,16 @@ export default function VideoEditor() {
 				}
 			}
 
-			const atEnd = Number.isFinite(audio.duration) && targetTime >= audio.duration;
+			const syncedPlaybackRate = getMediaSyncPlaybackRate({
+				basePlaybackRate: targetPlaybackRate,
+				currentTime: audio.currentTime,
+				targetTime,
+			});
+			if (Math.abs(audio.playbackRate - syncedPlaybackRate) > 0.001) {
+				audio.playbackRate = syncedPlaybackRate;
+			}
+
+			const atEnd = audioDuration !== null && targetTime >= audioDuration;
 			if (isPlaying && !atEnd) {
 				audio.play().catch(() => undefined);
 			} else if (!audio.paused) {

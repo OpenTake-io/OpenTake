@@ -1617,6 +1617,84 @@ async function probeMediaDurationSeconds(filePath: string): Promise<number> {
   return 0
 }
 
+type AudioSyncAdjustment = {
+  mode: 'none' | 'tempo' | 'delay'
+  delayMs: number
+  tempoRatio: number
+  durationDeltaMs: number
+}
+
+function buildAtempoFilters(tempoRatio: number) {
+  if (!Number.isFinite(tempoRatio) || tempoRatio <= 0) {
+    return []
+  }
+
+  const filters: string[] = []
+  let remaining = tempoRatio
+
+  while (remaining < 0.5) {
+    filters.push('atempo=0.5')
+    remaining /= 0.5
+  }
+
+  while (remaining > 2) {
+    filters.push('atempo=2.0')
+    remaining /= 2.0
+  }
+
+  if (Math.abs(remaining - 1) > 0.0005) {
+    filters.push(`atempo=${remaining.toFixed(6)}`)
+  }
+
+  return filters
+}
+
+function getAudioSyncAdjustment(videoDuration: number, audioDuration: number): AudioSyncAdjustment {
+  if (
+    !Number.isFinite(videoDuration) ||
+    !Number.isFinite(audioDuration) ||
+    videoDuration <= 0 ||
+    audioDuration <= 0
+  ) {
+    return { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
+  }
+
+  const durationDeltaMs = Math.round((videoDuration - audioDuration) * 1000)
+  const absDeltaMs = Math.abs(durationDeltaMs)
+  if (absDeltaMs <= 50) {
+    return { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs }
+  }
+
+  const tempoRatio = Math.max(0.5, Math.min(2, audioDuration / videoDuration))
+  const relativeDelta = absDeltaMs / Math.max(videoDuration * 1000, 1)
+
+  if (relativeDelta <= 0.03 || absDeltaMs <= 1500 || durationDeltaMs < 0) {
+    return { mode: 'tempo', delayMs: 0, tempoRatio, durationDeltaMs }
+  }
+
+  return { mode: 'delay', delayMs: durationDeltaMs, tempoRatio: 1, durationDeltaMs }
+}
+
+function appendSyncedAudioFilter(
+  filterParts: string[],
+  inputLabel: string,
+  outputLabel: string,
+  adjustment: AudioSyncAdjustment,
+) {
+  const filters: string[] = []
+
+  if (adjustment.mode === 'delay' && adjustment.delayMs > 0) {
+    filters.push(`adelay=${adjustment.delayMs}|${adjustment.delayMs}`)
+  }
+
+  if (adjustment.mode === 'tempo') {
+    filters.push(...buildAtempoFilters(adjustment.tempoRatio))
+  }
+
+  filters.push('aresample=async=1:first_pts=0', 'asetpts=PTS-STARTPTS')
+  filterParts.push(`${inputLabel}${filters.join(',')}[${outputLabel}]`)
+}
+
 function sendWhisperModelDownloadProgress(
   webContents: Electron.WebContents,
   payload: { status: 'idle' | 'downloading' | 'downloaded' | 'error'; progress: number; path?: string | null; error?: string },
@@ -2551,27 +2629,35 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
 
   if (audioInputs.length === 0) return
 
-  // Probe durations to compute audio delay offsets.
-  // If an audio file is shorter than the video it means the audio device
-  // started delivering samples late (common with Bluetooth / iPhone mics).
+  // Match each audio track to the captured video duration.
+  // Small duration deltas are more often clock drift than a true late start,
+  // so prefer tempo correction there and reserve leading silence for larger gaps.
   const videoDuration = await probeMediaDurationSeconds(videoPath)
-  const audioDelays: Map<string, number> = new Map()
+  const audioAdjustments: Map<string, AudioSyncAdjustment> = new Map()
 
   if (videoDuration > 0) {
     for (let i = 0; i < audioFilePaths.length; i++) {
       const audioDuration = await probeMediaDurationSeconds(audioFilePaths[i])
-      const delayMs = audioDuration > 0 ? Math.max(0, Math.round((videoDuration - audioDuration) * 1000)) : 0
-      audioDelays.set(audioInputs[i], delayMs)
-      if (delayMs > 0) {
-        console.log(`[mux-win] ${audioInputs[i]} audio is ${(delayMs / 1000).toFixed(2)}s shorter than video — adding ${delayMs}ms delay`)
+      const adjustment = getAudioSyncAdjustment(videoDuration, audioDuration)
+      audioAdjustments.set(audioInputs[i], adjustment)
+      if (adjustment.mode === 'tempo') {
+        console.log(
+          `[mux-win] ${audioInputs[i]} audio differs from video by ${adjustment.durationDeltaMs}ms — applying tempo ratio ${adjustment.tempoRatio.toFixed(6)}`,
+        )
+      } else if (adjustment.mode === 'delay' && adjustment.delayMs > 0) {
+        console.log(
+          `[mux-win] ${audioInputs[i]} audio appears to start late by ${adjustment.delayMs}ms — adding leading silence`,
+        )
       }
     }
   }
 
   const mixedOutputPath = `${videoPath}.muxed.mp4`
   const normalizedPauseSegments = normalizePauseSegments(pauseSegments)
-  const systemDelayMs = audioDelays.get('system') ?? 0
-  const micDelayMs = audioDelays.get('mic') ?? 0
+  const systemAdjustment =
+    audioAdjustments.get('system') ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
+  const micAdjustment =
+    audioAdjustments.get('mic') ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
 
   if (audioInputs.length === 2) {
     // Both system + mic audio: mix them
@@ -2589,19 +2675,9 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
     const systemLabel = systemPauseFilter ? '[system_trimmed]' : '[1:a]'
     const micLabel = micPauseFilter ? '[mic_trimmed]' : '[2:a]'
 
-    // Apply delay to compensate for late audio start
-    if (micDelayMs > 0) {
-      filterParts.push(`${micLabel}adelay=${micDelayMs}|${micDelayMs},asetpts=PTS-STARTPTS[m]`)
-    } else {
-      filterParts.push(`${micLabel}asetpts=PTS-STARTPTS[m]`)
-    }
-
-    if (systemDelayMs > 0) {
-      filterParts.push(`${systemLabel}adelay=${systemDelayMs}|${systemDelayMs},asetpts=PTS-STARTPTS[s]`)
-      filterParts.push(`[s][m]amix=inputs=2:duration=longest:normalize=0[aout]`)
-    } else {
-      filterParts.push(`${systemLabel}[m]amix=inputs=2:duration=longest:normalize=0[aout]`)
-    }
+    appendSyncedAudioFilter(filterParts, systemLabel, 's', systemAdjustment)
+    appendSyncedAudioFilter(filterParts, micLabel, 'm', micAdjustment)
+    filterParts.push('[s][m]amix=inputs=2:duration=longest:normalize=0[aout]')
 
     await execFileAsync(
       ffmpegPath,
@@ -2621,19 +2697,17 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
     )
   } else {
     // Single audio track
-    const pauseFilter = buildPausedAudioFilter('1:a', 'aout', normalizedPauseSegments)
-    const singleDelayMs = audioDelays.get(audioInputs[0]) ?? 0
+    const pauseFilter = buildPausedAudioFilter('1:a', 'trimmed_audio', normalizedPauseSegments)
+    const singleAdjustment =
+      audioAdjustments.get(audioInputs[0]) ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
 
-    if (pauseFilter || singleDelayMs > 0) {
+    if (pauseFilter || singleAdjustment.mode !== 'none') {
       const filterParts: string[] = []
       if (pauseFilter) {
         filterParts.push(pauseFilter)
       }
-      const srcLabel = pauseFilter ? '[aout]' : '[1:a]'
-      if (singleDelayMs > 0) {
-        filterParts.push(`${srcLabel}adelay=${singleDelayMs}|${singleDelayMs},asetpts=PTS-STARTPTS[delayed]`)
-      }
-      const outLabel = singleDelayMs > 0 ? '[delayed]' : '[aout]'
+      const srcLabel = pauseFilter ? '[trimmed_audio]' : '[1:a]'
+      appendSyncedAudioFilter(filterParts, srcLabel, 'aout', singleAdjustment)
 
       await execFileAsync(
         ffmpegPath,
@@ -2642,7 +2716,7 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
           ...inputs,
           '-filter_complex', filterParts.join(';'),
           '-map', '0:v:0',
-          '-map', outLabel,
+          '-map', '[aout]',
           '-c:v', 'copy',
           '-c:a', 'aac',
           '-b:a', '192k',
@@ -2880,39 +2954,40 @@ async function muxNativeMacRecordingWithAudio(
     return
   }
 
-  // Probe durations — if audio is shorter than video it means the audio device
-  // started late (e.g. iPhone mic over Continuity Camera). Add leading silence.
+  // Match each audio track to the captured video duration.
   const videoDuration = await probeMediaDurationSeconds(videoPath)
-  const audioDelays: Map<string, number> = new Map()
+  const audioAdjustments: Map<string, AudioSyncAdjustment> = new Map()
 
   if (videoDuration > 0) {
     for (let i = 0; i < audioFilePaths.length; i++) {
       const audioDuration = await probeMediaDurationSeconds(audioFilePaths[i])
-      const delayMs = audioDuration > 0 ? Math.max(0, Math.round((videoDuration - audioDuration) * 1000)) : 0
-      audioDelays.set(availableAudioInputs[i], delayMs)
-      if (delayMs > 0) {
-        console.log(`[mux] ${availableAudioInputs[i]} audio is ${(delayMs / 1000).toFixed(2)}s shorter than video — adding ${delayMs}ms delay`)
+      const adjustment = getAudioSyncAdjustment(videoDuration, audioDuration)
+      audioAdjustments.set(availableAudioInputs[i], adjustment)
+      if (adjustment.mode === 'tempo') {
+        console.log(
+          `[mux] ${availableAudioInputs[i]} audio differs from video by ${adjustment.durationDeltaMs}ms — applying tempo ratio ${adjustment.tempoRatio.toFixed(6)}`,
+        )
+      } else if (adjustment.mode === 'delay' && adjustment.delayMs > 0) {
+        console.log(
+          `[mux] ${availableAudioInputs[i]} audio appears to start late by ${adjustment.delayMs}ms — adding leading silence`,
+        )
       }
     }
   }
 
-  const systemDelayMs = audioDelays.get('system') ?? 0
-  const micDelayMs = audioDelays.get('microphone') ?? 0
-  const needsFilter = systemDelayMs > 0 || micDelayMs > 0
+  const systemAdjustment =
+    audioAdjustments.get('system') ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
+  const micAdjustment =
+    audioAdjustments.get('microphone') ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
+  const needsFilter = systemAdjustment.mode !== 'none' || micAdjustment.mode !== 'none'
 
   let args: string[]
   if (availableAudioInputs.length === 2) {
     if (needsFilter) {
       const filterParts: string[] = []
-      if (systemDelayMs > 0) {
-        filterParts.push(`[1:a]adelay=${systemDelayMs}|${systemDelayMs},asetpts=PTS-STARTPTS[s]`)
-      }
-      if (micDelayMs > 0) {
-        filterParts.push(`[2:a]adelay=${micDelayMs}|${micDelayMs},asetpts=PTS-STARTPTS[m]`)
-      }
-      const sLabel = systemDelayMs > 0 ? '[s]' : '[1:a]'
-      const mLabel = micDelayMs > 0 ? '[m]' : '[2:a]'
-      filterParts.push(`${sLabel}${mLabel}amix=inputs=2:duration=longest:normalize=0[aout]`)
+      appendSyncedAudioFilter(filterParts, '[1:a]', 's', systemAdjustment)
+      appendSyncedAudioFilter(filterParts, '[2:a]', 'm', micAdjustment)
+      filterParts.push('[s][m]amix=inputs=2:duration=longest:normalize=0[aout]')
       args = [
         '-y',
         ...inputs,
@@ -2940,12 +3015,15 @@ async function muxNativeMacRecordingWithAudio(
       ]
     }
   } else {
-    if (needsFilter) {
-      const delayMs = systemDelayMs || micDelayMs
+    const singleAdjustment =
+      audioAdjustments.get(availableAudioInputs[0]) ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
+    if (singleAdjustment.mode !== 'none') {
+      const filterParts: string[] = []
+      appendSyncedAudioFilter(filterParts, '[1:a]', 'aout', singleAdjustment)
       args = [
         '-y',
         ...inputs,
-        '-filter_complex', `[1:a]adelay=${delayMs}|${delayMs},asetpts=PTS-STARTPTS[aout]`,
+        '-filter_complex', filterParts.join(';'),
         '-map', '0:v:0',
         '-map', '[aout]',
         '-c:v', 'copy',
@@ -4030,12 +4108,20 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
   ipcMain.handle('switch-to-editor', () => {
     console.log('[switch-to-editor] Opening editor window')
     recordingFinalizing = false
+    const sourceSelectorWin = getSourceSelectorWindow()
+    if (sourceSelectorWin && !sourceSelectorWin.isDestroyed()) {
+      sourceSelectorWin.close()
+    }
     createEditorWindow()
   })
 
   ipcMain.handle('open-editor-early', () => {
     console.log('[open-editor-early] Opening editor window while recording finalizes')
     recordingFinalizing = true
+    const sourceSelectorWin = getSourceSelectorWindow()
+    if (sourceSelectorWin && !sourceSelectorWin.isDestroyed()) {
+      sourceSelectorWin.close()
+    }
     createEditorWindow()
   })
 

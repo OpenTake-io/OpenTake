@@ -1,7 +1,8 @@
 import { WebDemuxer } from 'web-demuxer'
 import type { SpeedRegion, TrimRegion, AudioRegion } from '@/components/video-editor/types'
-import type { VideoMuxer } from './muxer'
+import { clampMediaTimeToDuration, getMediaSyncPlaybackRate } from '@/lib/mediaTiming'
 import { resolveMediaElementSource } from './localMediaSource'
+import type { VideoMuxer } from './muxer'
 
 const AUDIO_BITRATE = 128_000
 const DECODE_BACKPRESSURE_LIMIT = 20
@@ -44,19 +45,19 @@ export class AudioProcessor {
         if (done || !chunk) break
 
         if (passthroughTimestampOffsetUs === null) {
-				passthroughTimestampOffsetUs = Math.min(0, chunk.timestamp)
-			}
+          passthroughTimestampOffsetUs = chunk.timestamp
+        }
 
-			const normalizedTimestamp = Math.max(
-				0,
-				chunk.timestamp - passthroughTimestampOffsetUs,
-			)
-			const outputChunk = passthroughTimestampOffsetUs === 0
-				? chunk
-				: this.cloneEncodedAudioChunkWithTimestamp(chunk, normalizedTimestamp)
+        const normalizedTimestamp = Math.max(
+          0,
+          chunk.timestamp - passthroughTimestampOffsetUs,
+        )
+        const outputChunk = passthroughTimestampOffsetUs === 0
+          ? chunk
+          : this.cloneEncodedAudioChunkWithTimestamp(chunk, normalizedTimestamp)
 
         await muxer.addAudioChunk(
-				outputChunk,
+          outputChunk,
           wroteAudio
             ? undefined
             : {
@@ -212,16 +213,24 @@ export class AudioProcessor {
       ? demuxer.read('audio', 0, readEndSec)
       : demuxer.read('audio')
 
+    let sourceTimestampOffsetUs: number | null = null
+
     await this.transcodeAudioStream(
       audioStream as ReadableStream<EncodedAudioChunk>,
       audioConfig,
       muxer,
       {
+        observeChunkTimestampUs: (timestampUs) => {
+          if (sourceTimestampOffsetUs === null) {
+            sourceTimestampOffsetUs = timestampUs
+          }
+        },
         shouldSkipChunk: (timestampMs) => this.isInTrimRegion(timestampMs, sortedTrims),
         transformAudioData: (data) => {
           const timestampMs = data.timestamp / 1000
           const trimOffsetMs = this.computeTrimOffset(timestampMs, sortedTrims)
-          const adjustedTimestampUs = data.timestamp - trimOffsetMs * 1000
+          const adjustedTimestampUs =
+            data.timestamp - (sourceTimestampOffsetUs ?? 0) - trimOffsetMs * 1000
           return this.cloneWithTimestamp(data, Math.max(0, adjustedTimestampUs))
         },
       },
@@ -233,6 +242,7 @@ export class AudioProcessor {
     audioConfig: AudioDecoderConfig,
     muxer: VideoMuxer,
     options: {
+      observeChunkTimestampUs?: (timestampUs: number) => void
       shouldSkipChunk?: (timestampMs: number) => boolean
       transformAudioData?: (data: AudioData) => AudioData | null
     } = {},
@@ -344,6 +354,7 @@ export class AudioProcessor {
         const { done, value: chunk } = await reader.read()
         if (done || !chunk) break
 
+        options.observeChunkTimestampUs?.(chunk.timestamp)
         const timestampMs = chunk.timestamp / 1000
         if (options.shouldSkipChunk?.(timestampMs)) continue
 
@@ -572,19 +583,10 @@ export class AudioProcessor {
 
           for (const entry of sourceAudioElements) {
             const audioEl = entry.media
-            const targetTimeSec = Math.max(
-              0,
-              Math.min(
-                currentTimeMs / 1000,
-                Number.isFinite(audioEl.duration) ? audioEl.duration : currentTimeMs / 1000,
-              ),
-            )
+            const audioDuration = Number.isFinite(audioEl.duration) ? audioEl.duration : null
+            const targetTimeSec = clampMediaTimeToDuration(currentTimeMs / 1000, audioDuration)
 
-            if (Math.abs(audioEl.playbackRate - playbackRate) > 0.0001) {
-              audioEl.playbackRate = playbackRate
-            }
-
-            const atEnd = Number.isFinite(audioEl.duration) && targetTimeSec >= audioEl.duration
+            const atEnd = audioDuration !== null && targetTimeSec >= audioDuration
             if (atEnd) {
               if (!audioEl.paused) {
                 audioEl.pause()
@@ -592,11 +594,22 @@ export class AudioProcessor {
               continue
             }
 
+            if (Math.abs(audioEl.currentTime - targetTimeSec) > 0.3) {
+              audioEl.currentTime = targetTimeSec
+            }
+
+            const syncedPlaybackRate = getMediaSyncPlaybackRate({
+              basePlaybackRate: playbackRate,
+              currentTime: audioEl.currentTime,
+              targetTime: targetTimeSec,
+            })
+            if (Math.abs(audioEl.playbackRate - syncedPlaybackRate) > 0.0001) {
+              audioEl.playbackRate = syncedPlaybackRate
+            }
+
             if (audioEl.paused) {
               audioEl.currentTime = targetTimeSec
-              audioEl.play().catch(() => {})
-            } else if (Math.abs(audioEl.currentTime - targetTimeSec) > 0.3) {
-              audioEl.currentTime = targetTimeSec
+              audioEl.play().catch(() => undefined)
             }
           }
 
@@ -607,11 +620,22 @@ export class AudioProcessor {
 
             if (isInRegion) {
               const audioOffset = (currentTimeMs - region.startMs) / 1000
+              if (Math.abs(audioEl.currentTime - audioOffset) > 0.3) {
+                audioEl.currentTime = audioOffset
+              }
+
+              const syncedPlaybackRate = getMediaSyncPlaybackRate({
+                basePlaybackRate: playbackRate,
+                currentTime: audioEl.currentTime,
+                targetTime: audioOffset,
+              })
+              if (Math.abs(audioEl.playbackRate - syncedPlaybackRate) > 0.0001) {
+                audioEl.playbackRate = syncedPlaybackRate
+              }
+
               if (audioEl.paused) {
                 audioEl.currentTime = audioOffset
-                audioEl.play().catch(() => {})
-              } else if (Math.abs(audioEl.currentTime - audioOffset) > 0.3) {
-                audioEl.currentTime = audioOffset
+                audioEl.play().catch(() => undefined)
               }
             } else {
               if (!audioEl.paused) {
