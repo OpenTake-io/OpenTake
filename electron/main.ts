@@ -8,8 +8,8 @@ import {
 	dialog,
 	ipcMain,
 	Menu,
-	nativeImage,
 	Notification,
+	nativeImage,
 	session,
 	systemPreferences,
 	Tray,
@@ -22,27 +22,28 @@ import {
 	killWindowsCaptureProcess,
 	registerIpcHandlers,
 } from "./ipc/handlers";
+import type { UpdateToastPayload } from "./updater";
 import {
 	checkForAppUpdates,
+	deferUpdateReminder,
 	dismissUpdateToast,
 	downloadAvailableUpdate,
-	deferUpdateReminder,
 	getCurrentUpdateToastPayload,
 	getUpdaterLogPath,
 	getUpdateStatusSummary,
 	installDownloadedUpdateNow,
 	previewUpdateToast,
-	skipAvailableUpdateVersion,
 	setupAutoUpdates,
+	skipAvailableUpdateVersion,
 } from "./updater";
-import type { UpdateToastPayload } from "./updater";
 import {
 	createEditorWindow,
 	createHudOverlayWindow,
 	createSourceSelectorWindow,
-	getUpdateToastWindow,
 	getHudOverlayWindow,
+	getUpdateToastWindow,
 	hideUpdateToastWindow,
+	isHudOverlayMousePassthroughSupported,
 	showUpdateToastWindow,
 } from "./windows";
 
@@ -76,14 +77,8 @@ async function logSmokeExportGpuDiagnostics() {
 	}
 
 	try {
-		console.log(
-			"[smoke-export] GPU feature status",
-			JSON.stringify(app.getGPUFeatureStatus()),
-		);
-		console.log(
-			"[smoke-export] GPU info",
-			JSON.stringify(await app.getGPUInfo("basic")),
-		);
+		console.log("[smoke-export] GPU feature status", JSON.stringify(app.getGPUFeatureStatus()));
+		console.log("[smoke-export] GPU info", JSON.stringify(await app.getGPUInfo("basic")));
 	} catch (error) {
 		console.warn("[smoke-export] Failed to read GPU diagnostics:", error);
 	}
@@ -207,11 +202,17 @@ function focusOrCreateMainWindow() {
 			return;
 		}
 
-		// On Win32, calling show/moveTop/focus on the transparent HUD overlay
-		// permanently corrupts setIgnoreMouseEvents forwarding, making it
-		// click-through.  Only focus the editor window; the HUD is alwaysOnTop
-		// so it doesn't need explicit focus.
-		if (process.platform === "win32" && !isEditorWindow(mainWindow)) {
+		// On Win32 with mouse passthrough enabled (Win11+), calling
+		// show/moveTop/focus on the transparent HUD overlay permanently corrupts
+		// setIgnoreMouseEvents forwarding, making it click-through.  Only focus
+		// the editor window; the HUD is alwaysOnTop so it doesn't need explicit
+		// focus.  On Win10 (passthrough disabled), the HUD is always interactive
+		// and can be safely shown/restored.
+		if (
+			process.platform === "win32" &&
+			!isEditorWindow(mainWindow) &&
+			isHudOverlayMousePassthroughSupported()
+		) {
 			return;
 		}
 
@@ -229,7 +230,7 @@ function focusOrCreateMainWindow() {
  * operation that may alter focus or z-order so that hover detection keeps working.
  */
 function reassertHudOverlayMouseState() {
-	if (process.platform !== "win32") {
+	if (process.platform !== "win32" || !isHudOverlayMousePassthroughSupported()) {
 		return;
 	}
 
@@ -448,7 +449,9 @@ function sendUpdateToastToWindows(channel: "update-toast-state", payload: unknow
 			return false;
 		}
 
-		const notificationKey = [updatePayload.phase, updatePayload.version, updatePayload.detail].join(":");
+		const notificationKey = [updatePayload.phase, updatePayload.version, updatePayload.detail].join(
+			":",
+		);
 		if (activeUpdateNotificationKey === notificationKey) {
 			return true;
 		}
@@ -723,10 +726,14 @@ app.whenReady().then(async () => {
 		const cameraStatus = systemPreferences.getMediaAccessStatus("camera");
 		const micStatus = systemPreferences.getMediaAccessStatus("microphone");
 		if (cameraStatus !== "granted") {
-			console.warn(`[permissions] Camera access is "${cameraStatus}" — webcam may not work. Check Windows Settings > Privacy > Camera.`);
+			console.warn(
+				`[permissions] Camera access is "${cameraStatus}" — webcam may not work. Check Windows Settings > Privacy > Camera.`,
+			);
 		}
 		if (micStatus !== "granted") {
-			console.warn(`[permissions] Microphone access is "${micStatus}" — mic recording may not work. Check Windows Settings > Privacy > Microphone.`);
+			console.warn(
+				`[permissions] Microphone access is "${micStatus}" — mic recording may not work. Check Windows Settings > Privacy > Microphone.`,
+			);
 		}
 	}
 
