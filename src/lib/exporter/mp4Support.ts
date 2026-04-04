@@ -1,4 +1,11 @@
 export const DEFAULT_MP4_CODEC = "avc1.640033";
+export const MP4_CODEC_FALLBACK_LIST = [
+	DEFAULT_MP4_CODEC,
+	"avc1.4d4033",
+	"avc1.420033",
+	"avc1.4d401f",
+	"avc1.42001f",
+] as const;
 
 export type SupportedMp4EncoderPath = {
 	codec: string;
