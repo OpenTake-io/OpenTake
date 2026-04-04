@@ -1,4 +1,5 @@
 import { WebDemuxer } from "web-demuxer";
+import { getEffectiveVideoStreamDurationSeconds } from "@/lib/mediaTiming";
 
 const DEFAULT_MAX_DECODE_QUEUE = 12;
 const DEFAULT_MAX_PENDING_FRAMES = 32;
@@ -270,7 +271,16 @@ export class ForwardFrameSource {
       throw new Error("Frame source not initialized");
     }
 
-    const clampedTargetTime = Math.max(0, Math.min(targetTimeSec, this.metadata.duration || targetTimeSec));
+    const clampedTargetTime = Math.max(
+      0,
+      Math.min(
+        targetTimeSec,
+        getEffectiveVideoStreamDurationSeconds({
+          duration: this.metadata.duration,
+          streamDuration: this.metadata.streamDuration,
+        }) || targetTimeSec,
+      ),
+    );
     if (clampedTargetTime + 0.001 < this.lastTargetTimeSec) {
       throw new Error("ForwardFrameSource only supports increasing timestamps");
     }

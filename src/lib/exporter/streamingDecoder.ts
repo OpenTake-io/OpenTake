@@ -1,5 +1,6 @@
 import { WebDemuxer } from 'web-demuxer';
 import type { TrimRegion, SpeedRegion } from '@/components/video-editor/types';
+import { getEffectiveVideoStreamDurationSeconds } from '@/lib/mediaTiming';
 
 const DEFAULT_MAX_DECODE_QUEUE = 12;
 const DEFAULT_MAX_PENDING_FRAMES = 32;
@@ -178,8 +179,12 @@ export class StreamingVideoDecoder {
     const decoderConfig = await this.demuxer.getDecoderConfig('video');
     const codec = this.metadata.codec.toLowerCase();
     const shouldPreferSoftwareDecode = codec.includes('av01') || codec.includes('av1');
+    const effectiveVideoDuration = getEffectiveVideoStreamDurationSeconds({
+      duration: this.metadata.duration,
+      streamDuration: this.metadata.streamDuration,
+    });
     const segments = this.splitBySpeed(
-      this.computeSegments(this.metadata.duration, trimRegions),
+      this.computeSegments(effectiveVideoDuration, trimRegions),
       speedRegions
     );
     const segmentOutputFrameCounts = segments.map(segment =>
@@ -512,7 +517,13 @@ export class StreamingVideoDecoder {
 
   getEffectiveDuration(trimRegions?: TrimRegion[], speedRegions?: SpeedRegion[]): number {
     if (!this.metadata) throw new Error('Must call loadMetadata() first');
-    const trimSegments = this.computeSegments(this.metadata.duration, trimRegions);
+    const trimSegments = this.computeSegments(
+      getEffectiveVideoStreamDurationSeconds({
+        duration: this.metadata.duration,
+        streamDuration: this.metadata.streamDuration,
+      }),
+      trimRegions,
+    );
     const speedSegments = this.splitBySpeed(trimSegments, speedRegions);
     return speedSegments.reduce((sum, seg) => sum + (seg.endSec - seg.startSec) / seg.speed, 0);
   }

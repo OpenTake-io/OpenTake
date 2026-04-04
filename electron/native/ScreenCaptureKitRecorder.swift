@@ -17,6 +17,7 @@ struct CaptureConfig: Codable {
 }
 
 let targetCaptureFPS = 60
+let maxInlineAudioTailExtension = CMTime(seconds: 2.0, preferredTimescale: 600)
 
 final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private let queue = DispatchQueue(label: "openscreen.screencapturekit.video")
@@ -33,6 +34,8 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private var lastSampleBuffer: CMSampleBuffer?
 	private var lastVideoPresentationTime: CMTime = .zero
 	private var lastVideoDuration: CMTime = .zero
+	private var lastInlineAudioPresentationTime: CMTime = .invalid
+	private var lastInlineAudioDuration: CMTime = .zero
 	private var isRecording = false
 	private var isPaused = false
 	private var pauseStartedHostTime: CMTime?
@@ -360,7 +363,6 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		windowValidationTask = nil
 		trackedWindowId = nil
 
-		isRecording = false
 		if let activeStream = stream {
 			do {
 				try await activeStream.stopCapture()
@@ -369,6 +371,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			}
 		}
 		stream = nil
+		isRecording = false
 
 		if let originalBuffer = lastSampleBuffer, let videoInput = videoInput {
 			let additionalTime = lastVideoPresentationTime + frameDuration(for: originalBuffer)
@@ -378,7 +381,8 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			}
 		}
 
-		let endTime = lastVideoPresentationTime + (lastSampleBuffer.map { frameDuration(for: $0) } ?? .zero)
+		let videoEndTime = lastVideoPresentationTime + (lastSampleBuffer.map { frameDuration(for: $0) } ?? .zero)
+		let endTime = resolvedCaptureEndTime(videoEndTime: videoEndTime)
 		assetWriter?.endSession(atSourceTime: endTime)
 		videoInput?.markAsFinished()
 		inlineAudioInput?.markAsFinished()
@@ -408,6 +412,8 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		lastSampleBuffer = nil
 		lastVideoPresentationTime = .zero
 		lastVideoDuration = .zero
+		lastInlineAudioPresentationTime = .invalid
+		lastInlineAudioDuration = .zero
 		frameCount = 0
 		isPaused = false
 		pauseStartedHostTime = nil
@@ -466,6 +472,34 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		return CMTime(value: 1, timescale: CMTimeScale(targetCaptureFPS))
 	}
 
+	private func latestInlineAudioEndTime() -> CMTime {
+		guard lastInlineAudioPresentationTime.isValid else {
+			return .invalid
+		}
+
+		if lastInlineAudioDuration.isValid && lastInlineAudioDuration > .zero {
+			return lastInlineAudioPresentationTime + lastInlineAudioDuration
+		}
+
+		return lastInlineAudioPresentationTime
+	}
+
+	private func resolvedCaptureEndTime(videoEndTime: CMTime) -> CMTime {
+		let inlineAudioEndTime = latestInlineAudioEndTime()
+		guard inlineAudioEndTime.isValid else {
+			return videoEndTime
+		}
+
+		if CMTimeCompare(inlineAudioEndTime, videoEndTime) <= 0 {
+			return videoEndTime
+		}
+
+		// Prevent a stray inline-audio timestamp from forcing finishWriting
+		// to finalize an arbitrarily long tail.
+		let tailExtension = CMTimeSubtract(inlineAudioEndTime, videoEndTime)
+		return videoEndTime + CMTimeMinimum(tailExtension, maxInlineAudioTailExtension)
+	}
+
 	private func appendAudioSampleBuffer(_ sampleBuffer: CMSampleBuffer, to input: AVAssetWriterInput, firstSampleTime: inout CMTime?, presentationTime: CMTime) {
 		guard input.isReadyForMoreMediaData else { return }
 
@@ -477,7 +511,11 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		// (computed by adjustedPresentationTime), so use it directly.
 		let timing = CMSampleTimingInfo(duration: sampleBuffer.duration, presentationTimeStamp: presentationTime, decodeTimeStamp: sampleBuffer.decodeTimeStamp)
 		if let retimedSampleBuffer = try? CMSampleBuffer(copying: sampleBuffer, withNewTiming: [timing]) {
-			input.append(retimedSampleBuffer)
+			let appended = input.append(retimedSampleBuffer)
+			if appended, input === inlineAudioInput {
+				lastInlineAudioPresentationTime = presentationTime
+				lastInlineAudioDuration = sampleBuffer.duration
+			}
 		}
 	}
 
