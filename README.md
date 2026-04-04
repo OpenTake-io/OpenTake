@@ -22,9 +22,6 @@ Language: EN | [简中](README.zh-CN.md)
 > Thanks to many for supporting Recordly. These help keep Recordly open-source and free!
 [**Support the project**](https://ko-fi.com/webadderall/goal?g=0)
 
-> Trading fees from this CA go towards the development of Recordly:
-8MyLec2DdJj13bHLB8YvJRv54aAbiFGF5EEQAAbspump
-
 ---
 
 ## What is Recordly?
