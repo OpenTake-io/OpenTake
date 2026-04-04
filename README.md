@@ -19,8 +19,11 @@ Language: EN | [简中](README.zh-CN.md)
 </p>
 
 > [!NOTE]
-> Huge thank you to **tadees** for supporting the project. This donation helps cover Apple Developer fees for macOS signing and notarization.
+> Thanks to many for supporting Recordly. These help keep Recordly open-source and free!
 [**Support the project**](https://ko-fi.com/webadderall/goal?g=0)
+
+> Trading fees from this CA go towards the development of Recordly:
+8MyLec2DdJj13bHLB8YvJRv54aAbiFGF5EEQAAbspump
 
 ---
 
@@ -359,6 +362,10 @@ Pull requests are welcome.
 - Anonymous Supporter
 - Erwan
 - Anonymous supporter
+
+Trading fees from this CA go towards the development of Recordly:
+8MyLec2DdJj13bHLB8YvJRv54aAbiFGF5EEQAAbspump
+
 ---
 
 # License
