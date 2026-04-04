@@ -45,6 +45,10 @@ function isHudOverlayCaptureProtectionSupported(): boolean {
 	return process.platform !== "linux";
 }
 
+function isHudOverlayMousePassthroughSupported(): boolean {
+	return process.platform !== "linux";
+}
+
 function loadHudOverlayCaptureProtectionSetting(): boolean {
 	if (hudOverlayCaptureProtectionLoaded) {
 		return hudOverlayHiddenFromCapture;
@@ -174,11 +178,17 @@ function positionUpdateToastWindow() {
 
 ipcMain.on("hud-overlay-set-ignore-mouse", (_event, ignore: boolean) => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
+		if (!isHudOverlayMousePassthroughSupported()) {
+			hudOverlayWindow.setIgnoreMouseEvents(false);
+			return;
+		}
+
 		if (ignore) {
 			hudOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
-		} else {
-			hudOverlayWindow.setIgnoreMouseEvents(false);
+			return;
 		}
+
+		hudOverlayWindow.setIgnoreMouseEvents(false);
 	}
 });
 
@@ -340,7 +350,9 @@ export function createHudOverlayWindow(): BrowserWindow {
 		win.setContentProtection(hudOverlayHiddenFromCapture);
 	}
 
-	win.setIgnoreMouseEvents(true, { forward: true });
+	if (isHudOverlayMousePassthroughSupported()) {
+		win.setIgnoreMouseEvents(true, { forward: true });
+	}
 
 	// On Windows 10, focus changes (e.g. showing a native notification) can break
 	// setIgnoreMouseEvents forwarding on a transparent always-on-top window, making
