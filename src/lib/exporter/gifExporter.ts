@@ -27,6 +27,8 @@ const GIF_WORKER_URL = new URL(
   import.meta.url,
 ).toString();
 
+const PROGRESS_SAMPLE_WINDOW_MS = 1_000;
+
 interface GifExporterConfig {
   videoUrl: string;
   width: number;
@@ -71,6 +73,8 @@ interface GifExporterConfig {
   cursorSway?: number;
   previewWidth?: number;
   previewHeight?: number;
+  maxDecodeQueue?: number;
+  maxPendingFrames?: number;
   onProgress?: (progress: ExportProgress) => void;
 }
 
@@ -114,6 +118,10 @@ export class GifExporter {
   private renderer: FrameRenderer | null = null;
   private gif: GIF | null = null;
   private cancelled = false;
+  private exportStartTimeMs = 0;
+  private progressSampleStartTimeMs = 0;
+  private progressSampleStartFrame = 0;
+  private lastRenderFps: number | undefined;
 
   constructor(config: GifExporterConfig) {
     this.config = config;
@@ -123,9 +131,16 @@ export class GifExporter {
     try {
       this.cleanup();
       this.cancelled = false;
+      this.exportStartTimeMs = this.getNowMs();
+      this.progressSampleStartTimeMs = this.exportStartTimeMs;
+      this.progressSampleStartFrame = 0;
+      this.lastRenderFps = undefined;
 
       // Initialize streaming decoder and load video metadata
-      this.streamingDecoder = new StreamingVideoDecoder();
+      this.streamingDecoder = new StreamingVideoDecoder({
+        maxDecodeQueue: this.config.maxDecodeQueue,
+        maxPendingFrames: this.config.maxPendingFrames,
+      });
       const videoInfo = await this.streamingDecoder.loadMetadata(
         this.config.videoUrl,
       );
@@ -250,6 +265,7 @@ export class GifExporter {
           percentage: 100,
           estimatedTimeRemaining: 0,
           phase: "finalizing",
+          renderFps: this.lastRenderFps,
         });
       }
 
@@ -268,6 +284,7 @@ export class GifExporter {
               percentage: 100,
               estimatedTimeRemaining: 0,
               phase: "finalizing",
+              renderFps: this.lastRenderFps,
               renderProgress: Math.round(progress * 100),
             });
           }
@@ -295,14 +312,37 @@ export class GifExporter {
   }
 
   private reportProgress(currentFrame: number, totalFrames: number) {
+    const nowMs = this.getNowMs();
+    const elapsedSeconds = Math.max(
+      (nowMs - this.exportStartTimeMs) / 1000,
+      0.001,
+    );
+    const averageRenderFps = currentFrame / elapsedSeconds;
+    const sampleElapsedMs = Math.max(nowMs - this.progressSampleStartTimeMs, 1);
+    const sampleFrameDelta = Math.max(currentFrame - this.progressSampleStartFrame, 0);
+    const renderFps = (sampleFrameDelta * 1000) / sampleElapsedMs;
+    const remainingFrames = Math.max(totalFrames - currentFrame, 0);
+    const estimatedTimeRemaining = averageRenderFps > 0 ? remainingFrames / averageRenderFps : 0;
+    this.lastRenderFps = renderFps;
+
+    if (sampleElapsedMs >= PROGRESS_SAMPLE_WINDOW_MS) {
+      this.progressSampleStartTimeMs = nowMs;
+      this.progressSampleStartFrame = currentFrame;
+    }
+
     if (this.config.onProgress) {
       this.config.onProgress({
         currentFrame,
         totalFrames,
         percentage: totalFrames > 0 ? (currentFrame / totalFrames) * 100 : 100,
-        estimatedTimeRemaining: 0,
+        estimatedTimeRemaining,
+        renderFps,
       });
     }
+  }
+
+  private getNowMs(): number {
+    return typeof performance !== "undefined" ? performance.now() : Date.now();
   }
 
   cancel(): void {
