@@ -244,6 +244,8 @@ ipcMain.on("hud-overlay-set-ignore-mouse", (_event, ignore: boolean) => {
 });
 
 let hudDragOffset: { x: number; y: number } | null = null;
+let hudDragLastCursor: { x: number; y: number } | null = null;
+let hudDragFixedSize: { width: number; height: number } | null = null;
 
 ipcMain.on("hud-overlay-drag", (_event, phase: string, screenX: number, screenY: number) => {
 	if (!hudOverlayWindow || hudOverlayWindow.isDestroyed()) return;
@@ -251,13 +253,31 @@ ipcMain.on("hud-overlay-drag", (_event, phase: string, screenX: number, screenY:
 	if (phase === "start") {
 		const bounds = hudOverlayWindow.getBounds();
 		hudDragOffset = { x: screenX - bounds.x, y: screenY - bounds.y };
+		hudDragLastCursor = { x: screenX, y: screenY };
+		hudDragFixedSize = { width: bounds.width, height: bounds.height };
 	} else if (phase === "move" && hudDragOffset) {
-		hudOverlayWindow.setPosition(
-			Math.round(screenX - hudDragOffset.x),
-			Math.round(screenY - hudDragOffset.y),
+		if (hudDragLastCursor && hudDragLastCursor.x === screenX && hudDragLastCursor.y === screenY) {
+			return;
+		}
+
+		hudDragLastCursor = { x: screenX, y: screenY };
+		const targetX = Math.round(screenX - hudDragOffset.x);
+		const targetY = Math.round(screenY - hudDragOffset.y);
+		const fixedWidth = hudDragFixedSize?.width ?? hudOverlayWindow.getBounds().width;
+		const fixedHeight = hudDragFixedSize?.height ?? hudOverlayWindow.getBounds().height;
+		hudOverlayWindow.setBounds(
+			{
+				x: targetX,
+				y: targetY,
+				width: fixedWidth,
+				height: fixedHeight,
+			},
+			false,
 		);
 	} else if (phase === "end") {
 		hudDragOffset = null;
+		hudDragLastCursor = null;
+		hudDragFixedSize = null;
 	}
 });
 
