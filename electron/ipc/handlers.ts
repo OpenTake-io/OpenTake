@@ -4102,42 +4102,13 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
     createSourceSelectorWindow()
   })
-
-  let recordingFinalizing = false
-
   ipcMain.handle('switch-to-editor', () => {
     console.log('[switch-to-editor] Opening editor window')
-    recordingFinalizing = false
     const sourceSelectorWin = getSourceSelectorWindow()
     if (sourceSelectorWin && !sourceSelectorWin.isDestroyed()) {
       sourceSelectorWin.close()
     }
     createEditorWindow()
-  })
-
-  ipcMain.handle('open-editor-early', () => {
-    console.log('[open-editor-early] Opening editor window while recording finalizes')
-    recordingFinalizing = true
-    const sourceSelectorWin = getSourceSelectorWindow()
-    if (sourceSelectorWin && !sourceSelectorWin.isDestroyed()) {
-      sourceSelectorWin.close()
-    }
-    createEditorWindow()
-  })
-
-  ipcMain.handle('is-recording-finalizing', () => {
-    return recordingFinalizing
-  })
-
-  ipcMain.handle('notify-recording-finalized', () => {
-    console.log('[notify-recording-finalized] Recording finalization complete')
-    recordingFinalizing = false
-    const allWindows = BrowserWindow.getAllWindows()
-    for (const win of allWindows) {
-      if (!win.isDestroyed()) {
-        win.webContents.send('recording-finalized')
-      }
-    }
   })
 
   ipcMain.handle('start-native-screen-recording', async (_, source: SelectedSource, options?: NativeMacRecordingOptions) => {
