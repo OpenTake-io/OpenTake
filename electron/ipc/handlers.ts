@@ -1,16 +1,27 @@
-import type { ChildProcessWithoutNullStreams } from 'node:child_process'
+import type { ChildProcessByStdio, ChildProcessWithoutNullStreams } from 'node:child_process'
 import { execFile, spawn, spawnSync } from 'node:child_process'
 import { createWriteStream, constants as fsConstants, existsSync } from 'node:fs'
 import fs from 'node:fs/promises'
 import { get as httpsGet } from 'node:https'
 import { createRequire } from 'node:module'
 import path from 'node:path'
+import type { Readable, Writable } from 'node:stream'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
-import type { SaveDialogOptions } from 'electron'
+import type { SaveDialogOptions, WebContents } from 'electron'
 import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, shell, systemPreferences } from 'electron'
 import { RECORDINGS_DIR, USER_DATA_PATH } from '../appPaths'
 import { hideCursor, showCursor } from '../cursorHider'
+import {
+  buildNativeVideoExportArgs,
+  buildTrimmedSourceAudioFilter,
+  getEditedAudioExtension,
+  getNativeVideoInputByteSize,
+  getPreferredNativeVideoEncoders,
+  parseAvailableFfmpegEncoders,
+  type NativeExportEncodingMode,
+  type NativeVideoExportFinishOptions,
+} from './nativeVideoExport'
 import { closeCountdownWindow, createCountdownWindow, getCountdownWindow } from '../windows'
 import { resolveWindowsCaptureDisplay } from './windowsCaptureSelection'
 
@@ -1164,6 +1175,414 @@ function getFfmpegBinaryPath() {
   }
 
   return ffmpegStatic
+}
+
+type NativeVideoExportSession = {
+  ffmpegProcess: ChildProcessByStdio<Writable, null, Readable>
+  outputPath: string
+  inputByteSize: number
+  maxQueuedWriteBytes: number
+  stderrOutput: string
+  encoderName: string
+  processError: Error | null
+  stdinError: Error | null
+  terminating: boolean
+  writeSequence: Promise<void>
+  completionPromise: Promise<void>
+  sender: WebContents | null
+  pendingWriteRequestIds: Set<number>
+}
+
+const nativeVideoExportSessions = new Map<string, NativeVideoExportSession>()
+let cachedNativeVideoEncoder: { ffmpegPath: string; encoderName: string } | null = null
+
+export function cleanupNativeVideoExportSessions() {
+  for (const [sessionId, session] of nativeVideoExportSessions) {
+    session.terminating = true
+    try {
+      if (!session.ffmpegProcess.stdin.destroyed) {
+        session.ffmpegProcess.stdin.destroy()
+      }
+    } catch { /* stream may already be closed */ }
+    try {
+      session.ffmpegProcess.kill('SIGKILL')
+    } catch { /* process may already be exited */ }
+    nativeVideoExportSessions.delete(sessionId)
+  }
+}
+
+function getNativeVideoExportMaxQueuedWriteBytes(inputByteSize: number) {
+  return Math.min(
+    64 * 1024 * 1024,
+    Math.max(16 * 1024 * 1024, inputByteSize * 4),
+  )
+}
+
+function isHardwareAcceleratedVideoEncoder(encoderName: string) {
+  return /(videotoolbox|nvenc|qsv|amf|mf)/i.test(encoderName)
+}
+
+async function removeTemporaryExportFile(filePath: string | null | undefined) {
+  if (!filePath) {
+    return
+  }
+
+  try {
+    await fs.rm(filePath, { force: true })
+  } catch {
+    // Ignore cleanup failures for temp export artifacts.
+  }
+}
+
+function getNativeVideoExportSessionError(
+  session: NativeVideoExportSession,
+  fallback: string,
+) {
+  return (
+    session.stdinError?.message ||
+    session.processError?.message ||
+    session.stderrOutput.trim() ||
+    fallback
+  )
+}
+
+function sendNativeVideoExportWriteFrameResult(
+  sender: WebContents | null | undefined,
+  sessionId: string,
+  requestId: number,
+  result: { success: boolean; error?: string },
+) {
+  if (!sender || sender.isDestroyed()) {
+    return
+  }
+
+  sender.send('native-video-export-write-frame-result', {
+    sessionId,
+    requestId,
+    ...result,
+  })
+}
+
+function settleNativeVideoExportWriteFrameRequest(
+  sessionId: string,
+  session: NativeVideoExportSession,
+  requestId: number,
+  result: { success: boolean; error?: string },
+) {
+  session.pendingWriteRequestIds.delete(requestId)
+  sendNativeVideoExportWriteFrameResult(session.sender, sessionId, requestId, result)
+}
+
+function flushNativeVideoExportPendingWriteRequests(
+  sessionId: string,
+  session: NativeVideoExportSession,
+  error: string,
+) {
+  for (const requestId of session.pendingWriteRequestIds) {
+    sendNativeVideoExportWriteFrameResult(session.sender, sessionId, requestId, {
+      success: false,
+      error,
+    })
+  }
+
+  session.pendingWriteRequestIds.clear()
+}
+
+function isIgnorableNativeVideoExportStreamError(error: Error | null | undefined): boolean {
+  if (!error) {
+    return false
+  }
+
+  const errno = error as NodeJS.ErrnoException
+  return (
+    errno.code === 'EPIPE' ||
+    errno.code === 'ERR_STREAM_DESTROYED' ||
+    /broken pipe|stream destroyed|eof/i.test(error.message)
+  )
+}
+
+async function waitForNativeVideoExportDrain(session: NativeVideoExportSession) {
+  if (
+    session.stdinError ||
+    session.processError ||
+    session.ffmpegProcess.stdin.destroyed ||
+    session.ffmpegProcess.stdin.writableEnded ||
+    !session.ffmpegProcess.stdin.writable ||
+    session.ffmpegProcess.stdin.writableLength <= 0
+  ) {
+    return
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup()
+      reject(new Error('Timed out while waiting for native export writer backpressure to clear'))
+    }, 15000)
+
+    const cleanup = () => {
+      clearTimeout(timeout)
+      session.ffmpegProcess.stdin.off('drain', handleDrain)
+      session.ffmpegProcess.stdin.off('error', handleError)
+      session.ffmpegProcess.off('close', handleClose)
+    }
+
+    const handleDrain = () => {
+      cleanup()
+      resolve()
+    }
+
+    const handleError = (error: Error) => {
+      cleanup()
+      reject(error)
+    }
+
+    const handleClose = () => {
+      cleanup()
+      reject(
+        new Error(
+          getNativeVideoExportSessionError(
+            session,
+            'Native video export writer closed before draining',
+          ),
+        ),
+      )
+    }
+
+    session.ffmpegProcess.stdin.once('drain', handleDrain)
+    session.ffmpegProcess.stdin.once('error', handleError)
+    session.ffmpegProcess.once('close', handleClose)
+  })
+}
+
+function getNativeVideoExportFrameLength(frameData: Uint8Array | ArrayBuffer) {
+  return frameData.byteLength
+}
+
+async function writeNativeVideoExportFrame(
+  session: NativeVideoExportSession,
+  frameData: Uint8Array | ArrayBuffer,
+) {
+  if (getNativeVideoExportFrameLength(frameData) !== session.inputByteSize) {
+    throw new Error(
+      `Native video export expected ${session.inputByteSize} bytes per frame but received ${getNativeVideoExportFrameLength(frameData)}`,
+    )
+  }
+
+  if (
+    session.stdinError ||
+    session.processError ||
+    session.ffmpegProcess.stdin.destroyed ||
+    session.ffmpegProcess.stdin.writableEnded ||
+    !session.ffmpegProcess.stdin.writable
+  ) {
+    throw new Error(
+      getNativeVideoExportSessionError(
+        session,
+        'Native video export encoder is not accepting frames',
+      ),
+    )
+  }
+
+  const frameBuffer = frameData instanceof ArrayBuffer
+    ? Buffer.from(frameData)
+    : Buffer.from(frameData.buffer, frameData.byteOffset, frameData.byteLength)
+
+  try {
+    session.ffmpegProcess.stdin.write(frameBuffer)
+  } catch (error) {
+    session.stdinError = error instanceof Error ? error : new Error(String(error))
+    throw session.stdinError
+  }
+
+  if (session.ffmpegProcess.stdin.writableLength >= session.maxQueuedWriteBytes) {
+    try {
+      await waitForNativeVideoExportDrain(session)
+    } catch (error) {
+      session.stdinError = error instanceof Error ? error : new Error(String(error))
+      throw session.stdinError
+    }
+  }
+}
+
+async function enqueueNativeVideoExportFrameWrite(
+  session: NativeVideoExportSession,
+  frameData: Uint8Array | ArrayBuffer,
+) {
+  const writePromise = session.writeSequence.then(async () => {
+    if (session.terminating) {
+      throw new Error('Native video export session was cancelled')
+    }
+
+    await writeNativeVideoExportFrame(session, frameData)
+  })
+
+  session.writeSequence = writePromise.catch(() => undefined)
+  await writePromise
+}
+
+async function getAvailableNativeVideoEncoders(ffmpegPath: string) {
+  const { stdout } = await execFileAsync(ffmpegPath, ['-hide_banner', '-encoders'], {
+    timeout: 15000,
+    maxBuffer: 20 * 1024 * 1024,
+  })
+
+  return parseAvailableFfmpegEncoders(stdout)
+}
+
+async function probeNativeVideoEncoder(
+  ffmpegPath: string,
+  encoderName: string,
+  encodingMode: NativeExportEncodingMode,
+) {
+  const outputPath = path.join(
+    app.getPath('temp'),
+    `recordly-export-probe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`,
+  )
+  const args = buildNativeVideoExportArgs(
+    encoderName,
+    {
+      width: 64,
+      height: 64,
+      frameRate: 1,
+      bitrate: 1_500_000,
+      encodingMode,
+    },
+    outputPath,
+  )
+
+  return new Promise<boolean>((resolve) => {
+    const process = spawn(ffmpegPath, args, {
+      stdio: ['pipe', 'ignore', 'pipe'],
+    })
+    let stderrOutput = ''
+    const timeout = setTimeout(() => {
+      try {
+        process.kill('SIGKILL')
+      } catch {
+        // ignore
+      }
+      resolve(false)
+    }, 15000)
+
+    process.stderr.on('data', (chunk: Buffer) => {
+      stderrOutput += chunk.toString()
+    })
+
+    process.on('close', (code) => {
+      clearTimeout(timeout)
+      void removeTemporaryExportFile(outputPath)
+      if (code !== 0 && stderrOutput.trim().length > 0) {
+        console.warn(
+          `[native-export] Encoder probe failed for ${encoderName}:`,
+          stderrOutput.trim(),
+        )
+      }
+      resolve(code === 0)
+    })
+
+    process.stdin.end(Buffer.alloc(getNativeVideoInputByteSize(64, 64), 0))
+  })
+}
+
+async function resolveNativeVideoEncoder(
+  ffmpegPath: string,
+  encodingMode: NativeExportEncodingMode,
+) {
+  if (cachedNativeVideoEncoder?.ffmpegPath === ffmpegPath) {
+    return cachedNativeVideoEncoder.encoderName
+  }
+
+  const availableEncoders = await getAvailableNativeVideoEncoders(ffmpegPath)
+  const candidates = [...new Set([...getPreferredNativeVideoEncoders(process.platform), 'libx264'])]
+
+  for (const encoderName of candidates) {
+    if (!availableEncoders.has(encoderName)) {
+      continue
+    }
+
+    if (await probeNativeVideoEncoder(ffmpegPath, encoderName, encodingMode)) {
+      cachedNativeVideoEncoder = { ffmpegPath, encoderName }
+      return encoderName
+    }
+  }
+
+  throw new Error('No usable FFmpeg encoder was available for native export')
+}
+
+async function muxNativeVideoExportAudio(
+  videoPath: string,
+  options: NativeVideoExportFinishOptions,
+) {
+  const audioMode = options.audioMode ?? 'none'
+  if (audioMode === 'none') {
+    return videoPath
+  }
+
+  const ffmpegPath = getFfmpegBinaryPath()
+  const tempArtifacts: string[] = []
+  let audioInputPath = options.audioSourcePath ?? null
+
+  if (audioMode === 'edited-track') {
+    if (!options.editedAudioData) {
+      throw new Error('Edited audio data is missing for native export')
+    }
+
+    const extension = getEditedAudioExtension(options.editedAudioMimeType)
+    audioInputPath = path.join(
+      app.getPath('temp'),
+      `recordly-export-audio-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${extension}`,
+    )
+    await fs.writeFile(audioInputPath, Buffer.from(options.editedAudioData))
+    tempArtifacts.push(audioInputPath)
+  }
+
+  if (!audioInputPath) {
+    return videoPath
+  }
+
+  const outputPath = path.join(
+    path.dirname(videoPath),
+    `${path.basename(videoPath, path.extname(videoPath))}-final.mp4`,
+  )
+
+  const args = ['-y', '-hide_banner', '-loglevel', 'error', '-i', videoPath, '-i', audioInputPath]
+
+  if (audioMode === 'trim-source') {
+    const filter = buildTrimmedSourceAudioFilter(options.trimSegments ?? [])
+    if (filter) {
+      args.push('-filter_complex', filter, '-map', '0:v:0', '-map', '[aout]')
+    } else {
+      args.push('-map', '0:v:0', '-map', '1:a:0')
+    }
+  } else {
+    args.push('-map', '0:v:0', '-map', '1:a:0')
+  }
+
+  args.push(
+    '-c:v',
+    'copy',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '192k',
+    '-shortest',
+    '-movflags',
+    '+faststart',
+    outputPath,
+  )
+
+  try {
+    await execFileAsync(ffmpegPath, args, {
+      timeout: 15 * 60 * 1000,
+      maxBuffer: 20 * 1024 * 1024,
+    })
+    await removeTemporaryExportFile(videoPath)
+    return outputPath
+  } finally {
+    await Promise.allSettled(
+      tempArtifacts.map((artifactPath) => removeTemporaryExportFile(artifactPath)),
+    )
+  }
 }
 
 /** Probe the duration of a media file (in seconds) using ffmpeg. */
@@ -3606,9 +4025,33 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     createSourceSelectorWindow()
   })
 
+  let recordingFinalizing = false
+
   ipcMain.handle('switch-to-editor', () => {
     console.log('[switch-to-editor] Opening editor window')
+    recordingFinalizing = false
     createEditorWindow()
+  })
+
+  ipcMain.handle('open-editor-early', () => {
+    console.log('[open-editor-early] Opening editor window while recording finalizes')
+    recordingFinalizing = true
+    createEditorWindow()
+  })
+
+  ipcMain.handle('is-recording-finalizing', () => {
+    return recordingFinalizing
+  })
+
+  ipcMain.handle('notify-recording-finalized', () => {
+    console.log('[notify-recording-finalized] Recording finalization complete')
+    recordingFinalizing = false
+    const allWindows = BrowserWindow.getAllWindows()
+    for (const win of allWindows) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('recording-finalized')
+      }
+    }
   })
 
   ipcMain.handle('start-native-screen-recording', async (_, source: SelectedSource, options?: NativeMacRecordingOptions) => {
@@ -4696,6 +5139,255 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
   })
 
+  ipcMain.handle(
+    'native-video-export-start',
+    async (
+      event,
+      options: {
+        width: number
+        height: number
+        frameRate: number
+        bitrate: number
+        encodingMode: NativeExportEncodingMode
+      },
+    ) => {
+      try {
+        if (options.width % 2 !== 0 || options.height % 2 !== 0) {
+          throw new Error('Native export requires even output dimensions')
+        }
+
+        const ffmpegPath = getFfmpegBinaryPath()
+        const encoderName = await resolveNativeVideoEncoder(ffmpegPath, options.encodingMode)
+        const sessionId = `recordly-export-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        const outputPath = path.join(app.getPath('temp'), `${sessionId}.mp4`)
+        const ffmpegArgs = buildNativeVideoExportArgs(encoderName, options, outputPath)
+        const ffmpegProcess = spawn(ffmpegPath, ffmpegArgs, {
+          stdio: ['pipe', 'ignore', 'pipe'],
+        }) as ChildProcessByStdio<Writable, null, Readable>
+        const inputByteSize = getNativeVideoInputByteSize(options.width, options.height)
+
+        const session: NativeVideoExportSession = {
+          ffmpegProcess,
+          outputPath,
+          inputByteSize,
+          maxQueuedWriteBytes: getNativeVideoExportMaxQueuedWriteBytes(inputByteSize),
+          stderrOutput: '',
+          encoderName,
+          processError: null,
+          stdinError: null,
+          terminating: false,
+          writeSequence: Promise.resolve(),
+          sender: event.sender,
+          pendingWriteRequestIds: new Set<number>(),
+          completionPromise: new Promise<void>((resolve, reject) => {
+            ffmpegProcess.once('error', (error) => {
+              const processError = error instanceof Error ? error : new Error(String(error))
+              if (session.terminating) {
+                resolve()
+                return
+              }
+
+              session.processError = processError
+              reject(processError)
+            })
+            ffmpegProcess.stdin.once('error', (error) => {
+              const stdinError = error instanceof Error ? error : new Error(String(error))
+              if (session.terminating && isIgnorableNativeVideoExportStreamError(stdinError)) {
+                return
+              }
+
+              session.stdinError = stdinError
+            })
+            ffmpegProcess.once('close', (code, signal) => {
+              if (session.terminating) {
+                resolve()
+                return
+              }
+
+              if (code === 0) {
+                resolve()
+                return
+              }
+
+              reject(
+                new Error(
+                  getNativeVideoExportSessionError(
+                    session,
+                    `FFmpeg exited with code ${code ?? 'unknown'}${signal ? ` (signal ${signal})` : ''}`,
+                  ),
+                ),
+              )
+            })
+          }),
+        }
+        void session.completionPromise.catch(() => undefined)
+
+        ffmpegProcess.stderr.on('data', (chunk: Buffer) => {
+          session.stderrOutput += chunk.toString()
+        })
+
+        nativeVideoExportSessions.set(sessionId, session)
+
+        console.log(
+          `[native-export] Started ${isHardwareAcceleratedVideoEncoder(encoderName) ? 'hardware' : 'software'} session ${sessionId} with ${encoderName}`,
+        )
+
+        return {
+          success: true,
+          sessionId,
+          encoderName,
+        }
+      } catch (error) {
+        console.error('[native-export] Failed to start native video export session:', error)
+        return {
+          success: false,
+          error: String(error),
+        }
+      }
+    },
+  )
+
+  ipcMain.on(
+    'native-video-export-write-frame-async',
+    (
+      event,
+      payload: {
+        sessionId: string
+        requestId: number
+        frameData: Uint8Array
+      },
+    ) => {
+      const sessionId = payload?.sessionId
+      const requestId = payload?.requestId
+      const frameData = payload?.frameData
+
+      if (typeof sessionId !== 'string' || typeof requestId !== 'number' || !frameData) {
+        return
+      }
+
+      const session = nativeVideoExportSessions.get(sessionId)
+      if (!session) {
+        sendNativeVideoExportWriteFrameResult(event.sender, sessionId, requestId, {
+          success: false,
+          error: 'Invalid native export session',
+        })
+        return
+      }
+
+      session.sender = event.sender
+      session.pendingWriteRequestIds.add(requestId)
+
+      if (session.terminating) {
+        settleNativeVideoExportWriteFrameRequest(sessionId, session, requestId, {
+          success: false,
+          error: 'Native video export session was cancelled',
+        })
+        return
+      }
+
+      if (frameData.byteLength !== session.inputByteSize) {
+        settleNativeVideoExportWriteFrameRequest(sessionId, session, requestId, {
+          success: false,
+          error: `Native video export expected ${session.inputByteSize} bytes per frame but received ${frameData.byteLength}`,
+        })
+        return
+      }
+
+      void enqueueNativeVideoExportFrameWrite(session, frameData)
+        .then(() => {
+          settleNativeVideoExportWriteFrameRequest(sessionId, session, requestId, {
+            success: true,
+          })
+        })
+        .catch((error) => {
+          session.stdinError = error instanceof Error ? error : new Error(String(error))
+          settleNativeVideoExportWriteFrameRequest(sessionId, session, requestId, {
+            success: false,
+            error: getNativeVideoExportSessionError(
+              session,
+              session.stdinError.message,
+            ),
+          })
+        })
+    },
+  )
+
+  ipcMain.handle(
+    'native-video-export-finish',
+    async (_, sessionId: string, options?: NativeVideoExportFinishOptions) => {
+      const session = nativeVideoExportSessions.get(sessionId)
+      if (!session) {
+        return { success: false, error: 'Invalid native export session' }
+      }
+
+      try {
+        await session.writeSequence
+        if (!session.ffmpegProcess.stdin.destroyed && !session.ffmpegProcess.stdin.writableEnded) {
+          session.ffmpegProcess.stdin.end()
+        }
+        await session.completionPromise
+
+        const finalizedPath = await muxNativeVideoExportAudio(session.outputPath, options ?? {})
+        const data = await fs.readFile(finalizedPath)
+        nativeVideoExportSessions.delete(sessionId)
+        await removeTemporaryExportFile(finalizedPath)
+
+        return {
+          success: true,
+          data: new Uint8Array(data),
+          encoderName: session.encoderName,
+        }
+      } catch (error) {
+        flushNativeVideoExportPendingWriteRequests(
+          sessionId,
+          session,
+          String(error),
+        )
+        nativeVideoExportSessions.delete(sessionId)
+        await removeTemporaryExportFile(session.outputPath)
+        const finalizedSuffix = session.outputPath.replace(/\.mp4$/, '-final.mp4')
+        await removeTemporaryExportFile(finalizedSuffix)
+        return {
+          success: false,
+          error: String(error),
+        }
+      }
+    },
+  )
+
+  ipcMain.handle('native-video-export-cancel', async (_, sessionId: string) => {
+    const session = nativeVideoExportSessions.get(sessionId)
+    if (!session) {
+      return { success: true }
+    }
+
+    session.terminating = true
+    nativeVideoExportSessions.delete(sessionId)
+    flushNativeVideoExportPendingWriteRequests(
+      sessionId,
+      session,
+      'Native video export session was cancelled',
+    )
+
+    try {
+      if (!session.ffmpegProcess.stdin.destroyed && !session.ffmpegProcess.stdin.writableEnded) {
+        session.ffmpegProcess.stdin.destroy()
+      }
+    } catch {
+      // Stream may already be closed.
+    }
+
+    try {
+      session.ffmpegProcess.kill('SIGKILL')
+    } catch {
+      // Process may already be closed.
+    }
+
+    await session.completionPromise.catch(() => undefined)
+    await removeTemporaryExportFile(session.outputPath)
+    return { success: true }
+  })
+
   ipcMain.handle('save-exported-video', async (event, videoData: ArrayBuffer, fileName: string) => {
     try {
       // Determine file type from extension
@@ -4735,6 +5427,37 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       return {
         success: false,
         message: 'Failed to save exported video',
+        error: String(error)
+      }
+    }
+  })
+
+  ipcMain.handle('write-exported-video-to-path', async (_event, videoData: ArrayBuffer, outputPath: string) => {
+    try {
+      const resolvedPath = path.resolve(outputPath)
+      const allowedPrefixes = [app.getPath('temp'), app.getPath('downloads'), RECORDINGS_DIR]
+      if (!allowedPrefixes.some((prefix) => resolvedPath.startsWith(prefix))) {
+        return {
+          success: false,
+          message: 'Output path is not in an allowed directory',
+          canceled: false,
+        }
+      }
+      await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
+      await fs.writeFile(resolvedPath, Buffer.from(videoData));
+
+      return {
+        success: true,
+        path: outputPath,
+        message: 'Video exported successfully',
+        canceled: false,
+      };
+    } catch (error) {
+      console.error('Failed to write exported video to path:', error)
+      return {
+        success: false,
+        message: 'Failed to write exported video',
+        canceled: false,
         error: String(error)
       }
     }
