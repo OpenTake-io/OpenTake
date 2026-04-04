@@ -1,4 +1,10 @@
-import { normalizeProjectEditor, type ProjectEditorState } from "./projectPersistence";
+import {
+	normalizeExportBackendPreference,
+	normalizeExportMp4FrameRate,
+	normalizeExportPipelineModel,
+	normalizeProjectEditor,
+	type ProjectEditorState,
+} from "./projectPersistence";
 
 type PersistedEditorControls = Pick<
 	ProjectEditorState,
@@ -28,7 +34,11 @@ type PersistedEditorControls = Pick<
 	| "padding"
 	| "webcam"
 	| "aspectRatio"
+	| "exportEncodingMode"
+	| "exportBackendPreference"
+	| "exportPipelineModel"
 	| "exportQuality"
+	| "mp4FrameRate"
 	| "exportFormat"
 	| "gifFrameRate"
 	| "gifLoop"
@@ -76,7 +86,11 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
 	padding: DEFAULT_EDITOR_CONTROLS.padding,
 	webcam: DEFAULT_EDITOR_CONTROLS.webcam,
 	aspectRatio: DEFAULT_EDITOR_CONTROLS.aspectRatio,
+	exportEncodingMode: DEFAULT_EDITOR_CONTROLS.exportEncodingMode,
+	exportBackendPreference: DEFAULT_EDITOR_CONTROLS.exportBackendPreference,
+	exportPipelineModel: DEFAULT_EDITOR_CONTROLS.exportPipelineModel,
 	exportQuality: DEFAULT_EDITOR_CONTROLS.exportQuality,
+	mp4FrameRate: DEFAULT_EDITOR_CONTROLS.mp4FrameRate,
 	exportFormat: DEFAULT_EDITOR_CONTROLS.exportFormat,
 	gifFrameRate: DEFAULT_EDITOR_CONTROLS.gifFrameRate,
 	gifLoop: DEFAULT_EDITOR_CONTROLS.gifLoop,
@@ -154,7 +168,20 @@ function normalizeEditorControls(
 		padding: raw.padding ?? fallback.padding,
 		webcam: raw.webcam ?? fallback.webcam,
 		aspectRatio: raw.aspectRatio ?? fallback.aspectRatio,
+		exportEncodingMode: raw.exportEncodingMode ?? fallback.exportEncodingMode,
+		exportBackendPreference:
+			raw.exportBackendPreference === undefined
+				? fallback.exportBackendPreference
+				: normalizeExportBackendPreference(raw.exportBackendPreference),
+		exportPipelineModel:
+			raw.exportPipelineModel === undefined
+				? fallback.exportPipelineModel
+				: normalizeExportPipelineModel(raw.exportPipelineModel),
 		exportQuality: raw.exportQuality ?? fallback.exportQuality,
+		mp4FrameRate:
+			raw.mp4FrameRate === undefined
+				? fallback.mp4FrameRate
+				: normalizeExportMp4FrameRate(raw.mp4FrameRate),
 		exportFormat: raw.exportFormat ?? fallback.exportFormat,
 		gifFrameRate: raw.gifFrameRate ?? fallback.gifFrameRate,
 		gifLoop: raw.gifLoop ?? fallback.gifLoop,
@@ -190,7 +217,11 @@ function normalizeEditorControls(
 		padding: normalized.padding,
 		webcam: normalized.webcam,
 		aspectRatio: normalized.aspectRatio,
+		exportEncodingMode: normalized.exportEncodingMode,
+		exportBackendPreference: normalized.exportBackendPreference,
+		exportPipelineModel: normalized.exportPipelineModel,
 		exportQuality: normalized.exportQuality,
+		mp4FrameRate: normalized.mp4FrameRate,
 		exportFormat: normalized.exportFormat,
 		gifFrameRate: normalized.gifFrameRate,
 		gifLoop: normalized.gifLoop,
