@@ -15,7 +15,7 @@ import { formatBinding, SHORTCUT_ACTIONS, SHORTCUT_LABELS } from "@/lib/shortcut
 import { formatShortcut } from "@/utils/platformUtils";
 import { toast } from "sonner";
 
-const RECORDLY_ISSUES_URL = "https://github.com/webadderall/Recordly/issues";
+export const RECORDLY_ISSUES_URL = "https://github.com/webadderall/Recordly/issues";
 const RECORDLY_DISCORD_URL = "https://discord.gg/FcfNN4S9m";
 const RECORDLY_X_URL = "https://x.com/webadderall";
 const CONTACT_EMAIL = "youngchen3442@gmail.com";
@@ -30,7 +30,7 @@ function DiscordIcon(props: React.SVGProps<SVGSVGElement>) {
 	);
 }
 
-async function openExternalLink(url: string, errorMessage: string) {
+export async function openExternalLink(url: string, errorMessage: string) {
 	try {
 		const result = await window.electronAPI.openExternalUrl(url);
 		if (!result.success) {
