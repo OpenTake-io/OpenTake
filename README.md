@@ -189,6 +189,20 @@ PKGBUILD, desktop entry, release sync, and optional **local-from-source** packag
 
 ## Build from source
 
+### Prerequisites
+
+**macOS:** Xcode Command Line Tools (`xcode-select --install`).
+
+**Linux (Ubuntu/Debian):**
+
+```bash
+sudo apt install build-essential cmake libx11-dev libxtst-dev libxrandr-dev libxt-dev
+```
+
+**Windows:** Visual Studio 2022 (or Build Tools) with the C++ workload and CMake.
+
+### Steps
+
 ```bash
 git clone https://github.com/webadderall/Recordly.git recordly
 cd recordly
