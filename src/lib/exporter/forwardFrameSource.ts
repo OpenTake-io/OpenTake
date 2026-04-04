@@ -1,9 +1,15 @@
 import { WebDemuxer } from "web-demuxer";
 
+const DEFAULT_MAX_DECODE_QUEUE = 12;
+const DEFAULT_MAX_PENDING_FRAMES = 32;
+
 export interface ForwardFrameSourceMetadata {
   width: number;
   height: number;
   duration: number;
+  mediaStartTime?: number;
+  streamStartTime?: number;
+  streamDuration?: number;
   codec: string;
 }
 
@@ -27,6 +33,7 @@ export class ForwardFrameSource {
   private heldFrame: VideoFrame | null = null;
   private heldFrameSec = 0;
   private lastTargetTimeSec = 0;
+  private firstFrameTimestampUs: number | null = null;
 
   private toLocalFilePath(resourceUrl: string): string | null {
     if (!resourceUrl.startsWith("file:")) {
@@ -120,11 +127,25 @@ export class ForwardFrameSource {
     const videoStream = mediaInfo.streams.find(
       (stream) => stream.codec_type_string === "video",
     );
+    const mediaStartTime =
+      typeof mediaInfo.start_time === "number" && Number.isFinite(mediaInfo.start_time)
+        ? mediaInfo.start_time
+        : 0;
+    const streamStartTime =
+      typeof videoStream?.start_time === "number" && Number.isFinite(videoStream.start_time)
+        ? videoStream.start_time
+        : mediaStartTime;
 
     this.metadata = {
       width: videoStream?.width || 0,
       height: videoStream?.height || 0,
       duration: mediaInfo.duration,
+      mediaStartTime,
+      streamStartTime,
+      streamDuration:
+        typeof videoStream?.duration === "number" && Number.isFinite(videoStream.duration)
+          ? videoStream.duration
+          : undefined,
       codec: videoStream?.codec_string || "unknown",
     };
 
@@ -177,7 +198,11 @@ export class ForwardFrameSource {
       this.decoder.configure(decoderConfig);
     }
 
-    const readEndSec = Math.max(this.metadata.duration, 0) + 0.5;
+    const readEndSec = Math.max(
+      this.metadata.duration + (this.metadata.mediaStartTime ?? 0),
+      (this.metadata.streamDuration ?? this.metadata.duration) +
+        (this.metadata.streamStartTime ?? this.metadata.mediaStartTime ?? 0),
+    ) + 0.5;
     this.reader = this.demuxer.read("video", 0, readEndSec).getReader();
 
     this.feedPromise = (async () => {
@@ -189,7 +214,10 @@ export class ForwardFrameSource {
           }
 
           while (
-            (this.decoder!.decodeQueueSize > 10 || this.pendingFrames.length > 24) &&
+            (
+              this.decoder!.decodeQueueSize > DEFAULT_MAX_DECODE_QUEUE ||
+              this.pendingFrames.length > DEFAULT_MAX_PENDING_FRAMES
+            ) &&
             !this.cancelled
           ) {
             await new Promise((resolve) => setTimeout(resolve, 1));
@@ -253,8 +281,9 @@ export class ForwardFrameSource {
       if (!firstFrame) {
         return null;
       }
+      this.firstFrameTimestampUs = firstFrame.timestamp;
       this.heldFrame = firstFrame;
-      this.heldFrameSec = firstFrame.timestamp / 1_000_000;
+      this.heldFrameSec = 0;
     }
 
     while (!this.cancelled) {
@@ -265,7 +294,13 @@ export class ForwardFrameSource {
         });
       }
 
-      const nextFrameSec = nextFrame.timestamp / 1_000_000;
+      const nextFrameSec = Math.max(
+        this.heldFrameSec,
+        Math.max(
+          0,
+          (nextFrame.timestamp - (this.firstFrameTimestampUs ?? nextFrame.timestamp)) / 1_000_000,
+        ),
+      );
       const handoffBoundarySec = (this.heldFrameSec + nextFrameSec) / 2;
       if (clampedTargetTime <= handoffBoundarySec) {
         this.pendingFrames.unshift(nextFrame);
@@ -341,5 +376,6 @@ export class ForwardFrameSource {
     this.decodeDone = false;
     this.decodeError = null;
     this.lastTargetTimeSec = 0;
+    this.firstFrameTimestampUs = null;
   }
 }

@@ -146,6 +146,7 @@
 			"high": "Alta",
 			"original": "Original"
 		},
+		"fpsTitle": "FPS",
 		"loop": "Bucle",
 		"outputDimensions": "Salida: {{dimensions}}px",
 		"sizePresetOriginalShort": "Orig",

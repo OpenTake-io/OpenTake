@@ -1,5 +1,67 @@
 import { contextBridge, ipcRenderer } from "electron";
 
+type NativeVideoExportWriteResult = { success: boolean; error?: string };
+
+const nativeVideoExportWriteRequests = new Map<
+	number,
+	{
+		sessionId: string;
+		resolve: (result: NativeVideoExportWriteResult) => void;
+	}
+>();
+
+let nextNativeVideoExportWriteRequestId = 1;
+let nativeVideoExportWriteResultListenerAttached = false;
+
+function ensureNativeVideoExportWriteResultListener() {
+	if (nativeVideoExportWriteResultListenerAttached) {
+		return;
+	}
+
+	nativeVideoExportWriteResultListenerAttached = true;
+	ipcRenderer.on(
+		"native-video-export-write-frame-result",
+		(
+			_event,
+			payload: {
+				sessionId?: string;
+				requestId?: number;
+				success?: boolean;
+				error?: string;
+			},
+		) => {
+			if (typeof payload?.requestId !== "number") {
+				return;
+			}
+
+			const pendingRequest = nativeVideoExportWriteRequests.get(payload.requestId);
+			if (!pendingRequest) {
+				return;
+			}
+
+			nativeVideoExportWriteRequests.delete(payload.requestId);
+			pendingRequest.resolve({
+				success: payload.success === true,
+				error: payload.error,
+			});
+		},
+	);
+}
+
+function settleNativeVideoExportPendingRequests(
+	sessionId: string,
+	result: NativeVideoExportWriteResult,
+) {
+	for (const [requestId, pendingRequest] of nativeVideoExportWriteRequests.entries()) {
+		if (pendingRequest.sessionId !== sessionId) {
+			continue;
+		}
+
+		nativeVideoExportWriteRequests.delete(requestId);
+		pendingRequest.resolve(result);
+	}
+}
+
 contextBridge.exposeInMainWorld("electronAPI", {
 	hudOverlaySetIgnoreMouse: (ignore: boolean) => {
 		ipcRenderer.send("hud-overlay-set-ignore-mouse", ignore);
@@ -37,6 +99,65 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	readLocalFile: (filePath: string) => {
 		return ipcRenderer.invoke("read-local-file", filePath);
 	},
+	nativeVideoExportStart: (options: {
+		width: number;
+		height: number;
+		frameRate: number;
+		bitrate: number;
+		encodingMode: "fast" | "balanced" | "quality";
+	}) => {
+		return ipcRenderer.invoke("native-video-export-start", options);
+	},
+	nativeVideoExportWriteFrame: (sessionId: string, frameData: Uint8Array) => {
+		ensureNativeVideoExportWriteResultListener();
+
+		return new Promise<NativeVideoExportWriteResult>((resolve) => {
+			const requestId = nextNativeVideoExportWriteRequestId++;
+			nativeVideoExportWriteRequests.set(requestId, {
+				sessionId,
+				resolve,
+			});
+
+			ipcRenderer.send("native-video-export-write-frame-async", {
+				sessionId,
+				requestId,
+				frameData,
+			});
+		});
+	},
+	nativeVideoExportFinish: (
+		sessionId: string,
+		options?: {
+			audioMode?: "none" | "copy-source" | "trim-source" | "edited-track";
+			audioSourcePath?: string | null;
+			trimSegments?: Array<{ startMs: number; endMs: number }>;
+			editedAudioData?: ArrayBuffer;
+			editedAudioMimeType?: string | null;
+		},
+	) => {
+		return ipcRenderer.invoke("native-video-export-finish", sessionId, options).then((result) => {
+			settleNativeVideoExportPendingRequests(sessionId, result?.success
+				? { success: true }
+				: {
+					success: false,
+					error:
+						typeof result?.error === "string"
+							? result.error
+							: "Native video export session finished before all frame writes settled.",
+				},
+			);
+
+			return result;
+		});
+	},
+	nativeVideoExportCancel: (sessionId: string) => {
+		return ipcRenderer.invoke("native-video-export-cancel", sessionId).finally(() => {
+			settleNativeVideoExportPendingRequests(sessionId, {
+				success: false,
+				error: "Native video export session was cancelled",
+			});
+		});
+	},
 	getVideoAudioFallbackPaths: (videoPath: string) => {
 		return ipcRenderer.invoke("get-video-audio-fallback-paths", videoPath);
 	},
@@ -45,6 +166,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	switchToEditor: () => {
 		return ipcRenderer.invoke("switch-to-editor");
+	},
+	openEditorEarly: () => {
+		return ipcRenderer.invoke("open-editor-early");
+	},
+	isRecordingFinalizing: () => {
+		return ipcRenderer.invoke("is-recording-finalizing") as Promise<boolean>;
+	},
+	notifyRecordingFinalized: () => {
+		return ipcRenderer.invoke("notify-recording-finalized");
+	},
+	onRecordingFinalized: (callback: () => void) => {
+		const listener = () => callback();
+		ipcRenderer.on("recording-finalized", listener);
+		return () => ipcRenderer.removeListener("recording-finalized", listener);
 	},
 	openSourceSelector: () => {
 		return ipcRenderer.invoke("open-source-selector");
@@ -166,6 +301,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	saveExportedVideo: (videoData: ArrayBuffer, fileName: string) => {
 		return ipcRenderer.invoke("save-exported-video", videoData, fileName);
+	},
+	writeExportedVideoToPath: (videoData: ArrayBuffer, outputPath: string) => {
+		return ipcRenderer.invoke("write-exported-video-to-path", videoData, outputPath);
 	},
 	openVideoFilePicker: () => {
 		return ipcRenderer.invoke("open-video-file-picker");

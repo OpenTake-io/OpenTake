@@ -1,10 +1,15 @@
 import { WebDemuxer } from 'web-demuxer';
 import type { TrimRegion, SpeedRegion } from '@/components/video-editor/types';
 
+const DEFAULT_MAX_DECODE_QUEUE = 12;
+const DEFAULT_MAX_PENDING_FRAMES = 32;
+
 export interface DecodedVideoInfo {
   width: number;
   height: number;
   duration: number; // seconds
+  mediaStartTime?: number; // seconds
+  streamStartTime?: number; // seconds
   streamDuration?: number; // seconds
   frameRate: number;
   codec: string;
@@ -32,6 +37,13 @@ export class StreamingVideoDecoder {
   private cancelled = false;
   private metadata: DecodedVideoInfo | null = null;
   private pendingFrames: VideoFrame[] = [];
+  private readonly maxDecodeQueue: number;
+  private readonly maxPendingFrames: number;
+
+  constructor(options?: { maxDecodeQueue?: number; maxPendingFrames?: number }) {
+    this.maxDecodeQueue = Math.max(1, Math.floor(options?.maxDecodeQueue ?? DEFAULT_MAX_DECODE_QUEUE));
+    this.maxPendingFrames = Math.max(1, Math.floor(options?.maxPendingFrames ?? DEFAULT_MAX_PENDING_FRAMES));
+  }
 
   private toLocalFilePath(resourceUrl: string): string | null {
     if (!resourceUrl.startsWith('file:')) {
@@ -115,6 +127,14 @@ export class StreamingVideoDecoder {
     const mediaInfo = await this.demuxer.getMediaInfo();
     const videoStream = mediaInfo.streams.find(s => s.codec_type_string === 'video');
     const audioStream = mediaInfo.streams.find(s => s.codec_type_string === 'audio');
+    const mediaStartTime =
+      typeof mediaInfo.start_time === 'number' && Number.isFinite(mediaInfo.start_time)
+        ? mediaInfo.start_time
+        : 0;
+    const streamStartTime =
+      typeof videoStream?.start_time === 'number' && Number.isFinite(videoStream.start_time)
+        ? videoStream.start_time
+        : mediaStartTime;
 
     let frameRate = 60;
     if (videoStream?.avg_frame_rate) {
@@ -130,6 +150,8 @@ export class StreamingVideoDecoder {
       width: videoStream?.width || 1920,
       height: videoStream?.height || 1080,
       duration: mediaInfo.duration,
+      mediaStartTime,
+      streamStartTime,
       streamDuration:
         typeof videoStream?.duration === 'number' && Number.isFinite(videoStream.duration)
           ? videoStream.duration
@@ -166,6 +188,14 @@ export class StreamingVideoDecoder {
     const expectedOutputFrames = segmentOutputFrameCounts.reduce((sum, count) => sum + count, 0);
     const frameDurationUs = 1_000_000 / targetFrameRate;
     const epsilonSec = 0.001;
+    const startupStabilizationSeconds = 3;
+    const startupFrameBudget = Math.max(1, Math.round(targetFrameRate * startupStabilizationSeconds));
+    let exportFrameIndex = 0;
+    let loggedSteadyStateBackpressure = false;
+
+    console.log(
+      `[StreamingVideoDecoder] Startup-safe decode backpressure active for first ${startupStabilizationSeconds}s (${startupFrameBudget} frames)`,
+    );
 
     // Async frame queue — decoder pushes, consumer pulls
     this.pendingFrames.length = 0
@@ -173,6 +203,7 @@ export class StreamingVideoDecoder {
     let frameResolve: ((frame: VideoFrame | null) => void) | null = null;
     let decodeError: Error | null = null;
     let decodeDone = false;
+    let firstDecodedFrameTimestampUs: number | null = null;
 
     this.decoder = new VideoDecoder({
       output: (frame: VideoFrame) => {
@@ -219,7 +250,11 @@ export class StreamingVideoDecoder {
 
     // One forward stream through the whole file.
     // Pass explicit range because some containers are truncated when no end is provided.
-    const readEndSec = Math.max(this.metadata.duration, this.metadata.streamDuration ?? 0) + 0.5;
+    const readEndSec = Math.max(
+      this.metadata.duration + (this.metadata.mediaStartTime ?? 0),
+      (this.metadata.streamDuration ?? this.metadata.duration) +
+        (this.metadata.streamStartTime ?? this.metadata.mediaStartTime ?? 0)
+    ) + 0.5;
     const reader = this.demuxer.read('video', 0, readEndSec).getReader();
 
     // Feed chunks to decoder in background with backpressure
@@ -229,9 +264,26 @@ export class StreamingVideoDecoder {
           const { done, value: chunk } = await reader.read();
           if (done || !chunk) break;
 
+          if (!loggedSteadyStateBackpressure && exportFrameIndex >= startupFrameBudget) {
+            loggedSteadyStateBackpressure = true;
+            console.log("[StreamingVideoDecoder] Switched to steady-state decode backpressure");
+          }
+
+          const decodeQueueLimit =
+            exportFrameIndex < startupFrameBudget
+              ? Math.min(this.maxDecodeQueue, 10)
+              : this.maxDecodeQueue;
+          const pendingFrameLimit =
+            exportFrameIndex < startupFrameBudget
+              ? Math.min(this.maxPendingFrames, 24)
+              : this.maxPendingFrames;
+
           // Backpressure on both decode queue and decoded frame backlog.
           while (
-            (this.decoder!.decodeQueueSize > 10 || pendingFrames.length > 24) &&
+            (
+              this.decoder!.decodeQueueSize > decodeQueueLimit ||
+              pendingFrames.length > pendingFrameLimit
+            ) &&
             !this.cancelled
           ) {
             await new Promise(resolve => setTimeout(resolve, 1));
@@ -259,7 +311,6 @@ export class StreamingVideoDecoder {
     // Route decoded frames into segments by timestamp, then deliver with VFR→CFR resampling
     let segmentIdx = 0;
     let segmentFrameIndex = 0;
-    let exportFrameIndex = 0;
     let lastDecodedFrameSec: number | null = null;
     let heldFrame: VideoFrame | null = null;
     let heldFrameSec = 0;
@@ -289,7 +340,18 @@ export class StreamingVideoDecoder {
       const frame = await getNextFrame();
       if (!frame) break;
 
-      const frameTimeSec = frame.timestamp / 1_000_000;
+      if (firstDecodedFrameTimestampUs === null) {
+        firstDecodedFrameTimestampUs = frame.timestamp;
+      }
+
+      const normalizedFrameTimeSec = Math.max(
+        0,
+        (frame.timestamp - firstDecodedFrameTimestampUs) / 1_000_000,
+      );
+      const frameTimeSec: number =
+        lastDecodedFrameSec === null
+          ? normalizedFrameTimeSec
+          : Math.max(lastDecodedFrameSec, normalizedFrameTimeSec);
       lastDecodedFrameSec = frameTimeSec;
 
       // Finalize completed segments before handling this frame.
@@ -383,6 +445,9 @@ export class StreamingVideoDecoder {
           break;
         }
       }
+      heldFrame.close();
+      heldFrame = null;
+    } else if (heldFrame) {
       heldFrame.close();
       heldFrame = null;
     }
