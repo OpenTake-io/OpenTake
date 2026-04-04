@@ -371,10 +371,11 @@ Pull requests are welcome.
 - Tadees
 - buildwithfur
 - Anonymous Supporter
+- Rajan RK
 - Erwan
 - Anonymous supporter
 
-Trading fees from this CA go towards the development of Recordly:
+Trading fees from this CA also go towards the development of Recordly:
 8MyLec2DdJj13bHLB8YvJRv54aAbiFGF5EEQAAbspump
 
 ---
