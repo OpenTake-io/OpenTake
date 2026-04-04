@@ -52,6 +52,7 @@ import { isVideoWallpaperSource } from "@/lib/wallpapers";
 interface FrameRenderConfig {
   width: number;
   height: number;
+  preferredRenderBackend?: "webgl" | "webgpu";
   wallpaper: string;
   zoomRegions: ZoomRegion[];
   showShadow: boolean;
@@ -211,6 +212,12 @@ export class FrameRenderer {
       antialias: true,
       resolution: 1,
       autoDensity: true,
+      autoStart: false,
+      sharedTicker: false,
+      powerPreference: "high-performance",
+      ...(this.config.preferredRenderBackend
+        ? { preference: this.config.preferredRenderBackend }
+        : {}),
     });
 
     // Setup containers

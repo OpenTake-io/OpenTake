@@ -4,12 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useScopedT } from "@/contexts/I18nContext";
 import type {
+	ExportEncodingMode,
 	ExportFormat,
+	ExportMp4FrameRate,
+	ExportPipelineModel,
 	ExportQuality,
 	GifFrameRate,
 	GifSizePreset,
 } from "@/lib/exporter";
-import { GIF_FRAME_RATES, GIF_SIZE_PRESETS } from "@/lib/exporter";
+import { GIF_FRAME_RATES, GIF_SIZE_PRESETS, MP4_FRAME_RATES } from "@/lib/exporter";
 import { cn } from "@/lib/utils";
 
 interface ExportSettingsMenuProps {
@@ -17,6 +20,12 @@ interface ExportSettingsMenuProps {
 	onExportFormatChange?: (format: ExportFormat) => void;
 	exportQuality: ExportQuality;
 	onExportQualityChange?: (quality: ExportQuality) => void;
+	exportEncodingMode: ExportEncodingMode;
+	onExportEncodingModeChange?: (encodingMode: ExportEncodingMode) => void;
+	mp4FrameRate: ExportMp4FrameRate;
+	onMp4FrameRateChange?: (frameRate: ExportMp4FrameRate) => void;
+	exportPipelineModel?: ExportPipelineModel;
+	onExportPipelineModelChange?: (pipelineModel: ExportPipelineModel) => void;
 	mp4OutputDimensions?: Record<ExportQuality, { width: number; height: number }>;
 	gifFrameRate: GifFrameRate;
 	onGifFrameRateChange?: (rate: GifFrameRate) => void;
@@ -34,6 +43,12 @@ export function ExportSettingsMenu({
 	onExportFormatChange,
 	exportQuality,
 	onExportQualityChange,
+	exportEncodingMode,
+	onExportEncodingModeChange,
+	mp4FrameRate,
+	onMp4FrameRateChange,
+	exportPipelineModel = "legacy",
+	onExportPipelineModelChange,
 	mp4OutputDimensions,
 	gifFrameRate,
 	onGifFrameRateChange,
@@ -46,6 +61,7 @@ export function ExportSettingsMenu({
 	className,
 }: ExportSettingsMenuProps) {
 	const tSettings = useScopedT("settings");
+	const isLegacyModel = exportPipelineModel === "legacy";
 
 	return (
 		<div className={cn("w-full rounded-2xl border border-white/10 bg-[#17171a] p-3 text-slate-200", className)}>
@@ -130,6 +146,108 @@ export function ExportSettingsMenu({
 							);
 						})}
 					</div>
+					<div className="mb-1 flex items-center justify-between px-1">
+						<span className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">
+							{tSettings("export.encodingTitle", "Encoding")}
+						</span>
+					</div>
+					<div className="mb-3 grid min-h-10 w-full grid-cols-3 rounded-xl border border-white/5 bg-white/5 p-0.5">
+						{([
+							{ value: "fast", label: tSettings("export.encoding.fast", "Fast") },
+							{ value: "balanced", label: tSettings("export.encoding.balanced", "Balanced") },
+							{ value: "quality", label: tSettings("export.encoding.quality", "Quality") },
+						] as const).map((option) => {
+							const isActive = exportEncodingMode === option.value;
+							return (
+								<button
+									key={option.value}
+									type="button"
+									onClick={() => onExportEncodingModeChange?.(option.value)}
+									className="relative rounded-lg px-1 py-1 text-[11px] font-medium transition-colors"
+								>
+									{isActive ? (
+										<motion.span
+											layoutId="header-export-encoding-pill"
+											className="absolute inset-0 rounded-lg bg-white"
+											transition={{ type: "spring", stiffness: 420, damping: 34 }}
+										/>
+									) : null}
+									<span className={cn("relative z-10", isActive ? "text-black" : "text-slate-400 hover:text-slate-200")}>
+										{option.label}
+									</span>
+								</button>
+							);
+						})}
+					</div>
+					<div className="mb-1 flex items-center justify-between px-1">
+						<span className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">
+							{tSettings("export.fpsTitle", "FPS")}
+						</span>
+					</div>
+					<div className="mb-3 grid min-h-10 w-full grid-cols-3 rounded-xl border border-white/5 bg-white/5 p-0.5">
+						{MP4_FRAME_RATES.map((rate) => {
+							const isActive = mp4FrameRate === rate;
+							return (
+								<button
+									key={rate}
+									type="button"
+									onClick={() => onMp4FrameRateChange?.(rate)}
+									className="relative rounded-lg px-1 py-1 text-[11px] font-medium transition-colors"
+								>
+									{isActive ? (
+										<motion.span
+											layoutId="header-export-fps-pill"
+											className="absolute inset-0 rounded-lg bg-white"
+											transition={{ type: "spring", stiffness: 420, damping: 34 }}
+										/>
+									) : null}
+									<span className={cn("relative z-10", isActive ? "text-black" : "text-slate-400 hover:text-slate-200")}>
+										{rate}
+									</span>
+								</button>
+							);
+						})}
+					</div>
+					<div className="mb-1 flex items-center justify-between px-1">
+						<span className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">
+							{tSettings("export.pipelineTitle", "Pipeline")}
+						</span>
+					</div>
+					<div className="mb-3 grid min-h-10 w-full grid-cols-2 rounded-xl border border-white/5 bg-white/5 p-0.5">
+						{([
+							{ value: "legacy", label: tSettings("export.pipeline.legacy", "Legacy") },
+							{ value: "modern", label: tSettings("export.pipeline.modern", "Lightning (Beta)") },
+						] as const).map((option) => {
+							const isActive = exportPipelineModel === option.value;
+							return (
+								<button
+									key={option.value}
+									type="button"
+									onClick={() => onExportPipelineModelChange?.(option.value)}
+									className="relative rounded-lg px-1 py-1 text-[11px] font-medium transition-colors"
+								>
+									{isActive ? (
+										<motion.span
+											layoutId="header-export-pipeline-pill"
+											className="absolute inset-0 rounded-lg bg-white"
+											transition={{ type: "spring", stiffness: 420, damping: 34 }}
+										/>
+									) : null}
+									<span className={cn("relative z-10", isActive ? "text-black" : "text-slate-400 hover:text-slate-200")}>
+										{option.label}
+									</span>
+								</button>
+							);
+						})}
+					</div>
+					<p className="mb-3 px-1 text-[10px] text-slate-500">
+						{isLegacyModel
+							? tSettings("export.pipeline.legacyHint", "Legacy uses the current stable WebCodecs export path.")
+							: tSettings(
+									"export.pipeline.lightningHint",
+									"Lightning (Beta) automatically uses the fastest compatible backend and falls back when needed.",
+							  )}
+					</p>
 				</LayoutGroup>
 			) : (
 				<div className="mb-3 space-y-2">

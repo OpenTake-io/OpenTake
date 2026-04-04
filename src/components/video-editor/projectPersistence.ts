@@ -1,4 +1,14 @@
-import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
+import type {
+	ExportBackendPreference,
+	ExportEncodingMode,
+	ExportFormat,
+	ExportMp4FrameRate,
+	ExportPipelineModel,
+	ExportQuality,
+	GifFrameRate,
+	GifSizePreset,
+} from "@/lib/exporter";
+import { isValidMp4FrameRate } from "@/lib/exporter";
 import { DEFAULT_WALLPAPER_PATH } from "@/lib/wallpapers";
 import { ASPECT_RATIOS, type AspectRatio, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
 import {
@@ -91,7 +101,11 @@ export interface ProjectEditorState {
 	autoCaptionSettings: AutoCaptionSettings;
 	webcam: WebcamOverlaySettings;
 	aspectRatio: AspectRatio;
+	exportEncodingMode: ExportEncodingMode;
+	exportBackendPreference: ExportBackendPreference;
+	exportPipelineModel: ExportPipelineModel;
 	exportQuality: ExportQuality;
+	mp4FrameRate: ExportMp4FrameRate;
 	exportFormat: ExportFormat;
 	gifFrameRate: GifFrameRate;
 	gifLoop: boolean;
@@ -110,6 +124,34 @@ function isFiniteNumber(value: unknown): value is number {
 
 function clamp(value: number, min: number, max: number) {
 	return Math.min(max, Math.max(min, value));
+}
+
+export function normalizeExportEncodingMode(value: unknown): ExportEncodingMode {
+	if (value === "fast" || value === "balanced" || value === "quality") {
+		return value;
+	}
+
+	return "balanced";
+}
+
+export function normalizeExportBackendPreference(value: unknown): ExportBackendPreference {
+	if (value === "auto" || value === "webcodecs" || value === "breeze") {
+		return value;
+	}
+
+	return "auto";
+}
+
+export function normalizeExportPipelineModel(value: unknown): ExportPipelineModel {
+	if (value === "modern" || value === "legacy") {
+		return value;
+	}
+
+	return "legacy";
+}
+
+export function normalizeExportMp4FrameRate(value: unknown): ExportMp4FrameRate {
+	return typeof value === "number" && isValidMp4FrameRate(value) ? value : 30;
 }
 
 function normalizeZoomTransitionEasing(
@@ -673,6 +715,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				isCustomAspectRatio(editor.aspectRatio))
 				? (editor.aspectRatio as AspectRatio)
 				: "16:9",
+		exportEncodingMode: normalizeExportEncodingMode(editor.exportEncodingMode),
+		exportBackendPreference: normalizeExportBackendPreference(editor.exportBackendPreference),
+		exportPipelineModel: normalizeExportPipelineModel(editor.exportPipelineModel),
 		exportQuality:
 			editor.exportQuality === "medium" ||
 			editor.exportQuality === "good" ||
@@ -680,6 +725,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			editor.exportQuality === "source"
 				? editor.exportQuality
 				: "good",
+		mp4FrameRate: normalizeExportMp4FrameRate(editor.mp4FrameRate),
 		exportFormat: editor.exportFormat === "gif" ? "gif" : "mp4",
 		gifFrameRate:
 			editor.gifFrameRate === 15 ||

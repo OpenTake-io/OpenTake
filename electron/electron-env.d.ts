@@ -75,6 +75,10 @@ interface Window {
 		) => Promise<{ success: boolean; enabled: boolean }>;
 		getSources: (opts: Electron.SourcesOptions) => Promise<ProcessedDesktopSource[]>;
 		switchToEditor: () => Promise<void>;
+		openEditorEarly: () => Promise<void>;
+		isRecordingFinalizing: () => Promise<boolean>;
+		notifyRecordingFinalized: () => Promise<void>;
+		onRecordingFinalized: (callback: () => void) => () => void;
 		openSourceSelector: () => Promise<void>;
 		selectSource: (source: any) => Promise<any>;
 		showSourceHighlight: (source: any) => Promise<{ success: boolean }>;
@@ -137,6 +141,40 @@ interface Window {
 		readLocalFile: (
 			filePath: string,
 		) => Promise<{ success: boolean; data?: Uint8Array; error?: string }>;
+		nativeVideoExportStart: (options: {
+			width: number;
+			height: number;
+			frameRate: number;
+			bitrate: number;
+			encodingMode: "fast" | "balanced" | "quality";
+		}) => Promise<{
+			success: boolean;
+			sessionId?: string;
+			encoderName?: string;
+			error?: string;
+		}>;
+		nativeVideoExportWriteFrame: (
+			sessionId: string,
+			frameData: Uint8Array,
+		) => Promise<{ success: boolean; error?: string }>;
+		nativeVideoExportFinish: (
+			sessionId: string,
+			options?: {
+				audioMode?: "none" | "copy-source" | "trim-source" | "edited-track";
+				audioSourcePath?: string | null;
+				trimSegments?: Array<{ startMs: number; endMs: number }>;
+				editedAudioData?: ArrayBuffer;
+				editedAudioMimeType?: string | null;
+			},
+		) => Promise<{
+			success: boolean;
+			data?: Uint8Array;
+			encoderName?: string;
+			error?: string;
+		}>;
+		nativeVideoExportCancel: (
+			sessionId: string,
+		) => Promise<{ success: boolean; error?: string }>;
 		getVideoAudioFallbackPaths: (
 			videoPath: string,
 		) => Promise<{ success: boolean; paths: string[]; error?: string }>;
@@ -186,6 +224,10 @@ interface Window {
 			videoData: ArrayBuffer,
 			fileName: string,
 		) => Promise<{ success: boolean; path?: string; message?: string; canceled?: boolean }>;
+		writeExportedVideoToPath: (
+			videoData: ArrayBuffer,
+			outputPath: string,
+		) => Promise<{ success: boolean; path?: string; message?: string; error?: string; canceled?: boolean }>;
 		openVideoFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
 		openAudioFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
 		openWhisperExecutablePicker: () => Promise<{
