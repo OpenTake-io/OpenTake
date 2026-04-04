@@ -75,10 +75,6 @@ interface Window {
 		) => Promise<{ success: boolean; enabled: boolean }>;
 		getSources: (opts: Electron.SourcesOptions) => Promise<ProcessedDesktopSource[]>;
 		switchToEditor: () => Promise<void>;
-		openEditorEarly: () => Promise<void>;
-		isRecordingFinalizing: () => Promise<boolean>;
-		notifyRecordingFinalized: () => Promise<void>;
-		onRecordingFinalized: (callback: () => void) => () => void;
 		openSourceSelector: () => Promise<void>;
 		selectSource: (source: any) => Promise<any>;
 		showSourceHighlight: (source: any) => Promise<{ success: boolean }>;

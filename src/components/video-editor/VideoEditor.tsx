@@ -453,7 +453,6 @@ export default function VideoEditor() {
 	const [projectLibraryEntries, setProjectLibraryEntries] = useState<ProjectLibraryEntry[]>([]);
 	const [projectBrowserOpen, setProjectBrowserOpen] = useState(false);
 	const [loading, setLoading] = useState(true);
-	const [recordingFinalizing, setRecordingFinalizing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
 	const [currentTime, setCurrentTime] = useState(0);
@@ -1523,7 +1522,6 @@ export default function VideoEditor() {
 
 	useEffect(() => {
 		async function loadInitialData() {
-			let waitingForFinalize = false;
 			try {
 				if (smokeExportConfig.enabled) {
 					if (!smokeExportConfig.inputPath) {
@@ -1601,76 +1599,17 @@ export default function VideoEditor() {
 						sourcePath: null,
 					}));
 				} else {
-					const finalizing = await window.electronAPI?.isRecordingFinalizing?.();
-					if (finalizing) {
-						waitingForFinalize = true;
-						setRecordingFinalizing(true);
-						return;
-					}
 					setError("No video to load. Please record or select a video.");
 				}
 			} catch (err) {
 				setError("Error loading video: " + String(err));
 			} finally {
-				if (!waitingForFinalize) setLoading(false);
+				setLoading(false);
 			}
 		}
 
-		// Subscribe to the finalized event BEFORE loadInitialData checks
-		// isRecordingFinalizing, so we never miss the event if it fires
-		// between the check and the subscription.
-		const cleanupFinalized = window.electronAPI?.onRecordingFinalized?.(() => {
-			setRecordingFinalizing((wasFinalizing) => {
-				if (!wasFinalizing) return false;
-				setLoading(true);
-				(async () => {
-					try {
-						const sessionResult = await window.electronAPI.getCurrentRecordingSession?.();
-						if (sessionResult?.success && sessionResult.session?.videoPath) {
-							const sourcePath = fromFileUrl(sessionResult.session.videoPath);
-							const sourceVideoUrl = toFileUrl(sourcePath);
-							setVideoSourcePath(sourcePath);
-							setVideoPath(sourceVideoUrl);
-							setCurrentProjectPath(null);
-							setLastSavedSnapshot(null);
-							pendingFreshRecordingAutoZoomPathRef.current = sourceVideoUrl;
-							setWebcam((prev) => ({
-								...prev,
-								enabled: Boolean(sessionResult.session?.webcamPath),
-								sourcePath: sessionResult.session?.webcamPath ?? null,
-							}));
-						} else {
-							const result = await window.electronAPI.getCurrentVideoPath();
-							if (result.success && result.path) {
-								const sourcePath = fromFileUrl(result.path);
-								const sourceVideoUrl = toFileUrl(sourcePath);
-								setVideoSourcePath(sourcePath);
-								setVideoPath(sourceVideoUrl);
-								setCurrentProjectPath(null);
-								setLastSavedSnapshot(null);
-								pendingFreshRecordingAutoZoomPathRef.current = sourceVideoUrl;
-								setWebcam((prev) => ({
-									...prev,
-									enabled: false,
-									sourcePath: null,
-								}));
-							} else {
-								setError("Recording finished but no video found.");
-							}
-						}
-					} catch (err) {
-						setError("Error loading video: " + String(err));
-					} finally {
-						setLoading(false);
-					}
-				})();
-				return false;
-			});
-		});
-
 		loadInitialData();
 
-		return () => { cleanupFinalized?.(); };
 	}, [applyLoadedProject, smokeExportConfig.enabled, smokeExportConfig.inputPath]);
 
 	useEffect(() => {
@@ -3823,7 +3762,7 @@ export default function VideoEditor() {
 	if (loading) {
 		return (
 			<div className="flex h-screen items-center justify-center bg-background">
-				<div className="text-foreground">{recordingFinalizing ? "Finalizing recording..." : "Loading video..."}</div>
+				<div className="text-foreground">Loading video...</div>
 				{projectBrowser}
 				<Toaster theme="dark" className="pointer-events-auto" />
 			</div>

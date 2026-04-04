@@ -371,7 +371,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
     }
 
     clearRecordingFinalizationToast();
-    await window.electronAPI.notifyRecordingFinalized();
+    await window.electronAPI.switchToEditor();
   }, [clearRecordingFinalizationToast]);
 
   const stopWebcamRecorder = useCallback(async () => {
@@ -402,8 +402,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       return null;
     }
 
-    // Open editor early so it shows "Finalizing recording..." while we finalize
-    await window.electronAPI.openEditorEarly?.();
     const webcamPath = await stopWebcamRecorder();
     await finalizeRecordingSession(result.path, webcamPath);
     return result.path;
@@ -560,11 +558,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         }
 
         let finalPath = result.path;
-
-        // Open the editor window immediately so the user sees a
-        // "Finalizing recording…" screen instead of staring at the
-        // recorder UI while mux/IO completes.
-        await window.electronAPI.openEditorEarly();
 
         if (isNativeWindows) {
           const muxResult = await window.electronAPI.muxNativeWindowsRecording(pauseSegments);
@@ -1018,9 +1011,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         if (chunks.current.length === 0) return;
 
         showRecordingFinalizationToast();
-
-        // Open editor window immediately while we process the recording
-        await window.electronAPI.openEditorEarly?.();
 
         const duration = getRecordingDurationMs(Date.now());
         const recordedChunks = chunks.current;

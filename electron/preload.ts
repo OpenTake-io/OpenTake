@@ -167,20 +167,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	switchToEditor: () => {
 		return ipcRenderer.invoke("switch-to-editor");
 	},
-	openEditorEarly: () => {
-		return ipcRenderer.invoke("open-editor-early");
-	},
-	isRecordingFinalizing: () => {
-		return ipcRenderer.invoke("is-recording-finalizing") as Promise<boolean>;
-	},
-	notifyRecordingFinalized: () => {
-		return ipcRenderer.invoke("notify-recording-finalized");
-	},
-	onRecordingFinalized: (callback: () => void) => {
-		const listener = () => callback();
-		ipcRenderer.on("recording-finalized", listener);
-		return () => ipcRenderer.removeListener("recording-finalized", listener);
-	},
 	openSourceSelector: () => {
 		return ipcRenderer.invoke("open-source-selector");
 	},
