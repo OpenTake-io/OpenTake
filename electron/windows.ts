@@ -609,37 +609,13 @@ export function createEditorWindow(): BrowserWindow {
 		},
 	});
 
-	const showEditorWindow = () => {
-		if (win.isDestroyed()) {
-			return;
-		}
-
-		if (win.isMinimized()) {
-			win.restore();
-		}
-
-		if (!win.isVisible()) {
-			win.show();
-		}
-
-		win.moveTop();
-		win.focus();
-	};
-
 	win.once("ready-to-show", () => {
 		console.log("[editor-window] ready-to-show");
-		showEditorWindow();
+		win.show();
 	});
 
 	win.webContents.on("did-finish-load", () => {
 		console.log("[editor-window] did-finish-load", win.webContents.getURL());
-		if (!win.isVisible()) {
-			setTimeout(() => {
-				if (!win.isDestroyed() && !win.isVisible()) {
-					showEditorWindow();
-				}
-			}, process.platform === "linux" ? 50 : 0);
-		}
 		win?.webContents.send("main-process-message", new Date().toLocaleString());
 	});
 
