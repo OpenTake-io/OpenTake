@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { createRequire } from "node:module";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain } from "electron";
@@ -96,8 +97,26 @@ function isHudOverlayCaptureProtectionSupported(): boolean {
 	return process.platform !== "linux";
 }
 
-function isHudOverlayMousePassthroughSupported(): boolean {
-	return process.platform !== "linux";
+function getWindowsBuildNumber(): number | null {
+	if (process.platform !== "win32") {
+		return null;
+	}
+
+	const build = Number.parseInt(os.release().split(".")[2] ?? "", 10);
+	return Number.isFinite(build) ? build : null;
+}
+
+export function isHudOverlayMousePassthroughSupported(): boolean {
+	if (process.platform === "linux") {
+		return false;
+	}
+
+	const build = getWindowsBuildNumber();
+	if (build !== null && build < 22000) {
+		return false;
+	}
+
+	return true;
 }
 
 function loadHudOverlayCaptureProtectionSetting(): boolean {
@@ -138,7 +157,9 @@ function persistHudOverlayCaptureProtectionSetting(enabled: boolean): void {
 
 function getScreen() {
 	if (!app.isReady()) {
-		throw new Error("getScreen() called before app is ready. Ensure all screen access happens after app.whenReady().");
+		throw new Error(
+			"getScreen() called before app is ready. Ensure all screen access happens after app.whenReady().",
+		);
 	}
 	return nodeRequire("electron").screen as typeof import("electron").screen;
 }
@@ -405,12 +426,13 @@ export function createHudOverlayWindow(): BrowserWindow {
 		win.setIgnoreMouseEvents(true, { forward: true });
 	}
 
-	// On Windows 10, focus changes (e.g. showing a native notification) can break
+	// On Windows 11+, focus changes (e.g. showing a native notification) can break
 	// setIgnoreMouseEvents forwarding on a transparent always-on-top window, making
 	// it permanently click-through without hover detection.  Re-initialise the
 	// pass-through-with-forwarding state whenever the window gains focus by toggling
 	// the flag off then back on so the native WS_EX_TRANSPARENT flag is fully reset.
-	if (process.platform === "win32") {
+	// On Windows 10 (build < 22000) passthrough is disabled entirely, so skip this.
+	if (process.platform === "win32" && isHudOverlayMousePassthroughSupported()) {
 		win.on("focus", () => {
 			if (!win.isDestroyed()) {
 				win.setIgnoreMouseEvents(false);
@@ -429,7 +451,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 			if (!win.isDestroyed()) {
 				win.show();
 				win.moveTop();
-				if (process.platform === "win32") {
+				if (process.platform === "win32" && isHudOverlayMousePassthroughSupported()) {
 					win.setIgnoreMouseEvents(false);
 					setTimeout(() => {
 						if (!win.isDestroyed()) {
