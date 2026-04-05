@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { USER_DATA_PATH } from "./appPaths";
+import { getPackagedRendererBaseUrl } from "./rendererServer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nodeRequire = createRequire(import.meta.url);
@@ -643,10 +644,19 @@ export function createEditorWindow(): BrowserWindow {
 		const query = new URLSearchParams(getEditorWindowQuery());
 		win.loadURL(`${VITE_DEV_SERVER_URL}?${query.toString()}`);
 	} else {
-		console.log("[editor-window] load-file", path.join(RENDERER_DIST, "index.html"));
-		win.loadFile(path.join(RENDERER_DIST, "index.html"), {
-			query: getEditorWindowQuery(),
-		});
+		const query = new URLSearchParams(getEditorWindowQuery());
+		const packagedRendererBaseUrl = getPackagedRendererBaseUrl();
+
+		if (packagedRendererBaseUrl) {
+			const targetUrl = `${packagedRendererBaseUrl}/?${query.toString()}`;
+			console.log("[editor-window] load-url", targetUrl);
+			win.loadURL(targetUrl);
+		} else {
+			console.log("[editor-window] load-file", path.join(RENDERER_DIST, "index.html"));
+			win.loadFile(path.join(RENDERER_DIST, "index.html"), {
+				query: getEditorWindowQuery(),
+			});
+		}
 	}
 
 	return win;
