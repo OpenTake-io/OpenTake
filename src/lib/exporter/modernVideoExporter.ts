@@ -132,6 +132,7 @@ export class ModernVideoExporter {
 	private renderFrameTimeMs = 0;
 	private encodeWaitTimeMs = 0;
 	private encodeWaitEvents = 0;
+	private encoderError: Error | null = null;
 	private peakEncodeQueueSize = 0;
 	private peakNativeWriteInFlight = 0;
 	private nativeCaptureTimeMs = 0;
@@ -149,6 +150,7 @@ export class ModernVideoExporter {
 		try {
 			this.cleanup();
 			this.cancelled = false;
+			this.encoderError = null;
 			this.totalExportStartTimeMs = this.getNowMs();
 
 			let stageStartedAt = this.getNowMs();
@@ -341,6 +343,14 @@ export class ModernVideoExporter {
 			this.decodeLoopTimeMs = this.getNowMs() - decodeLoopStartedAt;
 
 			if (this.cancelled) {
+				if (this.encoderError) {
+					return {
+						success: false,
+						error: this.buildLightningExportError(this.encoderError),
+						metrics: this.buildExportMetrics(),
+					};
+				}
+
 				return { success: false, error: "Export cancelled", metrics: this.buildExportMetrics() };
 			}
 
@@ -401,14 +411,15 @@ export class ModernVideoExporter {
 
 			return { success: true, blob, metrics: this.buildExportMetrics() };
 		} catch (error) {
-			if (this.cancelled) {
+			if (this.cancelled && !this.encoderError) {
 				return { success: false, error: "Export cancelled", metrics: this.buildExportMetrics() };
 			}
 
+			const resolvedError = this.encoderError ?? error;
 			console.error("Export error:", error);
 			return {
 				success: false,
-				error: this.buildLightningExportError(error),
+				error: this.buildLightningExportError(resolvedError),
 				metrics: this.buildExportMetrics(),
 			};
 		} finally {
@@ -1122,7 +1133,7 @@ export class ModernVideoExporter {
 					`[VideoExporter] Encoder error (codec: ${resolvedCodec}, ${this.config.width}x${this.config.height}):`,
 					error,
 				);
-				// Stop export — encoding failed
+				this.encoderError = error instanceof Error ? error : new Error(String(error));
 				this.cancelled = true;
 			},
 		});
@@ -1292,6 +1303,7 @@ export class ModernVideoExporter {
 		this.renderFrameTimeMs = 0;
 		this.encodeWaitTimeMs = 0;
 		this.encodeWaitEvents = 0;
+		this.encoderError = null;
 		this.peakEncodeQueueSize = 0;
 		this.peakNativeWriteInFlight = 0;
 		this.nativeCaptureTimeMs = 0;
