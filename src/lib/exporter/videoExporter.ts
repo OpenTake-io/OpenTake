@@ -99,6 +99,7 @@ export class VideoExporter {
 	private exportStartTimeMs = 0;
 	private progressSampleStartTimeMs = 0;
 	private progressSampleStartFrame = 0;
+	private encoderError: Error | null = null;
 	private nativeExportSessionId: string | null = null;
 
 	constructor(config: VideoExporterConfig) {
@@ -109,6 +110,7 @@ export class VideoExporter {
 		try {
 			this.cleanup();
 			this.cancelled = false;
+			this.encoderError = null;
 			this.exportStartTimeMs = this.getNowMs();
 			this.progressSampleStartTimeMs = this.exportStartTimeMs;
 			this.progressSampleStartFrame = 0;
@@ -230,6 +232,11 @@ export class VideoExporter {
 			);
 
 			if (this.cancelled) {
+				const encoderError = this.encoderError as Error | null;
+				if (encoderError) {
+					return { success: false, error: encoderError.message };
+				}
+
 				return { success: false, error: "Export cancelled" };
 			}
 
@@ -270,10 +277,15 @@ export class VideoExporter {
 
 			return { success: true, blob };
 		} catch (error) {
+			if (this.cancelled && !this.encoderError) {
+				return { success: false, error: "Export cancelled" };
+			}
+
+			const resolvedError = this.encoderError ?? error;
 			console.error("Export error:", error);
 			return {
 				success: false,
-				error: error instanceof Error ? error.message : String(error),
+				error: resolvedError instanceof Error ? resolvedError.message : String(resolvedError),
 			};
 		} finally {
 			this.cleanup();
@@ -678,7 +690,7 @@ export class VideoExporter {
 					`[VideoExporter] Encoder error (codec: ${resolvedCodec}, ${this.config.width}x${this.config.height}):`,
 					error,
 				);
-				// Stop export — encoding failed
+				this.encoderError = error instanceof Error ? error : new Error(String(error));
 				this.cancelled = true;
 			},
 		});
@@ -793,6 +805,7 @@ export class VideoExporter {
 		this.encodeQueue = 0;
 		this.pendingMuxing = Promise.resolve();
 		this.chunkCount = 0;
+		this.encoderError = null;
 		this.videoDescription = undefined;
 		this.videoColorSpace = undefined;
 	}
