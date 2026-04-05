@@ -10,6 +10,21 @@ export function clampMediaTimeToDuration(
   return Math.max(0, Math.min(safeTargetTime, Math.max(0, duration)));
 }
 
+export function estimateCompanionAudioStartDelaySeconds(
+  timelineDuration?: number | null,
+  audioDuration?: number | null,
+): number {
+  if (!Number.isFinite(timelineDuration) || !Number.isFinite(audioDuration)) {
+    return 0;
+  }
+
+  const safeTimelineDuration = Math.max(0, timelineDuration ?? 0);
+  const safeAudioDuration = Math.max(0, audioDuration ?? 0);
+  const estimatedDelaySeconds = safeTimelineDuration - safeAudioDuration;
+
+  return estimatedDelaySeconds > 0.05 ? estimatedDelaySeconds : 0;
+}
+
 export function getMediaSyncPlaybackRate({
   basePlaybackRate,
   currentTime,

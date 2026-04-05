@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   clampMediaTimeToDuration,
+  estimateCompanionAudioStartDelaySeconds,
   getEffectiveVideoStreamDurationSeconds,
   getEffectiveRecordingDurationMs,
   getMediaSyncPlaybackRate,
@@ -16,6 +17,17 @@ describe("clampMediaTimeToDuration", () => {
   it("leaves playback time unchanged when duration is unknown", () => {
     expect(clampMediaTimeToDuration(12, null)).toBe(12);
     expect(clampMediaTimeToDuration(12, Number.NaN)).toBe(12);
+  });
+});
+
+describe("estimateCompanionAudioStartDelaySeconds", () => {
+  it("returns the positive tail gap when companion audio is shorter", () => {
+    expect(estimateCompanionAudioStartDelaySeconds(10, 9.6)).toBeCloseTo(0.4);
+  });
+
+  it("ignores tiny or negative differences", () => {
+    expect(estimateCompanionAudioStartDelaySeconds(10, 9.97)).toBe(0);
+    expect(estimateCompanionAudioStartDelaySeconds(10, 10.5)).toBe(0);
   });
 });
 
