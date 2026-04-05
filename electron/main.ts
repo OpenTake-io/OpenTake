@@ -46,6 +46,7 @@ import {
 	isHudOverlayMousePassthroughSupported,
 	showUpdateToastWindow,
 } from "./windows";
+import { ensurePackagedRendererServer } from "./rendererServer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const IS_SMOKE_EXPORT = process.env.RECORDLY_SMOKE_EXPORT === "1";
@@ -746,6 +747,14 @@ app.whenReady().then(async () => {
 	setupApplicationMenu();
 	// Ensure recordings directory exists
 	await ensureRecordingsDir();
+
+	if (!VITE_DEV_SERVER_URL) {
+		try {
+			await ensurePackagedRendererServer(RENDERER_DIST);
+		} catch (error) {
+			console.warn("[renderer-server] Failed to start packaged renderer server:", error);
+		}
+	}
 
 	registerIpcHandlers(
 		createEditorWindowWrapper,
