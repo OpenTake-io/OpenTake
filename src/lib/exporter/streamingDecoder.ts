@@ -22,8 +22,20 @@ export interface DecodedVideoInfo {
 type OnFrameCallback = (
   frame: VideoFrame,
   exportTimestampUs: number,
-  sourceTimestampMs: number
+  sourceTimestampMs: number,
+  cursorTimestampMs: number
 ) => Promise<void>;
+
+export function getDecodedFrameStartupOffsetUs(
+  firstDecodedFrameTimestampUs: number,
+  metadata: Pick<DecodedVideoInfo, 'mediaStartTime' | 'streamStartTime'>
+): number {
+  const streamStartTimeUs = Math.round(
+    (metadata.streamStartTime ?? metadata.mediaStartTime ?? 0) * 1_000_000
+  );
+
+  return Math.max(0, firstDecodedFrameTimestampUs - streamStartTimeUs);
+}
 
 /**
  * Decodes video frames via web-demuxer + VideoDecoder in a single forward pass.
@@ -209,6 +221,7 @@ export class StreamingVideoDecoder {
     let decodeError: Error | null = null;
     let decodeDone = false;
     let firstDecodedFrameTimestampUs: number | null = null;
+    let decodedFrameStartupOffsetUs = 0;
 
     this.decoder = new VideoDecoder({
       output: (frame: VideoFrame) => {
@@ -335,7 +348,14 @@ export class StreamingVideoDecoder {
       if (sourceTimeSec >= segment.endSec - epsilonSec) return false;
 
       const clone = new VideoFrame(heldFrame, { timestamp: heldFrame.timestamp });
-      await onFrame(clone, exportFrameIndex * frameDurationUs, sourceTimeSec * 1000);
+      const sourceTimestampMs = sourceTimeSec * 1000;
+      const cursorTimestampMs = sourceTimestampMs + decodedFrameStartupOffsetUs / 1000;
+      await onFrame(
+        clone,
+        exportFrameIndex * frameDurationUs,
+        sourceTimestampMs,
+        cursorTimestampMs,
+      );
       segmentFrameIndex++;
       exportFrameIndex++;
       return true;
@@ -347,6 +367,10 @@ export class StreamingVideoDecoder {
 
       if (firstDecodedFrameTimestampUs === null) {
         firstDecodedFrameTimestampUs = frame.timestamp;
+        decodedFrameStartupOffsetUs = getDecodedFrameStartupOffsetUs(
+          firstDecodedFrameTimestampUs,
+          this.metadata,
+        );
       }
 
       const normalizedFrameTimeSec = Math.max(
@@ -419,7 +443,14 @@ export class StreamingVideoDecoder {
         }
 
         const clone = new VideoFrame(heldFrame, { timestamp: heldFrame.timestamp });
-        await onFrame(clone, exportFrameIndex * frameDurationUs, sourceTimeSec * 1000);
+        const sourceTimestampMs = sourceTimeSec * 1000;
+        const cursorTimestampMs = sourceTimestampMs + decodedFrameStartupOffsetUs / 1000;
+        await onFrame(
+          clone,
+          exportFrameIndex * frameDurationUs,
+          sourceTimestampMs,
+          cursorTimestampMs,
+        );
         segmentFrameIndex++;
         exportFrameIndex++;
       }
