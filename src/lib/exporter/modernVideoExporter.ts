@@ -122,7 +122,7 @@ export class ModernVideoExporter {
 	private nativeWriteError: Error | null = null;
 	private maxNativeWriteInFlight = 1;
 	private lastNativeExportError: string | null = null;
-	private readonly WINDOWS_FINALIZATION_TIMEOUT_MS = 180_000;
+       private readonly WINDOWS_FINALIZATION_TIMEOUT_MS = 600_000;
 	private totalExportStartTimeMs = 0;
 	private metadataLoadTimeMs = 0;
 	private rendererInitTimeMs = 0;
@@ -354,10 +354,11 @@ export class ModernVideoExporter {
 				return { success: false, error: "Export cancelled", metrics: this.buildExportMetrics() };
 			}
 
-			this.reportProgress(totalFrames, totalFrames, "finalizing");
+                       this.reportFinalizingProgress(totalFrames, 96);
 
 			if (useNativeEncoder) {
 				stageStartedAt = this.getNowMs();
+                               this.reportFinalizingProgress(totalFrames, 99);
 				const finishResult = await this.finishNativeVideoExport(nativeAudioPlan);
 				this.finalizationTimeMs = this.getNowMs() - stageStartedAt;
 				if (!finishResult.success || !finishResult.blob) {
@@ -377,9 +378,11 @@ export class ModernVideoExporter {
 
 			stageStartedAt = this.getNowMs();
 			if (this.encoder && this.encoder.state === "configured") {
+                               this.reportFinalizingProgress(totalFrames, 97);
 				await this.awaitWithWindowsTimeout(this.encoder.flush(), "encoder flush");
 			}
 
+                       this.reportFinalizingProgress(totalFrames, 98);
 			await this.awaitWithWindowsTimeout(this.pendingMuxing, "muxing queued video chunks");
 
 			if (nativeAudioPlan.audioMode !== "none" && !this.cancelled) {
@@ -390,6 +393,7 @@ export class ModernVideoExporter {
 					(this.config.sourceAudioFallbackPaths ?? []).length > 0
 				) {
 					this.audioProcessor = new AudioProcessor();
+                                       this.reportFinalizingProgress(totalFrames, 99);
 					await this.awaitWithWindowsTimeout(
 						this.audioProcessor.process(
 							demuxer,
@@ -406,6 +410,7 @@ export class ModernVideoExporter {
 				}
 			}
 
+                       this.reportFinalizingProgress(totalFrames, 99);
 			const blob = await this.awaitWithWindowsTimeout(this.muxer!.finalize(), "muxer finalization");
 			this.finalizationTimeMs = this.getNowMs() - stageStartedAt;
 
@@ -549,7 +554,11 @@ export class ModernVideoExporter {
 				promise,
 				new Promise<T>((_, reject) => {
 					timeoutId = setTimeout(() => {
-						reject(new Error(`Export timed out during ${stage} on Windows`));
+                                               reject(
+                                                       new Error(
+                                                               `Export timed out during ${stage} on Windows after ${Math.round(this.WINDOWS_FINALIZATION_TIMEOUT_MS / 60_000)} minutes`,
+                                                       ),
+                                               );
 					}, this.WINDOWS_FINALIZATION_TIMEOUT_MS);
 				}),
 			]);
@@ -890,10 +899,15 @@ export class ModernVideoExporter {
 		}
 	}
 
+       private reportFinalizingProgress(totalFrames: number, renderProgress: number) {
+               this.reportProgress(totalFrames, totalFrames, "finalizing", renderProgress);
+       }
+
 	private reportProgress(
 		currentFrame: number,
 		totalFrames: number,
 		phase: ExportProgress["phase"] = "extracting",
+               renderProgress?: number,
 	) {
 		const nowMs = this.getNowMs();
 		const elapsedSeconds = Math.max((nowMs - this.exportStartTimeMs) / 1000, 0.001);
@@ -903,6 +917,16 @@ export class ModernVideoExporter {
 		const sampleRenderFps = (sampleFrameDelta * 1000) / sampleElapsedMs;
 		const remainingFrames = Math.max(totalFrames - currentFrame, 0);
 		const estimatedTimeRemaining = averageRenderFps > 0 ? remainingFrames / averageRenderFps : 0;
+               const safeRenderProgress =
+                       phase === "finalizing"
+                               ? Math.max(0, Math.min(renderProgress ?? 99, 99))
+                               : undefined;
+               const percentage =
+                       phase === "finalizing"
+                               ? safeRenderProgress ?? 99
+                               : totalFrames > 0
+                                       ? (currentFrame / totalFrames) * 100
+                                       : 100;
 
 		if (nowMs - this.lastThroughputLogTimeMs >= 1000 || currentFrame === totalFrames) {
 			const safeFrameCount = Math.max(this.processedFrameCount, 1);
@@ -946,13 +970,14 @@ export class ModernVideoExporter {
 			this.config.onProgress({
 				currentFrame,
 				totalFrames,
-				percentage: totalFrames > 0 ? (currentFrame / totalFrames) * 100 : 100,
+                               percentage,
 				estimatedTimeRemaining,
 				renderFps: sampleRenderFps,
 				renderBackend: this.renderBackend ?? undefined,
 				encodeBackend: this.encodeBackend ?? undefined,
 				encoderName: this.encoderName ?? undefined,
 				phase,
+                               renderProgress: safeRenderProgress,
 			});
 		}
 	}

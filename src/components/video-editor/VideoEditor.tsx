@@ -3723,6 +3723,14 @@ export default function VideoEditor() {
 
 	const isExportSaving = exportProgress?.phase === "saving";
 	const isExportFinalizing = exportProgress?.phase === "finalizing";
+       const exportFinalizingProgress = isExportFinalizing
+               ? Math.min(
+                               typeof exportProgress?.renderProgress === "number"
+                                       ? exportProgress.renderProgress
+                                       : (exportProgress?.percentage ?? 99),
+                               99,
+                 )
+               : null;
 	const isLightningExportInProgress =
 		exportFormat === "mp4" && exportPipelineModel === "modern" && (isExporting || exportProgress !== null);
 	const isLegacyExportInProgress =
@@ -3738,9 +3746,9 @@ export default function VideoEditor() {
 	const exportPercentLabel = exportProgress
 		? isExportSaving
 			? t("editor.exportStatus.saving", "Opening save dialog...")
-			: isExportFinalizing && typeof exportProgress.renderProgress === "number"
+                       : isExportFinalizing
 				? t("editor.exportStatus.finalizingPercent", "Finalizing {{percent}}%", {
-						percent: Math.round(exportProgress.renderProgress),
+                                               percent: Math.round(exportFinalizingProgress ?? 99),
 					})
 				: t("editor.exportStatus.completePercent", "{{percent}}% complete", {
 						percent: Math.round(exportProgress.percentage),
@@ -3942,7 +3950,7 @@ export default function VideoEditor() {
 											<div
 												className="h-full bg-[#2563EB] transition-all duration-300 ease-out"
 												style={{
-													width: `${Math.min(isExportFinalizing && typeof exportProgress?.renderProgress === "number" ? exportProgress.renderProgress : (exportProgress?.percentage ?? 8), 100)}%`,
+                                                                              width: `${Math.min(exportFinalizingProgress ?? (exportProgress?.percentage ?? 8), 100)}%`,
 												}}
 											/>
 										)}
