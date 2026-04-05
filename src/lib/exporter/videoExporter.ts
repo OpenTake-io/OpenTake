@@ -210,7 +210,7 @@ export class VideoExporter {
 				this.config.frameRate,
 				this.config.trimRegions,
 				this.config.speedRegions,
-				async (videoFrame, _exportTimestampUs, sourceTimestampMs) => {
+				async (videoFrame, _exportTimestampUs, sourceTimestampMs, cursorTimestampMs) => {
 					if (this.cancelled) {
 						videoFrame.close();
 						return;
@@ -218,7 +218,8 @@ export class VideoExporter {
 
 					const timestamp = frameIndex * frameDuration;
 					const sourceTimestampUs = sourceTimestampMs * 1000;
-					await this.renderer!.renderFrame(videoFrame, sourceTimestampUs);
+					const cursorTimestampUs = cursorTimestampMs * 1000;
+					await this.renderer!.renderFrame(videoFrame, sourceTimestampUs, cursorTimestampUs);
 					videoFrame.close();
 
 					if (useNativeEncoder) {

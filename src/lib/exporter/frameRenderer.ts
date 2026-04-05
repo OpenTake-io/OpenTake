@@ -802,7 +802,11 @@ export class FrameRenderer {
     }
   }
 
-  async renderFrame(videoFrame: VideoFrame, timestamp: number): Promise<void> {
+  async renderFrame(
+    videoFrame: VideoFrame,
+    timestamp: number,
+    cursorTimestamp = timestamp,
+  ): Promise<void> {
     if (!this.app || !this.videoContainer || !this.cameraContainer) {
       throw new Error("Renderer not initialized");
     }
@@ -841,11 +845,12 @@ export class FrameRenderer {
     this.updateLayout();
 
     const timeMs = this.currentVideoTime * 1000;
+    const cursorTimeMs = cursorTimestamp / 1000;
 
     if (this.cursorOverlay) {
       this.cursorOverlay.update(
         this.config.cursorTelemetry ?? [],
-        timeMs,
+        cursorTimeMs,
         this.layoutCache.maskRect,
         this.config.showCursor ?? true,
         false,

@@ -328,7 +328,7 @@ export class ModernVideoExporter {
 				this.config.frameRate,
 				this.config.trimRegions,
 				this.config.speedRegions,
-				async (videoFrame, _exportTimestampUs, sourceTimestampMs) => {
+				async (videoFrame, _exportTimestampUs, sourceTimestampMs, cursorTimestampMs) => {
 					const callbackStartedAt = this.getNowMs();
 					if (this.cancelled) {
 						videoFrame.close();
@@ -337,8 +337,9 @@ export class ModernVideoExporter {
 
 					const timestamp = frameIndex * frameDuration;
 					const sourceTimestampUs = sourceTimestampMs * 1000;
+					const cursorTimestampUs = cursorTimestampMs * 1000;
 					const renderStartedAt = this.getNowMs();
-					await this.renderer!.renderFrame(videoFrame, sourceTimestampUs);
+					await this.renderer!.renderFrame(videoFrame, sourceTimestampUs, cursorTimestampUs);
 					this.renderFrameTimeMs += this.getNowMs() - renderStartedAt;
 					videoFrame.close();
 
