@@ -48,7 +48,11 @@ import {
 	VideoExporter,
 } from "@/lib/exporter";
 import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
-import { clampMediaTimeToDuration, getMediaSyncPlaybackRate } from "@/lib/mediaTiming";
+import {
+	clampMediaTimeToDuration,
+	estimateCompanionAudioStartDelaySeconds,
+	getMediaSyncPlaybackRate,
+} from "@/lib/mediaTiming";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { type AspectRatio, getAspectRatioValue } from "@/utils/aspectRatioUtils";
 import { resolveAutoCaptionSourcePath } from "./autoCaptionSource";
@@ -2954,7 +2958,15 @@ export default function VideoEditor() {
 
 		for (const audio of sourceAudioElementsRef.current.values()) {
 			const audioDuration = Number.isFinite(audio.duration) ? audio.duration : null;
-			const targetTime = clampMediaTimeToDuration(currentTime, audioDuration);
+			const startDelaySeconds = estimateCompanionAudioStartDelaySeconds(
+				duration,
+				audioDuration,
+			);
+			const beforeAudioStart = currentTime + 0.001 < startDelaySeconds;
+			const targetTime = clampMediaTimeToDuration(
+				currentTime - startDelaySeconds,
+				audioDuration,
+			);
 
 			if (timelineJumped || Math.abs(audio.currentTime - targetTime) > driftThreshold) {
 				try {
@@ -2974,7 +2986,7 @@ export default function VideoEditor() {
 			}
 
 			const atEnd = audioDuration !== null && targetTime >= audioDuration;
-			if (isPlaying && !atEnd) {
+			if (isPlaying && !beforeAudioStart && !atEnd) {
 				audio.play().catch(() => undefined);
 			} else if (!audio.paused) {
 				audio.pause();
@@ -2982,7 +2994,7 @@ export default function VideoEditor() {
 		}
 
 		lastSourceAudioSyncTimeRef.current = currentTime;
-	}, [currentTime, isPlaying, sourceAudioFallbackPaths, speedRegions]);
+	}, [currentTime, duration, isPlaying, sourceAudioFallbackPaths, speedRegions]);
 
 	const showExportSuccessToast = useCallback((filePath: string) => {
 		toast.success(`Exported successfully to ${filePath}`, {
@@ -3723,14 +3735,14 @@ export default function VideoEditor() {
 
 	const isExportSaving = exportProgress?.phase === "saving";
 	const isExportFinalizing = exportProgress?.phase === "finalizing";
-       const exportFinalizingProgress = isExportFinalizing
-               ? Math.min(
-                               typeof exportProgress?.renderProgress === "number"
-                                       ? exportProgress.renderProgress
-                                       : (exportProgress?.percentage ?? 99),
-                               99,
-                 )
-               : null;
+	const exportFinalizingProgress = isExportFinalizing
+		? Math.min(
+				typeof exportProgress?.renderProgress === "number"
+					? exportProgress.renderProgress
+					: (exportProgress?.percentage ?? 99),
+				99,
+		  )
+		: null;
 	const isLightningExportInProgress =
 		exportFormat === "mp4" && exportPipelineModel === "modern" && (isExporting || exportProgress !== null);
 	const isLegacyExportInProgress =
@@ -3746,9 +3758,9 @@ export default function VideoEditor() {
 	const exportPercentLabel = exportProgress
 		? isExportSaving
 			? t("editor.exportStatus.saving", "Opening save dialog...")
-                       : isExportFinalizing
+			: isExportFinalizing
 				? t("editor.exportStatus.finalizingPercent", "Finalizing {{percent}}%", {
-                                               percent: Math.round(exportFinalizingProgress ?? 99),
+						percent: Math.round(exportFinalizingProgress ?? 99),
 					})
 				: t("editor.exportStatus.completePercent", "{{percent}}% complete", {
 						percent: Math.round(exportProgress.percentage),
@@ -3950,7 +3962,7 @@ export default function VideoEditor() {
 											<div
 												className="h-full bg-[#2563EB] transition-all duration-300 ease-out"
 												style={{
-                                                                              width: `${Math.min(exportFinalizingProgress ?? (exportProgress?.percentage ?? 8), 100)}%`,
+													width: `${Math.min(exportFinalizingProgress ?? (exportProgress?.percentage ?? 8), 100)}%`,
 												}}
 											/>
 										)}

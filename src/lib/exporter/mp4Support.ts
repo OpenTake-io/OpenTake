@@ -59,6 +59,66 @@ function scaleDimensions(width: number, height: number, scale: number): { width:
 	};
 }
 
+function appendEncoderCandidate(
+	candidates: SupportedMp4EncoderPath[],
+	candidate: SupportedMp4EncoderPath | null | undefined,
+): void {
+	if (!candidate) {
+		return;
+	}
+
+	const alreadyIncluded = candidates.some((value) => {
+		return (
+			value.codec === candidate.codec &&
+			value.hardwareAcceleration === candidate.hardwareAcceleration
+		);
+	});
+
+	if (!alreadyIncluded) {
+		candidates.push(candidate);
+	}
+}
+
+export function getOrderedSupportedMp4EncoderCandidates(options: {
+	codec?: string;
+	preferredEncoderPath?: SupportedMp4EncoderPath | null;
+}): SupportedMp4EncoderPath[] {
+	const orderedCodecs = Array.from(
+		new Set(
+			[
+				options.preferredEncoderPath?.codec,
+				options.codec,
+				...MP4_CODEC_FALLBACK_LIST,
+			].filter((value): value is string => typeof value === "string" && value.length > 0),
+		),
+	);
+	const candidates: SupportedMp4EncoderPath[] = [];
+
+	if (options.preferredEncoderPath?.hardwareAcceleration === "prefer-hardware") {
+		appendEncoderCandidate(candidates, options.preferredEncoderPath);
+	}
+
+	for (const codec of orderedCodecs) {
+		appendEncoderCandidate(candidates, {
+			codec,
+			hardwareAcceleration: "prefer-hardware",
+		});
+	}
+
+	if (options.preferredEncoderPath?.hardwareAcceleration === "prefer-software") {
+		appendEncoderCandidate(candidates, options.preferredEncoderPath);
+	}
+
+	for (const codec of orderedCodecs) {
+		appendEncoderCandidate(candidates, {
+			codec,
+			hardwareAcceleration: "prefer-software",
+		});
+	}
+
+	return candidates;
+}
+
 export async function resolveSupportedMp4EncoderPath(
 	options: ResolveMp4EncoderPathOptions,
 ): Promise<SupportedMp4EncoderPath | null> {
