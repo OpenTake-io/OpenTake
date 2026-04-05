@@ -95,7 +95,7 @@ export class VideoExporter {
 	private videoColorSpace: VideoColorSpaceInit | undefined;
 	private pendingMuxing: Promise<void> = Promise.resolve();
 	private chunkCount = 0;
-	private readonly WINDOWS_FINALIZATION_TIMEOUT_MS = 180_000;
+	private readonly WINDOWS_FINALIZATION_TIMEOUT_MS = 600_000;
 	private exportStartTimeMs = 0;
 	private progressSampleStartTimeMs = 0;
 	private progressSampleStartFrame = 0;
@@ -240,22 +240,28 @@ export class VideoExporter {
 				return { success: false, error: "Export cancelled" };
 			}
 
+			this.reportFinalizingProgress(totalFrames, 96);
+
 			if (useNativeEncoder && nativeAudioPlan) {
+				this.reportFinalizingProgress(totalFrames, 99);
 				return await this.finishNativeVideoExport(nativeAudioPlan);
 			}
 
 			// Finalize encoding
 			if (this.encoder && this.encoder.state === "configured") {
+				this.reportFinalizingProgress(totalFrames, 97);
 				await this.awaitWithWindowsTimeout(this.encoder.flush(), "encoder flush");
 			}
 
 			// Wait for queued muxing operations to complete
+			this.reportFinalizingProgress(totalFrames, 98);
 			await this.awaitWithWindowsTimeout(this.pendingMuxing, "muxing queued video chunks");
 
 			if (hasAudio && !this.cancelled) {
 				const demuxer = this.streamingDecoder.getDemuxer();
 				if (demuxer || hasAudioRegions || hasSourceAudioFallback) {
 					this.audioProcessor = new AudioProcessor();
+					this.reportFinalizingProgress(totalFrames, 99);
 					await this.awaitWithWindowsTimeout(
 						this.audioProcessor.process(
 							demuxer,
@@ -273,6 +279,7 @@ export class VideoExporter {
 			}
 
 			// Finalize muxer and get output blob
+			this.reportFinalizingProgress(totalFrames, 99);
 			const blob = await this.awaitWithWindowsTimeout(this.muxer!.finalize(), "muxer finalization");
 
 			return { success: true, blob };
@@ -326,7 +333,11 @@ export class VideoExporter {
 				promise,
 				new Promise<T>((_, reject) => {
 					timeoutId = setTimeout(() => {
-						reject(new Error(`Export timed out during ${stage} on Windows`));
+						reject(
+							new Error(
+								`Export timed out during ${stage} on Windows after ${Math.round(this.WINDOWS_FINALIZATION_TIMEOUT_MS / 60_000)} minutes`,
+							),
+						);
 					}, this.WINDOWS_FINALIZATION_TIMEOUT_MS);
 				}),
 			]);
@@ -590,7 +601,16 @@ export class VideoExporter {
 		exportFrame.close();
 	}
 
-	private reportProgress(currentFrame: number, totalFrames: number) {
+	private reportFinalizingProgress(totalFrames: number, renderProgress: number) {
+		this.reportProgress(totalFrames, totalFrames, "finalizing", renderProgress);
+	}
+
+	private reportProgress(
+		currentFrame: number,
+		totalFrames: number,
+		phase: ExportProgress["phase"] = "extracting",
+		renderProgress?: number,
+	) {
 		const nowMs = this.getNowMs();
 		const elapsedSeconds = Math.max((nowMs - this.exportStartTimeMs) / 1000, 0.001);
 		const averageRenderFps = currentFrame / elapsedSeconds;
@@ -600,6 +620,16 @@ export class VideoExporter {
 		const remainingFrames = Math.max(totalFrames - currentFrame, 0);
 		const estimatedTimeRemaining =
 			averageRenderFps > 0 ? remainingFrames / averageRenderFps : 0;
+		const safeRenderProgress =
+			phase === "finalizing"
+				? Math.max(0, Math.min(renderProgress ?? 99, 99))
+				: undefined;
+		const percentage =
+			phase === "finalizing"
+				? safeRenderProgress ?? 99
+				: totalFrames > 0
+					? (currentFrame / totalFrames) * 100
+					: 100;
 
 		if (sampleElapsedMs >= PROGRESS_SAMPLE_WINDOW_MS) {
 			this.progressSampleStartTimeMs = nowMs;
@@ -610,9 +640,11 @@ export class VideoExporter {
 			this.config.onProgress({
 				currentFrame,
 				totalFrames,
-				percentage: totalFrames > 0 ? (currentFrame / totalFrames) * 100 : 100,
+				percentage,
 				estimatedTimeRemaining,
 				renderFps,
+				phase,
+				renderProgress: safeRenderProgress,
 			});
 		}
 	}
