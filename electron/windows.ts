@@ -587,6 +587,11 @@ function loadPackagedEditorWindow(win: BrowserWindow) {
 		void win.loadFile(indexHtmlPath, { query });
 	};
 
+	if (process.platform === "win32") {
+		loadFromFile();
+		return;
+	}
+
 	if (!packagedRendererBaseUrl) {
 		loadFromFile();
 		return;
