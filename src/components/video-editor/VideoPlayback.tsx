@@ -1044,8 +1044,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
           height: container.clientHeight,
           backgroundAlpha: 0,
           antialias: true,
+          failIfMajorPerformanceCaveat: false,
           resolution: window.devicePixelRatio || 1,
           autoDensity: true,
+          preference: "webgl",
         });
 
         app.ticker.maxFPS = 60;

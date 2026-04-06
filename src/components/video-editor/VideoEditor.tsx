@@ -815,6 +815,9 @@ export default function VideoEditor() {
 			percentage: 100,
 			estimatedTimeRemaining: 0,
 			renderFps: previous?.renderFps,
+			renderBackend: previous?.renderBackend,
+			encodeBackend: previous?.encodeBackend,
+			encoderName: previous?.encoderName,
 			phase: "saving",
 		}));
 	}, []);
@@ -3463,7 +3466,6 @@ export default function VideoEditor() {
 				setIsExporting(false);
 				exporterRef.current = null;
 				setShowExportDropdown(keepExportDialogOpen);
-				setExportProgress(null);
 				remountPreview();
 			}
 		},
@@ -3755,6 +3757,38 @@ export default function VideoEditor() {
 					fps: exportProgress.renderFps.toFixed(1),
 				})
 			: null;
+	const exportRuntimeLabel = useMemo(() => {
+		const renderBackend = exportProgress?.renderBackend;
+		const encodeBackend = exportProgress?.encodeBackend;
+		const encoderName = exportProgress?.encoderName;
+
+		if (!renderBackend && !encodeBackend && !encoderName) {
+			return null;
+		}
+
+		const rendererLabel =
+			renderBackend === "webgpu"
+				? "WebGPU"
+				: renderBackend === "webgl"
+					? "WebGL"
+					: null;
+		const encoderLabel =
+			encodeBackend === "ffmpeg"
+				? "Breeze"
+				: encodeBackend === "webcodecs"
+					? "WebCodecs"
+					: null;
+		const pathLabel =
+			rendererLabel && encoderLabel
+				? `${rendererLabel} + ${encoderLabel}`
+				: rendererLabel ?? encoderLabel;
+
+		if (!pathLabel) {
+			return encoderName ?? null;
+		}
+
+		return encoderName ? `${pathLabel} (${encoderName})` : pathLabel;
+	}, [exportProgress]);
 	const exportPercentLabel = exportProgress
 		? isExportSaving
 			? t("editor.exportStatus.saving", "Opening save dialog...")
@@ -3971,12 +4005,18 @@ export default function VideoEditor() {
 									{exportRenderSpeedLabel ? (
 										<p className="mt-1 text-[11px] text-slate-500">{exportRenderSpeedLabel}</p>
 									) : null}
+									{exportRuntimeLabel ? (
+										<p className="mt-1 text-[11px] text-slate-500">Path: {exportRuntimeLabel}</p>
+									) : null}
 								</div>
 							) : exportError ? (
 								<div className="rounded-2xl border border-white/10 bg-[#17171a] p-4 text-slate-200 shadow-2xl">
 									<p className="text-sm font-semibold text-white">
 										{t("editor.exportStatus.issue", "Export issue")}
 									</p>
+									{exportRuntimeLabel ? (
+										<p className="mt-1 text-[11px] text-slate-500">Path: {exportRuntimeLabel}</p>
+									) : null}
 									<p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-slate-400">{exportError}</p>
 									<div className="mt-4 flex gap-2">
 										{hasPendingExportSave ? (
@@ -4009,6 +4049,9 @@ export default function VideoEditor() {
 											"Your file was saved successfully.",
 										)}
 									</p>
+									{exportRuntimeLabel ? (
+										<p className="mt-1 text-[11px] text-slate-500">Path: {exportRuntimeLabel}</p>
+									) : null}
 									<p className="mt-3 truncate text-xs text-slate-500">
 										{exportedFilePath.split("/").pop()}
 									</p>

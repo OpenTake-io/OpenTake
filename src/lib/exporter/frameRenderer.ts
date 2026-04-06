@@ -210,6 +210,7 @@ export class FrameRenderer {
       height: this.config.height,
       backgroundAlpha: 0,
       antialias: true,
+      failIfMajorPerformanceCaveat: false,
       resolution: 1,
       autoDensity: true,
       autoStart: false,
