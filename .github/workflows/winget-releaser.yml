@@ -1,0 +1,13 @@
+name: Publish release to WinGet
+on:
+  release:
+    types: [released]
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - uses: vedantmgoyal9/winget-releaser@latest
+        with:
+          identifier: Webadderall.Recordly
+          installers-regex: 'windows\-x64\.exe'
+          token: ${{ secrets.WINGET_ACC_TOKEN }}
