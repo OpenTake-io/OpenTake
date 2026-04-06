@@ -13,6 +13,11 @@ import type {
 	ZoomTransitionEasing,
 } from "@/components/video-editor/types";
 import { AudioProcessor } from "./audioEncoder";
+import {
+	normalizeLightningRuntimePlatform,
+	shouldPreferNativeAutoBackend,
+	type LightningRuntimePlatform,
+} from "./backendPolicy";
 import { FrameRenderer as ModernFrameRenderer } from "./modernFrameRenderer";
 import {
 	getOrderedSupportedMp4EncoderCandidates,
@@ -158,6 +163,10 @@ export class ModernVideoExporter {
 
 			let stageStartedAt = this.getNowMs();
 			const backendPreference = this.config.backendPreference ?? "auto";
+			const runtimePlatform =
+				backendPreference === "auto" ? await this.getRuntimePlatform() : "unknown";
+			const preferNativeFirstInAuto =
+				backendPreference === "auto" && shouldPreferNativeAutoBackend(runtimePlatform);
 			let useNativeEncoder = false;
 			this.lastNativeExportError = null;
 
@@ -172,39 +181,70 @@ export class ModernVideoExporter {
 					);
 				}
 			} else {
-				try {
-					const configuredWebCodecsPath = await this.initializeEncoder();
-					if (
-						backendPreference === "auto" &&
-						configuredWebCodecsPath.hardwareAcceleration === "prefer-software"
-					) {
-						console.warn(
-							"[VideoExporter] Auto backend resolved to a software WebCodecs encoder; trying Breeze native export instead.",
-						);
-						stageStartedAt = this.getNowMs();
-						useNativeEncoder = await this.tryStartNativeVideoExport();
-						this.nativeSessionStartTimeMs = this.getNowMs() - stageStartedAt;
-						if (useNativeEncoder) {
-							this.disposeEncoder();
-						}
-					}
-				} catch (error) {
-					const webCodecsError = error instanceof Error ? error : new Error(String(error));
-					if (backendPreference === "webcodecs") {
-						throw webCodecsError;
-					}
-					console.warn(
-						`[VideoExporter] WebCodecs encoder unavailable, trying ${NATIVE_EXPORT_ENGINE_NAME} native export fallback`,
-						webCodecsError,
-					);
-					this.disposeEncoder();
-
+				if (preferNativeFirstInAuto) {
 					stageStartedAt = this.getNowMs();
 					useNativeEncoder = await this.tryStartNativeVideoExport();
 					this.nativeSessionStartTimeMs = this.getNowMs() - stageStartedAt;
+					if (useNativeEncoder) {
+						console.log(
+							`[VideoExporter] Auto backend preferred ${NATIVE_EXPORT_ENGINE_NAME} first on ${runtimePlatform}; skipping WebCodecs startup.`,
+						);
+					} else {
+						console.log(
+							`[VideoExporter] Auto backend could not start ${NATIVE_EXPORT_ENGINE_NAME} on ${runtimePlatform}; falling back to WebCodecs.`,
+						);
+					}
+				}
 
-					if (!useNativeEncoder) {
-						throw webCodecsError;
+				if (!useNativeEncoder) {
+					try {
+						const configuredWebCodecsPath = await this.initializeEncoder();
+						if (
+							!preferNativeFirstInAuto &&
+							backendPreference === "auto" &&
+							configuredWebCodecsPath.hardwareAcceleration === "prefer-software"
+						) {
+							console.warn(
+								"[VideoExporter] Auto backend resolved to a software WebCodecs encoder; trying Breeze native export instead.",
+							);
+							stageStartedAt = this.getNowMs();
+							useNativeEncoder = await this.tryStartNativeVideoExport();
+							this.nativeSessionStartTimeMs = this.getNowMs() - stageStartedAt;
+							if (useNativeEncoder) {
+								this.disposeEncoder();
+							}
+						} else if (
+							preferNativeFirstInAuto &&
+							backendPreference === "auto" &&
+							configuredWebCodecsPath.hardwareAcceleration === "prefer-software"
+						) {
+							console.warn(
+								`[VideoExporter] Auto backend fell back to a software WebCodecs encoder after ${NATIVE_EXPORT_ENGINE_NAME} startup was unavailable on ${runtimePlatform}.`,
+							);
+						}
+					} catch (error) {
+						const webCodecsError = error instanceof Error ? error : new Error(String(error));
+						if (backendPreference === "webcodecs") {
+							throw webCodecsError;
+						}
+
+						if (preferNativeFirstInAuto) {
+							throw webCodecsError;
+						}
+
+						console.warn(
+							`[VideoExporter] WebCodecs encoder unavailable, trying ${NATIVE_EXPORT_ENGINE_NAME} native export fallback`,
+							webCodecsError,
+						);
+						this.disposeEncoder();
+
+						stageStartedAt = this.getNowMs();
+						useNativeEncoder = await this.tryStartNativeVideoExport();
+						this.nativeSessionStartTimeMs = this.getNowMs() - stageStartedAt;
+
+						if (!useNativeEncoder) {
+							throw webCodecsError;
+						}
 					}
 				}
 			}
@@ -453,23 +493,41 @@ export class ModernVideoExporter {
 		}
 	}
 
+	private async getRuntimePlatform(): Promise<LightningRuntimePlatform> {
+		if (typeof window !== "undefined" && window.electronAPI?.getPlatform) {
+			try {
+				return normalizeLightningRuntimePlatform(await window.electronAPI.getPlatform());
+			} catch (error) {
+				console.warn(
+					"[VideoExporter] Failed to read runtime platform from Electron API; falling back to navigator hints.",
+					error,
+				);
+			}
+		}
+
+		if (typeof navigator === "undefined") {
+			return "unknown";
+		}
+
+		return normalizeLightningRuntimePlatform(navigator.platform || navigator.userAgent || "");
+	}
+
 	private getPlatformLabel(): string {
 		if (typeof navigator === "undefined") {
 			return "Unknown";
 		}
 
 		const platformHint = navigator.platform || navigator.userAgent || "";
-		if (/Win/i.test(platformHint)) {
+		switch (normalizeLightningRuntimePlatform(platformHint)) {
+			case "win32":
 			return "Windows";
-		}
-		if (/Linux/i.test(platformHint)) {
+			case "linux":
 			return "Linux";
-		}
-		if (/Mac|iPhone|iPad|iPod/i.test(platformHint)) {
+			case "darwin":
 			return "macOS";
+			default:
+				return platformHint || "Unknown";
 		}
-
-		return platformHint || "Unknown";
 	}
 
 	private getLightningErrorGuidance(message: string): string[] {
