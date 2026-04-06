@@ -22,6 +22,7 @@ import {
 	killWindowsCaptureProcess,
 	registerIpcHandlers,
 } from "./ipc/handlers";
+import { ensurePackagedRendererServer } from "./rendererServer";
 import type { UpdateToastPayload } from "./updater";
 import {
 	checkForAppUpdates,
@@ -46,29 +47,24 @@ import {
 	isHudOverlayMousePassthroughSupported,
 	showUpdateToastWindow,
 } from "./windows";
-import { ensurePackagedRendererServer } from "./rendererServer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const IS_SMOKE_EXPORT = process.env.RECORDLY_SMOKE_EXPORT === "1";
 
 function configureGpuAccelerationSwitches() {
-	app.commandLine.appendSwitch("ignore-gpu-blocklist");
-	app.commandLine.appendSwitch("enable-gpu-rasterization");
-
 	if (process.platform === "darwin") {
+		app.commandLine.appendSwitch("ignore-gpu-blocklist");
+		app.commandLine.appendSwitch("enable-gpu-rasterization");
 		app.commandLine.appendSwitch("use-angle", "metal");
 		app.commandLine.appendSwitch("disable-features", "MacCatapLoopbackAudioForScreenShare");
 		return;
 	}
 
 	if (process.platform === "win32") {
+		app.commandLine.appendSwitch("ignore-gpu-blocklist");
+		app.commandLine.appendSwitch("enable-gpu-rasterization");
 		app.commandLine.appendSwitch("use-angle", "d3d11");
 		return;
-	}
-
-	if (process.platform === "linux") {
-		app.commandLine.appendSwitch("use-angle", "vulkan");
-		app.commandLine.appendSwitch("enable-features", "Vulkan");
 	}
 }
 
@@ -121,6 +117,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 let mainWindow: BrowserWindow | null = null;
 let sourceSelectorWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+let trayContextMenu: Menu | null = null;
 let selectedSourceName = "";
 let editorHasUnsavedChanges = false;
 let isForceClosing = false;
@@ -392,9 +389,35 @@ function setupApplicationMenu() {
 	Menu.setApplicationMenu(menu);
 }
 
+function isPrimaryTrayClick(event: unknown) {
+	const button =
+		event && typeof event === "object" && "button" in event
+			? (event as { button?: number | string }).button
+			: undefined;
+	return button === undefined || button === 0 || button === "left";
+}
+
 function createTray() {
 	tray = new Tray(getDefaultTrayIcon());
-	tray.on("click", () => focusOrCreateMainWindow());
+	tray.on("click", (event) => {
+		if (process.platform === "win32" && !isPrimaryTrayClick(event)) {
+			return;
+		}
+
+		focusOrCreateMainWindow();
+	});
+
+	if (process.platform === "win32") {
+		tray.on("right-click", () => {
+			if (!tray || !trayContextMenu) {
+				return;
+			}
+
+			tray.popUpContextMenu(trayContextMenu);
+		});
+		return;
+	}
+
 	tray.on("double-click", () => focusOrCreateMainWindow());
 }
 
@@ -640,9 +663,13 @@ function updateTrayMenu(recording: boolean = false) {
 					},
 				},
 			];
+	const menu = Menu.buildFromTemplate(menuTemplate);
+	trayContextMenu = menu;
 	tray.setImage(trayIcon);
 	tray.setToolTip(trayToolTip);
-	tray.setContextMenu(Menu.buildFromTemplate(menuTemplate));
+	if (process.platform !== "win32") {
+		tray.setContextMenu(menu);
+	}
 }
 
 function createEditorWindowWrapper() {

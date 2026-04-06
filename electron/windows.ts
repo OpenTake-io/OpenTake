@@ -571,6 +571,95 @@ export function hideUpdateToastWindow(): void {
 	updateToastWindow.hide();
 }
 
+function loadPackagedEditorWindow(win: BrowserWindow) {
+	const query = getEditorWindowQuery();
+	const queryString = new URLSearchParams(query).toString();
+	const indexHtmlPath = path.join(RENDERER_DIST, "index.html");
+	const packagedRendererBaseUrl = getPackagedRendererBaseUrl();
+
+	const loadFromFile = () => {
+		console.log("[editor-window] load-file", indexHtmlPath);
+		void win.loadFile(indexHtmlPath, { query });
+	};
+
+	if (!packagedRendererBaseUrl) {
+		loadFromFile();
+		return;
+	}
+
+	const targetUrl = `${packagedRendererBaseUrl}/?${queryString}`;
+	let settled = false;
+	let timeoutId: NodeJS.Timeout | null = setTimeout(() => {
+		fallbackToFile("load-timeout");
+	}, 5000);
+
+	const clearTimeoutIfNeeded = () => {
+		if (timeoutId) {
+			clearTimeout(timeoutId);
+			timeoutId = null;
+		}
+	};
+
+	const cleanup = () => {
+		clearTimeoutIfNeeded();
+		win.webContents.removeListener("did-fail-load", handleDidFailLoad);
+		win.webContents.removeListener("did-finish-load", handleDidFinishLoad);
+	};
+
+	const fallbackToFile = (reason: string, details?: Record<string, unknown>) => {
+		if (settled || win.isDestroyed()) {
+			return;
+		}
+
+		settled = true;
+		cleanup();
+		console.warn("[editor-window] packaged renderer URL failed, falling back to file", {
+			reason,
+			targetUrl,
+			...details,
+		});
+		loadFromFile();
+	};
+
+	const handleDidFailLoad = (
+		_event: Electron.Event,
+		errorCode: number,
+		errorDescription: string,
+		validatedURL: string,
+		isMainFrame: boolean,
+	) => {
+		if (!isMainFrame || validatedURL !== targetUrl) {
+			return;
+		}
+
+		fallbackToFile("did-fail-load", {
+			errorCode,
+			errorDescription,
+			validatedURL,
+		});
+	};
+
+	const handleDidFinishLoad = () => {
+		if (win.webContents.getURL() !== targetUrl) {
+			return;
+		}
+
+		settled = true;
+		cleanup();
+	};
+
+	win.webContents.on("did-fail-load", handleDidFailLoad);
+	win.webContents.on("did-finish-load", handleDidFinishLoad);
+	win.once("closed", cleanup);
+
+	console.log("[editor-window] load-url", targetUrl);
+	void win.loadURL(targetUrl).catch((error) => {
+		fallbackToFile("load-url-rejected", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+	});
+}
+
 export function createEditorWindow(): BrowserWindow {
 	const isMac = process.platform === "darwin";
 	const { workArea, workAreaSize } = getScreen().getPrimaryDisplay();
@@ -644,19 +733,7 @@ export function createEditorWindow(): BrowserWindow {
 		const query = new URLSearchParams(getEditorWindowQuery());
 		win.loadURL(`${VITE_DEV_SERVER_URL}?${query.toString()}`);
 	} else {
-		const query = new URLSearchParams(getEditorWindowQuery());
-		const packagedRendererBaseUrl = getPackagedRendererBaseUrl();
-
-		if (packagedRendererBaseUrl) {
-			const targetUrl = `${packagedRendererBaseUrl}/?${query.toString()}`;
-			console.log("[editor-window] load-url", targetUrl);
-			win.loadURL(targetUrl);
-		} else {
-			console.log("[editor-window] load-file", path.join(RENDERER_DIST, "index.html"));
-			win.loadFile(path.join(RENDERER_DIST, "index.html"), {
-				query: getEditorWindowQuery(),
-			});
-		}
+		loadPackagedEditorWindow(win);
 	}
 
 	return win;
