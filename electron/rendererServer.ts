@@ -30,7 +30,16 @@ function getContentType(filePath: string): string {
 
 function resolveRequestedFilePath(rootDir: string, requestPathname: string): string | null {
 	const trimmedPathname = requestPathname === "/" ? "/index.html" : requestPathname;
-	const relativePath = path.normalize(decodeURIComponent(trimmedPathname)).replace(/^\/+/, "");
+
+	// path.normalize() on Windows converts / to \, making the leading-slash
+	// regex fail and causing path.resolve to escape to the drive root.
+	const normalizedPosix = path.posix.normalize(decodeURIComponent(trimmedPathname));
+	const relativePath = normalizedPosix.replace(/^\/+/, "");
+
+	if (!relativePath) {
+		return null;
+	}
+
 	const resolvedRootDir = path.resolve(rootDir);
 	const resolvedFilePath = path.resolve(resolvedRootDir, relativePath);
 
