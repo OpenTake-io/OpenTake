@@ -78,14 +78,7 @@
 		"radius": "Straal",
 		"roundness": "Afronding",
 		"padding": "Opvulling",
-		"removeBackground": "Achtergrond verwijderen",
-		"classicZoom": "Klassieke animatie",
-		"zoomSmoothness": "Zoomvloeiendheid",
-		"webcamPosition": "Positie",
-		"webcamCustomPosition": "Aangepaste positie",
-		"webcamHorizontal": "Horizontaal",
-		"webcamVertical": "Verticaal",
-		"webcamMargin": "Marge"
+		"removeBackground": "Achtergrond verwijderen"
 	},
 	"sections": {
 		"scene": "Scène",
@@ -121,9 +114,7 @@
 		"maxWidth": "Maximale breedte",
 		"boxRadius": "Vakstraal",
 		"backgroundOpacity": "Achtergrond-dekking",
-		"textColor": "Tekstkleur",
-		"selectModel": "Model selecteren",
-		"generatingStatus": "Ondertiteling genereren. Dit kan even duren."
+		"textColor": "Tekstkleur"
 	},
 	"crop": {
 		"title": "Video bijsnijden",
@@ -143,9 +134,7 @@
 		"uploadCustom": "Afbeelding uploaden",
 		"uploadSuccess": "Eigen afbeelding succesvol geüpload!",
 		"uploadError": "Upload een JPG- of JPEG-afbeelding.",
-		"uploadErrorDescription": "Alleen JPG- en JPEG-afbeeldingen worden ondersteund.",
-		"video": "Video",
-		"uploadCustomVideo": "Video uploaden"
+		"uploadErrorDescription": "Alleen JPG- en JPEG-afbeeldingen worden ondersteund."
 	},
 	"export": {
 		"title": "Exporteren",
@@ -167,19 +156,6 @@
 		"saveProject": "Project opslaan",
 		"exportVideo": "{{format}} exporteren",
 		"reportBug": "Bug melden",
-		"starOnGithub": "Ster op GitHub",
-		"encodingTitle": "Codering",
-		"encoding": {
-			"fast": "Snel",
-			"balanced": "Gebalanceerd",
-			"quality": "Kwaliteit"
-		},
-		"pipelineTitle": "Pipeline",
-		"pipeline": {
-			"legacy": "Legacy",
-			"modern": "Lightning (Beta)",
-			"legacyHint": "Legacy gebruikt het huidige stabiele WebCodecs-exportpad.",
-			"lightningHint": "Lightning (Beta) gebruikt automatisch de snelste compatibele backend en valt terug indien nodig."
-		}
+		"starOnGithub": "Ster op GitHub"
 	}
 }
