@@ -80,6 +80,7 @@ interface VideoExporterConfig extends ExportConfig {
 	cursorClickBounceDuration?: number;
 	cursorSway?: number;
 	zoomSmoothness?: number;
+	zoomClassicMode?: boolean;
 	audioRegions?: AudioRegion[];
 	sourceAudioFallbackPaths?: string[];
 	previewWidth?: number;
@@ -339,6 +340,7 @@ export class ModernVideoExporter {
 				cursorClickBounceDuration: this.config.cursorClickBounceDuration,
 				cursorSway: this.config.cursorSway,
 				zoomSmoothness: this.config.zoomSmoothness,
+				zoomClassicMode: this.config.zoomClassicMode,
 			});
 			await this.renderer.initialize();
 			this.rendererInitTimeMs = this.getNowMs() - stageStartedAt;

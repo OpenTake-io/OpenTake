@@ -219,8 +219,8 @@ export function getCursorSpringConfig(smoothingFactor: number): SpringConfig {
   };
 }
 
-export function getZoomSpringConfig(smoothnessFactor = 1.0): SpringConfig {
-  const clamped = Math.max(0, Math.min(2, smoothnessFactor));
+export function getZoomSpringConfig(smoothnessFactor = 0.5): SpringConfig {
+  const clamped = Math.max(0, Math.min(1, smoothnessFactor));
 
   if (clamped <= 0) {
     return {
@@ -232,15 +232,17 @@ export function getZoomSpringConfig(smoothnessFactor = 1.0): SpringConfig {
     };
   }
 
+  // Map 0-1 slider to the internal 0-2 spring range so that
+  // smoothness=1 gives the same feel as the old smoothness=2.
+  const scaled = clamped * 2;
+
   // Hooke's law spring: F = -kx - cv
-  // Damping ratio ζ = c / (2√(km)) = 21 / (2√(100·1)) = 1.05
-  // Always overdamped (ζ > 1) — no overshoot.
-  // clamped cancels out of ζ so the ratio is constant across all smoothness values.
-  // Higher smoothness → lower stiffness + higher mass → slower, floatier settle.
+  // Damping ratio ζ = c / (2√(km)) ≈ 1.05 — always overdamped, no overshoot.
+  // Higher scaled → lower stiffness + higher mass → slower, floatier settle.
   return {
-    stiffness: 100 / clamped,
+    stiffness: 100 / scaled,
     damping: 21,
-    mass: 1.0 * clamped,
+    mass: 1.0 * scaled,
     restDelta: 0.0005,
     restSpeed: 0.015,
   };

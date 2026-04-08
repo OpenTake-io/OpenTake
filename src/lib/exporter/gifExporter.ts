@@ -68,6 +68,7 @@ interface GifExporterConfig {
   cursorSize?: number;
   cursorSmoothing?: number;
   zoomSmoothness?: number;
+  zoomClassicMode?: boolean;
   cursorMotionBlur?: number;
   cursorClickBounce?: number;
   cursorClickBounceDuration?: number;
@@ -183,6 +184,8 @@ export class GifExporter {
         cursorStyle: this.config.cursorStyle,
         cursorSize: this.config.cursorSize,
         cursorSmoothing: this.config.cursorSmoothing,
+        zoomSmoothness: this.config.zoomSmoothness,
+        zoomClassicMode: this.config.zoomClassicMode,
         cursorMotionBlur: this.config.cursorMotionBlur,
         cursorClickBounce: this.config.cursorClickBounce,
         cursorClickBounceDuration: this.config.cursorClickBounceDuration,

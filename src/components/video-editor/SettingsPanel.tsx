@@ -195,6 +195,8 @@ interface SettingsPanelProps {
 	onCursorSmoothingChange?: (smoothing: number) => void;
 	zoomSmoothness?: number;
 	onZoomSmoothnessChange?: (smoothness: number) => void;
+	zoomClassicMode?: boolean;
+	onZoomClassicModeChange?: (enabled: boolean) => void;
 	cursorMotionBlur?: number;
 	onCursorMotionBlurChange?: (amount: number) => void;
 	cursorClickBounce?: number;
@@ -538,8 +540,10 @@ export function SettingsPanel({
 	onCursorSizeChange,
 	cursorSmoothing = 2,
 	onCursorSmoothingChange,
-	zoomSmoothness = 1.0,
+	zoomSmoothness = 0.5,
 	onZoomSmoothnessChange,
+	zoomClassicMode = false,
+	onZoomClassicModeChange,
 	cursorMotionBlur = DEFAULT_CURSOR_MOTION_BLUR,
 	onCursorMotionBlurChange,
 	cursorClickBounce = 1,
@@ -903,7 +907,9 @@ export function SettingsPanel({
 	};
 
 	const resetZoomSection = () => {
+		onZoomSmoothnessChange?.(0.5);
 		onZoomMotionBlurChange?.(initialEditorPreferences.zoomMotionBlur);
+		onZoomClassicModeChange?.(false);
 	};
 
 	const resetCursorSection = () => {
@@ -1330,17 +1336,29 @@ export function SettingsPanel({
 					</button>
 				</div>
 			</div>
-			<SliderControl
-				label={tSettings("effects.zoomSmoothness", "Zoom Smoothness")}
-				value={zoomSmoothness}
-				defaultValue={1.0}
-				min={0}
-				max={2}
-				step={0.01}
-				onChange={(v) => onZoomSmoothnessChange?.(v)}
-				formatValue={(v) => (v <= 0 ? tSettings("effects.off") : v.toFixed(2))}
-				parseInput={(text) => parseFloat(text)}
-			/>
+			<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
+				<span className="text-[10px] text-slate-400">
+					{tSettings("effects.classicZoom", "Classic Animation")}
+				</span>
+				<Switch
+					checked={zoomClassicMode}
+					onCheckedChange={(v) => onZoomClassicModeChange?.(v)}
+					className="data-[state=checked]:bg-[#2563EB] scale-75"
+				/>
+			</div>
+			{!zoomClassicMode && (
+				<SliderControl
+					label={tSettings("effects.zoomSmoothness", "Zoom Smoothness")}
+					value={zoomSmoothness}
+					defaultValue={0.5}
+					min={0}
+					max={1}
+					step={0.01}
+					onChange={(v) => onZoomSmoothnessChange?.(v)}
+					formatValue={(v) => (v <= 0 ? tSettings("effects.off") : v.toFixed(2))}
+					parseInput={(text) => parseFloat(text)}
+				/>
+			)}
 			<SliderControl
 				label={tSettings("effects.zoomMotionBlur")}
 				value={zoomMotionBlur}

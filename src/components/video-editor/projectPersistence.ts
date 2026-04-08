@@ -84,6 +84,8 @@ export interface ProjectEditorState {
 	cursorStyle: CursorStyle;
 	cursorSize: number;
 	cursorSmoothing: number;
+	zoomSmoothness: number;
+	zoomClassicMode: boolean;
 	cursorMotionBlur: number;
 	cursorClickBounce: number;
 	cursorClickBounceDuration: number;
@@ -627,6 +629,12 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		cursorSmoothing: isFiniteNumber(editor.cursorSmoothing)
 			? clamp(editor.cursorSmoothing, 0, 2)
 			: DEFAULT_CURSOR_SMOOTHING,
+		zoomSmoothness: isFiniteNumber((editor as any).zoomSmoothness)
+			? clamp((editor as any).zoomSmoothness as number, 0, 1)
+			: 0.5,
+		zoomClassicMode: typeof (editor as any).zoomClassicMode === 'boolean'
+			? (editor as any).zoomClassicMode
+			: false,
 		cursorMotionBlur: isFiniteNumber((editor as Partial<ProjectEditorState>).cursorMotionBlur)
 			? clamp((editor as Partial<ProjectEditorState>).cursorMotionBlur as number, 0, 2)
 			: DEFAULT_CURSOR_MOTION_BLUR,

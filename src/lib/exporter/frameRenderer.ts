@@ -43,6 +43,7 @@ import {
   type SpringState,
   createSpringState,
   stepSpringValue,
+  resetSpringState,
   getZoomSpringConfig,
 } from "@/components/video-editor/videoPlayback/motionSmoothing";
 import { renderAnnotations } from "./annotationRenderer";
@@ -97,6 +98,7 @@ interface FrameRenderConfig {
   cursorSize?: number;
   cursorSmoothing?: number;
   zoomSmoothness?: number;
+  zoomClassicMode?: boolean;
   cursorMotionBlur?: number;
   cursorClickBounce?: number;
   cursorClickBounceDuration?: number;
@@ -1057,7 +1059,7 @@ export class FrameRenderer {
 
       // Cursor follow: use cursor-follow camera for non-manual zoom regions
       let regionFocus = region.focus;
-      if (region.mode !== 'manual' && this.config.cursorTelemetry && this.config.cursorTelemetry.length > 0) {
+      if (!this.config.zoomClassicMode && region.mode !== 'manual' && this.config.cursorTelemetry && this.config.cursorTelemetry.length > 0) {
         regionFocus = computeCursorFollowFocus(
           this.cursorFollowCamera,
           this.config.cursorTelemetry,
@@ -1144,9 +1146,18 @@ export class FrameRenderer {
 
     const zoomSpringConfig = getZoomSpringConfig(this.config.zoomSmoothness);
 
-    state.appliedScale = stepSpringValue(this.springScale, projectedTransform.scale, deltaMs, zoomSpringConfig);
-    state.x = stepSpringValue(this.springX, projectedTransform.x, deltaMs, zoomSpringConfig);
-    state.y = stepSpringValue(this.springY, projectedTransform.y, deltaMs, zoomSpringConfig);
+    if (this.config.zoomClassicMode) {
+      state.appliedScale = projectedTransform.scale;
+      state.x = projectedTransform.x;
+      state.y = projectedTransform.y;
+      resetSpringState(this.springScale, state.appliedScale);
+      resetSpringState(this.springX, state.x);
+      resetSpringState(this.springY, state.y);
+    } else {
+      state.appliedScale = stepSpringValue(this.springScale, projectedTransform.scale, deltaMs, zoomSpringConfig);
+      state.x = stepSpringValue(this.springX, projectedTransform.x, deltaMs, zoomSpringConfig);
+      state.y = stepSpringValue(this.springY, projectedTransform.y, deltaMs, zoomSpringConfig);
+    }
 
     this.lastMotionVector = {
       x: state.x - prevX,
