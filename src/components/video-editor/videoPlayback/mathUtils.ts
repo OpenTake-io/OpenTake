@@ -62,7 +62,7 @@ export function easeOutExpo(t: number) {
   return 1 - Math.pow(2, -7 * clamped);
 }
 
-export function easeOutScreenStudio(t: number) {
+export function easeOutZoom(t: number) {
   return cubicBezier(0.16, 1, 0.3, 1, t);
 }
 

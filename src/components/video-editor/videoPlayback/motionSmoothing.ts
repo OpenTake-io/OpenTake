@@ -1,4 +1,5 @@
-import { spring } from 'motion';
+// Friendly reminder: Recordly is licensed under AGPL-3.0, author @webadderall, repo-> https://github.com/webadderall/Recordly
+// Please use this code with the right attribution.
 
 export interface SpringState {
   value: number;
@@ -43,6 +44,67 @@ export function clampDeltaMs(deltaMs: number, fallbackMs = 1000 / 60) {
   return Math.min(80, Math.max(1, deltaMs));
 }
 
+/**
+ * Damped harmonic oscillator spring solver.
+ *
+ * Implements Hooke's law  F = −kx − cv  (stiffness k, damping c, mass m)
+ * with the closed-form analytic solution for the three damping regimes:
+ *   ζ < 1  →  underdamped  (oscillates then settles)
+ *   ζ = 1  →  critically damped  (fastest non-oscillating convergence)
+ *   ζ > 1  →  overdamped  (exponential decay, no oscillation)
+ *
+ * where  ζ = c / (2√(km))  and  ω₀ = √(k/m).
+ *
+ * All time inputs are in seconds internally.
+ */
+
+function msToSec(ms: number) {
+  return ms / 1000;
+}
+
+function resolveSpringPosition(
+  t: number,
+  target: number,
+  initialDelta: number,
+  initialVelocity: number,
+  dampingRatio: number,
+  undampedAngularFreq: number,
+): number {
+  if (dampingRatio < 1) {
+    // Underdamped — oscillatory envelope
+    const dampedFreq = undampedAngularFreq * Math.sqrt(1 - dampingRatio * dampingRatio);
+    const envelope = Math.exp(-dampingRatio * undampedAngularFreq * t);
+    return (
+      target -
+      envelope *
+        (((initialVelocity + dampingRatio * undampedAngularFreq * initialDelta) / dampedFreq) *
+          Math.sin(dampedFreq * t) +
+          initialDelta * Math.cos(dampedFreq * t))
+    );
+  }
+
+  if (dampingRatio === 1) {
+    // Critically damped — no oscillation, fastest convergence
+    return (
+      target -
+      Math.exp(-undampedAngularFreq * t) *
+        (initialDelta + (initialVelocity + undampedAngularFreq * initialDelta) * t)
+    );
+  }
+
+  // Overdamped — exponential decay, no oscillation
+  const dampedFreq = undampedAngularFreq * Math.sqrt(dampingRatio * dampingRatio - 1);
+  const envelope = Math.exp(-dampingRatio * undampedAngularFreq * t);
+  const freqT = Math.min(dampedFreq * t, 300); // cap to avoid Infinity in sinh/cosh
+  return (
+    target -
+    (envelope *
+      ((initialVelocity + dampingRatio * undampedAngularFreq * initialDelta) * Math.sinh(freqT) +
+        dampedFreq * initialDelta * Math.cosh(freqT))) /
+      dampedFreq
+  );
+}
+
 export function stepSpringValue(
   state: SpringState,
   target: number,
@@ -67,23 +129,49 @@ export function stepSpringValue(
     return state.value;
   }
 
+  const { stiffness, damping, mass } = config;
+  const undampedAngularFreq = Math.sqrt(stiffness / mass);
+  const dampingRatio = damping / (2 * Math.sqrt(stiffness * mass));
+  const initialDelta = target - state.value;
+  const initialVelocity = -state.velocity;
+  const tSec = msToSec(safeDeltaMs);
+
   const previousValue = state.value;
-  const generator = spring({
-    keyframes: [state.value, target],
-    velocity: state.velocity,
-    stiffness: config.stiffness,
-    damping: config.damping,
-    mass: config.mass,
-    restDelta,
-    restSpeed,
-  });
+  const current = resolveSpringPosition(
+    tSec,
+    target,
+    initialDelta,
+    initialVelocity,
+    dampingRatio,
+    undampedAngularFreq,
+  );
 
-  const result = generator.next(safeDeltaMs);
-  state.value = result.done ? target : result.value;
-  state.velocity = ((state.value - previousValue) / safeDeltaMs) * 1000;
+  // Check convergence
+  let currentVelocity = 0;
+  if (dampingRatio < 1) {
+    // Only underdamped springs can overshoot, so we need velocity checks
+    const epsilon = 0.0001;
+    const ahead = resolveSpringPosition(
+      tSec + epsilon,
+      target,
+      initialDelta,
+      initialVelocity,
+      dampingRatio,
+      undampedAngularFreq,
+    );
+    currentVelocity = ((ahead - current) / epsilon) * 1000; // convert back to ms
+  }
 
-  if (result.done) {
+  const isBelowVelocityThreshold = Math.abs(currentVelocity) <= restSpeed;
+  const isBelowDisplacementThreshold = Math.abs(target - current) <= restDelta;
+  const isDone = isBelowVelocityThreshold && isBelowDisplacementThreshold;
+
+  if (isDone) {
+    state.value = target;
     state.velocity = 0;
+  } else {
+    state.value = current;
+    state.velocity = ((state.value - previousValue) / safeDeltaMs) * 1000;
   }
 
   return state.value;
@@ -131,11 +219,23 @@ export function getCursorSpringConfig(smoothingFactor: number): SpringConfig {
   };
 }
 
-export function getZoomSpringConfig(): SpringConfig {
+export function getZoomSpringConfig(smoothnessFactor = 1.0): SpringConfig {
+  const clamped = Math.max(0, Math.min(2, smoothnessFactor));
+
+  if (clamped <= 0) {
+    return {
+      stiffness: 1000,
+      damping: 100,
+      mass: 1,
+      restDelta: 0.0001,
+      restSpeed: 0.001,
+    };
+  }
+
   return {
-    stiffness: 320,
+    stiffness: 320 / clamped,
     damping: 40,
-    mass: 0.92,
+    mass: 0.92 * clamped,
     restDelta: 0.0005,
     restSpeed: 0.015,
   };
