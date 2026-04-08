@@ -232,10 +232,15 @@ export function getZoomSpringConfig(smoothnessFactor = 1.0): SpringConfig {
     };
   }
 
+  // Hooke's law spring: F = -kx - cv
+  // Damping ratio ζ = c / (2√(km)) = 21 / (2√(100·1)) = 1.05
+  // Always overdamped (ζ > 1) — no overshoot.
+  // clamped cancels out of ζ so the ratio is constant across all smoothness values.
+  // Higher smoothness → lower stiffness + higher mass → slower, floatier settle.
   return {
-    stiffness: 320 / clamped,
-    damping: 40,
-    mass: 0.92 * clamped,
+    stiffness: 100 / clamped,
+    damping: 21,
+    mass: 1.0 * clamped,
     restDelta: 0.0005,
     restSpeed: 0.015,
   };
