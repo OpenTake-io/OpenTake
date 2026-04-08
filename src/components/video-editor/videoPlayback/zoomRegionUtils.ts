@@ -2,11 +2,11 @@ import type { ZoomFocus, ZoomRegion } from "../types";
 import {
   ZOOM_DEPTH_SCALES,
 } from "../types";
-import { TRANSITION_WINDOW_MS, ZOOM_IN_TRANSITION_WINDOW_MS } from "./constants";
+import { TRANSITION_WINDOW_MS, ZOOM_IN_TRANSITION_WINDOW_MS, ZOOM_OUT_EARLY_START_MS } from "./constants";
 import { clampFocusToScale } from "./focusUtils";
-import { clamp01, cubicBezier, easeOutScreenStudio } from "./mathUtils";
+import { clamp01, cubicBezier, easeOutZoom } from "./mathUtils";
 
-const CHAINED_ZOOM_PAN_GAP_MS = 1500;
+const CHAINED_ZOOM_PAN_GAP_MS = 1350;
 const CONNECTED_ZOOM_PAN_DURATION_MS = 1000;
 const ZOOM_IN_OVERLAP_MS = 500;
 
@@ -43,7 +43,8 @@ export function computeRegionStrength(
 ) {
   const zoomInEnd = region.startMs + ZOOM_IN_OVERLAP_MS;
   const leadInStart = zoomInEnd - ZOOM_IN_TRANSITION_WINDOW_MS;
-  const leadOutEnd = region.endMs + TRANSITION_WINDOW_MS;
+  const zoomOutStart = region.endMs - ZOOM_OUT_EARLY_START_MS;
+  const leadOutEnd = zoomOutStart + TRANSITION_WINDOW_MS;
 
   if (timeMs < leadInStart || timeMs > leadOutEnd) {
     return 0;
@@ -51,15 +52,15 @@ export function computeRegionStrength(
 
   if (timeMs < zoomInEnd) {
     const progress = (timeMs - leadInStart) / ZOOM_IN_TRANSITION_WINDOW_MS;
-    return easeOutScreenStudio(progress);
+    return easeOutZoom(progress);
   }
 
-  if (timeMs <= region.endMs) {
+  if (timeMs <= zoomOutStart) {
     return 1;
   }
 
-  const progress = clamp01((timeMs - region.endMs) / TRANSITION_WINDOW_MS);
-  return 1 - easeOutScreenStudio(progress);
+  const progress = clamp01((timeMs - zoomOutStart) / TRANSITION_WINDOW_MS);
+  return 1 - easeOutZoom(progress);
 }
 
 function getLinearFocus(start: ZoomFocus, end: ZoomFocus, amount: number): ZoomFocus {
