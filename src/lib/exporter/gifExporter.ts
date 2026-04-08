@@ -67,6 +67,7 @@ interface GifExporterConfig {
   cursorStyle?: CursorStyle;
   cursorSize?: number;
   cursorSmoothing?: number;
+  zoomSmoothness?: number;
   cursorMotionBlur?: number;
   cursorClickBounce?: number;
   cursorClickBounceDuration?: number;
