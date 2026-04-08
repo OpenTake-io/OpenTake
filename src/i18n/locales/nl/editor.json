@@ -103,8 +103,7 @@
 		"showInFolder": "Tonen in map"
 	},
 	"project": {
-		"untitled": "Naamloos",
-		"projects": "Projecten"
+		"untitled": "Naamloos"
 	},
 	"exportStatus": {
 		"exporting": "Exporteren",
@@ -113,10 +112,7 @@
 		"completePercent": "{{percent}}% voltooid",
 		"issue": "Exportprobleem",
 		"complete": "Export voltooid",
-		"savedSuccessfully": "Je bestand is succesvol opgeslagen.",
-		"renderSpeed": "Rendersnelheid {{fps}} FPS",
-		"saving": "Opslagvenster openen...",
-		"finalizingPercent": "Afronden {{percent}}%"
+		"savedSuccessfully": "Je bestand is succesvol opgeslagen."
 	},
 	"openRecordingsFolder": "Opnamemap openen"
 }
