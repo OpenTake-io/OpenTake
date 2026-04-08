@@ -5,12 +5,15 @@ export interface ZoomFocus {
 	cy: number; // normalized vertical center (0-1)
 }
 
+export type ZoomMode = "auto" | "manual";
+
 export interface ZoomRegion {
 	id: string;
 	startMs: number;
 	endMs: number;
 	depth: ZoomDepth;
 	focus: ZoomFocus;
+	mode?: ZoomMode;
 }
 
 export interface CursorTelemetryPoint {
@@ -369,6 +372,7 @@ export const ZOOM_DEPTH_SCALES: Record<ZoomDepth, number> = {
 };
 
 export const DEFAULT_ZOOM_DEPTH: ZoomDepth = 3;
+export const DEFAULT_AUTO_ZOOM_DEPTH: ZoomDepth = 2;
 
 export function clampFocusToDepth(focus: ZoomFocus, _depth: ZoomDepth): ZoomFocus {
 	return {
