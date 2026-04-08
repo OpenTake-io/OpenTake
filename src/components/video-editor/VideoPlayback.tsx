@@ -42,9 +42,14 @@ import {
 } from "./types";
 import {
   DEFAULT_FOCUS,
-  ZOOM_SCALE_DEADZONE,
-  ZOOM_TRANSLATION_DEADZONE_PX,
 } from "./videoPlayback/constants";
+import {
+  type SpringState,
+  createSpringState,
+  resetSpringState,
+  stepSpringValue,
+  getZoomSpringConfig,
+} from "./videoPlayback/motionSmoothing";
 import {
   DEFAULT_CURSOR_CONFIG,
   PixiCursorOverlay,
@@ -64,6 +69,13 @@ import {
 } from "./captionStyle";
 import { clamp01 } from "./videoPlayback/mathUtils";
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
+import {
+  type CursorFollowCameraState,
+  createCursorFollowCameraState,
+  resetCursorFollowCamera,
+  computeCursorFollowFocus,
+  SNAP_TO_EDGES_RATIO_AUTO,
+} from "./videoPlayback/cursorFollowCamera";
 import { clampFocusToStage as clampFocusToStageUtil } from "./videoPlayback/focusUtils";
 import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
 import { layoutVideoContent as layoutVideoContentUtil } from "./videoPlayback/layoutUtils";
@@ -199,6 +211,7 @@ interface VideoPlaybackProps {
   cursorStyle?: CursorStyle;
   cursorSize?: number;
   cursorSmoothing?: number;
+  zoomSmoothness?: number;
   cursorMotionBlur?: number;
   cursorClickBounce?: number;
   cursorClickBounceDuration?: number;
@@ -266,6 +279,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       cursorStyle = "tahoe",
       cursorSize = DEFAULT_CURSOR_SIZE,
       cursorSmoothing = DEFAULT_CURSOR_SMOOTHING,
+      zoomSmoothness = 1.0,
       cursorMotionBlur = DEFAULT_CURSOR_MOTION_BLUR,
       cursorClickBounce = DEFAULT_CURSOR_CLICK_BOUNCE,
       cursorClickBounceDuration = DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
@@ -350,6 +364,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const cursorClickBounceRef = useRef(cursorClickBounce);
     const cursorClickBounceDurationRef = useRef(cursorClickBounceDuration);
     const cursorSwayRef = useRef(cursorSway);
+
+    // Spring animation state for smooth zoom transitions
+    const springScaleRef = useRef<SpringState>(createSpringState(1));
+    const springXRef = useRef<SpringState>(createSpringState(0));
+    const springYRef = useRef<SpringState>(createSpringState(0));
+    const lastTickTimeRef = useRef<number | null>(null);
+    const zoomSmoothnessRef = useRef(zoomSmoothness);
+    const cursorFollowCameraRef = useRef<CursorFollowCameraState>(createCursorFollowCameraState());
 
     const activeCaptionLayout = useMemo(() => {
       if (!autoCaptionSettings?.enabled || autoCaptions.length === 0 || typeof document === "undefined") {
@@ -753,6 +775,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
     useEffect(() => {
       isPlayingRef.current = isPlaying;
+      // Snap springs to current position when pausing so scrubbing is instant
+      if (!isPlaying) {
+        resetSpringState(springScaleRef.current);
+        resetSpringState(springXRef.current);
+        resetSpringState(springYRef.current);
+        resetCursorFollowCamera(cursorFollowCameraRef.current);
+        lastTickTimeRef.current = null;
+      }
       const bgVideo = bgVideoRef.current;
       if (bgVideo) {
         if (isPlaying) {
@@ -839,6 +869,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     useEffect(() => {
       cursorSmoothingRef.current = cursorSmoothing;
     }, [cursorSmoothing]);
+
+    useEffect(() => {
+      zoomSmoothnessRef.current = zoomSmoothness;
+    }, [zoomSmoothness]);
 
     useEffect(() => {
       cursorMotionBlurRef.current = cursorMotionBlur;
@@ -1310,7 +1344,20 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
         if (region && strength > 0 && !shouldShowUnzoomedView) {
           const zoomScale = blendedScale ?? ZOOM_DEPTH_SCALES[region.depth];
-          const regionFocus = region.focus;
+
+          // Cursor follow: use cursor-follow camera for non-manual zoom regions
+          let regionFocus = region.focus;
+          if (region.mode !== 'manual' && cursorTelemetryRef.current.length > 0) {
+            regionFocus = computeCursorFollowFocus(
+              cursorFollowCameraRef.current,
+              cursorTelemetryRef.current,
+              currentTimeRef.current,
+              zoomScale,
+              strength,
+              region.focus,
+              { snapToEdgesRatio: SNAP_TO_EDGES_RATIO_AUTO },
+            );
+          }
 
           targetScaleFactor = zoomScale;
           targetFocus = regionFocus;
@@ -1378,18 +1425,33 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
           focusY: state.focusY,
         });
 
-        const appliedScale =
-          Math.abs(projectedTransform.scale - prevScale) < ZOOM_SCALE_DEADZONE
-            ? projectedTransform.scale
-            : projectedTransform.scale;
-        const appliedX =
-          Math.abs(projectedTransform.x - prevX) < ZOOM_TRANSLATION_DEADZONE_PX
-            ? projectedTransform.x
-            : projectedTransform.x;
-        const appliedY =
-          Math.abs(projectedTransform.y - prevY) < ZOOM_TRANSLATION_DEADZONE_PX
-            ? projectedTransform.y
-            : projectedTransform.y;
+        // Spring-driven zoom animation
+        const now = performance.now();
+        const deltaMs = lastTickTimeRef.current !== null
+          ? now - lastTickTimeRef.current
+          : 1000 / 60;
+        lastTickTimeRef.current = now;
+
+        const zoomSpringConfig = getZoomSpringConfig(zoomSmoothnessRef.current);
+        const useSpring = isPlayingRef.current && !isSeekingRef.current;
+
+        let appliedScale: number;
+        let appliedX: number;
+        let appliedY: number;
+
+        if (useSpring) {
+          appliedScale = stepSpringValue(springScaleRef.current, projectedTransform.scale, deltaMs, zoomSpringConfig);
+          appliedX = stepSpringValue(springXRef.current, projectedTransform.x, deltaMs, zoomSpringConfig);
+          appliedY = stepSpringValue(springYRef.current, projectedTransform.y, deltaMs, zoomSpringConfig);
+        } else {
+          // Snap instantly when paused or seeking
+          appliedScale = projectedTransform.scale;
+          appliedX = projectedTransform.x;
+          appliedY = projectedTransform.y;
+          resetSpringState(springScaleRef.current, appliedScale);
+          resetSpringState(springXRef.current, appliedX);
+          resetSpringState(springYRef.current, appliedY);
+        }
 
         const motionIntensity = Math.max(
           Math.abs(appliedScale - prevScale),
