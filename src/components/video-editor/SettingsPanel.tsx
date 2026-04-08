@@ -1331,6 +1331,17 @@ export function SettingsPanel({
 				</div>
 			</div>
 			<SliderControl
+				label={tSettings("effects.zoomSmoothness", "Zoom Smoothness")}
+				value={zoomSmoothness}
+				defaultValue={1.0}
+				min={0}
+				max={2}
+				step={0.01}
+				onChange={(v) => onZoomSmoothnessChange?.(v)}
+				formatValue={(v) => (v <= 0 ? tSettings("effects.off") : v.toFixed(2))}
+				parseInput={(text) => parseFloat(text)}
+			/>
+			<SliderControl
 				label={tSettings("effects.zoomMotionBlur")}
 				value={zoomMotionBlur}
 				defaultValue={DEFAULT_ZOOM_MOTION_BLUR}
@@ -1814,17 +1825,6 @@ export function SettingsPanel({
 								max={2}
 								step={0.01}
 								onChange={(v) => onCursorSmoothingChange?.(v)}
-								formatValue={(v) => (v <= 0 ? tSettings("effects.off") : v.toFixed(2))}
-								parseInput={(text) => parseFloat(text)}
-							/>
-							<SliderControl
-								label={tSettings("effects.zoomSmoothness", "Zoom Smoothness")}
-								value={zoomSmoothness}
-								defaultValue={1.0}
-								min={0}
-								max={2}
-								step={0.01}
-								onChange={(v) => onZoomSmoothnessChange?.(v)}
 								formatValue={(v) => (v <= 0 ? tSettings("effects.off") : v.toFixed(2))}
 								parseInput={(text) => parseFloat(text)}
 							/>
