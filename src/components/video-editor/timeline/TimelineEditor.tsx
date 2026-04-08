@@ -35,6 +35,7 @@ const AUDIO_ROW_ID = "row-audio";
 const FALLBACK_RANGE_MS = 1000;
 const TARGET_MARKER_COUNT = 12;
 const SUGGESTION_SPACING_MS = 1800;
+const MERGE_NEARBY_GAP_MS = 1500;
 
 interface TimelineEditorProps {
   videoDuration: number;
@@ -1090,8 +1091,7 @@ export default function TimelineEditor({
 
     const sortedCandidates = [...dwellCandidates].sort((a, b) => b.strength - a.strength);
     const acceptedCenters: number[] = [];
-
-    let addedCount = 0;
+    const accepted: { start: number; end: number; focus: ZoomFocus }[] = [];
 
     sortedCandidates.forEach((candidate) => {
       const tooCloseToAccepted = acceptedCenters.some(
@@ -1115,18 +1115,33 @@ export default function TimelineEditor({
 
       reservedSpans.push({ start: candidateStart, end: candidateEnd });
       acceptedCenters.push(candidate.centerTimeMs);
-      onZoomSuggested({ start: candidateStart, end: candidateEnd }, candidate.focus);
-      addedCount += 1;
+      accepted.push({ start: candidateStart, end: candidateEnd, focus: candidate.focus });
     });
 
-    if (addedCount === 0) {
+    // Merge nearby accepted regions (gap ≤ MERGE_NEARBY_GAP_MS) into single spans
+    const sorted = [...accepted].sort((a, b) => a.start - b.start);
+    const merged: typeof sorted = [];
+    for (const region of sorted) {
+      const prev = merged[merged.length - 1];
+      if (prev && region.start - prev.end <= MERGE_NEARBY_GAP_MS) {
+        prev.end = Math.max(prev.end, region.end);
+      } else {
+        merged.push({ ...region });
+      }
+    }
+
+    if (merged.length === 0) {
       toast.info("No auto-zoom slots available", {
         description: "Detected dwell points overlap existing zoom regions.",
       });
       return;
     }
 
-    toast.success(`Added ${addedCount} interaction-based zoom suggestion${addedCount === 1 ? "" : "s"}`);
+    for (const region of merged) {
+      onZoomSuggested({ start: region.start, end: region.end }, region.focus);
+    }
+
+    toast.success(`Added ${merged.length} interaction-based zoom suggestion${merged.length === 1 ? "" : "s"}`);
   }, [
     videoDuration,
     totalMs,
