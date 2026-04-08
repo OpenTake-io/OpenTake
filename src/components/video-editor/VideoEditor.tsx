@@ -105,6 +105,8 @@ import {
 	DEFAULT_PLAYBACK_SPEED,
 	DEFAULT_WEBCAM_OVERLAY,
 	DEFAULT_ZOOM_DEPTH,
+	DEFAULT_AUTO_ZOOM_DEPTH,
+	type ZoomMode,
 	DEFAULT_ZOOM_IN_DURATION_MS,
 	DEFAULT_ZOOM_IN_EASING,
 	DEFAULT_ZOOM_IN_OVERLAP_MS,
@@ -1646,7 +1648,6 @@ export default function VideoEditor() {
 			cursorStyle,
 			cursorSize,
 			cursorSmoothing,
-			zoomSmoothness,
 			cursorMotionBlur,
 			cursorClickBounce,
 			cursorClickBounceDuration,
@@ -2233,6 +2234,7 @@ export default function VideoEditor() {
 			endMs: Math.round(span.end),
 			depth: DEFAULT_ZOOM_DEPTH,
 			focus: { cx: 0.5, cy: 0.5 },
+			mode: "manual",
 		};
 		setZoomRegions((prev) => [...prev, newRegion]);
 		setSelectedZoomId(id);
@@ -2246,8 +2248,9 @@ export default function VideoEditor() {
 			id,
 			startMs: Math.round(span.start),
 			endMs: Math.round(span.end),
-			depth: DEFAULT_ZOOM_DEPTH,
-			focus: clampFocusToDepth(focus, DEFAULT_ZOOM_DEPTH),
+			depth: DEFAULT_AUTO_ZOOM_DEPTH,
+			focus: clampFocusToDepth(focus, DEFAULT_AUTO_ZOOM_DEPTH),
+			mode: "auto",
 		};
 		setZoomRegions((prev) => [...prev, newRegion]);
 		setSelectedZoomId(id);
@@ -2320,6 +2323,20 @@ export default function VideoEditor() {
 								depth,
 								focus: clampFocusToDepth(region.focus, depth),
 							}
+						: region,
+				),
+			);
+		},
+		[selectedZoomId],
+	);
+
+	const handleZoomModeChange = useCallback(
+		(mode: ZoomMode) => {
+			if (!selectedZoomId) return;
+			setZoomRegions((prev) =>
+				prev.map((region) =>
+					region.id === selectedZoomId
+						? { ...region, mode }
 						: region,
 				),
 			);
@@ -4339,6 +4356,10 @@ export default function VideoEditor() {
 						}
 						onZoomDepthChange={(depth) => selectedZoomId && handleZoomDepthChange(depth)}
 						selectedZoomId={selectedZoomId}
+						selectedZoomMode={
+							selectedZoomId ? (zoomRegions.find((z) => z.id === selectedZoomId)?.mode ?? 'auto') : null
+						}
+						onZoomModeChange={(mode) => selectedZoomId && handleZoomModeChange(mode)}
 						onZoomDelete={handleZoomDelete}
 						selectedTrimId={selectedTrimId}
 						onTrimDelete={handleTrimDelete}
