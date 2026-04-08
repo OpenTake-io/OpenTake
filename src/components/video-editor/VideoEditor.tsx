@@ -500,7 +500,8 @@ export default function VideoEditor() {
 	);
 	const [cursorSize, setCursorSize] = useState(initialEditorPreferences.cursorSize);
 	const [cursorSmoothing, setCursorSmoothing] = useState(initialEditorPreferences.cursorSmoothing);
-	const [zoomSmoothness, setZoomSmoothness] = useState(1.0);
+	const [zoomSmoothness, setZoomSmoothness] = useState(0.5);
+	const [zoomClassicMode, setZoomClassicMode] = useState(false);
 	const [cursorMotionBlur, setCursorMotionBlur] = useState(
 		initialEditorPreferences.cursorMotionBlur,
 	);
@@ -718,7 +719,7 @@ export default function VideoEditor() {
 					annotationRegions,
 					autoCaptions,
 					autoCaptionSettings,
-					speedRegions,
+					speedRegions: effectiveSpeedRegions,
 					previewWidth,
 					previewHeight,
 					cursorTelemetry,
@@ -727,6 +728,7 @@ export default function VideoEditor() {
 					cursorSize,
 					cursorSmoothing,
 					zoomSmoothness,
+					zoomClassicMode,
 					cursorMotionBlur,
 					cursorClickBounce,
 					cursorClickBounceDuration,
@@ -803,6 +805,7 @@ export default function VideoEditor() {
 		shadowIntensity,
 		showCursor,
 		speedRegions,
+		clipRegions,
 		wallpaper,
 		webcam,
 		zoomInDurationMs,
@@ -1023,6 +1026,7 @@ export default function VideoEditor() {
 				cursorSize: number;
 				cursorSmoothing: number;
 				zoomSmoothness: number;
+				zoomClassicMode: boolean;
 				cursorMotionBlur: number;
 				cursorClickBounce: number;
 				cursorClickBounceDuration: number;
@@ -1121,6 +1125,7 @@ export default function VideoEditor() {
 				cursorSize,
 				cursorSmoothing,
 				zoomSmoothness,
+				zoomClassicMode,
 				cursorMotionBlur,
 				cursorClickBounce,
 				cursorClickBounceDuration,
@@ -1168,6 +1173,7 @@ export default function VideoEditor() {
 			cursorSize,
 			cursorSmoothing,
 			zoomSmoothness,
+			zoomClassicMode,
 			cursorMotionBlur,
 			cursorClickBounce,
 			cursorClickBounceDuration,
@@ -1353,6 +1359,8 @@ export default function VideoEditor() {
 			setCursorStyle(normalizedEditor.cursorStyle);
 			setCursorSize(normalizedEditor.cursorSize);
 			setCursorSmoothing(normalizedEditor.cursorSmoothing);
+			setZoomSmoothness(normalizedEditor.zoomSmoothness);
+			setZoomClassicMode(normalizedEditor.zoomClassicMode);
 			setCursorMotionBlur(normalizedEditor.cursorMotionBlur);
 			setCursorClickBounce(normalizedEditor.cursorClickBounce);
 			setCursorClickBounceDuration(normalizedEditor.cursorClickBounceDuration);
@@ -1688,6 +1696,7 @@ export default function VideoEditor() {
 		cursorSize,
 		cursorSmoothing,
 		zoomSmoothness,
+		zoomClassicMode,
 		cursorMotionBlur,
 		cursorClickBounce,
 		cursorClickBounceDuration,
@@ -2150,6 +2159,30 @@ export default function VideoEditor() {
 	}, [clipRegions, duration]);
 
 	const effectiveZoomRegions = zoomRegions;
+
+	// Merge clip speeds into speed regions so playback + export respect per-clip speed
+	const effectiveSpeedRegions = useMemo<SpeedRegion[]>(() => {
+		const clipDerived: SpeedRegion[] = clipRegions
+			.filter((clip) => clip.speed !== 1)
+			.map((clip) => ({
+				id: `clip-speed-${clip.id}`,
+				startMs: clip.startMs,
+				endMs: clip.endMs,
+				speed: clip.speed as SpeedRegion["speed"],
+			}));
+		if (clipDerived.length === 0) return speedRegions;
+		// Timeline speed regions take precedence; only fill in clip speed where no overlap exists
+		const result = [...speedRegions];
+		for (const cs of clipDerived) {
+			const overlaps = speedRegions.some(
+				(sr) => sr.endMs > cs.startMs && sr.startMs < cs.endMs,
+			);
+			if (!overlaps) {
+				result.push(cs);
+			}
+		}
+		return result;
+	}, [clipRegions, speedRegions]);
 
 	useEffect(() => {
 		if (
@@ -3129,7 +3162,7 @@ export default function VideoEditor() {
 						sizePreset: settings.gifConfig.sizePreset,
 						wallpaper,
 						trimRegions,
-						speedRegions,
+						speedRegions: effectiveSpeedRegions,
 						showShadow: effectiveShadowIntensity > 0,
 						shadowIntensity: effectiveShadowIntensity,
 						backgroundBlur,
@@ -3159,6 +3192,7 @@ export default function VideoEditor() {
 						cursorSize,
 						cursorSmoothing,
 						zoomSmoothness,
+						zoomClassicMode,
 						cursorMotionBlur,
 						cursorClickBounce,
 						cursorClickBounceDuration,
@@ -3295,7 +3329,7 @@ export default function VideoEditor() {
 						maxPendingFrames: smokeExportConfig.maxPendingFrames,
 						wallpaper,
 						trimRegions,
-						speedRegions,
+						speedRegions: effectiveSpeedRegions,
 						showShadow: effectiveShadowIntensity > 0,
 						shadowIntensity: effectiveShadowIntensity,
 						backgroundBlur,
@@ -3324,6 +3358,7 @@ export default function VideoEditor() {
 						cursorSize,
 						cursorSmoothing,
 						zoomSmoothness,
+						zoomClassicMode,
 						cursorMotionBlur,
 						cursorClickBounce,
 						cursorClickBounceDuration,
@@ -3503,6 +3538,7 @@ export default function VideoEditor() {
 			wallpaper,
 			trimRegions,
 			speedRegions,
+			clipRegions,
 			shadowIntensity,
 			backgroundBlur,
 			zoomMotionBlur,
@@ -3521,6 +3557,7 @@ export default function VideoEditor() {
 			cursorSize,
 			cursorSmoothing,
 			zoomSmoothness,
+			zoomClassicMode,
 			cursorMotionBlur,
 			cursorClickBounce,
 			cursorClickBounceDuration,
@@ -4240,7 +4277,7 @@ export default function VideoEditor() {
 												webcam={webcam}
 												webcamVideoPath={webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null}
 												trimRegions={trimRegions}
-												speedRegions={speedRegions}
+												speedRegions={effectiveSpeedRegions}
 												annotationRegions={annotationRegions}
 												autoCaptions={autoCaptions}
 												autoCaptionSettings={autoCaptionSettings}
@@ -4253,6 +4290,8 @@ export default function VideoEditor() {
 												cursorStyle={cursorStyle}
 												cursorSize={cursorSize}
 												cursorSmoothing={cursorSmoothing}
+												zoomSmoothness={zoomSmoothness}
+												zoomClassicMode={zoomClassicMode}
 												cursorMotionBlur={cursorMotionBlur}
 												cursorClickBounce={cursorClickBounce}
 												cursorClickBounceDuration={cursorClickBounceDuration}
@@ -4405,6 +4444,8 @@ export default function VideoEditor() {
 						onCursorSmoothingChange={setCursorSmoothing}
 						zoomSmoothness={zoomSmoothness}
 						onZoomSmoothnessChange={setZoomSmoothness}
+						zoomClassicMode={zoomClassicMode}
+						onZoomClassicModeChange={setZoomClassicMode}
 						cursorMotionBlur={cursorMotionBlur}
 						onCursorMotionBlurChange={setCursorMotionBlur}
 						cursorClickBounce={cursorClickBounce}

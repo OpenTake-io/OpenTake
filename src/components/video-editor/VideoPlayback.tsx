@@ -212,6 +212,7 @@ interface VideoPlaybackProps {
   cursorSize?: number;
   cursorSmoothing?: number;
   zoomSmoothness?: number;
+  zoomClassicMode?: boolean;
   cursorMotionBlur?: number;
   cursorClickBounce?: number;
   cursorClickBounceDuration?: number;
@@ -279,7 +280,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       cursorStyle = "tahoe",
       cursorSize = DEFAULT_CURSOR_SIZE,
       cursorSmoothing = DEFAULT_CURSOR_SMOOTHING,
-      zoomSmoothness = 1.0,
+      zoomSmoothness = 0.5,
+      zoomClassicMode = false,
       cursorMotionBlur = DEFAULT_CURSOR_MOTION_BLUR,
       cursorClickBounce = DEFAULT_CURSOR_CLICK_BOUNCE,
       cursorClickBounceDuration = DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
@@ -371,6 +373,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const springYRef = useRef<SpringState>(createSpringState(0));
     const lastTickTimeRef = useRef<number | null>(null);
     const zoomSmoothnessRef = useRef(zoomSmoothness);
+    const zoomClassicModeRef = useRef(zoomClassicMode);
     const cursorFollowCameraRef = useRef<CursorFollowCameraState>(createCursorFollowCameraState());
 
     const activeCaptionLayout = useMemo(() => {
@@ -875,6 +878,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     }, [zoomSmoothness]);
 
     useEffect(() => {
+      zoomClassicModeRef.current = zoomClassicMode;
+    }, [zoomClassicMode]);
+
+    useEffect(() => {
       cursorMotionBlurRef.current = cursorMotionBlur;
     }, [cursorMotionBlur]);
 
@@ -1347,7 +1354,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
           // Cursor follow: use cursor-follow camera for non-manual zoom regions
           let regionFocus = region.focus;
-          if (region.mode !== 'manual' && cursorTelemetryRef.current.length > 0) {
+          if (!zoomClassicModeRef.current && region.mode !== 'manual' && cursorTelemetryRef.current.length > 0) {
             regionFocus = computeCursorFollowFocus(
               cursorFollowCameraRef.current,
               cursorTelemetryRef.current,
@@ -1433,7 +1440,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         lastTickTimeRef.current = now;
 
         const zoomSpringConfig = getZoomSpringConfig(zoomSmoothnessRef.current);
-        const useSpring = isPlayingRef.current && !isSeekingRef.current;
+        const useSpring = isPlayingRef.current && !isSeekingRef.current && !zoomClassicModeRef.current;
 
         let appliedScale: number;
         let appliedX: number;
@@ -1444,7 +1451,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
           appliedX = stepSpringValue(springXRef.current, projectedTransform.x, deltaMs, zoomSpringConfig);
           appliedY = stepSpringValue(springYRef.current, projectedTransform.y, deltaMs, zoomSpringConfig);
         } else {
-          // Snap instantly when paused or seeking
+          // Snap instantly when paused, seeking, or in classic mode
           appliedScale = projectedTransform.scale;
           appliedX = projectedTransform.x;
           appliedY = projectedTransform.y;
