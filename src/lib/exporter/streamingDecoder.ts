@@ -221,7 +221,6 @@ export class StreamingVideoDecoder {
     let decodeError: Error | null = null;
     let decodeDone = false;
     let firstDecodedFrameTimestampUs: number | null = null;
-    let decodedFrameStartupOffsetUs = 0;
 
     this.decoder = new VideoDecoder({
       output: (frame: VideoFrame) => {
@@ -349,12 +348,11 @@ export class StreamingVideoDecoder {
 
       const clone = new VideoFrame(heldFrame, { timestamp: heldFrame.timestamp });
       const sourceTimestampMs = sourceTimeSec * 1000;
-      const cursorTimestampMs = sourceTimestampMs + decodedFrameStartupOffsetUs / 1000;
       await onFrame(
         clone,
         exportFrameIndex * frameDurationUs,
         sourceTimestampMs,
-        cursorTimestampMs,
+        sourceTimestampMs,
       );
       segmentFrameIndex++;
       exportFrameIndex++;
@@ -367,10 +365,6 @@ export class StreamingVideoDecoder {
 
       if (firstDecodedFrameTimestampUs === null) {
         firstDecodedFrameTimestampUs = frame.timestamp;
-        decodedFrameStartupOffsetUs = getDecodedFrameStartupOffsetUs(
-          firstDecodedFrameTimestampUs,
-          this.metadata,
-        );
       }
 
       const normalizedFrameTimeSec = Math.max(
@@ -444,12 +438,11 @@ export class StreamingVideoDecoder {
 
         const clone = new VideoFrame(heldFrame, { timestamp: heldFrame.timestamp });
         const sourceTimestampMs = sourceTimeSec * 1000;
-        const cursorTimestampMs = sourceTimestampMs + decodedFrameStartupOffsetUs / 1000;
         await onFrame(
           clone,
           exportFrameIndex * frameDurationUs,
           sourceTimestampMs,
-          cursorTimestampMs,
+          sourceTimestampMs,
         );
         segmentFrameIndex++;
         exportFrameIndex++;
