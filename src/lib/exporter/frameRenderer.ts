@@ -24,6 +24,12 @@ import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
 import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
 import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
 import {
+  type CursorFollowCameraState,
+  createCursorFollowCameraState,
+  computeCursorFollowFocus,
+  SNAP_TO_EDGES_RATIO_AUTO,
+} from "@/components/video-editor/videoPlayback/cursorFollowCamera";
+import {
   applyZoomTransform,
   computeFocusFromTransform,
   computeZoomTransform,
@@ -32,9 +38,13 @@ import {
 } from "@/components/video-editor/videoPlayback/zoomTransform";
 import {
   DEFAULT_FOCUS,
-  ZOOM_SCALE_DEADZONE,
-  ZOOM_TRANSLATION_DEADZONE_PX,
 } from "@/components/video-editor/videoPlayback/constants";
+import {
+  type SpringState,
+  createSpringState,
+  stepSpringValue,
+  getZoomSpringConfig,
+} from "@/components/video-editor/videoPlayback/motionSmoothing";
 import { renderAnnotations } from "./annotationRenderer";
 import { renderCaptions } from "./captionRenderer";
 import {
@@ -86,6 +96,7 @@ interface FrameRenderConfig {
   cursorStyle?: CursorStyle;
   cursorSize?: number;
   cursorSmoothing?: number;
+  zoomSmoothness?: number;
   cursorMotionBlur?: number;
   cursorClickBounce?: number;
   cursorClickBounceDuration?: number;
@@ -153,6 +164,11 @@ export class FrameRenderer {
   private layoutCache: any = null;
   private currentVideoTime = 0;
   private lastMotionVector = { x: 0, y: 0 };
+  private springScale: SpringState;
+  private springX: SpringState;
+  private springY: SpringState;
+  private cursorFollowCamera: CursorFollowCameraState;
+  private lastFrameTimeMs: number | null = null;
   private cursorOverlay: PixiCursorOverlay | null = null;
   private webcamForwardFrameSource: ForwardFrameSource | null = null;
   private webcamDecodedFrame: VideoFrame | null = null;
@@ -169,6 +185,10 @@ export class FrameRenderer {
     this.config = config;
     this.animationState = createAnimationState();
     this.motionBlurState = createMotionBlurState();
+    this.springScale = createSpringState(1);
+    this.springX = createSpringState(0);
+    this.springY = createSpringState(0);
+    this.cursorFollowCamera = createCursorFollowCameraState();
   }
 
   async initialize(): Promise<void> {
@@ -1034,7 +1054,20 @@ export class FrameRenderer {
 
     if (region && strength > 0) {
       const zoomScale = blendedScale ?? ZOOM_DEPTH_SCALES[region.depth];
-      const regionFocus = region.focus;
+
+      // Cursor follow: use cursor-follow camera for non-manual zoom regions
+      let regionFocus = region.focus;
+      if (region.mode !== 'manual' && this.config.cursorTelemetry && this.config.cursorTelemetry.length > 0) {
+        regionFocus = computeCursorFollowFocus(
+          this.cursorFollowCamera,
+          this.config.cursorTelemetry,
+          timeMs,
+          zoomScale,
+          strength,
+          region.focus,
+          { snapToEdgesRatio: SNAP_TO_EDGES_RATIO_AUTO },
+        );
+      }
 
       targetScaleFactor = zoomScale;
       targetFocus = regionFocus;
@@ -1102,18 +1135,18 @@ export class FrameRenderer {
       focusY: state.focusY,
     });
 
-    state.appliedScale =
-      Math.abs(projectedTransform.scale - prevScale) < ZOOM_SCALE_DEADZONE
-        ? projectedTransform.scale
-        : projectedTransform.scale;
-    state.x =
-      Math.abs(projectedTransform.x - prevX) < ZOOM_TRANSLATION_DEADZONE_PX
-        ? projectedTransform.x
-        : projectedTransform.x;
-    state.y =
-      Math.abs(projectedTransform.y - prevY) < ZOOM_TRANSLATION_DEADZONE_PX
-        ? projectedTransform.y
-        : projectedTransform.y;
+    // Spring-driven zoom animation for export
+    const now = performance.now();
+    const deltaMs = this.lastFrameTimeMs !== null
+      ? now - this.lastFrameTimeMs
+      : 1000 / 60;
+    this.lastFrameTimeMs = now;
+
+    const zoomSpringConfig = getZoomSpringConfig(this.config.zoomSmoothness);
+
+    state.appliedScale = stepSpringValue(this.springScale, projectedTransform.scale, deltaMs, zoomSpringConfig);
+    state.x = stepSpringValue(this.springX, projectedTransform.x, deltaMs, zoomSpringConfig);
+    state.y = stepSpringValue(this.springY, projectedTransform.y, deltaMs, zoomSpringConfig);
 
     this.lastMotionVector = {
       x: state.x - prevX,
