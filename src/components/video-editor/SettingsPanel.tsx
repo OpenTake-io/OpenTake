@@ -41,6 +41,7 @@ import type {
 	WebcamOverlaySettings,
 	WebcamPositionPreset,
 	ZoomDepth,
+	ZoomMode,
 	ZoomTransitionEasing,
 } from "./types";
 import {
@@ -149,6 +150,8 @@ interface SettingsPanelProps {
 	selectedZoomDepth?: ZoomDepth | null;
 	onZoomDepthChange?: (depth: ZoomDepth) => void;
 	selectedZoomId?: string | null;
+	selectedZoomMode?: ZoomMode | null;
+	onZoomModeChange?: (mode: ZoomMode) => void;
 	onZoomDelete?: (id: string) => void;
 	selectedTrimId?: string | null;
 	onTrimDelete?: (id: string) => void;
@@ -190,6 +193,8 @@ interface SettingsPanelProps {
 	onCursorSizeChange?: (size: number) => void;
 	cursorSmoothing?: number;
 	onCursorSmoothingChange?: (smoothing: number) => void;
+	zoomSmoothness?: number;
+	onZoomSmoothnessChange?: (smoothness: number) => void;
 	cursorMotionBlur?: number;
 	onCursorMotionBlurChange?: (amount: number) => void;
 	cursorClickBounce?: number;
@@ -508,6 +513,8 @@ export function SettingsPanel({
 	selectedZoomDepth,
 	onZoomDepthChange,
 	selectedZoomId,
+	selectedZoomMode,
+	onZoomModeChange,
 	onZoomDelete,
 	selectedTrimId,
 	onTrimDelete,
@@ -531,6 +538,8 @@ export function SettingsPanel({
 	onCursorSizeChange,
 	cursorSmoothing = 2,
 	onCursorSmoothingChange,
+	zoomSmoothness = 1.0,
+	onZoomSmoothnessChange,
 	cursorMotionBlur = DEFAULT_CURSOR_MOTION_BLUR,
 	onCursorMotionBlurChange,
 	cursorClickBounce = 1,
@@ -1809,6 +1818,17 @@ export function SettingsPanel({
 								parseInput={(text) => parseFloat(text)}
 							/>
 							<SliderControl
+								label={tSettings("effects.zoomSmoothness", "Zoom Smoothness")}
+								value={zoomSmoothness}
+								defaultValue={1.0}
+								min={0}
+								max={2}
+								step={0.01}
+								onChange={(v) => onZoomSmoothnessChange?.(v)}
+								formatValue={(v) => (v <= 0 ? tSettings("effects.off") : v.toFixed(2))}
+								parseInput={(text) => parseFloat(text)}
+							/>
+							<SliderControl
 								label={tSettings("effects.cursorMotionBlur")}
 								value={cursorMotionBlur}
 								defaultValue={DEFAULT_CURSOR_MOTION_BLUR}
@@ -2073,6 +2093,39 @@ export function SettingsPanel({
 									</span>
 								)}
 							</div>
+						</div>
+						<div className="mb-3">
+							<div className="flex rounded-lg border border-white/10 bg-white/5 p-0.5">
+								<button
+									type="button"
+									onClick={() => onZoomModeChange?.('auto')}
+									className={cn(
+										"flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+										selectedZoomMode === 'auto'
+											? "bg-[#2563EB] text-white shadow-sm"
+											: "text-slate-400 hover:text-slate-200",
+									)}
+								>
+									Auto
+								</button>
+								<button
+									type="button"
+									onClick={() => onZoomModeChange?.('manual')}
+									className={cn(
+										"flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+										selectedZoomMode === 'manual'
+											? "bg-[#2563EB] text-white shadow-sm"
+											: "text-slate-400 hover:text-slate-200",
+									)}
+								>
+									Manual
+								</button>
+							</div>
+							<p className="mt-1.5 text-[10px] text-slate-500">
+								{selectedZoomMode === 'manual'
+									? "Set a fixed focus point for this zoom"
+									: "Camera follows cursor automatically"}
+							</p>
 						</div>
 						<div className="grid grid-cols-6 gap-1.5">
 							{ZOOM_DEPTH_OPTIONS.map((option) => {
