@@ -48,7 +48,7 @@
 		"fixed": "Vast",
 		"pressEscToCancel": "Druk op Esc om te annuleren",
 		"clickToChange": "Klik om te wijzigen",
-		"pressAKey": "Druk een toets...",
+		"pressAKey": "Druk op een toets...",
 		"alreadyUsedBy": "Al in gebruik door <strong>{{action}}</strong>",
 		"swap": "Wisselen",
 		"reserved": "Deze sneltoets is gereserveerd voor \"{{label}}\" en kan niet opnieuw worden toegewezen.",
