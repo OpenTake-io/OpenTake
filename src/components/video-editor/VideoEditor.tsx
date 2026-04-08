@@ -425,6 +425,7 @@ function LanguageSwitcher() {
 		en: "EN",
 		es: "ES",
 		"zh-CN": "中文",
+		ko: "한국어",
 	};
 	return (
 		<Button
@@ -497,6 +498,7 @@ export default function VideoEditor() {
 	);
 	const [cursorSize, setCursorSize] = useState(initialEditorPreferences.cursorSize);
 	const [cursorSmoothing, setCursorSmoothing] = useState(initialEditorPreferences.cursorSmoothing);
+	const [zoomSmoothness, setZoomSmoothness] = useState(1.0);
 	const [cursorMotionBlur, setCursorMotionBlur] = useState(
 		initialEditorPreferences.cursorMotionBlur,
 	);
@@ -722,6 +724,7 @@ export default function VideoEditor() {
 					cursorStyle,
 					cursorSize,
 					cursorSmoothing,
+					zoomSmoothness,
 					cursorMotionBlur,
 					cursorClickBounce,
 					cursorClickBounceDuration,
@@ -790,6 +793,7 @@ export default function VideoEditor() {
 		cursorMotionBlur,
 		cursorSize,
 		cursorSmoothing,
+		zoomSmoothness,
 		cursorStyle,
 		cursorSway,
 		cursorTelemetry,
@@ -1016,6 +1020,7 @@ export default function VideoEditor() {
 				cursorStyle: CursorStyle;
 				cursorSize: number;
 				cursorSmoothing: number;
+				zoomSmoothness: number;
 				cursorMotionBlur: number;
 				cursorClickBounce: number;
 				cursorClickBounceDuration: number;
@@ -1113,6 +1118,7 @@ export default function VideoEditor() {
 				cursorStyle,
 				cursorSize,
 				cursorSmoothing,
+				zoomSmoothness,
 				cursorMotionBlur,
 				cursorClickBounce,
 				cursorClickBounceDuration,
@@ -1159,6 +1165,7 @@ export default function VideoEditor() {
 			cursorStyle,
 			cursorSize,
 			cursorSmoothing,
+			zoomSmoothness,
 			cursorMotionBlur,
 			cursorClickBounce,
 			cursorClickBounceDuration,
@@ -1639,6 +1646,7 @@ export default function VideoEditor() {
 			cursorStyle,
 			cursorSize,
 			cursorSmoothing,
+			zoomSmoothness,
 			cursorMotionBlur,
 			cursorClickBounce,
 			cursorClickBounceDuration,
@@ -1678,6 +1686,7 @@ export default function VideoEditor() {
 		cursorStyle,
 		cursorSize,
 		cursorSmoothing,
+		zoomSmoothness,
 		cursorMotionBlur,
 		cursorClickBounce,
 		cursorClickBounceDuration,
@@ -3132,6 +3141,7 @@ export default function VideoEditor() {
 						cursorStyle,
 						cursorSize,
 						cursorSmoothing,
+						zoomSmoothness,
 						cursorMotionBlur,
 						cursorClickBounce,
 						cursorClickBounceDuration,
@@ -3296,6 +3306,7 @@ export default function VideoEditor() {
 						cursorStyle,
 						cursorSize,
 						cursorSmoothing,
+						zoomSmoothness,
 						cursorMotionBlur,
 						cursorClickBounce,
 						cursorClickBounceDuration,
@@ -3492,6 +3503,7 @@ export default function VideoEditor() {
 			effectiveCursorTelemetry,
 			cursorSize,
 			cursorSmoothing,
+			zoomSmoothness,
 			cursorMotionBlur,
 			cursorClickBounce,
 			cursorClickBounceDuration,
@@ -4370,6 +4382,8 @@ export default function VideoEditor() {
 						onCursorSizeChange={setCursorSize}
 						cursorSmoothing={cursorSmoothing}
 						onCursorSmoothingChange={setCursorSmoothing}
+						zoomSmoothness={zoomSmoothness}
+						onZoomSmoothnessChange={setZoomSmoothness}
 						cursorMotionBlur={cursorMotionBlur}
 						onCursorMotionBlurChange={setCursorMotionBlur}
 						cursorClickBounce={cursorClickBounce}
