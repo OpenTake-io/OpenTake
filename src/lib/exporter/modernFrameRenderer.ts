@@ -25,8 +25,6 @@ import type {
 import { getDefaultCaptionFontFamily, ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
 import {
 	DEFAULT_FOCUS,
-	ZOOM_SCALE_DEADZONE,
-	ZOOM_TRANSLATION_DEADZONE_PX,
 } from "@/components/video-editor/videoPlayback/constants";
 import {
 	DEFAULT_CURSOR_CONFIG,
@@ -34,6 +32,18 @@ import {
 	preloadCursorAssets,
 } from "@/components/video-editor/videoPlayback/cursorRenderer";
 import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
+import {
+	type CursorFollowCameraState,
+	createCursorFollowCameraState,
+	computeCursorFollowFocus,
+	SNAP_TO_EDGES_RATIO_AUTO,
+} from "@/components/video-editor/videoPlayback/cursorFollowCamera";
+import {
+	type SpringState,
+	createSpringState,
+	stepSpringValue,
+	getZoomSpringConfig,
+} from "@/components/video-editor/videoPlayback/motionSmoothing";
 import {
 	applyZoomTransform,
 	computeFocusFromTransform,
@@ -105,6 +115,7 @@ interface FrameRenderConfig {
 	cursorClickBounce?: number;
 	cursorClickBounceDuration?: number;
 	cursorSway?: number;
+	zoomSmoothness?: number;
 }
 
 interface AnimationState {
@@ -324,6 +335,11 @@ export class FrameRenderer {
 	private config: FrameRenderConfig;
 	private animationState: AnimationState;
 	private motionBlurState: MotionBlurState;
+	private springScale: SpringState;
+	private springX: SpringState;
+	private springY: SpringState;
+	private cursorFollowCamera: CursorFollowCameraState;
+	private lastFrameTimeMs: number | null = null;
 	private layoutCache: LayoutCache | null = null;
 	private currentVideoTime = 0;
 	private lastMotionVector = { x: 0, y: 0 };
@@ -342,6 +358,10 @@ export class FrameRenderer {
 		this.config = config;
 		this.animationState = createAnimationState();
 		this.motionBlurState = createMotionBlurState();
+		this.springScale = createSpringState(1);
+		this.springX = createSpringState(0);
+		this.springY = createSpringState(0);
+		this.cursorFollowCamera = createCursorFollowCameraState();
 	}
 
 	private shouldUseZoomMotionBlur(): boolean {
@@ -2143,8 +2163,24 @@ export class FrameRenderer {
 		let targetProgress = 0;
 
 		if (region && strength > 0) {
-			targetScaleFactor = blendedScale ?? ZOOM_DEPTH_SCALES[region.depth];
-			targetFocus = region.focus;
+			const zoomScale = blendedScale ?? ZOOM_DEPTH_SCALES[region.depth];
+
+			// Cursor follow: use cursor-follow camera for non-manual zoom regions
+			let regionFocus = region.focus;
+			if (region.mode !== 'manual' && this.config.cursorTelemetry && this.config.cursorTelemetry.length > 0) {
+				regionFocus = computeCursorFollowFocus(
+					this.cursorFollowCamera,
+					this.config.cursorTelemetry,
+					timeMs,
+					zoomScale,
+					strength,
+					region.focus,
+					{ snapToEdgesRatio: SNAP_TO_EDGES_RATIO_AUTO },
+				);
+			}
+
+			targetScaleFactor = zoomScale;
+			targetFocus = regionFocus;
 			targetProgress = strength;
 
 			if (transition) {
@@ -2204,18 +2240,18 @@ export class FrameRenderer {
 			focusY: state.focusY,
 		});
 
-		state.appliedScale =
-			Math.abs(projectedTransform.scale - previousScale) < ZOOM_SCALE_DEADZONE
-				? projectedTransform.scale
-				: projectedTransform.scale;
-		state.x =
-			Math.abs(projectedTransform.x - previousX) < ZOOM_TRANSLATION_DEADZONE_PX
-				? projectedTransform.x
-				: projectedTransform.x;
-		state.y =
-			Math.abs(projectedTransform.y - previousY) < ZOOM_TRANSLATION_DEADZONE_PX
-				? projectedTransform.y
-				: projectedTransform.y;
+		// Spring-driven zoom animation for export
+		const now = performance.now();
+		const deltaMs = this.lastFrameTimeMs !== null
+			? now - this.lastFrameTimeMs
+			: 1000 / 60;
+		this.lastFrameTimeMs = now;
+
+		const zoomSpringConfig = getZoomSpringConfig(this.config.zoomSmoothness);
+
+		state.appliedScale = stepSpringValue(this.springScale, projectedTransform.scale, deltaMs, zoomSpringConfig);
+		state.x = stepSpringValue(this.springX, projectedTransform.x, deltaMs, zoomSpringConfig);
+		state.y = stepSpringValue(this.springY, projectedTransform.y, deltaMs, zoomSpringConfig);
 
 		this.lastMotionVector = {
 			x: state.x - previousX,
