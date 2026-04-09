@@ -3803,6 +3803,7 @@ export default function VideoEditor() {
 
 	const isExportSaving = exportProgress?.phase === "saving";
 	const isExportFinalizing = exportProgress?.phase === "finalizing";
+	const isRenderingAudio = isExportFinalizing && typeof exportProgress?.audioProgress === "number";
 	const exportFinalizingProgress = isExportFinalizing
 		? Math.min(
 				typeof exportProgress?.renderProgress === "number"
@@ -3858,13 +3859,17 @@ export default function VideoEditor() {
 	const exportPercentLabel = exportProgress
 		? isExportSaving
 			? t("editor.exportStatus.saving", "Opening save dialog...")
-			: isExportFinalizing
-				? t("editor.exportStatus.finalizingPercent", "Finalizing {{percent}}%", {
-						percent: Math.round(exportFinalizingProgress ?? 99),
+			: isRenderingAudio
+				? t("editor.exportStatus.renderingAudio", "Rendering audio {{percent}}%", {
+						percent: Math.round((exportProgress.audioProgress ?? 0) * 100),
 					})
-				: t("editor.exportStatus.completePercent", "{{percent}}% complete", {
-						percent: Math.round(exportProgress.percentage),
-					})
+				: isExportFinalizing
+					? t("editor.exportStatus.finalizingPercent", "Finalizing {{percent}}%", {
+							percent: Math.round(exportFinalizingProgress ?? 99),
+						})
+					: t("editor.exportStatus.completePercent", "{{percent}}% complete", {
+							percent: Math.round(exportProgress.percentage),
+						})
 		: t("editor.exportStatus.preparing", "Preparing export...");
 
 	const projectBrowser = (
@@ -4062,13 +4067,15 @@ export default function VideoEditor() {
 											<div
 												className="h-full bg-[#2563EB] transition-all duration-300 ease-out"
 												style={{
-													width: `${Math.min(exportFinalizingProgress ?? (exportProgress?.percentage ?? 8), 100)}%`,
+													width: `${Math.min(isRenderingAudio ? (exportProgress.audioProgress ?? 0) * 100 : (exportFinalizingProgress ?? (exportProgress?.percentage ?? 8)), 100)}%`,
 												}}
 											/>
 										)}
 									</div>
 									<p className="mt-2 text-xs text-slate-400">{exportPercentLabel}</p>
-									{exportRenderSpeedLabel ? (
+									{isRenderingAudio ? (
+										<p className="mt-1 text-[11px] text-slate-500">Audio requires real-time playback for speed/overlay edits</p>
+									) : exportRenderSpeedLabel ? (
 										<p className="mt-1 text-[11px] text-slate-500">{exportRenderSpeedLabel}</p>
 									) : null}
 									{exportRuntimeLabel ? (

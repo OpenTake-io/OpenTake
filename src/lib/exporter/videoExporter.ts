@@ -246,8 +246,8 @@ export class VideoExporter {
 			this.reportFinalizingProgress(totalFrames, 96);
 
 			if (useNativeEncoder && nativeAudioPlan) {
-				this.reportFinalizingProgress(totalFrames, 99);
-				return await this.finishNativeVideoExport(nativeAudioPlan);
+				this.reportFinalizingProgress(totalFrames, 99, 0);
+				return await this.finishNativeVideoExport(nativeAudioPlan, totalFrames);
 			}
 
 			// Finalize encoding
@@ -264,7 +264,10 @@ export class VideoExporter {
 				const demuxer = this.streamingDecoder.getDemuxer();
 				if (demuxer || hasAudioRegions || hasSourceAudioFallback) {
 					this.audioProcessor = new AudioProcessor();
-					this.reportFinalizingProgress(totalFrames, 99);
+					this.audioProcessor.setOnProgress((progress) => {
+						this.reportFinalizingProgress(totalFrames, 99, progress);
+					});
+					this.reportFinalizingProgress(totalFrames, 99, 0);
 					await this.awaitWithFinalizationTimeout(
 						this.audioProcessor.process(
 							demuxer,
@@ -502,7 +505,7 @@ export class VideoExporter {
 		}
 	}
 
-	private async finishNativeVideoExport(audioPlan: NativeAudioPlan): Promise<ExportResult> {
+	private async finishNativeVideoExport(audioPlan: NativeAudioPlan, totalFrames: number): Promise<ExportResult> {
 		if (!this.nativeExportSessionId) {
 			return { success: false, error: "Native export session is not active" };
 		}
@@ -512,6 +515,9 @@ export class VideoExporter {
 
 		if (audioPlan.audioMode === "edited-track") {
 			this.audioProcessor = new AudioProcessor();
+			this.audioProcessor.setOnProgress((progress) => {
+				this.reportFinalizingProgress(totalFrames, 99, progress);
+			});
 			const audioBlob = await this.awaitWithFinalizationTimeout(
 				this.audioProcessor.renderEditedAudioTrack(
 					this.config.videoUrl,
@@ -593,8 +599,8 @@ export class VideoExporter {
 		exportFrame.close();
 	}
 
-	private reportFinalizingProgress(totalFrames: number, renderProgress: number) {
-		this.reportProgress(totalFrames, totalFrames, "finalizing", renderProgress);
+	private reportFinalizingProgress(totalFrames: number, renderProgress: number, audioProgress?: number) {
+		this.reportProgress(totalFrames, totalFrames, "finalizing", renderProgress, audioProgress);
 	}
 
 	private reportProgress(
@@ -602,6 +608,7 @@ export class VideoExporter {
 		totalFrames: number,
 		phase: ExportProgress["phase"] = "extracting",
 		renderProgress?: number,
+		audioProgress?: number,
 	) {
 		const nowMs = this.getNowMs();
 		const elapsedSeconds = Math.max((nowMs - this.exportStartTimeMs) / 1000, 0.001);
@@ -637,6 +644,7 @@ export class VideoExporter {
 				renderFps,
 				phase,
 				renderProgress: safeRenderProgress,
+				audioProgress: typeof audioProgress === "number" ? Math.max(0, Math.min(audioProgress, 1)) : undefined,
 			});
 		}
 	}

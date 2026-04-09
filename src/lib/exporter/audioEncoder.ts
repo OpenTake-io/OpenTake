@@ -18,6 +18,7 @@ type TrimLikeRegion = TrimRegion | ClipRegion
 
 export class AudioProcessor {
   private cancelled = false
+  private onProgress?: (progress: number) => void
 
   private isPassthroughAudioCodec(codec: string | undefined): boolean {
     if (!codec) {
@@ -88,6 +89,10 @@ export class AudioProcessor {
    * 1) no speed regions -> fast WebCodecs trim-only pipeline
    * 2) speed regions present -> pitch-preserving rendered timeline pipeline
    */
+  setOnProgress(callback: (progress: number) => void) {
+    this.onProgress = callback
+  }
+
   async process(
     demuxer: WebDemuxer | null,
     muxer: VideoMuxer,
@@ -567,6 +572,9 @@ export class AudioProcessor {
       await this.seekTo(timelineMedia, 0)
       await timelineMedia.play()
 
+      const totalDurationMs = (timelineMedia.duration || 0) * 1000
+      let lastProgressReport = 0
+
       await new Promise<void>((resolve, reject) => {
         const cleanup = () => {
           if (rafId !== null) {
@@ -592,6 +600,16 @@ export class AudioProcessor {
             cleanup()
             resolve()
             return
+          }
+
+          // Report audio rendering progress
+          if (this.onProgress && totalDurationMs > 0) {
+            const now = performance.now()
+            if (now - lastProgressReport > 250) {
+              lastProgressReport = now
+              const progress = Math.min((timelineMedia.currentTime * 1000) / totalDurationMs, 1)
+              this.onProgress(progress)
+            }
           }
 
           let currentTimeMs = timelineMedia.currentTime * 1000
