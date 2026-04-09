@@ -9,6 +9,7 @@
 		"text": "文本",
 		"image": "图片",
 		"arrow": "箭头",
+		"blur": "模糊",
 		"textContent": "文本内容",
 		"textPlaceholder": "输入文本...",
 		"fontStyle": "字体样式",
