@@ -1587,6 +1587,21 @@ export default function VideoEditor() {
 						currentProjectResult.path ?? null,
 					);
 					if (restored) {
+						// Re-apply user preferences so stale project data does not
+						// overwrite the last-used padding, aspect ratio, export
+						// settings, etc. that were saved to localStorage.
+						setPadding(initialEditorPreferences.padding);
+						setBorderRadius(initialEditorPreferences.borderRadius);
+						setAspectRatio(initialEditorPreferences.aspectRatio);
+						setExportFormat(initialEditorPreferences.exportFormat);
+						setMp4FrameRate(initialEditorPreferences.mp4FrameRate ?? DEFAULT_MP4_EXPORT_FRAME_RATE);
+						setExportQuality(initialEditorPreferences.exportQuality);
+						setExportEncodingMode(initialEditorPreferences.exportEncodingMode);
+						setExportBackendPreference(initialEditorPreferences.exportBackendPreference);
+						setExportPipelineModel(initialEditorPreferences.exportPipelineModel);
+						setGifFrameRate(initialEditorPreferences.gifFrameRate);
+						setGifLoop(initialEditorPreferences.gifLoop);
+						setGifSizePreset(initialEditorPreferences.gifSizePreset);
 						return;
 					}
 				}
