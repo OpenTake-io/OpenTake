@@ -3438,16 +3438,26 @@ function getNormalizedCursorPoint() {
   // physical pixel coordinates, while Electron's getCursorScreenPoint() and
   // display.bounds return DIP (logical) coordinates. Apply a DPI correction
   // so all values are in the same coordinate space before normalizing.
-  const sf = process.platform !== 'darwin'
+  // Use the display containing the window (or cursor) rather than the primary
+  // display so multi-monitor setups with different DPI scales work correctly.
+  const primarySf = process.platform !== 'darwin'
     ? (getScreen().getPrimaryDisplay().scaleFactor || 1)
     : 1
 
   const cursor = isLinuxCacheFresh
-    ? { x: linuxCursorCache.x / sf, y: linuxCursorCache.y / sf }
+    ? { x: linuxCursorCache.x / primarySf, y: linuxCursorCache.y / primarySf }
     : fallbackCursor
 
   const windowBounds = selectedSource?.id?.startsWith('window:') ? selectedWindowBounds : null
   if (windowBounds) {
+    // Resolve the scale factor for the display that contains the target window
+    // centre point, falling back to the primary display scale factor.
+    const sf = process.platform !== 'darwin'
+      ? (getScreen().getDisplayNearestPoint({
+          x: windowBounds.x / primarySf,
+          y: windowBounds.y / primarySf,
+        }).scaleFactor || 1)
+      : 1
     const width = Math.max(1, windowBounds.width / sf)
     const height = Math.max(1, windowBounds.height / sf)
 
