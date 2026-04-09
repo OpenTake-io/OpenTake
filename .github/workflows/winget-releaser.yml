@@ -21,4 +21,5 @@ jobs:
           identifier: Webadderall.Recordly
           installers-regex: 'windows\-x64\.exe'
           version: ${{ steps.tag.outputs.tag }}
+          release-tag: ${{ steps.tag.outputs.tag }}
           token: ${{ secrets.WINGET_ACC_TOKEN }}
