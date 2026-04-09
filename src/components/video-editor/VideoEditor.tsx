@@ -5,7 +5,6 @@ import {
 	Download,
 	FolderOpen,
 	MousePointer2,
-	Puzzle,
 	Redo2,
 	Save,
 	Sparkles,

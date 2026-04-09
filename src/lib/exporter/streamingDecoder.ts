@@ -37,6 +37,21 @@ export function getDecodedFrameStartupOffsetUs(
   return Math.max(0, firstDecodedFrameTimestampUs - streamStartTimeUs);
 }
 
+export function getDecodedFrameTimelineOffsetUs(
+  firstDecodedFrameTimestampUs: number,
+  metadata: Pick<DecodedVideoInfo, 'mediaStartTime' | 'streamStartTime'>
+): number {
+  const mediaStartTimeUs = Math.round((metadata.mediaStartTime ?? 0) * 1_000_000);
+  const streamStartTimeUs = Math.round(
+    (metadata.streamStartTime ?? metadata.mediaStartTime ?? 0) * 1_000_000
+  );
+
+  return (
+    Math.max(0, streamStartTimeUs - mediaStartTimeUs) +
+    getDecodedFrameStartupOffsetUs(firstDecodedFrameTimestampUs, metadata)
+  );
+}
+
 /**
  * Decodes video frames via web-demuxer + VideoDecoder in a single forward pass.
  * Way faster than seeking an HTMLVideoElement per frame.
@@ -221,6 +236,7 @@ export class StreamingVideoDecoder {
     let decodeError: Error | null = null;
     let decodeDone = false;
     let firstDecodedFrameTimestampUs: number | null = null;
+    let decodedFrameTimelineOffsetUs = 0;
 
     this.decoder = new VideoDecoder({
       output: (frame: VideoFrame) => {
@@ -365,11 +381,16 @@ export class StreamingVideoDecoder {
 
       if (firstDecodedFrameTimestampUs === null) {
         firstDecodedFrameTimestampUs = frame.timestamp;
+        decodedFrameTimelineOffsetUs = getDecodedFrameTimelineOffsetUs(
+          firstDecodedFrameTimestampUs,
+          this.metadata
+        );
       }
 
       const normalizedFrameTimeSec = Math.max(
         0,
-        (frame.timestamp - firstDecodedFrameTimestampUs) / 1_000_000,
+        (frame.timestamp - firstDecodedFrameTimestampUs + decodedFrameTimelineOffsetUs) /
+          1_000_000,
       );
       const frameTimeSec: number =
         lastDecodedFrameSec === null
