@@ -370,7 +370,9 @@ Pull requests are welcome.
 
 - Tadees
 - buildwithfur
+- Tobias
 - Anonymous Supporter
+- Roberto Marcelino
 - Rajan RK
 - Erwan
 - Anonymous supporter
