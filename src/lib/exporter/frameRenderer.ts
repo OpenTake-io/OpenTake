@@ -170,7 +170,7 @@ export class FrameRenderer {
   private springX: SpringState;
   private springY: SpringState;
   private cursorFollowCamera: CursorFollowCameraState;
-  private lastFrameTimeMs: number | null = null;
+  private lastContentTimeMs: number | null = null;
   private cursorOverlay: PixiCursorOverlay | null = null;
   private webcamForwardFrameSource: ForwardFrameSource | null = null;
   private webcamDecodedFrame: VideoFrame | null = null;
@@ -1137,12 +1137,12 @@ export class FrameRenderer {
       focusY: state.focusY,
     });
 
-    // Spring-driven zoom animation for export
-    const now = performance.now();
-    const deltaMs = this.lastFrameTimeMs !== null
-      ? now - this.lastFrameTimeMs
+    // Spring-driven zoom animation for export — use content time, not wall-clock,
+    // so the spring advances at the same rate as the video regardless of render speed.
+    const deltaMs = this.lastContentTimeMs !== null
+      ? timeMs - this.lastContentTimeMs
       : 1000 / 60;
-    this.lastFrameTimeMs = now;
+    this.lastContentTimeMs = timeMs;
 
     const zoomSpringConfig = getZoomSpringConfig(this.config.zoomSmoothness);
 
