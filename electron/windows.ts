@@ -165,9 +165,16 @@ function getScreen() {
 	return nodeRequire("electron").screen as typeof import("electron").screen;
 }
 
+function getHudOverlayDisplay() {
+	const hudWindow = getHudOverlayWindow();
+	if (hudWindow) {
+		return getScreen().getDisplayMatching(hudWindow.getBounds());
+	}
+	return getScreen().getPrimaryDisplay();
+}
+
 function getHudOverlayBounds(expanded: boolean) {
-	const primaryDisplay = getScreen().getPrimaryDisplay();
-	const { bounds, workArea } = primaryDisplay;
+	const { bounds, workArea } = getHudOverlayDisplay();
 	const maxWindowWidth = Math.max(HUD_MIN_WINDOW_WIDTH, workArea.width - HUD_EDGE_MARGIN_DIP * 2);
 	const windowWidth = Math.min(
 		maxWindowWidth,
@@ -318,10 +325,9 @@ ipcMain.on("set-hud-overlay-compact-width", (_event, width: number) => {
 		return;
 	}
 
-	const primaryDisplay = getScreen().getPrimaryDisplay();
 	const maxWindowWidth = Math.max(
 		HUD_MIN_WINDOW_WIDTH,
-		primaryDisplay.workArea.width - HUD_EDGE_MARGIN_DIP * 2,
+		getHudOverlayDisplay().workArea.width - HUD_EDGE_MARGIN_DIP * 2,
 	);
 	const nextWidth = Math.min(maxWindowWidth, Math.max(HUD_MIN_WINDOW_WIDTH, Math.round(width)));
 
@@ -338,10 +344,9 @@ ipcMain.on("set-hud-overlay-measured-height", (_event, height: number, expanded:
 		return;
 	}
 
-	const primaryDisplay = getScreen().getPrimaryDisplay();
 	const maxWindowHeight = Math.max(
 		HUD_COMPACT_HEIGHT,
-		primaryDisplay.workArea.height - HUD_EDGE_MARGIN_DIP * 2,
+		getHudOverlayDisplay().workArea.height - HUD_EDGE_MARGIN_DIP * 2,
 	);
 	const nextHeight = Math.min(maxWindowHeight, Math.max(HUD_COMPACT_HEIGHT, Math.round(height)));
 
@@ -399,7 +404,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 		minHeight: HUD_COMPACT_HEIGHT,
 		maxHeight: Math.max(
 			HUD_COMPACT_HEIGHT,
-			getScreen().getPrimaryDisplay().workArea.height - HUD_EDGE_MARGIN_DIP * 2,
+			getHudOverlayDisplay().workArea.height - HUD_EDGE_MARGIN_DIP * 2,
 		),
 		x: initialBounds.x,
 		y: initialBounds.y,
