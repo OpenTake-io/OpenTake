@@ -5,6 +5,7 @@ import {
 	Download,
 	FolderOpen,
 	MousePointer2,
+	Puzzle,
 	Redo2,
 	Save,
 	Sparkles,
@@ -1815,6 +1816,9 @@ export default function VideoEditor() {
 		const result = await window.electronAPI.deleteWhisperSmallModel();
 		if (!result.success) {
 			toast.error(result.error || "Failed to delete Whisper small model");
+			// Reset download state so re-download is not blocked
+			setWhisperModelDownloadStatus("idle");
+			setWhisperModelDownloadProgress(0);
 			return;
 		}
 

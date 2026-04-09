@@ -5691,6 +5691,23 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       return { success: true }
     } catch (error) {
       console.error('Failed to delete Whisper small model:', error)
+      // Verify whether the file was actually removed despite the error
+      const status = await getWhisperSmallModelStatus()
+      if (!status.exists) {
+        // File is gone — treat as success
+        sendWhisperModelDownloadProgress(event.sender, {
+          status: 'idle',
+          progress: 0,
+          path: null,
+        })
+        return { success: true }
+      }
+      sendWhisperModelDownloadProgress(event.sender, {
+        status: 'error',
+        progress: 0,
+        path: null,
+        error: String(error),
+      })
       return { success: false, error: String(error) }
     }
   })
