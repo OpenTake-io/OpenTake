@@ -30,7 +30,7 @@ Recordly is a desktop app for recording and editing screen captures with motion-
 
 Recordly runs on:
 
-- **macOS** 12.3+
+- **macOS** 13.0+
 - **Windows** 10 Build 19041+
 - **Linux** on modern distros
 
@@ -237,7 +237,7 @@ xattr -rd com.apple.quarantine /Applications/Recordly.app
 
 | Platform | Minimum version | Notes |
 |---|---|---|
-| **macOS** | macOS 12.3 (Monterey) | Required for ScreenCaptureKit-based capture. |
+| **macOS** | macOS 13.0 (Ventura) | Required for ScreenCaptureKit audio capture. |
 | **Windows** | Windows 10 20H1 (Build 19041, May 2020) | Required for the native Windows Graphics Capture (WGC) helper and best cursor-hiding behavior. |
 | **Linux** | Any modern distro | Recording works through Electron capture. System audio generally requires PipeWire. |
 
@@ -308,7 +308,7 @@ System audio support varies by platform.
 - Usually requires PipeWire
 
 **macOS**
-- Requires macOS 12.3+ and the ScreenCaptureKit-based workflow
+- Requires macOS 13.0+ and the ScreenCaptureKit-based workflow
 
 ---
 

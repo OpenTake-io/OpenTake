@@ -117,7 +117,9 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			let scaleFactor = ScreenCaptureRecorder.scaleFactor(for: candidateDisplay?.displayID ?? CGMainDisplayID())
 			outputWidth = max(2, Int(window.frame.width) * scaleFactor)
 			outputHeight = max(2, Int(window.frame.height) * scaleFactor)
-			streamConfig.ignoreShadowsSingleWindow = true
+			if #available(macOS 14.0, *) {
+				streamConfig.ignoreShadowsSingleWindow = true
+			}
 			streamConfig.width = outputWidth
 			streamConfig.height = outputHeight
 		} else {
