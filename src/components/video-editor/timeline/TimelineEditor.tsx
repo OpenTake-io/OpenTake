@@ -967,6 +967,7 @@ export default function TimelineEditor({
     // Determine which row the item belongs to
     const isZoomItem = zoomRegions.some(r => r.id === excludeId);
     const isTrimItem = trimRegions.some(r => r.id === excludeId);
+    const isClipItem = clipRegions.some(r => r.id === excludeId);
     const isAnnotationItem = annotationRegions.some(r => r.id === excludeId);
     const isSpeedItem = speedRegions.some(r => r.id === excludeId);
     const isAudioItem = audioRegions.some(r => r.id === excludeId);
@@ -976,7 +977,7 @@ export default function TimelineEditor({
     }
 
     // Helper to check overlap against a specific set of regions
-    const checkOverlap = (regions: (ZoomRegion | TrimRegion | SpeedRegion | AudioRegion)[]) => {
+    const checkOverlap = (regions: (ZoomRegion | TrimRegion | ClipRegion | SpeedRegion | AudioRegion)[]) => {
       return regions.some((region) => {
         if (region.id === excludeId) return false;
         // True overlap: regions actually intersect (not just adjacent)
@@ -992,6 +993,10 @@ export default function TimelineEditor({
       return checkOverlap(trimRegions);
     }
 
+    if (isClipItem) {
+      return checkOverlap(clipRegions);
+    }
+
     if (isSpeedItem) {
       return checkOverlap(speedRegions);
     }
@@ -1001,7 +1006,7 @@ export default function TimelineEditor({
     }
 
     return false;
-  }, [zoomRegions, trimRegions, annotationRegions, speedRegions, audioRegions]);
+  }, [zoomRegions, trimRegions, clipRegions, annotationRegions, speedRegions, audioRegions]);
 
   // Keep newly added timeline regions at the original short default instead of
   // scaling them with the full recording length.
