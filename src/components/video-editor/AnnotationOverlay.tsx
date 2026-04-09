@@ -111,6 +111,17 @@ export function AnnotationOverlay({
           </div>
         );
 
+      case "blur":
+        return (
+          <div
+            className="h-full w-full bg-slate-400/10"
+            style={{
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+              boxShadow: isSelected ? "inset 0 0 0 1px rgba(255,255,255,0.2)" : "none",
+            }}
+          />
+        );
       default:
         return null;
     }

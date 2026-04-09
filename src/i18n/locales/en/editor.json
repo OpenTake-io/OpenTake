@@ -9,6 +9,7 @@
 		"text": "Text",
 		"image": "Image",
 		"arrow": "Arrow",
+		"blur": "Blur",
 		"textContent": "Text Content",
 		"textPlaceholder": "Enter your text...",
 		"fontStyle": "Font Style",

@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Trash2, Type, Image as ImageIcon, Upload, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, ChevronDown, Info } from "lucide-react";
+import { Trash2, Type, Image as ImageIcon, Upload, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, ChevronDown, Info, SquareDashed } from "lucide-react";
 import { toast } from "sonner";
 import Block from '@uiw/react-color-block';
 import type { AnnotationRegion, AnnotationType, ArrowDirection, FigureData } from "./types";
@@ -128,7 +128,7 @@ export function AnnotationSettingsPanel({
         
         {/* Type Selector */}
         <Tabs value={annotation.type} onValueChange={(value) => onTypeChange(value as AnnotationType)} className="mb-6">
-          <TabsList className="mb-4 bg-white/5 border border-white/5 p-1 w-full grid grid-cols-3 h-auto rounded-xl">
+          <TabsList className="mb-4 bg-white/5 border border-white/5 p-1 w-full grid grid-cols-4 h-auto rounded-xl">
             <TabsTrigger value="text" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 py-2 rounded-lg transition-all gap-2">
               <Type className="w-4 h-4" />
               {t('annotations.text')}
@@ -142,6 +142,10 @@ export function AnnotationSettingsPanel({
                 <path d="M4 12h16m0 0l-6-6m6 6l-6 6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               {t('annotations.arrow')}
+            </TabsTrigger>
+            <TabsTrigger value="blur" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 py-2 rounded-lg transition-all gap-2">
+              <SquareDashed className="w-4 h-4" />
+              {t('annotations.blur')}
             </TabsTrigger>
           </TabsList>
 
@@ -497,6 +501,18 @@ export function AnnotationSettingsPanel({
                   />
                 </PopoverContent>
               </Popover>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="blur" className="mt-0 space-y-4">
+            <div className="p-4 bg-white/5 rounded-xl border border-white/10 flex flex-col items-center justify-center text-center">
+              <div className="w-12 h-12 rounded-full bg-[#2563EB]/20 flex items-center justify-center mb-3">
+                <SquareDashed className="w-6 h-6 text-[#2563EB]" />
+              </div>
+              <h4 className="text-sm font-medium text-slate-200 mb-1">{t('annotations.blur')}</h4>
+              <p className="text-xs text-slate-400 max-w-[200px]">
+                Resize and reposition the box on the video to blur sensitive information.
+              </p>
             </div>
           </TabsContent>
         </Tabs>

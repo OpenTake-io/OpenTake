@@ -358,6 +358,16 @@ export async function renderAnnotations(
           );
         }
         break;
+
+      case "blur":
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, width, height);
+        ctx.clip();
+        ctx.filter = `blur(${20 * scaleFactor}px)`;
+        ctx.drawImage(ctx.canvas, 0, 0);
+        ctx.restore();
+        break;
     }
   }
 }
