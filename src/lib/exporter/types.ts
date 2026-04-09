@@ -29,6 +29,7 @@ export interface ExportProgress {
   encoderName?: string;
   phase?: 'extracting' | 'finalizing' | 'saving'; // Phase of export
   renderProgress?: number; // 0-100, progress of GIF rendering phase
+  audioProgress?: number; // 0-1, progress of real-time audio rendering (speed/audio regions)
 }
 
 export interface ExportMetrics {
