@@ -27,6 +27,8 @@
 		"noMicrophonesFound": "No se encontraron micrófonos",
 		"webcam": "Cámara",
 		"turnOffWebcam": "Desactivar cámara",
+		"hideFloatingWebcamPreview": "Ocultar vista flotante",
+		"showFloatingWebcamPreview": "Mostrar vista flotante",
 		"selectWebcamToEnable": "Selecciona una cámara para activar",
 		"noWebcamsFound": "No se encontraron cámaras",
 		"recordingsFolder": "Carpeta de grabaciones",
