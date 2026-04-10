@@ -136,7 +136,6 @@ export function stepSpringValue(
   const initialVelocity = -state.velocity;
   const tSec = msToSec(safeDeltaMs);
 
-  const previousValue = state.value;
   const current = resolveSpringPosition(
     tSec,
     target,
@@ -146,23 +145,36 @@ export function stepSpringValue(
     undampedAngularFreq,
   );
 
-  // Check convergence
-  let currentVelocity = 0;
-  if (dampingRatio < 1) {
-    // Only underdamped springs can overshoot, so we need velocity checks
-    const epsilon = 0.0001;
-    const ahead = resolveSpringPosition(
-      tSec + epsilon,
-      target,
-      initialDelta,
-      initialVelocity,
-      dampingRatio,
-      undampedAngularFreq,
-    );
-    currentVelocity = ((ahead - current) / epsilon) * 1000; // convert back to ms
+  // Overshoot guard for overdamped / critically-damped springs (ζ ≥ 1).
+  // With a fixed target an overdamped spring never overshoots, but when
+  // the target moves every frame (zoom easing curve) carried-over velocity
+  // can push the value past the new target → wobble on reversal.
+  // Clamping to target keeps the original animation speed while preventing
+  // the jelly-like counter-oscillation.
+  if (dampingRatio >= 1) {
+    const crossed =
+      (state.value <= target && current > target) ||
+      (state.value >= target && current < target);
+    if (crossed) {
+      state.value = target;
+      state.velocity = 0;
+      return state.value;
+    }
   }
 
-  const isBelowVelocityThreshold = Math.abs(currentVelocity) <= restSpeed;
+  // Analytical velocity via forward-difference on the closed-form solution.
+  const epsilon = 0.0001;
+  const ahead = resolveSpringPosition(
+    tSec + epsilon,
+    target,
+    initialDelta,
+    initialVelocity,
+    dampingRatio,
+    undampedAngularFreq,
+  );
+  const analyticalVelocity = (ahead - current) / epsilon; // value per second
+
+  const isBelowVelocityThreshold = Math.abs(analyticalVelocity) <= restSpeed;
   const isBelowDisplacementThreshold = Math.abs(target - current) <= restDelta;
   const isDone = isBelowVelocityThreshold && isBelowDisplacementThreshold;
 
@@ -171,7 +183,7 @@ export function stepSpringValue(
     state.velocity = 0;
   } else {
     state.value = current;
-    state.velocity = ((state.value - previousValue) / safeDeltaMs) * 1000;
+    state.velocity = analyticalVelocity;
   }
 
   return state.value;
@@ -237,7 +249,9 @@ export function getZoomSpringConfig(smoothnessFactor = 0.5): SpringConfig {
   const scaled = clamped * 2;
 
   // Hooke's law spring: F = -kx - cv
-  // Damping ratio ζ = c / (2√(km)) ≈ 1.05 — always overdamped, no overshoot.
+  // Damping ratio ζ = c / (2√(km)) ≈ 1.05 — barely overdamped.
+  // The overshoot clamp in stepSpringValue prevents wobble even at
+  // this low damping, so animations stay fast and responsive.
   // Higher scaled → lower stiffness + higher mass → slower, floatier settle.
   return {
     stiffness: 100 / scaled,
