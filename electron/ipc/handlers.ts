@@ -1589,7 +1589,7 @@ async function muxNativeVideoExportAudio(
 async function probeMediaDurationSeconds(filePath: string): Promise<number> {
   const ffmpegPath = getFfmpegBinaryPath()
   try {
-    await execFileAsync(ffmpegPath, ['-i', filePath, '-f', 'null', '-'], { timeout: 30000, maxBuffer: 2 * 1024 * 1024 })
+    await execFileAsync(ffmpegPath, ['-i', filePath], { timeout: 30000, maxBuffer: 2 * 1024 * 1024 })
   } catch (error) {
     // ffmpeg reports info on stderr even on "success" — parse it from the error
     const stderr = (error as NodeJS.ErrnoException & { stderr?: string })?.stderr ?? ''
