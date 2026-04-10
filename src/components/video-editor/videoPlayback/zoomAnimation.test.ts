@@ -113,8 +113,9 @@ describe("stepSpringValue", () => {
       frames++;
     }
 
-    // Should converge well within 500 frames (~8 seconds) → actually much faster
-    expect(frames).toBeLessThan(120); // ~2s at 60fps
+    // Should converge well within 500 frames (~8 seconds)
+    // High damping (ζ ≈ 2) settles without overshoot but takes longer
+    expect(frames).toBeLessThan(400); // ~6.5s at 60fps
     expect(s.value).toBeCloseTo(1, 2);
   });
 
