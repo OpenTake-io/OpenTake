@@ -61,6 +61,7 @@ const LOCALE_LABELS: Record<string, string> = {
 const COUNTDOWN_OPTIONS = [0, 3, 5, 10];
 const WEBCAM_PREVIEW_DRAG_THRESHOLD = 6;
 const DEFAULT_WEBCAM_PREVIEW_OFFSET = { x: 0, y: 0 };
+const DEFAULT_RECORDING_HUD_OFFSET = { x: 0, y: 0 };
 
 function IconButton({
   onClick,
@@ -165,6 +166,7 @@ export function LaunchWindow() {
   const [hideHudFromCapture, setHideHudFromCapture] = useState(true);
   const [showFloatingWebcamPreview, setShowFloatingWebcamPreview] = useState(true);
   const [webcamPreviewOffset, setWebcamPreviewOffset] = useState(DEFAULT_WEBCAM_PREVIEW_OFFSET);
+  const [recordingHudOffset, setRecordingHudOffset] = useState(DEFAULT_RECORDING_HUD_OFFSET);
   const [platform, setPlatform] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [updateStatus, setUpdateStatus] = useState<{
@@ -232,11 +234,18 @@ export function LaunchWindow() {
   useEffect(() => {
     if (!webcamEnabled) {
       setWebcamPreviewOffset(DEFAULT_WEBCAM_PREVIEW_OFFSET);
+      setRecordingHudOffset(DEFAULT_RECORDING_HUD_OFFSET);
       webcamPreviewDragStartRef.current = null;
       isWebcamPreviewDraggingRef.current = false;
       setShowFloatingWebcamPreview(true);
     }
   }, [webcamEnabled]);
+
+  useEffect(() => {
+    if (!showRecordingWebcamPreview) {
+      setRecordingHudOffset(DEFAULT_RECORDING_HUD_OFFSET);
+    }
+  }, [showRecordingWebcamPreview]);
 
   const handleWebcamPreviewPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) {
@@ -981,7 +990,10 @@ export function LaunchWindow() {
         }}
       >
         {/* Only the visible HUD content should become interactive. */}
-        <div className={styles.menuArea}>
+        <div
+          className={styles.menuArea}
+          style={{ transform: `translate(${recordingHudOffset.x}px, ${recordingHudOffset.y}px)` }}
+        >
           {projectBrowserOpen ? (
             <div className={styles.electronNoDrag}>
               <ProjectBrowserDialog
@@ -1226,12 +1238,62 @@ export function LaunchWindow() {
         </div>
 
         <div className="flex flex-col items-center pointer-events-auto">
-          <motion.div ref={hudBarRef} layout transition={hudStateTransition} className={`${styles.bar} mb-2`}>
+          <div style={{ transform: `translate(${recordingHudOffset.x}px, ${recordingHudOffset.y}px)` }}>
+            <motion.div
+              ref={hudBarRef}
+              layout={!showRecordingWebcamPreview}
+              transition={hudStateTransition}
+              className={`${styles.bar} mb-2`}
+            >
             <div
               className="flex items-center px-0.5 cursor-grab active:cursor-grabbing"
               onMouseDown={(e) => {
                 e.preventDefault();
                 isHudDraggingRef.current = true;
+                window.electronAPI?.hudOverlaySetIgnoreMouse?.(false);
+
+                if (showRecordingWebcamPreview && hudBarRef.current) {
+                  const hudRect = hudBarRef.current.getBoundingClientRect();
+                  const dragStartX = e.clientX;
+                  const dragStartY = e.clientY;
+                  const originX = recordingHudOffset.x;
+                  const originY = recordingHudOffset.y;
+                  const initialLeft = hudRect.left;
+                  const initialTop = hudRect.top;
+                  const hudWidth = hudRect.width;
+                  const hudHeight = hudRect.height;
+
+                  const handleMove = (ev: MouseEvent) => {
+                    const deltaX = ev.clientX - dragStartX;
+                    const deltaY = ev.clientY - dragStartY;
+                    const viewportWidth = Math.max(window.innerWidth, window.screen?.width ?? 0);
+                    const viewportHeight = Math.max(window.innerHeight, window.screen?.height ?? 0);
+                    const unclampedLeft = initialLeft + deltaX;
+                    const unclampedTop = initialTop + deltaY;
+                    const clampedLeft = Math.min(Math.max(0, unclampedLeft), Math.max(0, viewportWidth - hudWidth));
+                    const clampedTop = Math.min(Math.max(0, unclampedTop), Math.max(0, viewportHeight - hudHeight));
+
+                    setRecordingHudOffset({
+                      x: originX + (clampedLeft - initialLeft),
+                      y: originY + (clampedTop - initialTop),
+                    });
+                  };
+
+                  const handleUp = () => {
+                    const wasDragging = isHudDraggingRef.current;
+                    isHudDraggingRef.current = false;
+                    if (wasDragging) {
+                      window.electronAPI?.hudOverlaySetIgnoreMouse?.(true);
+                    }
+                    document.removeEventListener("mousemove", handleMove);
+                    document.removeEventListener("mouseup", handleUp);
+                  };
+
+                  document.addEventListener("mousemove", handleMove);
+                  document.addEventListener("mouseup", handleUp);
+                  return;
+                }
+
                 window.electronAPI?.hudOverlayDrag?.("start", e.screenX, e.screenY);
                 const handleMove = (ev: MouseEvent) => {
                   window.electronAPI?.hudOverlayDrag?.("move", ev.screenX, ev.screenY);
@@ -1270,7 +1332,7 @@ export function LaunchWindow() {
               <AnimatePresence initial={false} mode="wait">
                 <motion.div
                   key={recording ? "recording" : "idle"}
-                  layout
+                  layout={!showRecordingWebcamPreview}
                   className={styles.barState}
                   initial={{ opacity: 0, y: 10, scale: 0.985, filter: "blur(8px)" }}
                   animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
@@ -1281,7 +1343,8 @@ export function LaunchWindow() {
                 </motion.div>
               </AnimatePresence>
             </div>
-          </motion.div>
+            </motion.div>
+          </div>
           {showRecordingWebcamPreview && (
             <div
               ref={recordingWebcamPreviewContainerRef}
