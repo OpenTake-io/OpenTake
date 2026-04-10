@@ -1,1 +1,0 @@
-Windows object destroyed hotfix
