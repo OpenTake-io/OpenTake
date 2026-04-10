@@ -113,7 +113,7 @@ export function AnnotationOverlay({
           </div>
         );
 
-      case "blur":
+      case "blur": {
         const previewScaleFactor = containerWidth / BASE_PREVIEW_WIDTH;
         const blurPx = BLUR_ANNOTATION_STRENGTH * previewScaleFactor;
         const blurStyle = `blur(${blurPx}px)`;
@@ -128,6 +128,7 @@ export function AnnotationOverlay({
             }}
           />
         );
+      }
 
       default:
         return null;
