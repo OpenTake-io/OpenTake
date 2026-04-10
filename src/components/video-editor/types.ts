@@ -176,6 +176,10 @@ export function trimsToClips(trims: TrimRegion[], totalDurationMs: number): Clip
 }
 
 export type AnnotationType = "text" | "image" | "figure" | "blur";
+export const BLUR_ANNOTATION_STRENGTH = 20;
+export const BASE_PREVIEW_WIDTH = 1920;
+export const BASE_PREVIEW_HEIGHT = 1080;
+
 
 export type ArrowDirection =
 	| "up"

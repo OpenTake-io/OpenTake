@@ -36,8 +36,10 @@
 		"tipCycleForward": "Use Tab to cycle through overlapping items.",
 		"tipCycleBackward": "Use Shift+Tab to cycle backwards.",
 		"imageUploadSuccess": "Image uploaded successfully!",
-		"imageUploadError": "Please upload a JPG, PNG, GIF, or WebP image file."
+		"imageUploadError": "Please upload a JPG, PNG, GIF, or WebP image file.",
+		"blurDescription": "Resize and reposition the box on the video to blur sensitive information."
 	},
+
 	"fontStyles": {
 		"classic": "Classic",
 		"editor": "Editor",

@@ -1,10 +1,22 @@
 import type { AnnotationRegion, ArrowDirection } from "@/components/video-editor/types";
+import { BLUR_ANNOTATION_STRENGTH } from "@/components/video-editor/types";
+
 
 export interface AnnotationRenderAssets {
   imageCache: Map<string, HTMLImageElement>;
 }
 
 const annotationImagePromiseCache = new Map<string, Promise<HTMLImageElement | null>>();
+
+let blurBufferCanvas: HTMLCanvasElement | null = null;
+function getBlurBufferCanvas(): HTMLCanvasElement {
+  if (typeof document === "undefined") return {} as HTMLCanvasElement;
+  if (!blurBufferCanvas) {
+    blurBufferCanvas = document.createElement("canvas");
+  }
+  return blurBufferCanvas;
+}
+
 
 function getAnnotationImageContent(annotation: AnnotationRegion): string | null {
   const source = annotation.imageContent || annotation.content;
@@ -359,15 +371,39 @@ export async function renderAnnotations(
         }
         break;
 
-      case "blur":
+      case "blur": {
+        const blurStrength = BLUR_ANNOTATION_STRENGTH * scaleFactor;
+        const padding = Math.ceil(blurStrength * 2);
+        
         ctx.save();
+        
         ctx.beginPath();
         ctx.rect(x, y, width, height);
         ctx.clip();
-        ctx.filter = `blur(${20 * scaleFactor}px)`;
-        ctx.drawImage(ctx.canvas, 0, 0);
+        
+        const sx = Math.max(0, x - padding);
+        const sy = Math.max(0, y - padding);
+        const sw = Math.min(canvasWidth - sx, width + padding * 2);
+        const sh = Math.min(canvasHeight - sy, height + padding * 2);
+        
+        if (sw > 0 && sh > 0) {
+          const buffer = getBlurBufferCanvas();
+          buffer.width = sw;
+          buffer.height = sh;
+          const bCtx = buffer.getContext("2d");
+          if (bCtx) {
+            bCtx.drawImage(ctx.canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+            
+            ctx.filter = `blur(${blurStrength}px)`;
+            ctx.drawImage(buffer, sx, sy);
+          }
+        }
+        
         ctx.restore();
         break;
+      }
+
+
     }
   }
 }

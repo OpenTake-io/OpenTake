@@ -511,8 +511,9 @@ export function AnnotationSettingsPanel({
               </div>
               <h4 className="text-sm font-medium text-slate-200 mb-1">{t('annotations.blur')}</h4>
               <p className="text-xs text-slate-400 max-w-[200px]">
-                Resize and reposition the box on the video to blur sensitive information.
+                {t('annotations.blurDescription')}
               </p>
+
             </div>
           </TabsContent>
         </Tabs>
