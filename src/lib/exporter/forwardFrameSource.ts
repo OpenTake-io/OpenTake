@@ -1,5 +1,6 @@
 import { WebDemuxer } from "web-demuxer";
 import { getEffectiveVideoStreamDurationSeconds } from "@/lib/mediaTiming";
+import { getDecodedFrameTimelineOffsetUs } from "./streamingDecoder";
 
 const DEFAULT_MAX_DECODE_QUEUE = 12;
 const DEFAULT_MAX_PENDING_FRAMES = 32;
@@ -35,6 +36,7 @@ export class ForwardFrameSource {
   private heldFrameSec = 0;
   private lastTargetTimeSec = 0;
   private firstFrameTimestampUs: number | null = null;
+  private frameTimelineOffsetUs = 0;
 
   private toLocalFilePath(resourceUrl: string): string | null {
     if (!resourceUrl.startsWith("file:")) {
@@ -292,8 +294,12 @@ export class ForwardFrameSource {
         return null;
       }
       this.firstFrameTimestampUs = firstFrame.timestamp;
+      this.frameTimelineOffsetUs = getDecodedFrameTimelineOffsetUs(
+        firstFrame.timestamp,
+        this.metadata,
+      );
       this.heldFrame = firstFrame;
-      this.heldFrameSec = 0;
+      this.heldFrameSec = Math.max(0, this.frameTimelineOffsetUs / 1_000_000);
     }
 
     while (!this.cancelled) {
@@ -308,7 +314,10 @@ export class ForwardFrameSource {
         this.heldFrameSec,
         Math.max(
           0,
-          (nextFrame.timestamp - (this.firstFrameTimestampUs ?? nextFrame.timestamp)) / 1_000_000,
+          (
+            nextFrame.timestamp - (this.firstFrameTimestampUs ?? nextFrame.timestamp) +
+            this.frameTimelineOffsetUs
+          ) / 1_000_000,
         ),
       );
       const handoffBoundarySec = (this.heldFrameSec + nextFrameSec) / 2;
@@ -387,5 +396,6 @@ export class ForwardFrameSource {
     this.decodeError = null;
     this.lastTargetTimeSec = 0;
     this.firstFrameTimestampUs = null;
+    this.frameTimelineOffsetUs = 0;
   }
 }
