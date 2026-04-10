@@ -244,6 +244,25 @@ export function LaunchWindow() {
 		previewHeight: number;
 		dragging: boolean;
 	} | null>(null);
+	const hudDragStartRef = useRef<
+		| {
+				pointerId: number;
+				mode: "webcam-preview";
+				startX: number;
+				startY: number;
+				originX: number;
+				originY: number;
+				initialLeft: number;
+				initialTop: number;
+				hudWidth: number;
+				hudHeight: number;
+		  }
+		| {
+				pointerId: number;
+				mode: "overlay";
+		  }
+		| null
+	>(null);
 	const isHudDraggingRef = useRef(false);
 	const isWebcamPreviewDraggingRef = useRef(false);
 
@@ -386,6 +405,113 @@ export function LaunchWindow() {
 		const wasDragging = dragState.dragging;
 		webcamPreviewDragStartRef.current = null;
 		isWebcamPreviewDraggingRef.current = false;
+		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+			event.currentTarget.releasePointerCapture(event.pointerId);
+		}
+		if (wasDragging) {
+			window.electronAPI?.hudOverlaySetIgnoreMouse?.(true);
+		}
+	};
+
+	const handleHudBarPointerDown = (
+		event: React.PointerEvent<HTMLDivElement>,
+	) => {
+		if (event.button !== 0) {
+			return;
+		}
+
+		event.preventDefault();
+		event.currentTarget.setPointerCapture(event.pointerId);
+		isHudDraggingRef.current = true;
+		window.electronAPI?.hudOverlaySetIgnoreMouse?.(false);
+
+		if (showRecordingWebcamPreview && hudBarRef.current) {
+			const hudRect = hudBarRef.current.getBoundingClientRect();
+			hudDragStartRef.current = {
+				pointerId: event.pointerId,
+				mode: "webcam-preview",
+				startX: event.clientX,
+				startY: event.clientY,
+				originX: recordingHudOffset.x,
+				originY: recordingHudOffset.y,
+				initialLeft: hudRect.left,
+				initialTop: hudRect.top,
+				hudWidth: hudRect.width,
+				hudHeight: hudRect.height,
+			};
+			return;
+		}
+
+		hudDragStartRef.current = {
+			pointerId: event.pointerId,
+			mode: "overlay",
+		};
+		window.electronAPI?.hudOverlayDrag?.(
+			"start",
+			event.screenX,
+			event.screenY,
+		);
+	};
+
+	const handleHudBarPointerMove = (
+		event: React.PointerEvent<HTMLDivElement>,
+	) => {
+		const dragState = hudDragStartRef.current;
+		if (!dragState || dragState.pointerId !== event.pointerId) {
+			return;
+		}
+
+		if (dragState.mode === "webcam-preview") {
+			const deltaX = event.clientX - dragState.startX;
+			const deltaY = event.clientY - dragState.startY;
+			const viewportWidth = Math.max(
+				window.innerWidth,
+				window.screen?.width ?? 0,
+			);
+			const viewportHeight = Math.max(
+				window.innerHeight,
+				window.screen?.height ?? 0,
+			);
+			const unclampedLeft = dragState.initialLeft + deltaX;
+			const unclampedTop = dragState.initialTop + deltaY;
+			const clampedLeft = Math.min(
+				Math.max(0, unclampedLeft),
+				Math.max(0, viewportWidth - dragState.hudWidth),
+			);
+			const clampedTop = Math.min(
+				Math.max(0, unclampedTop),
+				Math.max(0, viewportHeight - dragState.hudHeight),
+			);
+
+			setRecordingHudOffset({
+				x: dragState.originX + (clampedLeft - dragState.initialLeft),
+				y: dragState.originY + (clampedTop - dragState.initialTop),
+			});
+			return;
+		}
+
+		window.electronAPI?.hudOverlayDrag?.(
+			"move",
+			event.screenX,
+			event.screenY,
+		);
+	};
+
+	const handleHudBarPointerUp = (
+		event: React.PointerEvent<HTMLDivElement>,
+	) => {
+		const dragState = hudDragStartRef.current;
+		if (!dragState || dragState.pointerId !== event.pointerId) {
+			return;
+		}
+
+		if (dragState.mode === "overlay") {
+			window.electronAPI?.hudOverlayDrag?.("end", 0, 0);
+		}
+
+		hudDragStartRef.current = null;
+		const wasDragging = isHudDraggingRef.current;
+		isHudDraggingRef.current = false;
 		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
 			event.currentTarget.releasePointerCapture(event.pointerId);
 		}
@@ -1627,144 +1753,10 @@ export function LaunchWindow() {
 						>
 							<div
 								className="flex items-center px-0.5 cursor-grab active:cursor-grabbing"
-								onMouseDown={(e) => {
-									e.preventDefault();
-									isHudDraggingRef.current = true;
-									window.electronAPI?.hudOverlaySetIgnoreMouse?.(
-										false,
-									);
-
-									if (
-										showRecordingWebcamPreview &&
-										hudBarRef.current
-									) {
-										const hudRect =
-											hudBarRef.current.getBoundingClientRect();
-										const dragStartX = e.clientX;
-										const dragStartY = e.clientY;
-										const originX = recordingHudOffset.x;
-										const originY = recordingHudOffset.y;
-										const initialLeft = hudRect.left;
-										const initialTop = hudRect.top;
-										const hudWidth = hudRect.width;
-										const hudHeight = hudRect.height;
-
-										const handleMove = (ev: MouseEvent) => {
-											const deltaX =
-												ev.clientX - dragStartX;
-											const deltaY =
-												ev.clientY - dragStartY;
-											const viewportWidth = Math.max(
-												window.innerWidth,
-												window.screen?.width ?? 0,
-											);
-											const viewportHeight = Math.max(
-												window.innerHeight,
-												window.screen?.height ?? 0,
-											);
-											const unclampedLeft =
-												initialLeft + deltaX;
-											const unclampedTop =
-												initialTop + deltaY;
-											const clampedLeft = Math.min(
-												Math.max(0, unclampedLeft),
-												Math.max(
-													0,
-													viewportWidth - hudWidth,
-												),
-											);
-											const clampedTop = Math.min(
-												Math.max(0, unclampedTop),
-												Math.max(
-													0,
-													viewportHeight - hudHeight,
-												),
-											);
-
-											setRecordingHudOffset({
-												x:
-													originX +
-													(clampedLeft - initialLeft),
-												y:
-													originY +
-													(clampedTop - initialTop),
-											});
-										};
-
-										const handleUp = () => {
-											const wasDragging =
-												isHudDraggingRef.current;
-											isHudDraggingRef.current = false;
-											if (wasDragging) {
-												window.electronAPI?.hudOverlaySetIgnoreMouse?.(
-													true,
-												);
-											}
-											document.removeEventListener(
-												"mousemove",
-												handleMove,
-											);
-											document.removeEventListener(
-												"mouseup",
-												handleUp,
-											);
-										};
-
-										document.addEventListener(
-											"mousemove",
-											handleMove,
-										);
-										document.addEventListener(
-											"mouseup",
-											handleUp,
-										);
-										return;
-									}
-
-									window.electronAPI?.hudOverlayDrag?.(
-										"start",
-										e.screenX,
-										e.screenY,
-									);
-									const handleMove = (ev: MouseEvent) => {
-										window.electronAPI?.hudOverlayDrag?.(
-											"move",
-											ev.screenX,
-											ev.screenY,
-										);
-									};
-									const handleUp = () => {
-										const wasDragging =
-											isHudDraggingRef.current;
-										isHudDraggingRef.current = false;
-										window.electronAPI?.hudOverlayDrag?.(
-											"end",
-											0,
-											0,
-										);
-										if (wasDragging) {
-											window.electronAPI?.hudOverlaySetIgnoreMouse?.(
-												true,
-											);
-										}
-										document.removeEventListener(
-											"mousemove",
-											handleMove,
-										);
-										document.removeEventListener(
-											"mouseup",
-											handleUp,
-										);
-									};
-									document.addEventListener(
-										"mousemove",
-										handleMove,
-									);
-									document.addEventListener(
-										"mouseup",
-										handleUp,
-									);
-								}}
+								onPointerDown={handleHudBarPointerDown}
+								onPointerMove={handleHudBarPointerMove}
+								onPointerUp={handleHudBarPointerUp}
+								onPointerCancel={handleHudBarPointerUp}
 							>
 								<RxDragHandleDots2
 									size={14}
