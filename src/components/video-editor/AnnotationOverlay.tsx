@@ -1,6 +1,8 @@
 import { useRef } from "react";
 import { Rnd } from "react-rnd";
 import type { AnnotationRegion } from "./types";
+import { BLUR_ANNOTATION_STRENGTH, BASE_PREVIEW_WIDTH } from "./types";
+
 import { cn } from "@/lib/utils";
 import { getArrowComponent } from "./ArrowSvgs";
 
@@ -112,16 +114,21 @@ export function AnnotationOverlay({
         );
 
       case "blur":
+        const previewScaleFactor = containerWidth / BASE_PREVIEW_WIDTH;
+        const blurPx = BLUR_ANNOTATION_STRENGTH * previewScaleFactor;
+        const blurStyle = `blur(${blurPx}px)`;
+
         return (
           <div
             className="h-full w-full bg-slate-400/10"
             style={{
-              backdropFilter: "blur(12px)",
-              WebkitBackdropFilter: "blur(12px)",
+              backdropFilter: blurStyle,
+              WebkitBackdropFilter: blurStyle,
               boxShadow: isSelected ? "inset 0 0 0 1px rgba(255,255,255,0.2)" : "none",
             }}
           />
         );
+
       default:
         return null;
     }
