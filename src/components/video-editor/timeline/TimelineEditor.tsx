@@ -1448,11 +1448,11 @@ export default function TimelineEditor({
     return [...zooms, ...clips, ...annotations, ...audios];
   }, [zoomRegions, clipRegions, annotationRegions, audioRegions]);
 
-  // Flat list of all non-annotation region spans for neighbour-clamping during drag/resize
+  // Flat list of draggable row spans for neighbour-clamping during drag/resize.
   const allRegionSpans = useMemo(() => {
-    const zooms = zoomRegions.map((r) => ({ id: r.id, start: r.startMs, end: r.endMs }));
-    const clips = clipRegions.map((r) => ({ id: r.id, start: r.startMs, end: r.endMs }));
-    const audios = audioRegions.map((r) => ({ id: r.id, start: r.startMs, end: r.endMs }));
+    const zooms = zoomRegions.map((r) => ({ id: r.id, start: r.startMs, end: r.endMs, rowId: ZOOM_ROW_ID }));
+    const clips = clipRegions.map((r) => ({ id: r.id, start: r.startMs, end: r.endMs, rowId: CLIP_ROW_ID }));
+    const audios = audioRegions.map((r) => ({ id: r.id, start: r.startMs, end: r.endMs, rowId: AUDIO_ROW_ID }));
     return [...zooms, ...clips, ...audios];
   }, [zoomRegions, clipRegions, audioRegions]);
 
