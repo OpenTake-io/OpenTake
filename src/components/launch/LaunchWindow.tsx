@@ -1181,7 +1181,6 @@ export function LaunchWindow() {
 		<div
 			className="w-full flex items-end justify-center bg-transparent overflow-visible pb-5"
 			style={{ height: "100vh" }}
-			ref={dropdownRef}
 		>
 			<div
 				ref={hudContentRef}
@@ -1202,6 +1201,7 @@ export function LaunchWindow() {
 				{/* Only the visible HUD content should become interactive. */}
 				<div
 					className={styles.menuArea}
+					ref={dropdownRef}
 					style={{
 						transform: `translate(${recordingHudOffset.x}px, ${recordingHudOffset.y}px)`,
 					}}
