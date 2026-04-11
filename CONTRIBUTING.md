@@ -7,6 +7,7 @@ Areas where help is especially valuable:
 - Export optimisations
 - Native screen recording for Linux
 - Wallpaper submissions
+- Extensions (device frames, click effects, render hooks — see [EXTENSIONS.md](./EXTENSIONS.md))
 
 ## How to Contribute
 

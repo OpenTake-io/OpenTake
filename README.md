@@ -388,6 +388,14 @@ Recordly is licensed under the **AGPL 3.0**.
 
 ---
 
+## Extensions
+
+Recordly has an extension system for adding device frames, click effects, render hooks, sounds, and settings panels. Built-in extensions ship under `public/builtin-extensions/`.
+
+See [EXTENSIONS.md](./EXTENSIONS.md) for the full API reference and examples.
+
+---
+
 # Credits
 
 ## Acknowledgements
