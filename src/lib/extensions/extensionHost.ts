@@ -6,7 +6,9 @@
  */
 
 import type {
+	ContributedCursorStyle,
 	ContributedFrame,
+	ContributedWallpaper,
 	CursorEffectContext,
 	CursorEffectFn,
 	ExtensionEvent,
@@ -59,11 +61,20 @@ function installElectronAPIGuard(): void {
 		},
 	});
 
-	Object.defineProperty(window, "electronAPI", {
-		value: proxy,
-		writable: false,
-		configurable: false,
-	});
+	// contextBridge.exposeInMainWorld creates a non-configurable property on
+	// window.  Attempting Object.defineProperty on it throws "Cannot redefine
+	// property: electronAPI" which crashes the renderer (and makes the
+	// transparent HUD window invisible).  Only redefine when the descriptor
+	// allows it; otherwise the proxy is still used internally via
+	// _realElectronAPI so app code keeps working.
+	const desc = Object.getOwnPropertyDescriptor(window, "electronAPI");
+	if (!desc || desc.configurable) {
+		Object.defineProperty(window, "electronAPI", {
+			value: proxy,
+			writable: false,
+			configurable: false,
+		});
+	}
 }
 
 installElectronAPIGuard();
@@ -82,6 +93,26 @@ interface RegisteredCursorEffect {
 interface RegisteredSettingsPanel {
 	extensionId: string;
 	panel: ExtensionSettingsPanel;
+}
+
+interface RegisteredWallpaper {
+	id: string;
+	extensionId: string;
+	wallpaper: ContributedWallpaper;
+	/** Resolved absolute URL to the wallpaper file */
+	resolvedUrl: string;
+	/** Resolved absolute URL to the thumbnail (or resolvedUrl if absent) */
+	resolvedThumbnailUrl: string;
+}
+
+interface RegisteredCursorStyle {
+	id: string;
+	extensionId: string;
+	cursorStyle: ContributedCursorStyle;
+	/** Resolved absolute URL to the default cursor image */
+	resolvedDefaultUrl: string;
+	/** Resolved absolute URL to the click image (if provided) */
+	resolvedClickUrl?: string;
 }
 
 interface ActiveExtension {
@@ -104,6 +135,8 @@ export class ExtensionHost {
 		{ extensionId: string; handler: ExtensionEventHandler }[]
 	>();
 	private settingsPanels: RegisteredSettingsPanel[] = [];
+	private wallpapers: RegisteredWallpaper[] = [];
+	private cursorStyles: RegisteredCursorStyle[] = [];
 	private extensionSettings = new Map<string, Record<string, unknown>>();
 	private settingChangeCallbacks = new Map<
 		string,
@@ -358,6 +391,20 @@ export class ExtensionHost {
 	 */
 	getFrames(): FrameInstance[] {
 		return [...this.frames];
+	}
+
+	/**
+	 * Get all contributed wallpapers from active extensions.
+	 */
+	getContributedWallpapers(): RegisteredWallpaper[] {
+		return [...this.wallpapers];
+	}
+
+	/**
+	 * Get all contributed cursor styles from active extensions.
+	 */
+	getContributedCursorStyles(): RegisteredCursorStyle[] {
+		return [...this.cursorStyles];
 	}
 
 	/**
@@ -633,6 +680,59 @@ export class ExtensionHost {
 				const dispose = () => {
 					const index = host.frames.indexOf(instance);
 					if (index >= 0) host.frames.splice(index, 1);
+					host.notifyListeners();
+				};
+				disposables.push(dispose);
+				return dispose;
+			},
+
+			registerWallpaper(wallpaper: ContributedWallpaper): () => void {
+				requirePermission("assets", "registerWallpaper");
+				const resolvedUrl = resolveExtensionRelativeFileUrl(extensionPath, wallpaper.file);
+				const resolvedThumbnailUrl = wallpaper.thumbnail
+					? resolveExtensionRelativeFileUrl(extensionPath, wallpaper.thumbnail)
+					: resolvedUrl;
+				const entry: RegisteredWallpaper = {
+					id: `${extensionId}/${wallpaper.id}`,
+					extensionId,
+					wallpaper,
+					resolvedUrl,
+					resolvedThumbnailUrl,
+				};
+				host.wallpapers.push(entry);
+				host.notifyListeners();
+
+				const dispose = () => {
+					const index = host.wallpapers.indexOf(entry);
+					if (index >= 0) host.wallpapers.splice(index, 1);
+					host.notifyListeners();
+				};
+				disposables.push(dispose);
+				return dispose;
+			},
+
+			registerCursorStyle(cursorStyle: ContributedCursorStyle): () => void {
+				requirePermission("assets", "registerCursorStyle");
+				const resolvedDefaultUrl = resolveExtensionRelativeFileUrl(
+					extensionPath,
+					cursorStyle.defaultImage,
+				);
+				const resolvedClickUrl = cursorStyle.clickImage
+					? resolveExtensionRelativeFileUrl(extensionPath, cursorStyle.clickImage)
+					: undefined;
+				const entry: RegisteredCursorStyle = {
+					id: `${extensionId}/${cursorStyle.id}`,
+					extensionId,
+					cursorStyle,
+					resolvedDefaultUrl,
+					resolvedClickUrl,
+				};
+				host.cursorStyles.push(entry);
+				host.notifyListeners();
+
+				const dispose = () => {
+					const index = host.cursorStyles.indexOf(entry);
+					if (index >= 0) host.cursorStyles.splice(index, 1);
 					host.notifyListeners();
 				};
 				disposables.push(dispose);

@@ -52,7 +52,8 @@ export type CursorStyle =
 	| "parched"
 	| "chooper"
 	| "amongus"
-	| "turtle";
+	| "turtle"
+	| (string & {});  // extension-contributed cursor styles
 export const DEFAULT_CURSOR_STYLE: CursorStyle = "tahoe";
 
 export type ZoomTransitionEasing = "recordly" | "glide" | "smooth" | "snappy" | "linear";

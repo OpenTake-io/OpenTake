@@ -66,15 +66,16 @@ export function ExtensionIcon({
   icon,
   extensionPath,
   className = "w-4 h-4",
+  imageClassName,
   ...rest
-}: { icon?: string | null; extensionPath?: string | null; className?: string } & Omit<LucideProps, "ref">) {
+}: { icon?: string | null; extensionPath?: string | null; className?: string; imageClassName?: string } & Omit<LucideProps, "ref">) {
   if (!icon) {
     return <Puzzle className={className} {...rest} />;
   }
 
   const iconSrc = resolveIconSrc(icon, extensionPath);
   if (iconSrc) {
-    return <img src={iconSrc} alt="" className={className} style={{ objectFit: "contain" }} />;
+    return <img src={iconSrc} alt="" className={imageClassName ?? className} style={{ objectFit: "cover" }} />;
   }
 
   // Try Lucide icon name (PascalCase)

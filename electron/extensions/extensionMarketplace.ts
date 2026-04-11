@@ -241,7 +241,10 @@ export async function downloadAndInstallExtension(
 
     // Security: verify no extracted file escaped the extraction directory
     // (protects against zip-slip / path traversal entries in malicious archives)
-    const resolvedExtractDir = path.resolve(extractDir);
+    // Use fs.realpath so the root matches what fs.realpath returns for children
+    // (on macOS /var is a symlink to /private/var — path.resolve does not
+    // resolve symlinks, so root and children would mismatch).
+    const resolvedExtractDir = await fs.realpath(extractDir);
     await assertNoEscapedFiles(resolvedExtractDir, resolvedExtractDir);
 
     // Find the manifest — it might be in a subfolder

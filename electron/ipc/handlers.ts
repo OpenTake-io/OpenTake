@@ -5169,6 +5169,70 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
   })
 
+  // Generate a tiny thumbnail for a wallpaper image and cache it in userData.
+  // Returns the cached thumbnail as raw JPEG bytes for fast grid rendering.
+  // Serialized to prevent concurrent nativeImage operations from eating memory.
+  const THUMB_SIZE = 96
+  const thumbCacheDir = path.join(USER_DATA_PATH, 'wallpaper-thumbs')
+  let thumbGenerationQueue: Promise<void> = Promise.resolve()
+
+  ipcMain.handle('generate-wallpaper-thumbnail', async (_, filePath: string) => {
+    try {
+      const resolved = path.resolve(filePath)
+
+      // Security: only allow reads from known safe directories
+      const allowedPrefixes = [
+        RECORDINGS_DIR,
+        USER_DATA_PATH,
+        getAssetRootPath(),
+        app.getPath('temp'),
+      ]
+      if (!allowedPrefixes.some((prefix) => resolved.startsWith(path.resolve(prefix)))) {
+        return { success: false, error: 'Access denied' }
+      }
+
+      // Deterministic cache key from file path + mtime
+      const stat = await fs.stat(resolved)
+      const cacheKey = Buffer.from(`${resolved}:${stat.mtimeMs}`).toString('base64url')
+      const thumbPath = path.join(thumbCacheDir, `${cacheKey}.jpg`)
+
+      // Return cached thumbnail if it exists (no queue needed)
+      if (existsSync(thumbPath)) {
+        const data = await fs.readFile(thumbPath)
+        return { success: true, data }
+      }
+
+      // Serialize nativeImage operations to avoid OOM from concurrent full-res decodes
+      let jpegData: Buffer
+      const generation = thumbGenerationQueue.then(async () => {
+        const { nativeImage } = await import('electron')
+        const img = nativeImage.createFromPath(resolved)
+        if (img.isEmpty()) {
+          throw new Error('Failed to load image')
+        }
+        const { width, height } = img.getSize()
+        const scale = THUMB_SIZE / Math.min(width, height)
+        const resized = img.resize({
+          width: Math.round(width * scale),
+          height: Math.round(height * scale),
+          quality: 'good',
+        })
+        jpegData = resized.toJPEG(70)
+
+        // Cache to disk
+        await fs.mkdir(thumbCacheDir, { recursive: true })
+        await fs.writeFile(thumbPath, jpegData)
+      })
+      // Keep the queue moving even if one fails
+      thumbGenerationQueue = generation.catch(() => {})
+      await generation
+
+      return { success: true, data: jpegData! }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
+  })
+
   // Return base path for assets so renderer can resolve file:// paths in production
   ipcMain.handle('get-asset-base-path', () => {
     try {

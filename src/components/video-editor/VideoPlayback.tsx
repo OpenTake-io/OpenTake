@@ -68,6 +68,17 @@ import {
   getCaptionWordVisualState,
 } from "./captionStyle";
 import { clamp01 } from "./videoPlayback/mathUtils";
+
+function getContributedCursorStylesSignature() {
+  return extensionHost
+    .getContributedCursorStyles()
+    .map(
+      (cursorStyle) =>
+        `${cursorStyle.id}:${cursorStyle.resolvedDefaultUrl}:${cursorStyle.resolvedClickUrl ?? ""}:${cursorStyle.cursorStyle.hotspot?.x ?? ""}:${cursorStyle.cursorStyle.hotspot?.y ?? ""}`,
+    )
+    .sort()
+    .join("|");
+}
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
 import {
   type CursorFollowCameraState,
@@ -1905,14 +1916,34 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         return;
       }
 
+      let cancelled = false;
+
       overlay.setDotRadius(DEFAULT_CURSOR_CONFIG.dotRadius * cursorSize);
-      overlay.setStyle(cursorStyle);
       overlay.setSmoothingFactor(cursorSmoothing);
       overlay.setMotionBlur(cursorMotionBlur);
       overlay.setClickBounce(cursorClickBounce);
       overlay.setClickBounceDuration(cursorClickBounceDuration);
       overlay.setSway(cursorSway);
-      overlay.reset();
+
+      void (async () => {
+        try {
+          await preloadCursorAssets();
+        } catch (error) {
+          console.warn("Failed to refresh cursor assets for preview:", error);
+          return;
+        }
+
+        if (cancelled || cursorOverlayRef.current !== overlay) {
+          return;
+        }
+
+        overlay.setStyle(cursorStyle);
+        overlay.reset();
+      })();
+
+      return () => {
+        cancelled = true;
+      };
     }, [
       cursorStyle,
       cursorSize,
@@ -1922,6 +1953,47 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       cursorClickBounceDuration,
       cursorSway,
     ]);
+
+    useEffect(() => {
+      let cancelled = false;
+      let signature = getContributedCursorStylesSignature();
+
+      const refreshSelectedCursorStyle = async () => {
+        const overlay = cursorOverlayRef.current;
+        if (!overlay) {
+          return;
+        }
+
+        try {
+          await preloadCursorAssets();
+        } catch (error) {
+          console.warn("Failed to refresh contributed cursor styles in preview:", error);
+          return;
+        }
+
+        if (cancelled || cursorOverlayRef.current !== overlay) {
+          return;
+        }
+
+        overlay.setStyle(cursorStyleRef.current);
+        overlay.reset();
+      };
+
+      const unsubscribe = extensionHost.onChange(() => {
+        const nextSignature = getContributedCursorStylesSignature();
+        if (nextSignature === signature) {
+          return;
+        }
+
+        signature = nextSignature;
+        void refreshSelectedCursorStyle();
+      });
+
+      return () => {
+        cancelled = true;
+        unsubscribe();
+      };
+    }, []);
 
     const handleLoadedMetadata = (
       e: React.SyntheticEvent<HTMLVideoElement, Event>,
