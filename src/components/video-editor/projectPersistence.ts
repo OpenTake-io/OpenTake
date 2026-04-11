@@ -92,6 +92,8 @@ export interface ProjectEditorState {
 	cursorSway: number;
 	borderRadius: number;
 	padding: number;
+	/** Selected frame ID (e.g. "recordly.frames/browser-dark"), or null for none */
+	frame: string | null;
 	cropRegion: CropRegion;
 	zoomRegions: ZoomRegion[];
 	trimRegions: TrimRegion[];
@@ -655,6 +657,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			: DEFAULT_CURSOR_SWAY,
 		borderRadius: typeof editor.borderRadius === "number" ? editor.borderRadius : 12.5,
 		padding: isFiniteNumber(editor.padding) ? clamp(editor.padding, 0, 100) : 20,
+		frame: typeof editor.frame === "string" ? editor.frame : null,
 		cropRegion: {
 			x: cropX,
 			y: cropY,

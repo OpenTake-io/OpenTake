@@ -14,6 +14,8 @@ import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
 import { cn } from "@/lib/utils";
+import { extensionHost, type FrameInstance } from "@/lib/extensions";
+import type { ExtensionSettingField } from "@/lib/extensions";
 import type { BuiltInWallpaper } from "@/lib/wallpapers";
 import { BUILT_IN_WALLPAPERS, getAvailableWallpapers, isVideoWallpaperSource } from "@/lib/wallpapers";
 import { type AspectRatio } from "@/utils/aspectRatioUtils";
@@ -114,7 +116,9 @@ export type EditorEffectSection =
 	| "webcam"
 	| "zoom"
 	| "frame"
-	| "crop";
+	| "crop"
+	| "extensions"
+	| `ext:${string}`;
 
 function isHexWallpaper(value: string): boolean {
 	return /^#(?:[0-9a-f]{3}){1,2}$/i.test(value);
@@ -139,6 +143,129 @@ function getBackgroundTabForWallpaper(value: string): BackgroundTab {
 function SectionLabel({ children }: { children: React.ReactNode }) {
 	return (
 		<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{children}</p>
+	);
+}
+
+/**
+ * Renders extension-contributed settings fields (toggle, slider, select, color, text).
+ */
+function ExtensionSettingsSection({ extensionId, label, fields }: {
+	extensionId: string;
+	label: string;
+	fields: ExtensionSettingField[];
+}) {
+	const [, forceUpdate] = useState(0);
+
+	return (
+		<div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-white/[0.06]">
+			<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">{label}</p>
+			{fields.map((field) => {
+				const value = extensionHost.getExtensionSetting(extensionId, field.id) ?? field.defaultValue;
+
+				if (field.type === 'toggle') {
+					return (
+						<div key={field.id} className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
+							<span className="text-[11px] text-slate-300">{field.label}</span>
+							<Switch
+								checked={Boolean(value)}
+								onCheckedChange={(checked) => {
+									extensionHost.setExtensionSetting(extensionId, field.id, checked);
+									forceUpdate(n => n + 1);
+								}}
+								className="data-[state=checked]:bg-[#2563EB] scale-75"
+							/>
+						</div>
+					);
+				}
+
+				if (field.type === 'slider') {
+					return (
+						<div key={field.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5">
+							<span className="text-[11px] text-slate-300 flex-shrink-0">{field.label}</span>
+							<div className="flex items-center gap-1.5">
+								<input
+									type="range"
+									min={field.min ?? 0}
+									max={field.max ?? 1}
+									step={field.step ?? 0.01}
+									value={typeof value === 'number' ? value : field.defaultValue as number}
+									onChange={(e) => {
+										extensionHost.setExtensionSetting(extensionId, field.id, parseFloat(e.target.value));
+										forceUpdate(n => n + 1);
+									}}
+									className="w-20 h-1 accent-[#2563EB]"
+								/>
+								<span className="text-[10px] text-slate-500 w-8 text-right font-mono">
+									{(typeof value === 'number' ? value : 0).toFixed(1)}
+								</span>
+							</div>
+						</div>
+					);
+				}
+
+				if (field.type === 'select' && field.options) {
+					return (
+						<div key={field.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5">
+							<span className="text-[11px] text-slate-300 flex-shrink-0">{field.label}</span>
+							<Select
+								value={String(value)}
+								onValueChange={(v) => {
+									extensionHost.setExtensionSetting(extensionId, field.id, v);
+									forceUpdate(n => n + 1);
+								}}
+							>
+								<SelectTrigger className="h-6 w-24 text-[10px] border-white/10 bg-white/[0.03]">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									{field.options.map(opt => (
+										<SelectItem key={opt.value} value={opt.value} className="text-[10px]">
+											{opt.label}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</div>
+					);
+				}
+
+				if (field.type === 'color') {
+					return (
+						<div key={field.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5">
+							<span className="text-[11px] text-slate-300 flex-shrink-0">{field.label}</span>
+							<input
+								type="color"
+								value={String(value)}
+								onChange={(e) => {
+									extensionHost.setExtensionSetting(extensionId, field.id, e.target.value);
+									forceUpdate(n => n + 1);
+								}}
+								className="w-7 h-5 rounded border border-white/10 cursor-pointer bg-transparent"
+							/>
+						</div>
+					);
+				}
+
+				if (field.type === 'text') {
+					return (
+						<div key={field.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5">
+							<span className="text-[11px] text-slate-300 flex-shrink-0">{field.label}</span>
+							<input
+								type="text"
+								value={String(value)}
+								onChange={(e) => {
+									extensionHost.setExtensionSetting(extensionId, field.id, e.target.value);
+									forceUpdate(n => n + 1);
+								}}
+								className="w-24 h-6 rounded bg-white/[0.06] border border-white/10 px-1.5 text-[10px] text-slate-200"
+							/>
+						</div>
+					);
+				}
+
+				return null;
+			})}
+		</div>
 	);
 }
 
@@ -213,6 +340,8 @@ interface SettingsPanelProps {
 	onClearWebcam?: () => void;
 	padding?: number;
 	onPaddingChange?: (padding: number) => void;
+	frame?: string | null;
+	onFrameChange?: (frameId: string | null) => void;
 	cropRegion?: CropRegion;
 	onCropChange?: (region: CropRegion) => void;
 	aspectRatio: AspectRatio;
@@ -562,6 +691,8 @@ export function SettingsPanel({
 	onClearWebcam,
 	padding = 50,
 	onPaddingChange,
+	frame = null,
+	onFrameChange,
 	cropRegion,
 	onCropChange,
 	aspectRatio,
@@ -670,6 +801,38 @@ export function SettingsPanel({
 		GRADIENTS.includes(selected) ? selected : GRADIENTS[0],
 	);
 	const removeBackgroundEnabled = aspectRatio === "native" && padding === 0;
+
+	// Device frames from extension system
+	const [availableFrames, setAvailableFrames] = useState<FrameInstance[]>([]);
+	useEffect(() => {
+		const update = () => setAvailableFrames(extensionHost.getFrames());
+		update();
+		return extensionHost.onChange(update);
+	}, []);
+
+	// Extension-contributed settings panels
+	const [extensionPanels, setExtensionPanels] = useState<ReturnType<typeof extensionHost.getSettingsPanels>>([]);
+	useEffect(() => {
+		const update = () => setExtensionPanels(extensionHost.getSettingsPanels());
+		update();
+		return extensionHost.onChange(update);
+	}, []);
+
+	const renderExtensionPanelsForSections = (...sections: string[]) =>
+		extensionPanels
+			.filter((panel) => {
+				const parentSection = panel.panel.parentSection;
+				return parentSection ? sections.includes(parentSection) : false;
+			})
+			.map((panel) => (
+				<ExtensionSettingsSection
+					key={`${panel.extensionId}/${panel.panel.id}`}
+					extensionId={panel.extensionId}
+					label={panel.panel.label}
+					fields={panel.panel.fields}
+				/>
+			));
+
 	const [backgroundTab, setBackgroundTab] = useState<BackgroundTab>(() =>
 		getBackgroundTabForWallpaper(selected),
 	);
@@ -932,6 +1095,7 @@ export function SettingsPanel({
 		onShadowChange?.(initialEditorPreferences.shadowIntensity);
 		onBorderRadiusChange?.(initialEditorPreferences.borderRadius);
 		onPaddingChange?.(initialEditorPreferences.padding);
+		onFrameChange?.(null);
 		onAspectRatioChange?.(initialEditorPreferences.aspectRatio);
 		removeBackgroundStateRef.current = null;
 	};
@@ -1443,6 +1607,53 @@ export function SettingsPanel({
 						className="data-[state=checked]:bg-[#2563EB] scale-75"
 					/>
 				</div>
+				{/* Frame Picker */}
+				{availableFrames.length > 0 && (
+					<div className="flex flex-col gap-1.5 mt-1">
+						<div className="flex items-center justify-between">
+							<span className="text-[10px] text-slate-400">Frame</span>
+							{frame && (
+								<button
+									type="button"
+									onClick={() => onFrameChange?.(null)}
+									className="text-[9px] text-[#2563EB] hover:opacity-80"
+								>
+									Remove
+								</button>
+							)}
+						</div>
+						<div className="grid grid-cols-3 gap-1.5">
+							{availableFrames.map((f) => {
+								const isSelected = frame === f.id;
+								return (
+									<button
+										key={f.id}
+										type="button"
+										onClick={() => onFrameChange?.(isSelected ? null : f.id)}
+										className={cn(
+											"flex flex-col items-center gap-1 p-1.5 rounded-lg border transition-all text-center",
+											isSelected
+												? "border-[#2563EB]/50 bg-[#2563EB]/10 ring-1 ring-[#2563EB]/30"
+												: "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05]",
+										)}
+									>
+										<div className="w-full aspect-video rounded bg-black/30 overflow-hidden flex items-center justify-center">
+											<img
+												src={f.thumbnailPath}
+												alt={f.label}
+												className="w-full h-full object-contain"
+												draggable={false}
+											/>
+										</div>
+										<span className="text-[8px] text-slate-400 truncate w-full leading-tight">
+											{f.label}
+										</span>
+									</button>
+								);
+							})}
+						</div>
+					</div>
+				)}
 			</div>
 		</section>
 	);
@@ -1744,6 +1955,7 @@ export function SettingsPanel({
 					formatValue={(value) => `${Math.round(value * 100)}%`}
 					parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100}
 				/>
+				{renderExtensionPanelsForSections("captions")}
 			</div>
 		</section>
 	);
@@ -1755,6 +1967,7 @@ export function SettingsPanel({
 				{zoomSectionContent}
 				{frameSectionContent}
 				{cropSectionContent}
+				{renderExtensionPanelsForSections("scene", "appearance", "zoom", "frame", "crop")}
 			</div>
 		);
 
@@ -1909,6 +2122,7 @@ export function SettingsPanel({
 								}}
 							/>
 						</div>
+						{renderExtensionPanelsForSections("cursor")}
 					</section>
 				);
 			case "webcam":
@@ -2088,9 +2302,32 @@ export function SettingsPanel({
 									</div>
 								</div>
 							</div>
+							{renderExtensionPanelsForSections("webcam")}
 						</div>
 					</section>
 				);
+			default: {
+				// Handle extension-contributed standalone section pages (ext:extensionId/panelId)
+				if (activeEffectSection?.startsWith('ext:')) {
+					const panels = extensionPanels.filter(
+						p => !p.panel.parentSection && `ext:${p.extensionId}/${p.panel.id}` === activeEffectSection,
+					);
+					if (panels.length > 0) {
+						const p = panels[0];
+						return (
+							<section className="flex flex-col gap-2">
+								<SectionLabel>{p.panel.label}</SectionLabel>
+								<ExtensionSettingsSection
+									extensionId={p.extensionId}
+									label={p.panel.label}
+									fields={p.panel.fields}
+								/>
+							</section>
+						);
+					}
+				}
+				return sceneSectionContent;
+			}
 		}
 	})();
 
