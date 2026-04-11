@@ -1,4 +1,11 @@
 export const DEFAULT_MP4_CODEC = "avc1.640033";
+export const MP4_CODEC_FALLBACK_LIST = [
+	DEFAULT_MP4_CODEC,
+	"avc1.4d4033",
+	"avc1.420033",
+	"avc1.4d401f",
+	"avc1.42001f",
+] as const;
 
 export type SupportedMp4EncoderPath = {
 	codec: string;
@@ -50,6 +57,66 @@ function scaleDimensions(width: number, height: number, scale: number): { width:
 		width: normalizeEvenDimension(width * scale),
 		height: normalizeEvenDimension(height * scale),
 	};
+}
+
+function appendEncoderCandidate(
+	candidates: SupportedMp4EncoderPath[],
+	candidate: SupportedMp4EncoderPath | null | undefined,
+): void {
+	if (!candidate) {
+		return;
+	}
+
+	const alreadyIncluded = candidates.some((value) => {
+		return (
+			value.codec === candidate.codec &&
+			value.hardwareAcceleration === candidate.hardwareAcceleration
+		);
+	});
+
+	if (!alreadyIncluded) {
+		candidates.push(candidate);
+	}
+}
+
+export function getOrderedSupportedMp4EncoderCandidates(options: {
+	codec?: string;
+	preferredEncoderPath?: SupportedMp4EncoderPath | null;
+}): SupportedMp4EncoderPath[] {
+	const orderedCodecs = Array.from(
+		new Set(
+			[
+				options.preferredEncoderPath?.codec,
+				options.codec,
+				...MP4_CODEC_FALLBACK_LIST,
+			].filter((value): value is string => typeof value === "string" && value.length > 0),
+		),
+	);
+	const candidates: SupportedMp4EncoderPath[] = [];
+
+	if (options.preferredEncoderPath?.hardwareAcceleration === "prefer-hardware") {
+		appendEncoderCandidate(candidates, options.preferredEncoderPath);
+	}
+
+	for (const codec of orderedCodecs) {
+		appendEncoderCandidate(candidates, {
+			codec,
+			hardwareAcceleration: "prefer-hardware",
+		});
+	}
+
+	if (options.preferredEncoderPath?.hardwareAcceleration === "prefer-software") {
+		appendEncoderCandidate(candidates, options.preferredEncoderPath);
+	}
+
+	for (const codec of orderedCodecs) {
+		appendEncoderCandidate(candidates, {
+			codec,
+			hardwareAcceleration: "prefer-software",
+		});
+	}
+
+	return candidates;
 }
 
 export async function resolveSupportedMp4EncoderPath(

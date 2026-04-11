@@ -12,7 +12,7 @@
 		"url": "https://github.com/webadderall/Recordly/issues"
 	},
 	"private": true,
-	"version": "1.1.13",
+	"version": "1.1.20",
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
@@ -32,6 +32,7 @@
 		"build:win": "npm run build:platform-native-helpers && tsc && vite build && electron-builder --win",
 		"build:linux": "npm run build:platform-native-helpers && tsc && vite build && electron-builder --linux",
 		"i18n:check": "node scripts/i18n-check.mjs",
+		"benchmark:export-queues": "node scripts/benchmark-export-queues.mjs",
 		"test": "vitest --run",
 		"test:watch": "vitest"
 	},

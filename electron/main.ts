@@ -8,8 +8,8 @@ import {
 	dialog,
 	ipcMain,
 	Menu,
-	nativeImage,
 	Notification,
+	nativeImage,
 	session,
 	systemPreferences,
 	Tray,
@@ -17,39 +17,72 @@ import {
 import { RECORDINGS_DIR } from "./appPaths";
 import { showCursor } from "./cursorHider";
 import {
+	cleanupNativeVideoExportSessions,
 	getSelectedSourceId,
 	killWindowsCaptureProcess,
 	registerIpcHandlers,
 } from "./ipc/handlers";
+import { registerExtensionIpcHandlers } from "./extensions/extensionIpc";
+import { ensurePackagedRendererServer } from "./rendererServer";
+import type { UpdateToastPayload } from "./updater";
 import {
 	checkForAppUpdates,
+	deferUpdateReminder,
 	dismissUpdateToast,
 	downloadAvailableUpdate,
-	deferUpdateReminder,
 	getCurrentUpdateToastPayload,
 	getUpdaterLogPath,
 	getUpdateStatusSummary,
 	installDownloadedUpdateNow,
 	previewUpdateToast,
-	skipAvailableUpdateVersion,
 	setupAutoUpdates,
+	skipAvailableUpdateVersion,
 } from "./updater";
-import type { UpdateToastPayload } from "./updater";
 import {
 	createEditorWindow,
 	createHudOverlayWindow,
 	createSourceSelectorWindow,
-	getUpdateToastWindow,
 	getHudOverlayWindow,
+	getUpdateToastWindow,
 	hideUpdateToastWindow,
+	isHudOverlayMousePassthroughSupported,
 	showUpdateToastWindow,
 } from "./windows";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const IS_SMOKE_EXPORT = process.env.RECORDLY_SMOKE_EXPORT === "1";
 
-if (process.platform === "darwin") {
-	app.commandLine.appendSwitch("disable-features", "MacCatapLoopbackAudioForScreenShare");
+app.commandLine.appendSwitch("ignore-gpu-blocklist");
+app.commandLine.appendSwitch("enable-unsafe-webgpu");
+app.commandLine.appendSwitch("enable-gpu-rasterization");
+
+function configureGpuAccelerationSwitches() {
+	if (process.platform === "darwin") {
+		app.commandLine.appendSwitch("use-angle", "metal");
+		app.commandLine.appendSwitch("disable-features", "MacCatapLoopbackAudioForScreenShare");
+		return;
+	}
+
+	if (process.platform === "win32") {
+		app.commandLine.appendSwitch("use-angle", "d3d11");
+		return;
+	}
 }
+
+async function logSmokeExportGpuDiagnostics() {
+	if (!IS_SMOKE_EXPORT) {
+		return;
+	}
+
+	try {
+		console.log("[smoke-export] GPU feature status", JSON.stringify(app.getGPUFeatureStatus()));
+		console.log("[smoke-export] GPU info", JSON.stringify(await app.getGPUInfo("basic")));
+	} catch (error) {
+		console.warn("[smoke-export] Failed to read GPU diagnostics:", error);
+	}
+}
+
+configureGpuAccelerationSwitches();
 
 async function ensureRecordingsDir() {
 	try {
@@ -85,6 +118,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 let mainWindow: BrowserWindow | null = null;
 let sourceSelectorWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
+let trayContextMenu: Menu | null = null;
 let selectedSourceName = "";
 let editorHasUnsavedChanges = false;
 let isForceClosing = false;
@@ -101,9 +135,19 @@ function closeEditorWindowBypassingUnsavedPrompt(window: BrowserWindow | null) {
 		return;
 	}
 
-	isForceClosing = true;
-	editorHasUnsavedChanges = false;
+	if (isEditorWindow(window)) {
+		isForceClosing = true;
+		editorHasUnsavedChanges = false;
+	}
 	window.close();
+}
+
+function restoreWindowSafely(window: BrowserWindow | null) {
+	if (!window || window.isDestroyed()) {
+		return;
+	}
+
+	window.restore();
 }
 
 // Tray Icons (lazily created after app is ready to avoid accessing Electron APIs too early)
@@ -122,6 +166,29 @@ function getRecordingTrayIcon() {
 		recordingTrayIcon = getTrayIcon("rec-button.png");
 	}
 	return recordingTrayIcon;
+}
+
+function showHudOverlayFromTray() {
+	const hud = getHudOverlayWindow();
+	if (!hud) {
+		return false;
+	}
+
+	if (hud.isMinimized()) {
+		hud.restore();
+	}
+
+	if (process.platform === "win32" && isHudOverlayMousePassthroughSupported()) {
+		hud.showInactive();
+		hud.moveTop();
+		reassertHudOverlayMouseState();
+		return true;
+	}
+
+	hud.show();
+	hud.moveTop();
+	hud.focus();
+	return true;
 }
 
 ipcMain.on("set-has-unsaved-changes", (_event, hasChanges: boolean) => {
@@ -167,11 +234,18 @@ function focusOrCreateMainWindow() {
 			return;
 		}
 
-		// On Win32, calling show/moveTop/focus on the transparent HUD overlay
-		// permanently corrupts setIgnoreMouseEvents forwarding, making it
-		// click-through.  Only focus the editor window; the HUD is alwaysOnTop
-		// so it doesn't need explicit focus.
-		if (process.platform === "win32" && !isEditorWindow(mainWindow)) {
+		// On Win32 with mouse passthrough enabled (Win11+), calling
+		// show/moveTop/focus on the transparent HUD overlay permanently corrupts
+		// setIgnoreMouseEvents forwarding, making it click-through.  Only focus
+		// the editor window; the HUD is alwaysOnTop so it doesn't need explicit
+		// focus.  On Win10 (passthrough disabled), the HUD is always interactive
+		// and can be safely shown/restored.
+		if (
+			process.platform === "win32" &&
+			!isEditorWindow(mainWindow) &&
+			isHudOverlayMousePassthroughSupported()
+		) {
+			showHudOverlayFromTray();
 			return;
 		}
 
@@ -189,7 +263,7 @@ function focusOrCreateMainWindow() {
  * operation that may alter focus or z-order so that hover detection keeps working.
  */
 function reassertHudOverlayMouseState() {
-	if (process.platform !== "win32") {
+	if (process.platform !== "win32" || !isHudOverlayMousePassthroughSupported()) {
 		return;
 	}
 
@@ -326,9 +400,36 @@ function setupApplicationMenu() {
 	Menu.setApplicationMenu(menu);
 }
 
+function isPrimaryTrayClick(event: unknown) {
+	const button =
+		event && typeof event === "object" && "button" in event
+			? (event as { button?: number | string }).button
+			: undefined;
+	return button === undefined || button === 0 || button === "left";
+}
+
 function createTray() {
 	tray = new Tray(getDefaultTrayIcon());
-	tray.on("click", () => focusOrCreateMainWindow());
+	tray.on("click", (event) => {
+		if (process.platform === "win32" && !isPrimaryTrayClick(event)) {
+			return;
+		}
+
+		focusOrCreateMainWindow();
+	});
+
+	if (process.platform === "win32") {
+		tray.on("right-click", () => {
+			if (!tray || !trayContextMenu) {
+				return;
+			}
+
+			tray.popUpContextMenu(trayContextMenu);
+		});
+		return;
+	}
+
+	tray.on("double-click", () => focusOrCreateMainWindow());
 }
 
 function getPublicAssetPath(filename: string) {
@@ -408,7 +509,9 @@ function sendUpdateToastToWindows(channel: "update-toast-state", payload: unknow
 			return false;
 		}
 
-		const notificationKey = [updatePayload.phase, updatePayload.version, updatePayload.detail].join(":");
+		const notificationKey = [updatePayload.phase, updatePayload.version, updatePayload.detail].join(
+			":",
+		);
 		if (activeUpdateNotificationKey === notificationKey) {
 			return true;
 		}
@@ -539,6 +642,14 @@ function updateTrayMenu(recording: boolean = false) {
 	const menuTemplate = recording
 		? [
 				{
+					label: "Show Controls",
+					click: () => {
+						if (!showHudOverlayFromTray()) {
+							focusOrCreateMainWindow();
+						}
+					},
+				},
+				{
 					label: "Stop Recording",
 					click: () => {
 						if (mainWindow && !mainWindow.isDestroyed()) {
@@ -551,13 +662,8 @@ function updateTrayMenu(recording: boolean = false) {
 				{
 					label: "Open",
 					click: () => {
-						if (mainWindow && !mainWindow.isDestroyed()) {
-							if (mainWindow.isMinimized()) mainWindow.restore();
-							mainWindow.show();
-							mainWindow.focus();
-							mainWindow.moveTop();
-						} else {
-							createWindow();
+						if (!showHudOverlayFromTray()) {
+							focusOrCreateMainWindow();
 						}
 					},
 				},
@@ -568,35 +674,47 @@ function updateTrayMenu(recording: boolean = false) {
 					},
 				},
 			];
+	const menu = Menu.buildFromTemplate(menuTemplate);
+	trayContextMenu = menu;
 	tray.setImage(trayIcon);
 	tray.setToolTip(trayToolTip);
-	tray.setContextMenu(Menu.buildFromTemplate(menuTemplate));
+	if (process.platform !== "win32") {
+		tray.setContextMenu(menu);
+	}
 }
 
 function createEditorWindowWrapper() {
-	if (mainWindow) {
-		closeEditorWindowBypassingUnsavedPrompt(mainWindow);
-		mainWindow = null;
+	const previousWindow = mainWindow;
+	if (previousWindow && !previousWindow.isDestroyed()) {
+		const closingEditorWindow = isEditorWindow(previousWindow);
+		closeEditorWindowBypassingUnsavedPrompt(previousWindow);
+		if (!closingEditorWindow) {
+			isForceClosing = false;
+		}
+		if (mainWindow === previousWindow) {
+			mainWindow = null;
+		}
 	}
-	mainWindow = createEditorWindow();
+	const editorWindow = createEditorWindow();
+	mainWindow = editorWindow;
 	editorHasUnsavedChanges = false;
 
-	mainWindow.on("closed", () => {
-		if (mainWindow?.isDestroyed()) {
+	editorWindow.on("closed", () => {
+		if (mainWindow === editorWindow) {
 			mainWindow = null;
 		}
 		isForceClosing = false;
 		editorHasUnsavedChanges = false;
 	});
 
-	mainWindow.on("close", (event) => {
+	editorWindow.on("close", (event) => {
 		if (isForceClosing || !editorHasUnsavedChanges) {
 			return;
 		}
 
 		event.preventDefault();
 
-		const choice = dialog.showMessageBoxSync(mainWindow!, {
+		const choice = dialog.showMessageBoxSync(editorWindow, {
 			type: "warning",
 			buttons: ["Save & Close", "Discard & Close", "Cancel"],
 			defaultId: 0,
@@ -607,14 +725,14 @@ function createEditorWindowWrapper() {
 		});
 
 		if (choice === 0) {
-			mainWindow!.webContents.send("request-save-before-close");
+			editorWindow.webContents.send("request-save-before-close");
 			ipcMain.once("save-before-close-done", (_event, saved: boolean) => {
 				if (saved) {
-					closeEditorWindowBypassingUnsavedPrompt(mainWindow);
+					closeEditorWindowBypassingUnsavedPrompt(editorWindow);
 				}
 			});
 		} else if (choice === 1) {
-			closeEditorWindowBypassingUnsavedPrompt(mainWindow);
+			closeEditorWindowBypassingUnsavedPrompt(editorWindow);
 		}
 	});
 }
@@ -632,10 +750,11 @@ function createSourceSelectorWindowWrapper() {
 app.on("before-quit", () => {
 	killWindowsCaptureProcess();
 	showCursor();
+	cleanupNativeVideoExportSessions();
 });
 
 app.on("window-all-closed", () => {
-	if (process.platform !== "darwin") {
+	if (IS_SMOKE_EXPORT || process.platform !== "darwin") {
 		app.quit();
 	}
 });
@@ -682,10 +801,14 @@ app.whenReady().then(async () => {
 		const cameraStatus = systemPreferences.getMediaAccessStatus("camera");
 		const micStatus = systemPreferences.getMediaAccessStatus("microphone");
 		if (cameraStatus !== "granted") {
-			console.warn(`[permissions] Camera access is "${cameraStatus}" — webcam may not work. Check Windows Settings > Privacy > Camera.`);
+			console.warn(
+				`[permissions] Camera access is "${cameraStatus}" — webcam may not work. Check Windows Settings > Privacy > Camera.`,
+			);
 		}
 		if (micStatus !== "granted") {
-			console.warn(`[permissions] Microphone access is "${micStatus}" — mic recording may not work. Check Windows Settings > Privacy > Microphone.`);
+			console.warn(
+				`[permissions] Microphone access is "${micStatus}" — mic recording may not work. Check Windows Settings > Privacy > Microphone.`,
+			);
 		}
 	}
 
@@ -698,6 +821,14 @@ app.whenReady().then(async () => {
 	setupApplicationMenu();
 	// Ensure recordings directory exists
 	await ensureRecordingsDir();
+
+	if (!VITE_DEV_SERVER_URL) {
+		try {
+			await ensurePackagedRendererServer(RENDERER_DIST);
+		} catch (error) {
+			console.warn("[renderer-server] Failed to start packaged renderer server:", error);
+		}
+	}
 
 	registerIpcHandlers(
 		createEditorWindowWrapper,
@@ -712,10 +843,21 @@ app.whenReady().then(async () => {
 				reassertHudOverlayMouseState();
 			}
 			if (!recording) {
-				if (mainWindow) mainWindow.restore();
+				restoreWindowSafely(mainWindow);
 			}
 		},
 	);
+
+	registerExtensionIpcHandlers();
+
+	if (IS_SMOKE_EXPORT) {
+		await logSmokeExportGpuDiagnostics();
+		console.log(
+			`[smoke-export] Starting editor smoke export for ${process.env.RECORDLY_SMOKE_EXPORT_INPUT ?? "<missing input>"}`,
+		);
+		createEditorWindowWrapper();
+		return;
+	}
 
 	createWindow();
 	setupAutoUpdates(getUpdateDialogWindow, sendUpdateToastToWindows);

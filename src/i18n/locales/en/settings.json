@@ -146,6 +146,7 @@
 			"high": "High",
 			"original": "Original"
 		},
+		"fpsTitle": "FPS",
 		"loop": "Loop",
 		"outputDimensions": "Output: {{dimensions}}px",
 		"sizePresetOriginalShort": "Orig",

@@ -14,6 +14,26 @@ export interface CursorInteractionCandidate extends ZoomDwellCandidate {
   kind: 'dwell' | 'click-like' | 'double-click-like' | 'text-focus-like' | 'dropdown-open' | 'text-selection' | 'text-field-click';
 }
 
+export interface SuggestedZoomRegion {
+  start: number;
+  end: number;
+  focus: ZoomFocus;
+}
+
+export type InteractionZoomSuggestionStatus =
+  | 'ok'
+  | 'no-telemetry'
+  | 'no-interactions'
+  | 'no-slots';
+
+export interface InteractionZoomSuggestionResult {
+  status: InteractionZoomSuggestionStatus;
+  suggestions: SuggestedZoomRegion[];
+}
+
+const DEFAULT_SUGGESTION_SPACING_MS = 1800;
+const DEFAULT_MERGE_NEARBY_GAP_MS = 1500;
+
 function normalizeTelemetrySample(sample: CursorTelemetryPoint, totalMs: number): CursorTelemetryPoint {
   return {
     timeMs: Math.max(0, Math.min(sample.timeMs, totalMs)),
@@ -186,6 +206,91 @@ export function detectInteractionCandidates(samples: CursorTelemetryPoint[]): Cu
   }
 
   return [...explicitInteractionCandidates, ...dwellCandidates, ...doubleClickCandidates];
+}
+
+export function buildInteractionZoomSuggestions(params: {
+  cursorTelemetry: CursorTelemetryPoint[];
+  totalMs: number;
+  defaultDurationMs: number;
+  reservedSpans?: Array<{ start: number; end: number }>;
+  spacingMs?: number;
+  mergeGapMs?: number;
+}): InteractionZoomSuggestionResult {
+  const {
+    cursorTelemetry,
+    totalMs,
+    defaultDurationMs,
+    reservedSpans = [],
+    spacingMs = DEFAULT_SUGGESTION_SPACING_MS,
+    mergeGapMs = DEFAULT_MERGE_NEARBY_GAP_MS,
+  } = params;
+
+  const defaultDuration = Math.min(defaultDurationMs, totalMs);
+  if (defaultDuration <= 0) {
+    return { status: 'no-slots', suggestions: [] };
+  }
+
+  const normalizedSamples = normalizeCursorTelemetry(cursorTelemetry, totalMs);
+  if (normalizedSamples.length < 2) {
+    return { status: 'no-telemetry', suggestions: [] };
+  }
+
+  const interactionCandidates = detectInteractionCandidates(normalizedSamples);
+  if (interactionCandidates.length === 0) {
+    return { status: 'no-interactions', suggestions: [] };
+  }
+
+  const sortedCandidates = [...interactionCandidates].sort((a, b) => b.strength - a.strength);
+  const acceptedCenters: number[] = [];
+  const accepted: SuggestedZoomRegion[] = [];
+  const reserved = [...reservedSpans].sort((a, b) => a.start - b.start);
+
+  sortedCandidates.forEach((candidate) => {
+    const tooCloseToAccepted = acceptedCenters.some(
+      (center) => Math.abs(center - candidate.centerTimeMs) < spacingMs,
+    );
+
+    if (tooCloseToAccepted) {
+      return;
+    }
+
+    const centeredStart = Math.round(candidate.centerTimeMs - defaultDuration / 2);
+    const candidateStart = Math.max(0, Math.min(centeredStart, totalMs - defaultDuration));
+    const candidateEnd = candidateStart + defaultDuration;
+    const hasOverlap = reserved.some(
+      (span) => candidateEnd > span.start && candidateStart < span.end,
+    );
+
+    if (hasOverlap) {
+      return;
+    }
+
+    reserved.push({ start: candidateStart, end: candidateEnd });
+    acceptedCenters.push(candidate.centerTimeMs);
+    accepted.push({
+      start: candidateStart,
+      end: candidateEnd,
+      focus: candidate.focus,
+    });
+  });
+
+  const sortedAccepted = [...accepted].sort((a, b) => a.start - b.start);
+  const merged: SuggestedZoomRegion[] = [];
+  for (const region of sortedAccepted) {
+    const previous = merged[merged.length - 1];
+    if (previous && region.start - previous.end <= mergeGapMs) {
+      previous.end = Math.max(previous.end, region.end);
+      continue;
+    }
+
+    merged.push({ ...region });
+  }
+
+  if (merged.length === 0) {
+    return { status: 'no-slots', suggestions: [] };
+  }
+
+  return { status: 'ok', suggestions: merged };
 }
 
 /**

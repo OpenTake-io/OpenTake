@@ -19,7 +19,7 @@ Language: EN | [简中](README.zh-CN.md)
 </p>
 
 > [!NOTE]
-> Huge thank you to **tadees** for supporting the project. This donation helps cover Apple Developer fees for macOS signing and notarization.
+> Thanks to many for supporting Recordly. These help keep Recordly open-source and free!
 [**Support the project**](https://ko-fi.com/webadderall/goal?g=0)
 
 ---
@@ -30,7 +30,7 @@ Recordly is a desktop app for recording and editing screen captures with motion-
 
 Recordly runs on:
 
-- **macOS** 12.3+
+- **macOS** 13.0+
 - **Windows** 10 Build 19041+
 - **Linux** on modern distros
 
@@ -186,6 +186,20 @@ PKGBUILD, desktop entry, release sync, and optional **local-from-source** packag
 
 ## Build from source
 
+### Prerequisites
+
+**macOS:** Xcode Command Line Tools (`xcode-select --install`).
+
+**Linux (Ubuntu/Debian):**
+
+```bash
+sudo apt install build-essential cmake libx11-dev libxtst-dev libxrandr-dev libxt-dev
+```
+
+**Windows:** Visual Studio 2022 (or Build Tools) with the C++ workload and CMake.
+
+### Steps
+
 ```bash
 git clone https://github.com/webadderall/Recordly.git recordly
 cd recordly
@@ -223,7 +237,7 @@ xattr -rd com.apple.quarantine /Applications/Recordly.app
 
 | Platform | Minimum version | Notes |
 |---|---|---|
-| **macOS** | macOS 12.3 (Monterey) | Required for ScreenCaptureKit-based capture. |
+| **macOS** | macOS 13.0 (Ventura) | Required for ScreenCaptureKit audio capture. |
 | **Windows** | Windows 10 20H1 (Build 19041, May 2020) | Required for the native Windows Graphics Capture (WGC) helper and best cursor-hiding behavior. |
 | **Linux** | Any modern distro | Recording works through Electron capture. System audio generally requires PipeWire. |
 
@@ -294,7 +308,7 @@ System audio support varies by platform.
 - Usually requires PipeWire
 
 **macOS**
-- Requires macOS 12.3+ and the ScreenCaptureKit-based workflow
+- Requires macOS 13.0+ and the ScreenCaptureKit-based workflow
 
 ---
 
@@ -356,14 +370,29 @@ Pull requests are welcome.
 
 - Tadees
 - buildwithfur
+- Tobias
 - Anonymous Supporter
+- Roberto Marcelino
+- Rajan RK
 - Erwan
 - Anonymous supporter
+
+Trading fees from this CA also go towards the development of Recordly:
+8MyLec2DdJj13bHLB8YvJRv54aAbiFGF5EEQAAbspump
+
 ---
 
 # License
 
 Recordly is licensed under the **AGPL 3.0**.
+
+---
+
+## Extensions
+
+Recordly has an extension system for adding device frames, click effects, render hooks, sounds, and settings panels. Built-in extensions ship under `public/builtin-extensions/`.
+
+See [EXTENSIONS.md](./EXTENSIONS.md) for the full API reference and examples.
 
 ---
 

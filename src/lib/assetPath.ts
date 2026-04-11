@@ -108,5 +108,63 @@ export async function getRenderableAssetUrl(asset: string): Promise<string> {
   }
 }
 
-export default getAssetPath;
+// ---------------------------------------------------------------------------
+// Wallpaper thumbnail helper — generates a tiny JPEG thumbnail via the main
+// process (nativeImage resize) and returns a data URL for fast grid rendering.
+// Concurrency is capped to avoid OOM from loading many full-res images at once.
+// ---------------------------------------------------------------------------
 
+const thumbnailCache = new Map<string, string>()
+
+const THUMB_CONCURRENCY = 3
+let thumbActive = 0
+const thumbQueue: Array<() => void> = []
+
+function acquireThumbSlot(): Promise<void> {
+  if (thumbActive < THUMB_CONCURRENCY) {
+    thumbActive++
+    return Promise.resolve()
+  }
+  return new Promise<void>((resolve) => thumbQueue.push(resolve))
+}
+
+function releaseThumbSlot(): void {
+  const next = thumbQueue.shift()
+  if (next) {
+    next()
+  } else {
+    thumbActive--
+  }
+}
+
+export async function getWallpaperThumbnailUrl(asset: string): Promise<string> {
+  if (!asset || asset.startsWith('data:') || asset.startsWith('http') || asset.startsWith('#') || asset.startsWith('linear-gradient') || asset.startsWith('radial-gradient')) {
+    return asset
+  }
+
+  const cached = thumbnailCache.get(asset)
+  if (cached) return cached
+
+  const localFilePath = toLocalFilePath(asset.startsWith('/') && !asset.startsWith('//') ? await getAssetPath(asset.replace(/^\//, '')) : asset)
+  if (!localFilePath || typeof window === 'undefined' || !window.electronAPI?.generateWallpaperThumbnail) {
+    return getRenderableAssetUrl(asset)
+  }
+
+  await acquireThumbSlot()
+  try {
+    const result = await window.electronAPI.generateWallpaperThumbnail(localFilePath)
+    if (!result.success || !result.data) {
+      return getRenderableAssetUrl(asset)
+    }
+    const bytes = result.data instanceof Uint8Array ? result.data : new Uint8Array(result.data)
+    const dataUrl = `data:image/jpeg;base64,${toBase64(bytes)}`
+    thumbnailCache.set(asset, dataUrl)
+    return dataUrl
+  } catch {
+    return getRenderableAssetUrl(asset)
+  } finally {
+    releaseThumbSlot()
+  }
+}
+
+export default getAssetPath;

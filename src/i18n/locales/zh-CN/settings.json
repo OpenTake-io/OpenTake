@@ -146,6 +146,7 @@
 			"high": "高",
 			"original": "原始"
 		},
+		"fpsTitle": "帧率",
 		"loop": "循环",
 		"outputDimensions": "输出：{{dimensions}}px",
 		"sizePresetOriginalShort": "原",
