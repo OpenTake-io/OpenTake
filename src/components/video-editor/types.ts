@@ -247,6 +247,7 @@ export interface AnnotationRegion {
 	style: AnnotationTextStyle;
 	zIndex: number;
 	figureData?: FigureData;
+	blurIntensity?: number;
 }
 
 export const DEFAULT_ANNOTATION_POSITION: AnnotationPosition = {
