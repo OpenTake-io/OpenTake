@@ -496,19 +496,13 @@ export function createHudOverlayWindow(): BrowserWindow {
 
 	hudOverlayWindow = win;
 
-	win.on("closed", () => {
-		if (hudOverlayWindow === win) {
-			hudOverlayWindow = null;
-		}
-	});
-
 	// Reset the user's saved HUD position when displays change so the bar
 	// doesn't end up stranded off-screen after a monitor is disconnected.
 	const screen = getScreen();
-	screen.on("display-removed", () => {
+	const handleDisplayRemoved = () => {
 		hudUserPosition = null;
-	});
-	screen.on("display-metrics-changed", () => {
+	};
+	const handleDisplayMetricsChanged = () => {
 		if (hudUserPosition) {
 			const displays = screen.getAllDisplays();
 			const onScreen = displays.some(
@@ -523,6 +517,16 @@ export function createHudOverlayWindow(): BrowserWindow {
 			}
 		}
 		applyHudOverlayBounds(hudOverlayExpanded);
+	};
+	screen.on("display-removed", handleDisplayRemoved);
+	screen.on("display-metrics-changed", handleDisplayMetricsChanged);
+
+	win.on("closed", () => {
+		screen.removeListener("display-removed", handleDisplayRemoved);
+		screen.removeListener("display-metrics-changed", handleDisplayMetricsChanged);
+		if (hudOverlayWindow === win) {
+			hudOverlayWindow = null;
+		}
 	});
 
 	if (VITE_DEV_SERVER_URL) {
