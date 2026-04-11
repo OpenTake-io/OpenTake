@@ -24,7 +24,7 @@ import KeyframeMarkers from "./KeyframeMarkers";
 import type { Range, Span } from "dnd-timeline";
 import type { ZoomRegion, TrimRegion, ClipRegion, AnnotationRegion, SpeedRegion, AudioRegion, CursorTelemetryPoint, ZoomFocus } from "../types";
 import { toFileUrl } from "../projectPersistence";
-import { detectInteractionCandidates, normalizeCursorTelemetry } from "./zoomSuggestionUtils";
+import { buildInteractionZoomSuggestions } from "./zoomSuggestionUtils";
 import { useAudioPeaks, type AudioPeaksData } from "./useAudioPeaks";
 import AudioWaveform from "./AudioWaveform";
 
@@ -34,9 +34,6 @@ const ANNOTATION_ROW_ID = "row-annotation";
 const AUDIO_ROW_ID = "row-audio";
 const FALLBACK_RANGE_MS = 1000;
 const TARGET_MARKER_COUNT = 12;
-const SUGGESTION_SPACING_MS = 1800;
-const MERGE_NEARBY_GAP_MS = 1500;
-
 interface TimelineEditorProps {
   videoDuration: number;
   currentTime: number;
@@ -1072,81 +1069,41 @@ export default function TimelineEditor({
       return;
     }
 
-    const reservedSpans = [...zoomRegions]
-      .map((region) => ({ start: region.startMs, end: region.endMs }))
-      .sort((a, b) => a.start - b.start);
+    const result = buildInteractionZoomSuggestions({
+      cursorTelemetry,
+      totalMs,
+      defaultDurationMs: defaultDuration,
+      reservedSpans: zoomRegions
+        .map((region) => ({ start: region.startMs, end: region.endMs }))
+        .sort((a, b) => a.start - b.start),
+    });
 
-    const normalizedSamples = normalizeCursorTelemetry(cursorTelemetry, totalMs);
-
-    if (normalizedSamples.length < 2) {
+    if (result.status === 'no-telemetry') {
       toast.info("No usable cursor telemetry", {
         description: "The recording does not include enough cursor movement data.",
       });
       return;
     }
 
-    const dwellCandidates = detectInteractionCandidates(normalizedSamples);
-
-    if (dwellCandidates.length === 0) {
+    if (result.status === 'no-interactions') {
       toast.info("No clear interaction moments found", {
         description: "Try a recording with pauses or clicks around important actions.",
       });
       return;
     }
 
-    const sortedCandidates = [...dwellCandidates].sort((a, b) => b.strength - a.strength);
-    const acceptedCenters: number[] = [];
-    const accepted: { start: number; end: number; focus: ZoomFocus }[] = [];
-
-    sortedCandidates.forEach((candidate) => {
-      const tooCloseToAccepted = acceptedCenters.some(
-        (center) => Math.abs(center - candidate.centerTimeMs) < SUGGESTION_SPACING_MS,
-      );
-
-      if (tooCloseToAccepted) {
-        return;
-      }
-
-      const centeredStart = Math.round(candidate.centerTimeMs - defaultDuration / 2);
-      const candidateStart = Math.max(0, Math.min(centeredStart, totalMs - defaultDuration));
-      const candidateEnd = candidateStart + defaultDuration;
-      const hasOverlap = reservedSpans.some(
-        (span) => candidateEnd > span.start && candidateStart < span.end,
-      );
-
-      if (hasOverlap) {
-        return;
-      }
-
-      reservedSpans.push({ start: candidateStart, end: candidateEnd });
-      acceptedCenters.push(candidate.centerTimeMs);
-      accepted.push({ start: candidateStart, end: candidateEnd, focus: candidate.focus });
-    });
-
-    // Merge nearby accepted regions (gap ≤ MERGE_NEARBY_GAP_MS) into single spans
-    const sorted = [...accepted].sort((a, b) => a.start - b.start);
-    const merged: typeof sorted = [];
-    for (const region of sorted) {
-      const prev = merged[merged.length - 1];
-      if (prev && region.start - prev.end <= MERGE_NEARBY_GAP_MS) {
-        prev.end = Math.max(prev.end, region.end);
-      } else {
-        merged.push({ ...region });
-      }
-    }
-
-    if (merged.length === 0) {
+    if (result.status === 'no-slots' || result.suggestions.length === 0) {
       toast.info("No auto-zoom slots available", {
         description: "Detected dwell points overlap existing zoom regions.",
       });
       return;
     }
 
-    for (const region of merged) {
+    for (const region of result.suggestions) {
       onZoomSuggested({ start: region.start, end: region.end }, region.focus);
     }
 
-    toast.success(`Added ${merged.length} interaction-based zoom suggestion${merged.length === 1 ? "" : "s"}`);
+    toast.success(`Added ${result.suggestions.length} interaction-based zoom suggestion${result.suggestions.length === 1 ? "" : "s"}`);
   }, [
     videoDuration,
     totalMs,
