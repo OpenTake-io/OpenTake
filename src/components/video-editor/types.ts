@@ -216,6 +216,7 @@ export interface AnnotationTextStyle {
 	fontStyle: "normal" | "italic";
 	textDecoration: "none" | "underline";
 	textAlign: "left" | "center" | "right";
+	borderRadius: number;
 }
 
 function getDefaultAnnotationFontFamily() {
@@ -248,6 +249,7 @@ export interface AnnotationRegion {
 	zIndex: number;
 	figureData?: FigureData;
 	blurIntensity?: number;
+	blurColor?: string;
 }
 
 export const DEFAULT_ANNOTATION_POSITION: AnnotationPosition = {
@@ -269,6 +271,7 @@ export const DEFAULT_ANNOTATION_STYLE: AnnotationTextStyle = {
 	fontStyle: "normal",
 	textDecoration: "none",
 	textAlign: "center",
+	borderRadius: 8,
 };
 
 export const DEFAULT_FIGURE_DATA: FigureData = {

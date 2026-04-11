@@ -2725,6 +2725,12 @@ export default function VideoEditor() {
 		);
 	}, []);
 
+	const handleAnnotationBlurColorChange = useCallback((id: string, blurColor: string) => {
+		setAnnotationRegions((prev) =>
+			prev.map((region) => (region.id === id ? { ...region, blurColor } : region)),
+		);
+	}, []);
+
 	const handleAnnotationPositionChange = useCallback(
 		(id: string, position: { x: number; y: number }) => {
 			setAnnotationRegions((prev) =>
@@ -4523,6 +4529,7 @@ export default function VideoEditor() {
 						onAnnotationStyleChange={handleAnnotationStyleChange}
 						onAnnotationFigureDataChange={handleAnnotationFigureDataChange}
 						onAnnotationBlurIntensityChange={handleAnnotationBlurIntensityChange}
+						onAnnotationBlurColorChange={handleAnnotationBlurColorChange}
 						onAnnotationDelete={handleAnnotationDelete}
 						selectedSpeedId={selectedSpeedId}
 						selectedSpeedValue={

@@ -37,7 +37,9 @@
 		"tipCycleBackward": "使用 Shift+Tab 反向循环切换。",
 		"imageUploadSuccess": "图片上传成功！",
 		"imageUploadError": "请上传 JPG、PNG、GIF 或 WebP 图片文件。",
-		"blurDescription": "调整视频上方框的大小和位置，以模糊敏感信息。"
+		"blurStrength": "模糊强度: {{strength}}",
+		"solidColor": "纯色 (审查)",
+		"borderRadius": "边框半径"
 	},
 
 	"fontStyles": {

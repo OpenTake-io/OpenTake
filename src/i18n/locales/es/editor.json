@@ -37,7 +37,9 @@
 		"tipCycleBackward": "Usa Shift+Tab para recorrer hacia atrás.",
 		"imageUploadSuccess": "¡Imagen subida exitosamente!",
 		"imageUploadError": "Por favor sube un archivo de imagen JPG, PNG, GIF o WebP.",
-		"blurDescription": "Cambia el tamaño y reposiciona el cuadro en el vídeo para difuminar la información sensible."
+		"blurStrength": "Fuerza del Desenfoque: {{strength}}",
+		"solidColor": "Color Sólido (Censura)",
+		"borderRadius": "Radio del Borde"
 	},
 
 	"fontStyles": {

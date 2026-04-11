@@ -38,7 +38,9 @@
 		"tipCycleBackward": "Gebruik Shift+Tab om terug te bladeren.",
 		"imageUploadSuccess": "Afbeelding succesvol geüpload!",
 		"imageUploadError": "Upload een JPG-, PNG-, GIF- of WebP-afbeelding.",
-		"blurDescription": "Pas de grootte aan en verplaats het vak op de video om gevoelige informatie te vervagen."
+		"blurStrength": "Vervagingssterkte: {{strength}}",
+		"solidColor": "Effen Kleur (Censuur)",
+		"borderRadius": "Hoekradius"
 	},
 
 	"fontStyles": {

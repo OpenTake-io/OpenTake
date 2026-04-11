@@ -449,6 +449,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						blurIntensity: isFiniteNumber(region.blurIntensity) 
 							? clamp(region.blurIntensity, 1, 100) 
 							: 20,
+						blurColor: typeof region.blurColor === "string" ? region.blurColor : undefined,
 					};
 				})
 		: [];
