@@ -1585,32 +1585,19 @@ async function muxNativeVideoExportAudio(
   }
 }
 
-/** Probe the duration of a media file (in seconds) using ffmpeg. */
+/** Probe the duration of a media file (in seconds) using the container header. */
 async function probeMediaDurationSeconds(filePath: string): Promise<number> {
   const ffmpegPath = getFfmpegBinaryPath()
   try {
-    await execFileAsync(ffmpegPath, ['-i', filePath], { timeout: 30000, maxBuffer: 2 * 1024 * 1024 })
+    await execFileAsync(ffmpegPath, ['-i', filePath, '-hide_banner'], { timeout: 5000 })
   } catch (error) {
-    // ffmpeg reports info on stderr even on "success" — parse it from the error
     const stderr = (error as NodeJS.ErrnoException & { stderr?: string })?.stderr ?? ''
-    // Match "Duration: HH:MM:SS.mm" or "time=HH:MM:SS.mm" (from progress output)
-    // Prefer the last "time=" value (actual decoded duration) over the container Duration header
-    const timeMatches = [...stderr.matchAll(/time=(\d{2}):(\d{2}):(\d{2})\.(\d{2,3})/g)]
-    if (timeMatches.length > 0) {
-      const last = timeMatches[timeMatches.length - 1]
-      const h = Number(last[1])
-      const m = Number(last[2])
-      const s = Number(last[3])
-      const frac = Number(last[4]) / (last[4].length === 3 ? 1000 : 100)
-      return h * 3600 + m * 60 + s + frac
-    }
-    // Fall back to Duration header
-    const durationMatch = stderr.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2})\.(\d{2,3})/)
-    if (durationMatch) {
-      const h = Number(durationMatch[1])
-      const m = Number(durationMatch[2])
-      const s = Number(durationMatch[3])
-      const frac = Number(durationMatch[4]) / (durationMatch[4].length === 3 ? 1000 : 100)
+    const match = stderr.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2})\.(\d{2,3})/)
+    if (match) {
+      const h = Number(match[1])
+      const m = Number(match[2])
+      const s = Number(match[3])
+      const frac = Number(match[4]) / (match[4].length === 3 ? 1000 : 100)
       return h * 3600 + m * 60 + s + frac
     }
   }
