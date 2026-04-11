@@ -446,6 +446,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 									...region.figureData,
 								}
 							: undefined,
+						blurIntensity: isFiniteNumber(region.blurIntensity) ? region.blurIntensity : undefined,
 					};
 				})
 		: [];

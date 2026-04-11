@@ -21,6 +21,7 @@ interface AnnotationSettingsPanelProps {
   onTypeChange: (type: AnnotationType) => void;
   onStyleChange: (style: Partial<AnnotationRegion['style']>) => void;
   onFigureDataChange?: (figureData: FigureData) => void;
+  onBlurIntensityChange?: (intensity: number) => void;
   onDelete: () => void;
 }
 
@@ -43,6 +44,7 @@ export function AnnotationSettingsPanel({
   onTypeChange,
   onStyleChange,
   onFigureDataChange,
+  onBlurIntensityChange,
   onDelete,
 }: AnnotationSettingsPanelProps) {
   const t = useScopedT('editor');
@@ -510,10 +512,25 @@ export function AnnotationSettingsPanel({
                 <SquareDashed className="w-6 h-6 text-[#2563EB]" />
               </div>
               <h4 className="text-sm font-medium text-slate-200 mb-1">{t('annotations.blur')}</h4>
-              <p className="text-xs text-slate-400 max-w-[200px]">
+              <p className="text-xs text-slate-400 max-w-[200px] mb-4">
                 {t('annotations.blurDescription')}
               </p>
 
+              <div className="w-full space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-200">
+                    {t('annotations.blurStrength', undefined, { strength: annotation.blurIntensity ?? 20 })}
+                  </span>
+                </div>
+                <Slider
+                  value={[annotation.blurIntensity ?? 20]}
+                  onValueChange={([value]) => onBlurIntensityChange?.(value)}
+                  min={1}
+                  max={100}
+                  step={1}
+                  className="w-full"
+                />
+              </div>
             </div>
           </TabsContent>
         </Tabs>
