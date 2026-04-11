@@ -22,6 +22,7 @@ import {
 	killWindowsCaptureProcess,
 	registerIpcHandlers,
 } from "./ipc/handlers";
+import { registerExtensionIpcHandlers } from "./extensions/extensionIpc";
 import { ensurePackagedRendererServer } from "./rendererServer";
 import type { UpdateToastPayload } from "./updater";
 import {
@@ -51,18 +52,18 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const IS_SMOKE_EXPORT = process.env.RECORDLY_SMOKE_EXPORT === "1";
 
+app.commandLine.appendSwitch("ignore-gpu-blocklist");
+app.commandLine.appendSwitch("enable-unsafe-webgpu");
+app.commandLine.appendSwitch("enable-gpu-rasterization");
+
 function configureGpuAccelerationSwitches() {
 	if (process.platform === "darwin") {
-		app.commandLine.appendSwitch("ignore-gpu-blocklist");
-		app.commandLine.appendSwitch("enable-gpu-rasterization");
 		app.commandLine.appendSwitch("use-angle", "metal");
 		app.commandLine.appendSwitch("disable-features", "MacCatapLoopbackAudioForScreenShare");
 		return;
 	}
 
 	if (process.platform === "win32") {
-		app.commandLine.appendSwitch("ignore-gpu-blocklist");
-		app.commandLine.appendSwitch("enable-gpu-rasterization");
 		app.commandLine.appendSwitch("use-angle", "d3d11");
 		return;
 	}
@@ -846,6 +847,8 @@ app.whenReady().then(async () => {
 			}
 		},
 	);
+
+	registerExtensionIpcHandlers();
 
 	if (IS_SMOKE_EXPORT) {
 		await logSmokeExportGpuDiagnostics();
