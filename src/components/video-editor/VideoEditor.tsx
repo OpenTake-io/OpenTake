@@ -2689,6 +2689,11 @@ export default function VideoEditor() {
 					if (!region.figureData) {
 						updatedRegion.figureData = { ...DEFAULT_FIGURE_DATA };
 					}
+				} else if (type === "blur") {
+					updatedRegion.content = "";
+					if (region.blurIntensity === undefined) {
+						updatedRegion.blurIntensity = 20;
+					}
 				}
 
 				return updatedRegion;
