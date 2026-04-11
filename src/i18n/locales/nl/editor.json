@@ -9,7 +9,9 @@
 		"text": "Tekst",
 		"image": "Afbeelding",
 		"arrow": "Pijl",
+		"blur": "Vervagen",
 		"textContent": "Tekstinhoud",
+
 		"textPlaceholder": "Voer je tekst in...",
 		"fontStyle": "Lettertype",
 		"selectStyle": "Selecteer stijl",
@@ -35,8 +37,12 @@
 		"tipCycleForward": "Gebruik Tab om door overlappende items te bladeren.",
 		"tipCycleBackward": "Gebruik Shift+Tab om terug te bladeren.",
 		"imageUploadSuccess": "Afbeelding succesvol geüpload!",
-		"imageUploadError": "Upload een JPG-, PNG-, GIF- of WebP-afbeelding."
+		"imageUploadError": "Upload een JPG-, PNG-, GIF- of WebP-afbeelding.",
+		"blurStrength": "Vervagingssterkte: {{strength}}",
+		"solidColor": "Effen Kleur (Censuur)",
+		"borderRadius": "Hoekradius"
 	},
+
 	"fontStyles": {
 		"classic": "Klassiek",
 		"editor": "Editor",

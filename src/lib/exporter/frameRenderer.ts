@@ -20,7 +20,8 @@ import type {
   WebcamOverlaySettings,
   ZoomTransitionEasing,
 } from "@/components/video-editor/types";
-import { ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
+import { ZOOM_DEPTH_SCALES, BASE_PREVIEW_WIDTH, BASE_PREVIEW_HEIGHT } from "@/components/video-editor/types";
+
 import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
 import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
 import {
@@ -925,11 +926,10 @@ export class FrameRenderer {
       this.compositeCtx
     ) {
       // Calculate scale factor based on export vs preview dimensions
-      const previewWidth = this.config.previewWidth || 1920;
-      const previewHeight = this.config.previewHeight || 1080;
-      const scaleX = this.config.width / previewWidth;
-      const scaleY = this.config.height / previewHeight;
+      const scaleX = this.config.width / BASE_PREVIEW_WIDTH;
+      const scaleY = this.config.height / BASE_PREVIEW_HEIGHT;
       const scaleFactor = (scaleX + scaleY) / 2;
+
 
       await renderAnnotations(
         this.compositeCtx,
@@ -1004,12 +1004,11 @@ export class FrameRenderer {
 
     this.videoContainer.position.set(0, 0);
 
-    const previewWidth = this.config.previewWidth || 1920;
-    const previewHeight = this.config.previewHeight || 1080;
     const canvasScaleFactor = Math.min(
-      width / previewWidth,
-      height / previewHeight,
+      width / BASE_PREVIEW_WIDTH,
+      height / BASE_PREVIEW_HEIGHT,
     );
+
     const scaledBorderRadius = borderRadius * canvasScaleFactor;
 
     this.maskGraphics.clear();

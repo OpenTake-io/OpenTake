@@ -2689,6 +2689,11 @@ export default function VideoEditor() {
 					if (!region.figureData) {
 						updatedRegion.figureData = { ...DEFAULT_FIGURE_DATA };
 					}
+				} else if (type === "blur") {
+					updatedRegion.content = "";
+					if (region.blurIntensity === undefined) {
+						updatedRegion.blurIntensity = 20;
+					}
 				}
 
 				return updatedRegion;
@@ -2711,6 +2716,18 @@ export default function VideoEditor() {
 	const handleAnnotationFigureDataChange = useCallback((id: string, figureData: FigureData) => {
 		setAnnotationRegions((prev) =>
 			prev.map((region) => (region.id === id ? { ...region, figureData } : region)),
+		);
+	}, []);
+
+	const handleAnnotationBlurIntensityChange = useCallback((id: string, blurIntensity: number) => {
+		setAnnotationRegions((prev) =>
+			prev.map((region) => (region.id === id ? { ...region, blurIntensity } : region)),
+		);
+	}, []);
+
+	const handleAnnotationBlurColorChange = useCallback((id: string, blurColor: string) => {
+		setAnnotationRegions((prev) =>
+			prev.map((region) => (region.id === id ? { ...region, blurColor } : region)),
 		);
 	}, []);
 
@@ -4511,6 +4528,8 @@ export default function VideoEditor() {
 						onAnnotationTypeChange={handleAnnotationTypeChange}
 						onAnnotationStyleChange={handleAnnotationStyleChange}
 						onAnnotationFigureDataChange={handleAnnotationFigureDataChange}
+						onAnnotationBlurIntensityChange={handleAnnotationBlurIntensityChange}
+						onAnnotationBlurColorChange={handleAnnotationBlurColorChange}
 						onAnnotationDelete={handleAnnotationDelete}
 						selectedSpeedId={selectedSpeedId}
 						selectedSpeedValue={

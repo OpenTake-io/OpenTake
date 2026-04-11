@@ -1,10 +1,21 @@
-import type { AnnotationRegion, ArrowDirection } from "@/components/video-editor/types";
+import { BLUR_ANNOTATION_STRENGTH, type AnnotationRegion, type ArrowDirection } from "@/components/video-editor/types";
+
 
 export interface AnnotationRenderAssets {
   imageCache: Map<string, HTMLImageElement>;
 }
 
 const annotationImagePromiseCache = new Map<string, Promise<HTMLImageElement | null>>();
+
+let blurBufferCanvas: HTMLCanvasElement | null = null;
+function getBlurBufferCanvas(): HTMLCanvasElement {
+  if (typeof document === "undefined") return {} as HTMLCanvasElement;
+  if (!blurBufferCanvas) {
+    blurBufferCanvas = document.createElement("canvas");
+  }
+  return blurBufferCanvas;
+}
+
 
 function getAnnotationImageContent(annotation: AnnotationRegion): string | null {
   const source = annotation.imageContent || annotation.content;
@@ -358,6 +369,47 @@ export async function renderAnnotations(
           );
         }
         break;
+
+      case "blur": {
+        const blurStrength = (annotation.blurIntensity ?? BLUR_ANNOTATION_STRENGTH) * scaleFactor;
+        const padding = Math.ceil(blurStrength * 2);
+        
+        ctx.save();
+        
+        ctx.beginPath();
+        const borderRadius = (annotation.style.borderRadius ?? 0) * scaleFactor;
+        ctx.roundRect(x, y, width, height, borderRadius);
+        ctx.clip();
+        
+        const sx = Math.max(0, x - padding);
+        const sy = Math.max(0, y - padding);
+        const sw = Math.min(canvasWidth - sx, width + padding * 2);
+        const sh = Math.min(canvasHeight - sy, height + padding * 2);
+        
+        if (sw > 0 && sh > 0) {
+          const buffer = getBlurBufferCanvas();
+          buffer.width = sw;
+          buffer.height = sh;
+          const bCtx = buffer.getContext("2d");
+          if (bCtx) {
+            bCtx.drawImage(ctx.canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+            
+            ctx.filter = `blur(${blurStrength}px)`;
+            ctx.drawImage(buffer, sx, sy);
+
+            if (annotation.blurColor && annotation.blurColor !== "transparent") {
+              ctx.filter = "none";
+              ctx.fillStyle = annotation.blurColor;
+              ctx.fillRect(x, y, width, height);
+            }
+          }
+        }
+        
+        ctx.restore();
+        break;
+      }
+
+
     }
   }
 }

@@ -9,6 +9,7 @@
 		"text": "Texto",
 		"image": "Imagen",
 		"arrow": "Flecha",
+		"blur": "Desenfoque",
 		"textContent": "Contenido de texto",
 		"textPlaceholder": "Ingresa tu texto...",
 		"fontStyle": "Estilo de fuente",
@@ -35,8 +36,12 @@
 		"tipCycleForward": "Usa Tab para recorrer los elementos superpuestos.",
 		"tipCycleBackward": "Usa Shift+Tab para recorrer hacia atrás.",
 		"imageUploadSuccess": "¡Imagen subida exitosamente!",
-		"imageUploadError": "Por favor sube un archivo de imagen JPG, PNG, GIF o WebP."
+		"imageUploadError": "Por favor sube un archivo de imagen JPG, PNG, GIF o WebP.",
+		"blurStrength": "Fuerza del Desenfoque: {{strength}}",
+		"solidColor": "Color Sólido (Censura)",
+		"borderRadius": "Radio del Borde"
 	},
+
 	"fontStyles": {
 		"classic": "Clásico",
 		"editor": "Editor",

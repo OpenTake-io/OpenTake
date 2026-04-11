@@ -175,7 +175,11 @@ export function trimsToClips(trims: TrimRegion[], totalDurationMs: number): Clip
 	return clips;
 }
 
-export type AnnotationType = "text" | "image" | "figure";
+export type AnnotationType = "text" | "image" | "figure" | "blur";
+export const BLUR_ANNOTATION_STRENGTH = 20;
+export const BASE_PREVIEW_WIDTH = 1920;
+export const BASE_PREVIEW_HEIGHT = 1080;
+
 
 export type ArrowDirection =
 	| "up"
@@ -212,6 +216,7 @@ export interface AnnotationTextStyle {
 	fontStyle: "normal" | "italic";
 	textDecoration: "none" | "underline";
 	textAlign: "left" | "center" | "right";
+	borderRadius: number;
 }
 
 function getDefaultAnnotationFontFamily() {
@@ -243,6 +248,8 @@ export interface AnnotationRegion {
 	style: AnnotationTextStyle;
 	zIndex: number;
 	figureData?: FigureData;
+	blurIntensity?: number;
+	blurColor?: string;
 }
 
 export const DEFAULT_ANNOTATION_POSITION: AnnotationPosition = {
@@ -264,6 +271,7 @@ export const DEFAULT_ANNOTATION_STYLE: AnnotationTextStyle = {
 	fontStyle: "normal",
 	textDecoration: "none",
 	textAlign: "center",
+	borderRadius: 8,
 };
 
 export const DEFAULT_FIGURE_DATA: FigureData = {
