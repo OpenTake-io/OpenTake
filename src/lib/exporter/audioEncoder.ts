@@ -562,7 +562,7 @@ export class AudioProcessor {
     }
 
     const { recorder, recordedBlobPromise } = this.startAudioRecording(destinationNode.stream)
-    let rafId: number | null = null
+    let tickTimerId: ReturnType<typeof setTimeout> | null = null
 
     try {
       if (audioContext.state === 'suspended') {
@@ -577,9 +577,9 @@ export class AudioProcessor {
 
       await new Promise<void>((resolve, reject) => {
         const cleanup = () => {
-          if (rafId !== null) {
-            cancelAnimationFrame(rafId)
-            rafId = null
+          if (tickTimerId !== null) {
+            clearTimeout(tickTimerId)
+            tickTimerId = null
           }
           timelineMedia.removeEventListener('error', onError)
           timelineMedia.removeEventListener('ended', onEnded)
@@ -701,7 +701,7 @@ export class AudioProcessor {
           }
 
           if (!timelineMedia.paused && !timelineMedia.ended) {
-            rafId = requestAnimationFrame(tick)
+            tickTimerId = setTimeout(tick, 16)
           } else {
             cleanup()
             resolve()
@@ -710,11 +710,11 @@ export class AudioProcessor {
 
         timelineMedia.addEventListener('error', onError, { once: true })
         timelineMedia.addEventListener('ended', onEnded, { once: true })
-        rafId = requestAnimationFrame(tick)
+        tickTimerId = setTimeout(tick, 16)
       })
     } finally {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId)
+      if (tickTimerId !== null) {
+        clearTimeout(tickTimerId)
       }
       timelineMedia.pause()
       timelineAudioSourceNode?.disconnect()
@@ -856,6 +856,8 @@ export class AudioProcessor {
     }
 
     return new Promise<void>((resolve, reject) => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null
+
       const onLoaded = () => {
         cleanup()
         resolve()
@@ -864,11 +866,20 @@ export class AudioProcessor {
         cleanup()
         reject(new Error('Failed to load media metadata for speed-adjusted audio'))
       }
+      const onTimeout = () => {
+        cleanup()
+        reject(new Error('Timed out waiting for media metadata (30s)'))
+      }
       const cleanup = () => {
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
         media.removeEventListener('loadedmetadata', onLoaded)
         media.removeEventListener('error', onError)
       }
 
+      timeoutId = setTimeout(onTimeout, 30_000)
       media.addEventListener('loadedmetadata', onLoaded)
       media.addEventListener('error', onError, { once: true })
     })
@@ -880,6 +891,8 @@ export class AudioProcessor {
     }
 
     return new Promise<void>((resolve, reject) => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null
+
       const onSeeked = () => {
         cleanup()
         resolve()
@@ -888,11 +901,20 @@ export class AudioProcessor {
         cleanup()
         reject(new Error('Failed to seek media for speed-adjusted audio'))
       }
+      const onTimeout = () => {
+        cleanup()
+        reject(new Error('Timed out waiting for media seek (30s)'))
+      }
       const cleanup = () => {
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
         media.removeEventListener('seeked', onSeeked)
         media.removeEventListener('error', onError)
       }
 
+      timeoutId = setTimeout(onTimeout, 30_000)
       media.addEventListener('seeked', onSeeked, { once: true })
       media.addEventListener('error', onError, { once: true })
       media.currentTime = targetSec

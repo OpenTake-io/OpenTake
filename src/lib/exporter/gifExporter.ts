@@ -73,6 +73,7 @@ interface GifExporterConfig {
   cursorClickBounce?: number;
   cursorClickBounceDuration?: number;
   cursorSway?: number;
+  frame?: string | null;
   previewWidth?: number;
   previewHeight?: number;
   maxDecodeQueue?: number;
@@ -190,6 +191,7 @@ export class GifExporter {
         cursorClickBounce: this.config.cursorClickBounce,
         cursorClickBounceDuration: this.config.cursorClickBounceDuration,
         cursorSway: this.config.cursorSway,
+        frame: this.config.frame,
       });
       await this.renderer.initialize();
 
