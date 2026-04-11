@@ -1,5 +1,6 @@
 import type React from 'react';
 import type { TrimRegion, SpeedRegion } from '../types';
+import { extensionHost } from '@/lib/extensions';
 
 interface VideoEventHandlersParams {
   video: HTMLVideoElement;
@@ -31,6 +32,7 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
   const emitTime = (timeValue: number) => {
     currentTimeRef.current = timeValue * 1000;
     onTimeUpdate(timeValue);
+    extensionHost.emitEvent({ type: 'playback:timeupdate', timeMs: timeValue * 1000 });
   };
 
   // Helper function to check if current time is within a trim region

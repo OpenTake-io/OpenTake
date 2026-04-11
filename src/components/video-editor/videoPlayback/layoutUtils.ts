@@ -12,6 +12,8 @@ interface LayoutParams {
   lockedVideoDimensions?: { width: number; height: number } | null;
   borderRadius?: number;
   padding?: number;
+  /** Screen insets from the active device frame, used to scale/center the full frame */
+  frameInsets?: { top: number; right: number; bottom: number; left: number } | null;
 }
 
 interface LayoutResult {
@@ -30,7 +32,7 @@ interface LayoutResult {
 }
 
 export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
-  const { container, app, videoSprite, maskGraphics, videoElement, cropRegion, lockedVideoDimensions, borderRadius = 0, padding = 0 } = params;
+  const { container, app, videoSprite, maskGraphics, videoElement, cropRegion, lockedVideoDimensions, borderRadius = 0, padding = 0, frameInsets } = params;
 
   const videoWidth = lockedVideoDimensions?.width || videoElement.videoWidth;
   const videoHeight = lockedVideoDimensions?.height || videoElement.videoHeight;
@@ -68,9 +70,20 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
   const maxDisplayWidth = width * paddingScale;
   const maxDisplayHeight = height * paddingScale;
 
+  // When a device frame is active, the frame extends beyond the video area.
+  // We need to scale so the ENTIRE frame (video + bezels) fits in the viewport,
+  // then center the full frame, not just the video content.
+  const insets = frameInsets;
+  // Fraction of the full frame occupied by the screen area
+  const screenFracW = insets ? (1 - insets.left - insets.right) : 1;
+  const screenFracH = insets ? (1 - insets.top - insets.bottom) : 1;
+  // Full frame dimensions in video pixels (the frame image is this large relative to the screen)
+  const fullFrameVideoW = croppedVideoWidth / screenFracW;
+  const fullFrameVideoH = croppedVideoHeight / screenFracH;
+
   const scale = Math.min(
-    maxDisplayWidth / croppedVideoWidth,
-    maxDisplayHeight / croppedVideoHeight,
+    maxDisplayWidth / fullFrameVideoW,
+    maxDisplayHeight / fullFrameVideoH,
   );
 
   videoSprite.scale.set(scale);
@@ -83,9 +96,20 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
   const croppedDisplayWidth = croppedVideoWidth * scale;
   const croppedDisplayHeight = croppedVideoHeight * scale;
 
-  // Center the cropped region in the container
-  const centerOffsetX = (width - croppedDisplayWidth) / 2;
-  const centerOffsetY = (height - croppedDisplayHeight) / 2;
+  // Center the full frame (or just the video if no frame) in the container
+  // Full frame display dimensions
+  const fullFrameDisplayW = fullFrameVideoW * scale;
+  const fullFrameDisplayH = fullFrameVideoH * scale;
+  // The full frame's top-left, centered in the viewport
+  const frameCenterX = (width - fullFrameDisplayW) / 2;
+  const frameCenterY = (height - fullFrameDisplayH) / 2;
+  // The screen area starts at frameCenterX + insets.left * fullFrameDisplayW
+  const centerOffsetX = insets
+    ? frameCenterX + insets.left * fullFrameDisplayW
+    : (width - croppedDisplayWidth) / 2;
+  const centerOffsetY = insets
+    ? frameCenterY + insets.top * fullFrameDisplayH
+    : (height - croppedDisplayHeight) / 2;
   
   // Position the full video sprite so that when we apply the mask,
   // the cropped region appears centered

@@ -91,7 +91,7 @@ export const DEFAULT_CURSOR_CONFIG: CursorRenderConfig = {
 
 const REFERENCE_WIDTH = 1920;
 const MIN_CURSOR_VIEWPORT_SCALE = 0.55;
-const CLICK_RING_FADE_MS = 240;
+const CLICK_RING_FADE_MS = 600;
 const CURSOR_MOTION_BLUR_BASE_MULTIPLIER = 0.08;
 const CURSOR_TIME_DISCONTINUITY_MS = 100;
 const CURSOR_SWAY_SMOOTHING_MULTIPLIER = 0.7;
@@ -852,13 +852,6 @@ export class SmoothedCursorState {
 	}
 }
 
-function drawClickRing(graphics: Graphics, px: number, py: number, h: number, progress: number) {
-	void graphics;
-	void px;
-	void py;
-	void h;
-	void progress;
-}
 
 export class PixiCursorOverlay {
 	public readonly container: Container;
@@ -1000,6 +993,22 @@ export class PixiCursorOverlay {
 		this.customCursorSprite.anchor.set(asset.anchorX, asset.anchorY);
 	}
 
+	getSmoothedCursorSnapshot(): {
+		cx: number;
+		cy: number;
+		trail: Array<{ cx: number; cy: number }>;
+	} | null {
+		if (!this.container.visible) {
+			return null;
+		}
+
+		return {
+			cx: this.state.x,
+			cy: this.state.y,
+			trail: this.state.trail.map((point) => ({ cx: point.x, cy: point.y })),
+		};
+	}
+
 	update(
 		samples: CursorTelemetryPoint[],
 		timeMs: number,
@@ -1053,7 +1062,7 @@ export class PixiCursorOverlay {
 		const px = viewport.x + this.state.x * viewport.width;
 		const py = viewport.y + this.state.y * viewport.height;
 		const h = this.config.dotRadius * getCursorViewportScale(viewport);
-		const { cursorType, clickBounceProgress, clickProgress } = getCursorVisualState(
+		const { cursorType, clickBounceProgress } = getCursorVisualState(
 			samples,
 			timeMs,
 			this.config.clickBounceDuration,
@@ -1066,7 +1075,6 @@ export class PixiCursorOverlay {
 		const swayRotation = this.updateCursorSway(px, py, timeMs, shouldFreezeCursorMotion);
 
 		this.clickRingGraphics.clear();
-		drawClickRing(this.clickRingGraphics, px, py, h, clickProgress);
 
 		const spriteKey = (cursorType in this.cursorSprites ? cursorType : "arrow") as CursorAssetKey;
 
