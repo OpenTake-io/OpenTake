@@ -411,6 +411,46 @@ interface Window {
 		cancelCountdown: () => Promise<{ success: boolean }>;
 		getActiveCountdown: () => Promise<{ success: boolean; seconds: number | null }>;
 		onCountdownTick: (callback: (seconds: number) => void) => () => void;
+		extensionsDiscover: () => Promise<any[]>;
+		extensionsList: () => Promise<any[]>;
+		extensionsGet: (id: string) => Promise<any | null>;
+		extensionsEnable: (id: string) => Promise<{ success: boolean; error?: string }>;
+		extensionsDisable: (id: string) => Promise<{ success: boolean; error?: string }>;
+		extensionsInstallFromFolder: () => Promise<{
+			success: boolean;
+			extension?: any;
+			message?: string;
+			error?: string;
+			canceled?: boolean;
+		}>;
+		extensionsUninstall: (id: string) => Promise<{ success: boolean; error?: string }>;
+		extensionsGetDirectory: () => Promise<{ success: boolean; path?: string; error?: string }>;
+		extensionsOpenDirectory: () => Promise<{ success: boolean; path?: string; error?: string }>;
+		extensionsMarketplaceSearch: (params: {
+			query?: string;
+			tags?: string[];
+			sort?: string;
+			page?: number;
+			pageSize?: number;
+		}) => Promise<any>;
+		extensionsMarketplaceGet: (id: string) => Promise<any | null>;
+		extensionsMarketplaceInstall: (
+			extensionId: string,
+			downloadUrl: string,
+		) => Promise<{ success: boolean; error?: string }>;
+		extensionsMarketplaceSubmit: (
+			extensionId: string,
+		) => Promise<{ success: boolean; reviewId?: string; error?: string }>;
+		extensionsReviewsList: (params: {
+			status?: string;
+			page?: number;
+			pageSize?: number;
+		}) => Promise<{ reviews: any[]; total: number }>;
+		extensionsReviewUpdate: (
+			reviewId: string,
+			status: string,
+			notes?: string,
+		) => Promise<{ success: boolean; error?: string }>;
 	};
 }
 
