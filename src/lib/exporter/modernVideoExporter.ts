@@ -25,6 +25,7 @@ import {
 } from "./mp4Support";
 import { VideoMuxer } from "./muxer";
 import { captureCanvasFrameForNativeExport } from "./nativeFrameCapture";
+import { extensionHost } from "@/lib/extensions";
 import { type DecodedVideoInfo, StreamingVideoDecoder } from "./streamingDecoder";
 import type {
 	ExportConfig,
@@ -81,6 +82,7 @@ interface VideoExporterConfig extends ExportConfig {
 	cursorSway?: number;
 	zoomSmoothness?: number;
 	zoomClassicMode?: boolean;
+	frame?: string | null;
 	audioRegions?: AudioRegion[];
 	sourceAudioFallbackPaths?: string[];
 	previewWidth?: number;
@@ -341,6 +343,7 @@ export class ModernVideoExporter {
 				cursorSway: this.config.cursorSway,
 				zoomSmoothness: this.config.zoomSmoothness,
 				zoomClassicMode: this.config.zoomClassicMode,
+				frame: this.config.frame,
 			});
 			await this.renderer.initialize();
 			this.rendererInitTimeMs = this.getNowMs() - stageStartedAt;
@@ -400,6 +403,7 @@ export class ModernVideoExporter {
 					frameIndex++;
 					this.processedFrameCount = frameIndex;
 					this.reportProgress(frameIndex, totalFrames, "extracting");
+					extensionHost.emitEvent({ type: 'export:frame', data: { frameIndex, totalFrames } });
 				},
 			);
 			this.decodeLoopTimeMs = this.getNowMs() - decodeLoopStartedAt;
@@ -455,6 +459,9 @@ export class ModernVideoExporter {
 					(this.config.sourceAudioFallbackPaths ?? []).length > 0
 				) {
 					this.audioProcessor = new AudioProcessor();
+					this.audioProcessor.setOnProgress((progress) => {
+						this.reportFinalizingProgress(totalFrames, 99, progress);
+					});
 					this.reportFinalizingProgress(totalFrames, 99);
 					await this.awaitWithFinalizationTimeout(
 						this.audioProcessor.process(
@@ -857,6 +864,9 @@ export class ModernVideoExporter {
 
 		if (audioPlan.audioMode === "edited-track") {
 			this.audioProcessor = new AudioProcessor();
+			this.audioProcessor.setOnProgress((progress) => {
+				this.reportFinalizingProgress(this.processedFrameCount, 99, progress);
+			});
 			const audioBlob = await this.awaitWithFinalizationTimeout(
 				this.audioProcessor.renderEditedAudioTrack(
 					this.config.videoUrl,
@@ -968,8 +978,8 @@ export class ModernVideoExporter {
 		}
 	}
 
-	private reportFinalizingProgress(totalFrames: number, renderProgress: number) {
-		this.reportProgress(totalFrames, totalFrames, "finalizing", renderProgress);
+	private reportFinalizingProgress(totalFrames: number, renderProgress: number, audioProgress?: number) {
+		this.reportProgress(totalFrames, totalFrames, "finalizing", renderProgress, audioProgress);
 	}
 
 	private reportProgress(
@@ -977,6 +987,7 @@ export class ModernVideoExporter {
 		totalFrames: number,
 		phase: ExportProgress["phase"] = "extracting",
 		renderProgress?: number,
+		audioProgress?: number,
 	) {
 		const nowMs = this.getNowMs();
 		const elapsedSeconds = Math.max((nowMs - this.exportStartTimeMs) / 1000, 0.001);
@@ -1047,6 +1058,7 @@ export class ModernVideoExporter {
 				encoderName: this.encoderName ?? undefined,
 				phase,
 				renderProgress: safeRenderProgress,
+				audioProgress,
 			});
 		}
 	}
