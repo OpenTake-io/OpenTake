@@ -63,6 +63,7 @@ import { isVideoWallpaperSource } from "@/lib/wallpapers";
 import {
 	type AnnotationRenderAssets,
 	preloadAnnotationAssets,
+	renderAnnotations,
 	renderAnnotationToCanvas,
 } from "./annotationRenderer";
 import { ForwardFrameSource } from "./forwardFrameSource";
@@ -182,6 +183,11 @@ interface AnnotationSpriteEntry {
 	annotation: AnnotationRegion;
 	sprite: Sprite;
 	texture: Texture;
+}
+
+interface ExportCompositeCanvasState {
+	canvas: HTMLCanvasElement;
+	context: CanvasRenderingContext2D;
 }
 
 type ResolvedCaptionLayout = NonNullable<ReturnType<typeof buildActiveCaptionLayout>>;
@@ -334,6 +340,8 @@ export class FrameRenderer {
 	private captionSprite: Sprite | null = null;
 	private captionTextureSource: MutableVideoTextureSource | null = null;
 	private captionRenderKey: string | null = null;
+	private exportCompositeCanvas: ExportCompositeCanvasState | null = null;
+	private outputCanvasOverride: HTMLCanvasElement | null = null;
 	private config: FrameRenderConfig;
 	private animationState: AnimationState;
 	private motionBlurState: MotionBlurState;
@@ -1036,6 +1044,94 @@ export class FrameRenderer {
 		const scaleX = this.config.width / previewWidth;
 		const scaleY = this.config.height / previewHeight;
 		return (scaleX + scaleY) / 2;
+	}
+
+	private hasActiveBlurAnnotations(timeMs: number): boolean {
+		return (this.config.annotationRegions ?? []).some(
+			(annotation) =>
+				annotation.type === "blur" &&
+				timeMs >= annotation.startMs &&
+				timeMs <= annotation.endMs,
+		);
+	}
+
+	private ensureExportCompositeCanvas(): ExportCompositeCanvasState | null {
+		const targetWidth = Math.max(1, Math.ceil(this.config.width));
+		const targetHeight = Math.max(1, Math.ceil(this.config.height));
+
+		if (
+			this.exportCompositeCanvas &&
+			this.exportCompositeCanvas.canvas.width === targetWidth &&
+			this.exportCompositeCanvas.canvas.height === targetHeight
+		) {
+			return this.exportCompositeCanvas;
+		}
+
+		const canvas = document.createElement("canvas");
+		canvas.width = targetWidth;
+		canvas.height = targetHeight;
+
+		const context = configureHighQuality2DContext(canvas.getContext("2d"));
+		if (!context) {
+			return null;
+		}
+
+		this.exportCompositeCanvas = {
+			canvas,
+			context,
+		};
+
+		return this.exportCompositeCanvas;
+	}
+
+	private drawCaptionOverlay(context: CanvasRenderingContext2D): void {
+		if (
+			!this.captionContainer?.visible ||
+			!this.captionSprite?.visible ||
+			!this.captionCanvas
+		) {
+			return;
+		}
+
+		const drawWidth = this.captionCanvas.width * this.captionSprite.scale.x;
+		const drawHeight = this.captionCanvas.height * this.captionSprite.scale.y;
+		const drawX = this.captionSprite.x - drawWidth * this.captionSprite.anchor.x;
+		const drawY = this.captionSprite.y - drawHeight * this.captionSprite.anchor.y;
+
+		context.save();
+		context.globalAlpha = this.captionSprite.alpha;
+		context.drawImage(this.captionCanvas, drawX, drawY, drawWidth, drawHeight);
+		context.restore();
+	}
+
+	private async composeBlurAnnotationFrame(timeMs: number): Promise<void> {
+		if (!this.app) {
+			this.outputCanvasOverride = null;
+			return;
+		}
+
+		const compositeState = this.ensureExportCompositeCanvas();
+		if (!compositeState) {
+			this.outputCanvasOverride = null;
+			return;
+		}
+
+		const { canvas, context } = compositeState;
+		context.clearRect(0, 0, canvas.width, canvas.height);
+		context.drawImage(this.app.canvas as HTMLCanvasElement, 0, 0);
+
+		await renderAnnotations(
+			context,
+			this.config.annotationRegions ?? [],
+			this.config.width,
+			this.config.height,
+			timeMs,
+			this.annotationScaleFactor,
+			this.annotationAssets ?? undefined,
+		);
+
+		this.drawCaptionOverlay(context);
+		this.outputCanvasOverride = canvas;
 	}
 
 	private async setupAnnotationLayer(): Promise<void> {
@@ -2042,6 +2138,32 @@ export class FrameRenderer {
 		this.updateAnnotationLayer(timeMs);
 		this.updateCaptionLayer(timeMs);
 		this.updateWebcamOverlay();
+
+		if (this.hasActiveBlurAnnotations(timeMs)) {
+			const annotationContainerVisible = this.annotationContainer?.visible ?? true;
+			const captionContainerVisible = this.captionContainer?.visible ?? true;
+
+			if (this.annotationContainer) {
+				this.annotationContainer.visible = false;
+			}
+			if (this.captionContainer) {
+				this.captionContainer.visible = false;
+			}
+
+			this.app.render();
+
+			if (this.annotationContainer) {
+				this.annotationContainer.visible = annotationContainerVisible;
+			}
+			if (this.captionContainer) {
+				this.captionContainer.visible = captionContainerVisible;
+			}
+
+			await this.composeBlurAnnotationFrame(timeMs);
+			return;
+		}
+
+		this.outputCanvasOverride = null;
 		this.app.render();
 	}
 
@@ -2373,6 +2495,10 @@ export class FrameRenderer {
 			throw new Error("Renderer not initialized");
 		}
 
+		if (this.outputCanvasOverride) {
+			return null;
+		}
+
 		if (this.config.nativeReadbackMode !== "pixels") {
 			return null;
 		}
@@ -2397,7 +2523,7 @@ export class FrameRenderer {
 			throw new Error("Renderer not initialized");
 		}
 
-		return this.app.canvas as HTMLCanvasElement;
+		return this.outputCanvasOverride ?? (this.app.canvas as HTMLCanvasElement);
 	}
 
 	getRendererBackend(): ExportRenderBackend {
@@ -2527,6 +2653,8 @@ export class FrameRenderer {
 		this.captionSprite = null;
 		this.captionTextureSource = null;
 		this.captionRenderKey = null;
+		this.exportCompositeCanvas = null;
+		this.outputCanvasOverride = null;
 		this.nativeReadbackBuffer = null;
 
 		this.annotationScaleFactor = 1;

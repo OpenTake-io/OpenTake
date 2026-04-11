@@ -461,6 +461,10 @@ export async function renderAnnotationToCanvas(
         scaleFactor,
       );
       break;
+    case "blur":
+      // Blur annotations must sample already-rendered scene pixels,
+      // so they cannot be rasterized as standalone sprites.
+      return null;
   }
 
   return canvas;
