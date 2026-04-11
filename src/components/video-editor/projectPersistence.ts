@@ -399,7 +399,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						id: region.id,
 						startMs,
 						endMs,
-						type: region.type === "image" || region.type === "figure" ? region.type : "text",
+						type: region.type === "image" || region.type === "figure" || region.type === "blur" ? region.type : "text",
 						content: typeof region.content === "string" ? region.content : "",
 						textContent: typeof region.textContent === "string" ? region.textContent : undefined,
 						imageContent: typeof region.imageContent === "string" ? region.imageContent : undefined,
@@ -446,6 +446,10 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 									...region.figureData,
 								}
 							: undefined,
+						blurIntensity: isFiniteNumber(region.blurIntensity) 
+							? clamp(region.blurIntensity, 1, 100) 
+							: 20,
+						blurColor: typeof region.blurColor === "string" ? region.blurColor : undefined,
 					};
 				})
 		: [];

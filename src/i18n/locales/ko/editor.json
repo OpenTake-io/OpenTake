@@ -9,7 +9,9 @@
 		"text": "텍스트",
 		"image": "이미지",
 		"arrow": "화살표",
+		"blur": "흐리게",
 		"textContent": "텍스트 내용",
+
 		"textPlaceholder": "텍스트를 입력하세요...",
 		"fontStyle": "글꼴 스타일",
 		"selectStyle": "스타일 선택",
@@ -35,8 +37,12 @@
 		"tipCycleForward": "Tab 키로 겹치는 항목을 순환할 수 있습니다.",
 		"tipCycleBackward": "Shift+Tab으로 이전 항목으로 이동할 수 있습니다.",
 		"imageUploadSuccess": "이미지를 업로드했습니다!",
-		"imageUploadError": "JPG, PNG, GIF 또는 WebP 이미지 파일을 업로드해 주세요."
+		"imageUploadError": "JPG, PNG, GIF 또는 WebP 이미지 파일을 업로드해 주세요.",
+		"blurStrength": "블러 강도: {{strength}}",
+		"solidColor": "단색 (검열)",
+		"borderRadius": "테두리 반경"
 	},
+
 	"fontStyles": {
 		"classic": "클래식",
 		"editor": "에디터",

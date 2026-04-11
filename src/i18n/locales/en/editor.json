@@ -9,6 +9,7 @@
 		"text": "Text",
 		"image": "Image",
 		"arrow": "Arrow",
+		"blur": "Blur",
 		"textContent": "Text Content",
 		"textPlaceholder": "Enter your text...",
 		"fontStyle": "Font Style",
@@ -35,8 +36,12 @@
 		"tipCycleForward": "Use Tab to cycle through overlapping items.",
 		"tipCycleBackward": "Use Shift+Tab to cycle backwards.",
 		"imageUploadSuccess": "Image uploaded successfully!",
-		"imageUploadError": "Please upload a JPG, PNG, GIF, or WebP image file."
+		"imageUploadError": "Please upload a JPG, PNG, GIF, or WebP image file.",
+		"blurStrength": "Blur Strength: {{strength}}",
+		"solidColor": "Solid Color (Censorship)",
+		"borderRadius": "Border Radius"
 	},
+
 	"fontStyles": {
 		"classic": "Classic",
 		"editor": "Editor",
