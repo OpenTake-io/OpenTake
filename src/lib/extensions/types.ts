@@ -423,6 +423,12 @@ export interface RecordlyExtensionAPI {
 	/** Register a device frame (browser chrome, laptop bezel, etc.) */
 	registerFrame(frame: ContributedFrame): () => void;
 
+	/** Register a wallpaper/background image or video */
+	registerWallpaper(wallpaper: ContributedWallpaper): () => void;
+
+	/** Register a cursor style pack */
+	registerCursorStyle(cursorStyle: ContributedCursorStyle): () => void;
+
 	/** Listen to extension events */
 	on(event: ExtensionEventType, handler: ExtensionEventHandler): () => void;
 

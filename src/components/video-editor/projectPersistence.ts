@@ -618,15 +618,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		showCursor: typeof editor.showCursor === "boolean" ? editor.showCursor : true,
 		loopCursor: typeof editor.loopCursor === "boolean" ? editor.loopCursor : false,
 		cursorStyle:
-			editor.cursorStyle === "dot" ||
-			editor.cursorStyle === "figma" ||
-			editor.cursorStyle === "mono" ||
-			editor.cursorStyle === "tahoe" ||
-			editor.cursorStyle === "lavender" ||
-			editor.cursorStyle === "parched" ||
-			editor.cursorStyle === "chooper" ||
-			editor.cursorStyle === "amongus" ||
-			editor.cursorStyle === "turtle"
+			typeof editor.cursorStyle === "string" && editor.cursorStyle.trim().length > 0
 				? editor.cursorStyle
 				: DEFAULT_CURSOR_STYLE,
 		cursorSize: isFiniteNumber(editor.cursorSize)

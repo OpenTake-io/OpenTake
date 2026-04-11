@@ -137,6 +137,9 @@ interface Window {
 		readLocalFile: (
 			filePath: string,
 		) => Promise<{ success: boolean; data?: Uint8Array; error?: string }>;
+		generateWallpaperThumbnail: (
+			filePath: string,
+		) => Promise<{ success: boolean; data?: Uint8Array; error?: string }>;
 		nativeVideoExportStart: (options: {
 			width: number;
 			height: number;

@@ -1,20 +1,18 @@
 # Recordly Extension API
 
-Extensions add render hooks, device frames, click animations, audio cues, and custom settings UI to Recordly. They run in the renderer process and use a permission-gated host API to hook into the frame render pipeline.
+Recordly extensions run in the editor renderer and use a permission-gated host API. They can draw into the render pipeline, react to playback and export events, register cursor effects, add settings panels, and contribute packaged assets such as frames, wallpapers, and cursor styles.
 
 ## Quick Start
 
-Create a folder under `public/builtin-extensions/` (for built-ins) or install via the Extensions tab.
+For local user-installed extensions, use `Extensions -> Open Directory` in the app. Recordly stores them in the app `userData/extensions` directory. This repo also includes installable example bundles under `extension-examples/`.
 
 ### Minimum Extension
 
-```
+```text
 my-extension/
   recordly-extension.json
   index.js
 ```
-
-**recordly-extension.json**
 
 ```json
 {
@@ -29,318 +27,263 @@ my-extension/
 }
 ```
 
-**index.js**
-
 ```js
 export function activate(api) {
-  api.log('Hello from my extension!');
+  api.log("Hello from my extension");
 }
 
 export function deactivate() {}
 ```
 
-## Extension Manifest
+### TypeScript
+
+Extensions can be authored in TypeScript. Import the `RecordlyExtensionAPI` type from `types.ts` in this repo for full IDE auto-complete and compile-time checks:
+
+```ts
+import type { RecordlyExtensionAPI } from "./types";
+
+export function activate(api: RecordlyExtensionAPI) {
+  api.registerRenderHook("final", (ctx) => {
+    ctx.ctx.fillStyle = "rgba(255,255,255,0.1)";
+    ctx.ctx.fillRect(0, 0, ctx.width, 30);
+  });
+}
+
+export function deactivate() {}
+```
+
+Recordly loads the `main` entry from the manifest, which must be a `.js` file. If you author in TypeScript, compile or bundle to JavaScript before packaging. A `tsconfig.json` with `"module": "ESNext"` and `"target": "ESNext"` works well since extensions run in a Chromium renderer.
+
+### Manifest Screenshots
+
+Extensions can include `screenshots` in the manifest to show preview images in the marketplace:
+
+```json
+{
+  "id": "com.example.my-extension",
+  "screenshots": [
+    "screenshots/preview-1.png",
+    "screenshots/preview-2.png"
+  ]
+}
+```
+
+Paths are relative to the extension root. The marketplace displays screenshots in a carousel on both the in-app detail modal and the web detail page.
+
+## Manifest
+
+`recordly-extension.json` is validated both when the extension loads and when a zip is uploaded to the marketplace.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `id` | `string` | ✅ | Unique identifier (reverse-domain style) |
-| `name` | `string` | ✅ | Display name |
-| `version` | `string` | ✅ | Semver version |
-| `description` | `string` | ✅ | One-line summary |
-| `author` | `string` | | Author or org name |
-| `homepage` | `string` | | Repository/homepage URL |
-| `license` | `string` | | SPDX license identifier |
-| `engine` | `string` | | Minimum Recordly version |
-| `icon` | `string` | | Path to icon relative to extension root |
-| `main` | `string` | ✅ | Entry point JS file |
-| `permissions` | `string[]` | ✅ | Required API permissions |
-| `contributes` | `object` | | Optional metadata for bundled assets; behavior is still registered from `activate()` |
+| `id` | `string` | Yes | Unique identifier, for example `yourname.cool-effect` |
+| `name` | `string` | Yes | Human-readable name shown in the UI |
+| `version` | `string` | Yes | Strict semver version, for example `1.0.0` |
+| `description` | `string` | Yes | One-line summary |
+| `author` | `string` | No | Author or organisation |
+| `homepage` | `string` | No | HTTPS homepage or repository URL |
+| `license` | `string` | No | SPDX license identifier |
+| `engine` | `string` | No | Minimum supported Recordly version |
+| `icon` | `string` | No | Relative path to a PNG icon |
+| `screenshots` | `string[]` | No | Relative paths to preview images shown in the marketplace |
+| `main` | `string` | Yes | Relative entry point JS file |
+| `permissions` | `string[]` | Yes | Required capabilities |
+| `contributes` | `object` | No | Metadata for packaged frames, cursor styles, sounds, wallpapers, and webcam frames |
 
-### Permissions
+`contributes` is metadata only today. Recordly does not auto-register runtime behavior from the manifest. Use `activate()` to call APIs such as `registerFrame()`, `registerWallpaper()`, `registerCursorStyle()`, `registerSettingsPanel()`, and `playSound()`.
+
+## Permissions
 
 | Permission | Grants access to |
-|-----------|-----------------|
-| `render` | Frame render pipeline hooks |
-| `cursor` | Cursor telemetry & cursor effect registration |
-| `audio` | Sound playback |
-| `timeline` | Timeline lifecycle events |
-| `ui` | Settings panels & frames |
-| `assets` | Bundled asset path resolution |
-| `export` | Export lifecycle hooks |
+|-----------|------------------|
+| `render` | Render hook registration |
+| `cursor` | Cursor telemetry and cursor effect registration |
+| `audio` | Bundled sound playback |
+| `timeline` | Playback and timeline events |
+| `ui` | Settings panels and device frame registration |
+| `assets` | Bundled asset resolution plus wallpaper and cursor style registration |
+| `export` | Export lifecycle events |
 
-Manifest `contributes` entries are metadata only today. Recordly does not auto-register them at runtime; extensions still need to call APIs like `registerFrame()`, `registerSettingsPanel()`, `resolveAsset()`, and `playSound()` from `activate()`.
+## Render Pipeline
 
-## API Reference
+Render hooks draw into `hookCtx.ctx`, a `CanvasRenderingContext2D`, at specific phases.
 
-The `api` object passed to `activate()` provides the following methods.
+| Phase | Preview | Export | Notes |
+|-------|---------|--------|-------|
+| `background` | Reserved | Reserved | Exists in the type surface but is not dispatched yet |
+| `post-video` | Yes | Yes | Runs inside the scene transform |
+| `post-zoom` | Yes | Yes | Runs inside the scene transform |
+| `post-cursor` | Yes | Yes | Runs inside the scene transform |
+| `post-webcam` | Yes | Yes | Runs after the built-in transform |
+| `post-annotations` | Yes | Yes | Runs after the built-in transform |
+| `final` | Yes | Yes | Last pass for HUD-style overlays |
 
-### Render Hooks
+### Inside vs Outside the Scene Transform
 
-```js
-const dispose = api.registerRenderHook(phase, (ctx) => {
-  // Draw on ctx.ctx (a CanvasRenderingContext2D)
-});
+- `post-video`, `post-zoom`, and `post-cursor` already follow zoom and motion in preview and export.
+- `post-webcam`, `post-annotations`, and `final` run after Recordly restores the canvas transform. Use `sceneTransform` manually if you want those overlays to move with the scene.
+
+### RenderHookContext
+
+```ts
+{
+  width: number;
+  height: number;
+  timeMs: number;
+  durationMs: number;
+  cursor: { cx: number; cy: number; interactionType?: string } | null;
+  smoothedCursor?: {
+    cx: number;
+    cy: number;
+    trail: Array<{ cx: number; cy: number }>;
+  } | null;
+  ctx: CanvasRenderingContext2D;
+  videoLayout?: {
+    maskRect: { x: number; y: number; width: number; height: number };
+    borderRadius: number;
+    padding: number;
+  };
+  zoom?: { scale: number; focusX: number; focusY: number; progress: number };
+  sceneTransform?: { scale: number; x: number; y: number };
+  shadow?: { enabled: boolean; intensity: number };
+  getPixelColor(x: number, y: number): { r: number; g: number; b: number; a: number };
+  getAverageSceneColor(): { r: number; g: number; b: number; a: number };
+  getEdgeAverageColor(edgeWidth?: number): { r: number; g: number; b: number; a: number };
+  getDominantColors(count?: number): Array<{ r: number; g: number; b: number; frequency: number }>;
+}
 ```
 
-**Phases** (in pipeline order):
+Use `videoLayout.maskRect` and `videoLayout.borderRadius` for scene-relative sizing. That gives you true scene borders and correctly shaped rounded corners instead of canvas-wide overlays.
 
-| Phase | Timing |
-|-------|--------|
-| `background` | Before video frame (custom backgrounds) |
-| `post-video` | After video, before zoom |
-| `post-zoom` | After zoom transform |
-| `post-cursor` | After cursor (click effects, trails) |
-| `post-webcam` | After webcam overlay |
-| `post-annotations` | After annotations |
-| `final` | Last pass (watermarks, HUD overlays) |
+## Cursor Effects
 
-**RenderHookContext** fields:
-
-- `width`, `height` — output canvas dimensions
-- `timeMs` — current playback time in ms
-- `durationMs` — total video duration
-- `cursor` — `{ cx, cy, interactionType } | null` (normalized 0-1)
-- `smoothedCursor` — `{ cx, cy, trail } | null` using the live rendered cursor smoothing state
-- `ctx` — `CanvasRenderingContext2D` to draw on
-- `videoLayout` — `{ maskRect, borderRadius, padding }`
-- `zoom` — `{ scale, focusX, focusY, progress }`
-- `shadow` — `{ enabled, intensity }`
-
-### Cursor Effects
+Cursor effect callbacks run each frame after a click until they return `false`.
 
 ```js
 api.registerCursorEffect((ctx) => {
-  // ctx.cx, ctx.cy — cursor position (normalized 0-1)
-  // ctx.elapsedMs — time since the click
-  // ctx.interactionType — 'click', 'double-click', 'right-click', 'mouseup'
-  // ctx.ctx — CanvasRenderingContext2D
-  // ctx.width, ctx.height — canvas dimensions
+  const progress = ctx.elapsedMs / 400;
+  if (progress >= 1) return false;
 
-  // Return true to keep animating, false to stop
-  return ctx.elapsedMs < 600;
+  const sceneWidth = ctx.videoLayout?.maskRect.width ?? ctx.width;
+  const x = ctx.cx * ctx.width;
+  const y = ctx.cy * ctx.height;
+  const radius = sceneWidth * 0.03 * progress;
+
+  ctx.ctx.beginPath();
+  ctx.ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.ctx.stroke();
+  return true;
 });
 ```
 
-### Device Frames
+`CursorEffectContext` now includes `videoLayout`, `zoom`, and `sceneTransform`, so effects can scale relative to the scene instead of the full canvas.
 
-Register browser chrome, laptop bezels, or any device overlay.
+## API Surface
 
-**Preferred: draw function** (resolution-independent, no bitmap artifacts):
+### Registration
 
 ```js
-api.registerFrame({
-  id: 'my-frame',
-  label: 'My Frame',
-  category: 'browser', // 'browser' | 'laptop' | 'phone' | 'tablet' | 'desktop' | 'custom'
-  appearance: 'dark',  // 'light' | 'dark'
-  screenInsets: { top: 0.05, right: 0.005, bottom: 0.005, left: 0.005 },
-  draw(ctx, width, height) {
-    // Draw frame chrome at the given dimensions.
-    // Leave the screen area transparent (use globalCompositeOperation: 'destination-out').
-    // All dimensions are proportional — the function is called at whatever
-    // resolution is needed (preview, export, thumbnail).
-  },
-});
+api.registerRenderHook(phase, hook);
+api.registerCursorEffect(effect);
+api.registerFrame(frame);
+api.registerWallpaper(wallpaper);
+api.registerCursorStyle(cursorStyle);
+api.registerSettingsPanel(panel);
+api.on(event, handler);
 ```
 
-**Legacy: static image** (scaled as bitmap — may produce artifacts):
+Every registration returns a dispose function.
+
+### Settings
 
 ```js
-api.registerFrame({
-  id: 'my-frame',
-  label: 'My Frame',
-  category: 'browser',
-  file: 'frames/my-frame.png', // relative to extension root
-  screenInsets: { top: 0.05, right: 0.01, bottom: 0.01, left: 0.01 },
-});
+api.getSetting(settingId);
+api.setSetting(settingId, value);
+api.onSettingChange((settingId, value) => {});
+api.getAllSettings();
 ```
 
-**`screenInsets`** define where the video content sits inside the frame, as fractions (0–1) of the frame dimensions. Example: `{ top: 0.05 }` means the top 5% of the frame image is the title bar/bezel.
+Supported settings field types are `toggle`, `slider`, `select`, `color`, and `text`.
 
-### Settings Panels
+### Assets and Audio
+
+```js
+api.resolveAsset("images/overlay.png");
+api.playSound("sounds/click.mp3", { volume: 0.8 });
+api.log("hello", payload);
+```
+
+### Read-only Queries
+
+```js
+api.getVideoInfo();
+api.getVideoLayout();
+api.getCursorAt(timeMs);
+api.getSmoothedCursor();
+api.getZoomState();
+api.getShadowConfig();
+api.getKeystrokesInRange(startMs, endMs);
+api.getAspectRatio();
+api.getActiveFrame();
+api.isExtensionActive(extensionId);
+api.getPlaybackState();
+api.getCanvasDimensions();
+```
+
+## Settings Panels
 
 ```js
 api.registerSettingsPanel({
-  id: 'my-settings',
-  label: 'My Extension',
-  icon: 'sparkles',        // Lucide icon name
-  parentSection: 'cursor', // Nest inside an existing section
+  id: "my-settings",
+  label: "My Extension",
+  icon: "sparkles",
+  parentSection: "cursor",
   fields: [
-    { id: 'enabled', label: 'Enable', type: 'toggle', defaultValue: true },
-    { id: 'color', label: 'Color', type: 'color', defaultValue: '#2563EB' },
-    { id: 'size', label: 'Size', type: 'slider', defaultValue: 1.0, min: 0.1, max: 3.0, step: 0.1 },
-    { id: 'style', label: 'Style', type: 'select', defaultValue: 'ripple',
-      options: [{ label: 'Ripple', value: 'ripple' }, { label: 'Pulse', value: 'pulse' }] },
-    { id: 'name', label: 'Label', type: 'text', defaultValue: '' },
+    { id: "enabled", label: "Enable", type: "toggle", defaultValue: true },
+    { id: "size", label: "Size", type: "slider", defaultValue: 1, min: 0.1, max: 3, step: 0.1 },
+    {
+      id: "style",
+      label: "Style",
+      type: "select",
+      defaultValue: "ripple",
+      options: [{ label: "Ripple", value: "ripple" }, { label: "Pulse", value: "pulse" }],
+    },
+    { id: "color", label: "Color", type: "color", defaultValue: "#2563EB" },
   ],
 });
 ```
 
-**`parentSection`** options:
-- `'cursor'` — appears inside the Cursor settings section
-- `'scene'` — inside Scene settings
-- Omit for a **standalone section** with its own icon in the settings rail
+Use `parentSection` to nest your panel inside an existing area such as `cursor` or `scene`.
 
-**Reading/writing settings:**
+## Events
 
-```js
-const color = api.getSetting('color');
-api.setSetting('color', '#FF0000');
-```
+| Event | Permission | Description |
+|-------|------------|-------------|
+| `playback:timeupdate` | `timeline` | Fires each playback tick |
+| `playback:play` | `timeline` | Playback started |
+| `playback:pause` | `timeline` | Playback paused |
+| `cursor:click` | `cursor` | Cursor click detected |
+| `cursor:move` | `cursor` | Cursor move detected |
+| `timeline:region-added` | `timeline` | Region added |
+| `timeline:region-removed` | `timeline` | Region removed |
+| `export:start` | `export` | Export started |
+| `export:frame` | `export` | A frame was rendered during export |
+| `export:complete` | `export` | Export finished |
 
-### Events
+## Frames, Wallpapers, and Cursor Styles
 
-```js
-api.on('cursor:click', (event) => {
-  // event.timeMs, event.data
-});
-```
-
-- `timeline` permission is required for `playback:*` and `timeline:*` subscriptions.
-- `cursor` permission is required for `cursor:*` subscriptions.
-- `export` permission is required for `export:*` subscriptions.
-
-| Event | Description |
-|-------|-------------|
-| `playback:timeupdate` | Playback time changed |
-| `playback:play` | Playback started |
-| `playback:pause` | Playback paused |
-| `cursor:click` | Mouse click detected |
-| `cursor:move` | Cursor moved |
-| `timeline:region-added` | Zoom/trim region added |
-| `timeline:region-removed` | Region removed |
-| `export:start` | Export began |
-| `export:frame` | Frame exported |
-| `export:complete` | Export finished |
-
-### Sound Playback
-
-```js
-const stop = api.playSound('sounds/click.mp3', { volume: 0.8 });
-// Call stop() to cancel playback early
-```
-
-### Query APIs
-
-Read-only access to project state:
-
-```js
-api.getVideoInfo()     // { width, height, durationMs, fps } | null
-api.getVideoLayout()   // { maskRect, canvasWidth, canvasHeight, borderRadius, padding } | null
-api.getCursorAt(timeMs) // { cx, cy, timeMs, interactionType, pressure } | null
-api.getSmoothedCursor() // { cx, cy, timeMs, trail } | null
-api.getZoomState()     // { scale, focusX, focusY, progress } | null
-api.getShadowConfig()  // { enabled, intensity }
-api.getKeystrokesInRange(startMs, endMs) // [{ timeMs, key, modifiers }]
-```
-
-### Asset Resolution
-
-```js
-const url = api.resolveAsset('images/overlay.png');
-// Returns a file:// URL scoped to the extension directory
-```
-
-### Logging
-
-```js
-api.log('Debug message', someData);
-// Output: [ext:com.example.my-extension] Debug message ...
-```
+- `registerFrame()` is the runtime API for device frames. Use a `draw(ctx, width, height)` function when possible for resolution-independent output.
+- `registerWallpaper()` contributes scene backgrounds.
+- `registerCursorStyle()` contributes cursor image packs.
+- All three rely on packaged files relative to the extension root.
 
 ## Lifecycle
 
-1. **Discovery**: Recordly scans `public/builtin-extensions/` and user extension directories
-2. **Activation**: `activate(api)` is called — register hooks, effects, panels
-3. **Runtime**: Hooks/effects execute each frame; settings panel renders in the UI
-4. **Deactivation**: `deactivate()` is called; all registered hooks are auto-disposed
+1. Discovery: Recordly scans built-in extensions and the user extensions directory.
+2. Activation: `activate(api)` runs and you register hooks, effects, panels, and assets.
+3. Runtime: Registered callbacks execute in preview and export according to their phase.
+4. Deactivation: `deactivate()` runs and all registrations are automatically disposed.
 
-All `register*` methods return a dispose function for early cleanup:
+## Examples
 
-```js
-const dispose = api.registerRenderHook('final', myHook);
-// Later: dispose() to unregister
-```
-
-## Built-in Extensions
-
-| Extension | What it does |
-|-----------|-------------|
-| `recordly.frames` | Browser chrome, macOS window, MacBook bezel frames |
-| `recordly.click-effects` | Animated ripple/sparkle/pulse effects at click positions |
-
-## Example: Full Click Effect Extension
-
-```js
-const DURATION = 600;
-
-export function activate(api) {
-  api.registerSettingsPanel({
-    id: 'settings',
-    label: 'My Click Effect',
-    icon: 'mouse-pointer-click',
-    parentSection: 'cursor',
-    fields: [
-      { id: 'color', label: 'Color', type: 'color', defaultValue: '#FF6B6B' },
-    ],
-  });
-
-  api.registerCursorEffect((ctx) => {
-    const progress = ctx.elapsedMs / DURATION;
-    if (progress >= 1) return false;
-
-    const px = ctx.cx * ctx.width;
-    const py = ctx.cy * ctx.height;
-    const radius = 30 * progress;
-    const alpha = 1 - progress;
-    const color = api.getSetting('color') || '#FF6B6B';
-
-    ctx.ctx.beginPath();
-    ctx.ctx.arc(px, py, radius, 0, Math.PI * 2);
-    ctx.ctx.strokeStyle = color;
-    ctx.ctx.globalAlpha = alpha;
-    ctx.ctx.lineWidth = 2;
-    ctx.ctx.stroke();
-    ctx.ctx.globalAlpha = 1;
-
-    return true;
-  });
-}
-
-export function deactivate() {}
-```
-
-## Example: Resolution-Independent Device Frame
-
-```js
-function drawMyFrame(ctx, W, H) {
-  const titleBarH = Math.round(H * 0.04);
-  const border = Math.round(H * 0.003);
-  const radius = Math.round(W * 0.005);
-
-  // Draw outer frame
-  ctx.fillStyle = '#1E1E2E';
-  ctx.beginPath();
-  ctx.roundRect(0, 0, W, H, radius);
-  ctx.fill();
-
-  // Cut out screen area
-  ctx.save();
-  ctx.globalCompositeOperation = 'destination-out';
-  ctx.fillStyle = '#000';
-  ctx.fillRect(border, titleBarH, W - border * 2, H - titleBarH - border);
-  ctx.restore();
-}
-
-export function activate(api) {
-  api.registerFrame({
-    id: 'my-frame',
-    label: 'My Custom Frame',
-    category: 'custom',
-    screenInsets: { top: 0.04, right: 0.003, bottom: 0.003, left: 0.003 },
-    draw: drawMyFrame,
-  });
-}
-
-export function deactivate() {}
-```
+- `extension-examples/webadderall.more-wallpapers` shows a user-installable wallpaper bundle that registers 180 packaged wallpapers through `registerWallpaper()`.

@@ -99,6 +99,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	readLocalFile: (filePath: string) => {
 		return ipcRenderer.invoke("read-local-file", filePath);
 	},
+	generateWallpaperThumbnail: (filePath: string) => {
+		return ipcRenderer.invoke("generate-wallpaper-thumbnail", filePath);
+	},
 	nativeVideoExportStart: (options: {
 		width: number;
 		height: number;

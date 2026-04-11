@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
+import { getAssetPath, getRenderableAssetUrl, getWallpaperThumbnailUrl } from "@/lib/assetPath";
 import { cn } from "@/lib/utils";
 import { extensionHost, type FrameInstance } from "@/lib/extensions";
 import type { ExtensionSettingField } from "@/lib/extensions";
@@ -401,7 +401,16 @@ const WEBCAM_POSITION_PRESETS: Array<{
 	{ preset: "bottom-right", label: "↘" },
 ];
 
-const CURSOR_STYLE_OPTIONS: Array<{ value: CursorStyle; label: string }> = [
+type CursorStyleOption = { value: CursorStyle; label: string };
+
+type WallpaperTile = {
+	key: string;
+	label: string;
+	value: string;
+	previewUrl: string;
+};
+
+const BUILTIN_CURSOR_STYLE_OPTIONS: CursorStyleOption[] = [
 	{ value: "tahoe", label: "Tahoe" },
 	{ value: "dot", label: "Dot" },
 	{ value: "figma", label: "Minimal" },
@@ -568,12 +577,31 @@ function CursorStylePreview({
 	previewUrls,
 }: {
 	style: CursorStyle;
-	previewUrls: Partial<Record<"tahoe" | "figma" | "mono", string>>;
+	previewUrls: Partial<Record<string, string>>;
 }) {
+	const previewSrc =
+		style === "tahoe"
+			? previewUrls.tahoe ?? tahoeCursorUrl
+			: style === "figma"
+				? previewUrls.figma ?? minimalCursorUrl
+				: style === "mono"
+					? previewUrls.mono ?? tahoeCursorUrl
+					: style === "lavender"
+						? lavenderCursorUrl
+						: style === "parched"
+							? parchedCursorUrl
+							: style === "chooper"
+								? chooperCursorUrl
+								: style === "amongus"
+									? amongusCursorUrl
+									: style === "turtle"
+										? turtleCursorUrl
+										: previewUrls[style];
+
 	if (style === "tahoe") {
 		return (
 			<img
-				src={previewUrls.tahoe ?? tahoeCursorUrl}
+				src={previewSrc}
 				alt=""
 				className="h-7 w-7 object-contain drop-shadow-[0_8px_12px_rgba(15,23,42,0.18)]"
 				draggable={false}
@@ -584,7 +612,7 @@ function CursorStylePreview({
 	if (style === "figma") {
 		return (
 			<img
-				src={previewUrls.figma ?? minimalCursorUrl}
+				src={previewSrc}
 				alt=""
 				className="h-7 w-7 object-contain"
 				draggable={false}
@@ -598,39 +626,9 @@ function CursorStylePreview({
 		);
 	}
 
-	if (style === "lavender") {
-		return (
-			<img src={lavenderCursorUrl} alt="" className="h-7 w-7 object-contain" draggable={false} />
-		);
-	}
-
-	if (style === "parched") {
-		return (
-			<img src={parchedCursorUrl} alt="" className="h-7 w-7 object-contain" draggable={false} />
-		);
-	}
-
-	if (style === "chooper") {
-		return (
-			<img src={chooperCursorUrl} alt="" className="h-7 w-7 object-contain" draggable={false} />
-		);
-	}
-
-	if (style === "amongus") {
-		return (
-			<img src={amongusCursorUrl} alt="" className="h-7 w-7 object-contain" draggable={false} />
-		);
-	}
-
-	if (style === "turtle") {
-		return (
-			<img src={turtleCursorUrl} alt="" className="h-7 w-7 object-contain" draggable={false} />
-		);
-	}
-
 	return (
 		<img
-			src={previewUrls.mono ?? tahoeCursorUrl}
+			src={previewSrc ?? tahoeCursorUrl}
 			alt=""
 			className="h-7 w-7 object-contain"
 			draggable={false}
@@ -729,7 +727,12 @@ export function SettingsPanel({
 	const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
 	const [builtInWallpapers, setBuiltInWallpapers] =
 		useState<BuiltInWallpaper[]>(BUILT_IN_WALLPAPERS);
+	const [extensionWallpapers, setExtensionWallpapers] =
+		useState<ReturnType<typeof extensionHost.getContributedWallpapers>>([]);
 	const [wallpaperPreviewPaths, setWallpaperPreviewPaths] = useState<string[]>([]);
+	const [extensionWallpaperPreviewUrls, setExtensionWallpaperPreviewUrls] = useState<
+		Record<string, string>
+	>({});
 	const [customImages, setCustomImages] = useState<string[]>(
 		initialEditorPreferences.customWallpapers,
 	);
@@ -741,6 +744,10 @@ export function SettingsPanel({
 	const builtInWallpaperPaths = useMemo(
 		() => builtInWallpapers.map((wallpaper) => wallpaper.publicPath),
 		[builtInWallpapers],
+	);
+	const extensionWallpaperPaths = useMemo(
+		() => extensionWallpapers.map((wallpaper) => wallpaper.resolvedUrl),
+		[extensionWallpapers],
 	);
 	const captionCueCount = autoCaptions.length;
 	const updateAutoCaptionSettings = (partial: Partial<AutoCaptionSettings>) => {
@@ -756,9 +763,14 @@ export function SettingsPanel({
 			try {
 				const availableWallpapers = await getAvailableWallpapers();
 				const resolved = await Promise.all(
-					availableWallpapers.map(async (wallpaper) =>
-						getRenderableAssetUrl(await getAssetPath(wallpaper.relativePath)),
-					),
+					availableWallpapers.map(async (wallpaper) => {
+						const assetUrl = await getAssetPath(wallpaper.relativePath);
+						// Use tiny thumbnails for the grid; full-res loads on selection
+						if (isVideoWallpaperSource(wallpaper.publicPath)) {
+							return getRenderableAssetUrl(assetUrl);
+						}
+						return getWallpaperThumbnailUrl(assetUrl);
+					}),
 				);
 				if (mounted) {
 					setBuiltInWallpapers(availableWallpapers);
@@ -773,6 +785,50 @@ export function SettingsPanel({
 		})();
 		return () => {
 			mounted = false;
+		};
+	}, []);
+
+	useEffect(() => {
+		let cancelled = false;
+
+		const updateExtensionAssets = async () => {
+			const wallpapers = extensionHost.getContributedWallpapers();
+			const cursorStyles = extensionHost.getContributedCursorStyles();
+			const [wallpaperPreviewEntries, cursorPreviewEntries] = await Promise.all([
+				Promise.all(
+					wallpapers.map(async (wallpaper) => [
+						wallpaper.id,
+						isVideoWallpaperSource(wallpaper.resolvedThumbnailUrl)
+							? wallpaper.resolvedThumbnailUrl
+							: await getWallpaperThumbnailUrl(wallpaper.resolvedThumbnailUrl),
+					] as const),
+				),
+				Promise.all(
+					cursorStyles.map(async (cursorStyle) => [
+						cursorStyle.id,
+						await getRenderableAssetUrl(cursorStyle.resolvedDefaultUrl),
+					] as const),
+				),
+			]);
+
+			if (cancelled) {
+				return;
+			}
+
+			setExtensionWallpapers(wallpapers);
+			setExtensionWallpaperPreviewUrls(Object.fromEntries(wallpaperPreviewEntries));
+			setExtensionCursorStyles(cursorStyles);
+			setExtensionCursorPreviewUrls(Object.fromEntries(cursorPreviewEntries));
+		};
+
+		void extensionHost.autoActivateBuiltins().then(updateExtensionAssets);
+		const unsubscribe = extensionHost.onChange(() => {
+			void updateExtensionAssets();
+		});
+
+		return () => {
+			cancelled = true;
+			unsubscribe();
 		};
 	}, []);
 	const colorPalette = [
@@ -840,9 +896,28 @@ export function SettingsPanel({
 	const defaultWebcam = initialEditorPreferences.webcam;
 	const [internalActiveEffectSection] = useState<EditorEffectSection>("scene");
 	const activeEffectSection = activeEffectSectionProp ?? internalActiveEffectSection;
-	const [cursorPreviewUrls, setCursorPreviewUrls] = useState<
-		Partial<Record<"tahoe" | "figma" | "mono", string>>
+	const [extensionCursorStyles, setExtensionCursorStyles] =
+		useState<ReturnType<typeof extensionHost.getContributedCursorStyles>>([]);
+	const [builtInCursorPreviewUrls, setBuiltInCursorPreviewUrls] = useState<
+		Partial<Record<string, string>>
 	>({});
+	const [extensionCursorPreviewUrls, setExtensionCursorPreviewUrls] = useState<
+		Partial<Record<string, string>>
+	>({});
+	const cursorPreviewUrls = useMemo(
+		() => ({ ...builtInCursorPreviewUrls, ...extensionCursorPreviewUrls }),
+		[builtInCursorPreviewUrls, extensionCursorPreviewUrls],
+	);
+	const cursorStyleOptions = useMemo<CursorStyleOption[]>(
+		() => [
+			...BUILTIN_CURSOR_STYLE_OPTIONS,
+			...extensionCursorStyles.map((cursorStyle) => ({
+				value: cursorStyle.id as CursorStyle,
+				label: cursorStyle.cursorStyle.label,
+			})),
+		],
+		[extensionCursorStyles],
+	);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -861,7 +936,7 @@ export function SettingsPanel({
 				const invertedPreview = await createInvertedPreview(tahoePreview);
 
 				if (!cancelled) {
-					setCursorPreviewUrls({
+					setBuiltInCursorPreviewUrls({
 						tahoe: tahoePreview,
 						figma: minimalPreview,
 						mono: invertedPreview,
@@ -869,7 +944,7 @@ export function SettingsPanel({
 				}
 			} catch {
 				if (!cancelled) {
-					setCursorPreviewUrls({
+					setBuiltInCursorPreviewUrls({
 						tahoe: tahoeCursorUrl,
 						figma: minimalCursorUrl,
 						mono: tahoeCursorUrl,
@@ -898,17 +973,86 @@ export function SettingsPanel({
 			setCustomImages((prev) => [selected, ...prev]);
 		}
 
-		const isBuiltInWallpaper =
-			builtInWallpaperPaths.includes(selected) || wallpaperPreviewPaths.includes(selected);
+		const isKnownWallpaper =
+			builtInWallpaperPaths.includes(selected) ||
+			wallpaperPreviewPaths.includes(selected) ||
+			extensionWallpaperPaths.includes(selected);
 
 		if (
-			!isBuiltInWallpaper &&
+			!isKnownWallpaper &&
 			isVideoWallpaperSource(selected) &&
 			!customImages.includes(selected)
 		) {
 			setCustomImages((prev) => [selected, ...prev]);
 		}
-	}, [builtInWallpaperPaths, customImages, selected, wallpaperPreviewPaths]);
+	}, [
+		builtInWallpaperPaths,
+		customImages,
+		extensionWallpaperPaths,
+		selected,
+		wallpaperPreviewPaths,
+	]);
+
+	const imageWallpaperTiles = useMemo<WallpaperTile[]>(() => {
+		const imageWallpapers = builtInWallpapers.filter(
+			(wallpaper) => !isVideoWallpaperSource(wallpaper.publicPath),
+		);
+		const builtInTiles = (wallpaperPreviewPaths.length > 0
+			? wallpaperPreviewPaths
+			: builtInWallpaperPaths
+		)
+			.filter((path) => !isVideoWallpaperSource(path))
+			.map((previewPath, index) => {
+				const wallpaper = imageWallpapers[index];
+				return {
+					key: wallpaper ? `builtin/${wallpaper.id}` : previewPath,
+					label: wallpaper?.label ?? `Wallpaper ${index + 1}`,
+					value: wallpaper?.publicPath ?? previewPath,
+					previewUrl: previewPath,
+				};
+			});
+
+		const extensionTiles = extensionWallpapers
+			.filter((wallpaper) => !isVideoWallpaperSource(wallpaper.resolvedUrl))
+			.map((wallpaper) => ({
+				key: wallpaper.id,
+				label: wallpaper.wallpaper.label,
+				value: wallpaper.resolvedUrl,
+				previewUrl:
+					extensionWallpaperPreviewUrls[wallpaper.id] ?? wallpaper.resolvedThumbnailUrl,
+			}));
+
+		return [...builtInTiles, ...extensionTiles];
+	}, [
+		builtInWallpaperPaths,
+		builtInWallpapers,
+		extensionWallpaperPreviewUrls,
+		extensionWallpapers,
+		wallpaperPreviewPaths,
+	]);
+
+	const videoWallpaperTiles = useMemo<WallpaperTile[]>(() => {
+		const builtInTiles = builtInWallpapers
+			.filter((wallpaper) => isVideoWallpaperSource(wallpaper.publicPath))
+			.map((wallpaper) => ({
+				key: `builtin/${wallpaper.id}`,
+				label: wallpaper.label,
+				value: wallpaper.publicPath,
+				previewUrl: wallpaper.publicPath,
+			}));
+
+		const extensionTiles = extensionWallpapers
+			.filter((wallpaper) => isVideoWallpaperSource(wallpaper.resolvedUrl))
+			.map((wallpaper) => ({
+				key: wallpaper.id,
+				label: wallpaper.wallpaper.label,
+				value: wallpaper.resolvedUrl,
+				previewUrl:
+					extensionWallpaperPreviewUrls[wallpaper.id] ?? wallpaper.resolvedThumbnailUrl,
+			}));
+
+		return [...builtInTiles, ...extensionTiles];
+	}, [builtInWallpapers, extensionWallpaperPreviewUrls, extensionWallpapers]);
 
 	useEffect(() => {
 		saveEditorPreferences({ customWallpapers: customImages });
@@ -1191,7 +1335,12 @@ export function SettingsPanel({
 		setCustomImages((prev) => prev.filter((img) => img !== imageUrl));
 		// If the removed image was selected, clear selection
 		if (selected === imageUrl) {
-			onWallpaperChange(builtInWallpaperPaths[0] ?? BUILT_IN_WALLPAPERS[0]?.publicPath ?? "");
+			onWallpaperChange(
+				builtInWallpaperPaths[0] ??
+				extensionWallpaperPaths[0] ??
+				BUILT_IN_WALLPAPERS[0]?.publicPath ??
+				"",
+			);
 		}
 	};
 
@@ -1316,20 +1465,13 @@ export function SettingsPanel({
 											});
 										})}
 
-										{(wallpaperPreviewPaths.length > 0
-											? wallpaperPreviewPaths
-											: builtInWallpaperPaths
-										).filter(p => !isVideoWallpaperSource(p)).map((previewPath, filteredIndex) => {
-											const imageWallpapers = builtInWallpapers.filter(w => !isVideoWallpaperSource(w.publicPath));
-											const wallpaper = imageWallpapers[filteredIndex];
-											const wallpaperValue =
-												wallpaper?.publicPath ?? previewPath;
-											const isSelected = getWallpaperTileState(wallpaperValue, previewPath);
-											return renderWallpaperImageTile(previewPath, isSelected, {
-												key: wallpaperValue,
-												ariaLabel: wallpaper?.label ?? `Wallpaper ${filteredIndex + 1}`,
-												title: wallpaper?.label ?? `Wallpaper ${filteredIndex + 1}`,
-												onClick: () => onWallpaperChange(wallpaperValue),
+										{imageWallpaperTiles.map((tile) => {
+											const isSelected = getWallpaperTileState(tile.value, tile.previewUrl);
+											return renderWallpaperImageTile(tile.previewUrl, isSelected, {
+												key: tile.key,
+												ariaLabel: tile.label,
+												title: tile.label,
+												onClick: () => onWallpaperChange(tile.value),
 											});
 										})}
 									</div>
@@ -1364,14 +1506,16 @@ export function SettingsPanel({
 											});
 										})}
 
-										{BUILT_IN_WALLPAPERS.filter(w => isVideoWallpaperSource(w.publicPath)).map((wallpaper) => {
-											const wallpaperValue = wallpaper.publicPath;
-											const isSelected = selected === wallpaperValue;
-											return renderWallpaperImageTile(wallpaperValue, isSelected, {
-												key: wallpaperValue,
+										{videoWallpaperTiles.map((wallpaper) => {
+											const isSelected = getWallpaperTileState(
+												wallpaper.value,
+												wallpaper.previewUrl,
+											);
+											return renderWallpaperImageTile(wallpaper.previewUrl, isSelected, {
+												key: wallpaper.key,
 												ariaLabel: wallpaper.label,
 												title: wallpaper.label,
-												onClick: () => onWallpaperChange(wallpaperValue),
+												onClick: () => onWallpaperChange(wallpaper.value),
 											});
 										})}
 									</div>
@@ -2028,7 +2172,7 @@ export function SettingsPanel({
 									className="grid grid-cols-4 gap-2"
 									aria-label={tSettings("effects.cursorStyle", "Cursor Style")}
 								>
-									{CURSOR_STYLE_OPTIONS.map((option) => (
+									{cursorStyleOptions.map((option) => (
 										<ToggleGroupItem
 											key={option.value}
 											value={option.value}

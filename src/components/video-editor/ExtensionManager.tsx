@@ -28,6 +28,8 @@ import {
   BookOpen,
   Tag,
   ExternalLink,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -76,8 +78,8 @@ function InstalledExtensionCard({
       )}
       onClick={onClick}
     >
-      <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
-        <ExtensionIcon icon={extension.manifest.icon} extensionPath={extension.path} className="w-3.5 h-3.5 text-slate-400" />
+      <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
+        <ExtensionIcon icon={extension.manifest.icon} extensionPath={extension.path} className="w-3.5 h-3.5 text-slate-400" imageClassName="w-8 h-8 rounded-lg" />
       </div>
 
       <div className="flex-1 min-w-0">
@@ -105,7 +107,7 @@ function InstalledExtensionCard({
           </p>
         )}
 
-        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">
+        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-3">
           {extension.manifest.description || "No description"}
         </p>
 
@@ -164,9 +166,9 @@ function MarketplaceCard({
 }) {
   return (
     <div className="flex items-start gap-3 p-3 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors cursor-pointer" onClick={onClick}>
-      <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center">
+      <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
         {extension.iconUrl ? (
-          <img src={extension.iconUrl} alt="" className="w-5 h-5 rounded" />
+          <img src={extension.iconUrl} alt="" className="w-8 h-8 rounded-lg object-cover" />
         ) : (
           <ExtensionIcon icon={undefined} className="w-3.5 h-3.5 text-slate-400" />
         )}
@@ -195,7 +197,7 @@ function MarketplaceCard({
           )}
         </p>
 
-        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">
+        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-3">
           {extension.description}
         </p>
 
@@ -248,6 +250,62 @@ function MarketplaceCard({
 }
 
 // ---------------------------------------------------------------------------
+// Screenshot Gallery Carousel
+// ---------------------------------------------------------------------------
+
+function ScreenshotGallery({ screenshots }: { screenshots: string[] }) {
+  const [index, setIndex] = useState(0);
+  const count = screenshots.length;
+  if (count === 0) return null;
+
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
+        Preview
+      </p>
+      <div className="relative group rounded-lg overflow-hidden bg-black/20 border border-white/[0.06]">
+        <img
+          src={screenshots[index]}
+          alt={`Screenshot ${index + 1}`}
+          className="w-full aspect-video object-cover"
+        />
+        {count > 1 && (
+          <>
+            <button
+              type="button"
+              className="absolute left-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black/60 text-white/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+              onClick={() => setIndex((i) => (i - 1 + count) % count)}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black/60 text-white/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+              onClick={() => setIndex((i) => (i + 1) % count)}
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 flex gap-1">
+              {screenshots.map((_, i) => (
+                <button
+                  type="button"
+                  key={i}
+                  className={cn(
+                    "w-1.5 h-1.5 rounded-full transition-colors",
+                    i === index ? "bg-white" : "bg-white/30 hover:bg-white/50",
+                  )}
+                  onClick={() => setIndex(i)}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Extension Detail (unified type for installed + marketplace)
 // ---------------------------------------------------------------------------
 
@@ -276,6 +334,7 @@ function ExtensionDetailModal({
   const author = isInstalled ? detail.ext.manifest.author : detail.ext.author;
   const permissions = isInstalled ? detail.ext.manifest.permissions : detail.ext.permissions;
   const homepage = isInstalled ? detail.ext.manifest.homepage : detail.ext.homepage;
+  const screenshots = detail.source === 'marketplace' ? detail.ext.screenshots ?? [] : [];
   const isError = isInstalled ? detail.ext.status === 'error' : false;
 
   return (
@@ -332,6 +391,9 @@ function ExtensionDetailModal({
 
         {/* Body */}
         <div className="px-5 pb-5 space-y-4 max-h-[50vh] overflow-y-auto custom-scrollbar">
+          {/* Screenshot gallery */}
+          {screenshots.length > 0 && <ScreenshotGallery screenshots={screenshots} />}
+
           {/* Description */}
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
@@ -631,16 +693,6 @@ export default function ExtensionManager() {
     [marketplaceInstall],
   );
 
-  if (!ready) {
-    return (
-      <div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-[#161619] border border-white/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-5 h-5 text-slate-600 animate-spin" />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-[#161619] border border-white/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
       {/* Header */}
@@ -691,6 +743,11 @@ export default function ExtensionManager() {
 
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pb-0 pt-0" style={{ scrollbarGutter: "stable" }}>
+        {!ready ? (
+          <div className="flex-1 flex items-center justify-center py-12">
+            <Loader2 className="w-5 h-5 text-slate-600 animate-spin" />
+          </div>
+        ) : (
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={activeTab}
@@ -728,6 +785,7 @@ export default function ExtensionManager() {
             )}
           </motion.div>
         </AnimatePresence>
+        )}
       </div>
 
       {/* Extension Detail Modal */}
