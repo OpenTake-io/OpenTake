@@ -5088,6 +5088,11 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
   ipcMain.handle('open-external-url', async (_, url: string) => {
     try {
+      // Security: only allow http/https URLs to prevent file:// or custom protocol abuse
+      const parsed = new URL(url)
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        return { success: false, error: `Blocked non-HTTP URL: ${parsed.protocol}` }
+      }
       await shell.openExternal(url)
       return { success: true }
     } catch (error) {
@@ -5202,7 +5207,21 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
   ipcMain.handle('read-local-file', async (_, filePath: string) => {
     try {
-      const data = await fs.readFile(filePath)
+      // Security: only allow reads from known safe directories to prevent
+      // malicious code from reading arbitrary files (SSH keys, credentials, etc.)
+      const resolved = path.resolve(filePath)
+      const allowedPrefixes = [
+        RECORDINGS_DIR,
+        USER_DATA_PATH,
+        getAssetRootPath(),
+        app.getPath('temp'),
+      ]
+      if (!allowedPrefixes.some((prefix) => resolved.startsWith(path.resolve(prefix)))) {
+        console.warn(`[read-local-file] Blocked read outside allowed directories: ${resolved}`)
+        return { success: false, error: 'Access denied: path outside allowed directories' }
+      }
+
+      const data = await fs.readFile(resolved)
       return { success: true, data }
     } catch (error) {
       console.error('Failed to read local file:', error)
