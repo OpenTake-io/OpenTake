@@ -1,7 +1,12 @@
 import { WebDemuxer } from 'web-demuxer'
-import type { SpeedRegion, TrimRegion, AudioRegion } from '@/components/video-editor/types'
-import type { VideoMuxer } from './muxer'
+import type { SpeedRegion, TrimRegion, ClipRegion, AudioRegion } from '@/components/video-editor/types'
+import {
+  clampMediaTimeToDuration,
+  estimateCompanionAudioStartDelaySeconds,
+  getMediaSyncPlaybackRate,
+} from '@/lib/mediaTiming'
 import { resolveMediaElementSource } from './localMediaSource'
+import type { VideoMuxer } from './muxer'
 
 const AUDIO_BITRATE = 128_000
 const DECODE_BACKPRESSURE_LIMIT = 20
@@ -9,19 +14,90 @@ const ENCODE_BACKPRESSURE_LIMIT = 20
 const MIN_SPEED_REGION_DELTA_MS = 0.0001
 const MP4_AUDIO_CODEC = 'mp4a.40.2'
 
+type TrimLikeRegion = TrimRegion | ClipRegion
+
 export class AudioProcessor {
   private cancelled = false
+  private onProgress?: (progress: number) => void
+
+  private isPassthroughAudioCodec(codec: string | undefined): boolean {
+    if (!codec) {
+      return false
+    }
+
+    const normalizedCodec = codec.toLowerCase()
+    return (
+      normalizedCodec === MP4_AUDIO_CODEC
+      || normalizedCodec === 'aac'
+      || normalizedCodec.startsWith('mp4a.40.2')
+    )
+  }
+
+  private async passthroughAudioStream(
+    audioStream: ReadableStream<EncodedAudioChunk>,
+    audioConfig: AudioDecoderConfig,
+    muxer: VideoMuxer,
+  ): Promise<boolean> {
+    if (!this.isPassthroughAudioCodec(audioConfig.codec)) {
+      return false
+    }
+
+    const reader = audioStream.getReader()
+    let wroteAudio = false
+    let passthroughTimestampOffsetUs: number | null = null
+
+    try {
+      while (!this.cancelled) {
+        const { done, value: chunk } = await reader.read()
+        if (done || !chunk) break
+
+        if (passthroughTimestampOffsetUs === null) {
+          passthroughTimestampOffsetUs = chunk.timestamp
+        }
+
+        const normalizedTimestamp = Math.max(
+          0,
+          chunk.timestamp - passthroughTimestampOffsetUs,
+        )
+        const outputChunk = passthroughTimestampOffsetUs === 0
+          ? chunk
+          : this.cloneEncodedAudioChunkWithTimestamp(chunk, normalizedTimestamp)
+
+        await muxer.addAudioChunk(
+          outputChunk,
+          wroteAudio
+            ? undefined
+            : {
+                decoderConfig: audioConfig,
+              },
+        )
+        wroteAudio = true
+      }
+    } finally {
+      try {
+        await reader.cancel()
+      } catch {
+        // reader already closed
+      }
+    }
+
+    return wroteAudio
+  }
 
   /**
    * Audio export has two modes:
    * 1) no speed regions -> fast WebCodecs trim-only pipeline
    * 2) speed regions present -> pitch-preserving rendered timeline pipeline
    */
+  setOnProgress(callback: (progress: number) => void) {
+    this.onProgress = callback
+  }
+
   async process(
     demuxer: WebDemuxer | null,
     muxer: VideoMuxer,
     videoUrl: string,
-    trimRegions?: TrimRegion[],
+    trimRegions?: TrimLikeRegion[],
     speedRegions?: SpeedRegion[],
     readEndSec?: number,
     audioRegions?: AudioRegion[],
@@ -40,11 +116,12 @@ export class AudioProcessor {
       ? sourceAudioFallbackPaths.filter((audioPath) => typeof audioPath === 'string' && audioPath.trim().length > 0)
       : []
 
-    // When audio regions or speed edits are present, use AudioContext mixing path.
+    // When speed edits, audio regions, or multiple audio sources need mixing, use AudioContext mixing path.
+    // Note: real-time rendering is required here; it plays audio at 1x speed via HTMLMediaElement.
     if (
       sortedSpeedRegions.length > 0
       || sortedAudioRegions.length > 0
-      || sortedSourceAudioFallbackPaths.length > 0
+      || sortedSourceAudioFallbackPaths.length > 1
     ) {
       const renderedAudioBlob = await this.renderMixedTimelineAudio(
         videoUrl,
@@ -55,8 +132,30 @@ export class AudioProcessor {
       )
       if (!this.cancelled) {
         await this.muxRenderedAudioBlob(renderedAudioBlob, muxer)
+      }
+      return
+    }
+
+    // Single sidecar audio with no speed/audio edits: demux directly (skips slow real-time rendering).
+    if (sortedSourceAudioFallbackPaths.length === 1) {
+      const sidecarDemuxer = await this.loadAudioFileDemuxer(sortedSourceAudioFallbackPaths[0])
+      if (sidecarDemuxer) {
+        try {
+          await this.processTrimOnlyAudio(sidecarDemuxer, muxer, sortedTrims)
+        } finally {
+          try { sidecarDemuxer.destroy() } catch { /* cleanup */ }
+        }
         return
       }
+      // Fallback to real-time rendering if demuxer creation failed
+      console.warn('[AudioProcessor] Fast sidecar demux failed, falling back to real-time rendering')
+      const renderedAudioBlob = await this.renderMixedTimelineAudio(
+        videoUrl, sortedTrims, sortedSpeedRegions, sortedAudioRegions, sortedSourceAudioFallbackPaths,
+      )
+      if (!this.cancelled) {
+        await this.muxRenderedAudioBlob(renderedAudioBlob, muxer)
+      }
+      return
     }
 
     // No speed edits or audio regions: keep the original demux/decode/encode path with trim timestamp remap.
@@ -65,14 +164,69 @@ export class AudioProcessor {
       return
     }
 
+    if (sortedTrims.length === 0) {
+      let audioConfig: AudioDecoderConfig
+      try {
+        audioConfig = (await demuxer.getDecoderConfig('audio')) as AudioDecoderConfig
+      } catch {
+        console.warn('[AudioProcessor] No audio track found, skipping')
+        return
+      }
+
+      const audioStream = typeof readEndSec === 'number'
+        ? demuxer.read('audio', 0, readEndSec)
+        : demuxer.read('audio')
+
+      const copiedSourceAudio = await this.passthroughAudioStream(
+        audioStream as ReadableStream<EncodedAudioChunk>,
+        audioConfig,
+        muxer,
+      )
+
+      if (copiedSourceAudio) {
+        return
+      }
+    }
+
     await this.processTrimOnlyAudio(demuxer, muxer, sortedTrims, readEndSec)
+  }
+
+  async renderEditedAudioTrack(
+    videoUrl: string,
+    trimRegions?: TrimLikeRegion[],
+    speedRegions?: SpeedRegion[],
+    audioRegions?: AudioRegion[],
+    sourceAudioFallbackPaths?: string[],
+  ): Promise<Blob> {
+    const sortedTrims = trimRegions ? [...trimRegions].sort((a, b) => a.startMs - b.startMs) : []
+    const sortedSpeedRegions = speedRegions
+      ? [...speedRegions]
+        .filter((region) => region.endMs - region.startMs > MIN_SPEED_REGION_DELTA_MS)
+        .sort((a, b) => a.startMs - b.startMs)
+      : []
+    const sortedAudioRegions = audioRegions
+      ? [...audioRegions].sort((a, b) => a.startMs - b.startMs)
+      : []
+    const sortedSourceAudioFallbackPaths = sourceAudioFallbackPaths
+      ? sourceAudioFallbackPaths.filter(
+        (audioPath) => typeof audioPath === 'string' && audioPath.trim().length > 0,
+      )
+      : []
+
+    return this.renderMixedTimelineAudio(
+      videoUrl,
+      sortedTrims,
+      sortedSpeedRegions,
+      sortedAudioRegions,
+      sortedSourceAudioFallbackPaths,
+    )
   }
 
   // Legacy trim-only path used when no speed regions are configured.
   private async processTrimOnlyAudio(
     demuxer: WebDemuxer,
     muxer: VideoMuxer,
-    sortedTrims: TrimRegion[],
+    sortedTrims: TrimLikeRegion[],
     readEndSec?: number,
   ): Promise<void> {
     let audioConfig: AudioDecoderConfig
@@ -93,16 +247,24 @@ export class AudioProcessor {
       ? demuxer.read('audio', 0, readEndSec)
       : demuxer.read('audio')
 
+    let sourceTimestampOffsetUs: number | null = null
+
     await this.transcodeAudioStream(
       audioStream as ReadableStream<EncodedAudioChunk>,
       audioConfig,
       muxer,
       {
+        observeChunkTimestampUs: (timestampUs) => {
+          if (sourceTimestampOffsetUs === null) {
+            sourceTimestampOffsetUs = timestampUs
+          }
+        },
         shouldSkipChunk: (timestampMs) => this.isInTrimRegion(timestampMs, sortedTrims),
         transformAudioData: (data) => {
           const timestampMs = data.timestamp / 1000
           const trimOffsetMs = this.computeTrimOffset(timestampMs, sortedTrims)
-          const adjustedTimestampUs = data.timestamp - trimOffsetMs * 1000
+          const adjustedTimestampUs =
+            data.timestamp - (sourceTimestampOffsetUs ?? 0) - trimOffsetMs * 1000
           return this.cloneWithTimestamp(data, Math.max(0, adjustedTimestampUs))
         },
       },
@@ -114,6 +276,7 @@ export class AudioProcessor {
     audioConfig: AudioDecoderConfig,
     muxer: VideoMuxer,
     options: {
+      observeChunkTimestampUs?: (timestampUs: number) => void
       shouldSkipChunk?: (timestampMs: number) => boolean
       transformAudioData?: (data: AudioData) => AudioData | null
     } = {},
@@ -225,6 +388,7 @@ export class AudioProcessor {
         const { done, value: chunk } = await reader.read()
         if (done || !chunk) break
 
+        options.observeChunkTimestampUs?.(chunk.timestamp)
         const timestampMs = chunk.timestamp / 1000
         if (options.shouldSkipChunk?.(timestampMs)) continue
 
@@ -290,7 +454,7 @@ export class AudioProcessor {
   // Uses AudioContext to mix all sources into a single recorded stream.
   private async renderMixedTimelineAudio(
     videoUrl: string,
-    trimRegions: TrimRegion[],
+    trimRegions: TrimLikeRegion[],
     speedRegions: SpeedRegion[],
     audioRegions: AudioRegion[],
     sourceAudioFallbackPaths: string[] = [],
@@ -327,6 +491,7 @@ export class AudioProcessor {
     const sourceAudioElements: {
       media: HTMLAudioElement
       sourceNode: MediaElementAudioSourceNode
+      startDelaySeconds: number
       cleanup: () => void
     }[] = []
 
@@ -350,6 +515,10 @@ export class AudioProcessor {
       sourceAudioElements.push({
         media: audioEl,
         sourceNode,
+        startDelaySeconds: estimateCompanionAudioStartDelaySeconds(
+          timelineMedia.duration,
+          audioEl.duration,
+        ),
         cleanup: sourceFileSource.revoke,
       })
     }
@@ -393,7 +562,7 @@ export class AudioProcessor {
     }
 
     const { recorder, recordedBlobPromise } = this.startAudioRecording(destinationNode.stream)
-    let rafId: number | null = null
+    let tickTimerId: ReturnType<typeof setTimeout> | null = null
 
     try {
       if (audioContext.state === 'suspended') {
@@ -403,11 +572,14 @@ export class AudioProcessor {
       await this.seekTo(timelineMedia, 0)
       await timelineMedia.play()
 
+      const totalDurationMs = (timelineMedia.duration || 0) * 1000
+      let lastProgressReport = 0
+
       await new Promise<void>((resolve, reject) => {
         const cleanup = () => {
-          if (rafId !== null) {
-            cancelAnimationFrame(rafId)
-            rafId = null
+          if (tickTimerId !== null) {
+            clearTimeout(tickTimerId)
+            tickTimerId = null
           }
           timelineMedia.removeEventListener('error', onError)
           timelineMedia.removeEventListener('ended', onEnded)
@@ -428,6 +600,16 @@ export class AudioProcessor {
             cleanup()
             resolve()
             return
+          }
+
+          // Report audio rendering progress
+          if (this.onProgress && totalDurationMs > 0) {
+            const now = performance.now()
+            if (now - lastProgressReport > 250) {
+              lastProgressReport = now
+              const progress = Math.min((timelineMedia.currentTime * 1000) / totalDurationMs, 1)
+              this.onProgress(progress)
+            }
           }
 
           let currentTimeMs = timelineMedia.currentTime * 1000
@@ -453,31 +635,37 @@ export class AudioProcessor {
 
           for (const entry of sourceAudioElements) {
             const audioEl = entry.media
-            const targetTimeSec = Math.max(
-              0,
-              Math.min(
-                currentTimeMs / 1000,
-                Number.isFinite(audioEl.duration) ? audioEl.duration : currentTimeMs / 1000,
-              ),
+            const audioDuration = Number.isFinite(audioEl.duration) ? audioEl.duration : null
+            const beforeAudioStart = currentTimeMs + 1 < entry.startDelaySeconds * 1000
+            const targetTimeSec = clampMediaTimeToDuration(
+              currentTimeMs / 1000 - entry.startDelaySeconds,
+              audioDuration,
             )
 
-            if (Math.abs(audioEl.playbackRate - playbackRate) > 0.0001) {
-              audioEl.playbackRate = playbackRate
-            }
-
-            const atEnd = Number.isFinite(audioEl.duration) && targetTimeSec >= audioEl.duration
-            if (atEnd) {
+            const atEnd = audioDuration !== null && targetTimeSec >= audioDuration
+            if (beforeAudioStart || atEnd) {
               if (!audioEl.paused) {
                 audioEl.pause()
               }
               continue
             }
 
+            if (Math.abs(audioEl.currentTime - targetTimeSec) > 0.3) {
+              audioEl.currentTime = targetTimeSec
+            }
+
+            const syncedPlaybackRate = getMediaSyncPlaybackRate({
+              basePlaybackRate: playbackRate,
+              currentTime: audioEl.currentTime,
+              targetTime: targetTimeSec,
+            })
+            if (Math.abs(audioEl.playbackRate - syncedPlaybackRate) > 0.0001) {
+              audioEl.playbackRate = syncedPlaybackRate
+            }
+
             if (audioEl.paused) {
               audioEl.currentTime = targetTimeSec
-              audioEl.play().catch(() => {})
-            } else if (Math.abs(audioEl.currentTime - targetTimeSec) > 0.3) {
-              audioEl.currentTime = targetTimeSec
+              audioEl.play().catch(() => undefined)
             }
           }
 
@@ -488,11 +676,22 @@ export class AudioProcessor {
 
             if (isInRegion) {
               const audioOffset = (currentTimeMs - region.startMs) / 1000
+              if (Math.abs(audioEl.currentTime - audioOffset) > 0.3) {
+                audioEl.currentTime = audioOffset
+              }
+
+              const syncedPlaybackRate = getMediaSyncPlaybackRate({
+                basePlaybackRate: playbackRate,
+                currentTime: audioEl.currentTime,
+                targetTime: audioOffset,
+              })
+              if (Math.abs(audioEl.playbackRate - syncedPlaybackRate) > 0.0001) {
+                audioEl.playbackRate = syncedPlaybackRate
+              }
+
               if (audioEl.paused) {
                 audioEl.currentTime = audioOffset
-                audioEl.play().catch(() => {})
-              } else if (Math.abs(audioEl.currentTime - audioOffset) > 0.3) {
-                audioEl.currentTime = audioOffset
+                audioEl.play().catch(() => undefined)
               }
             } else {
               if (!audioEl.paused) {
@@ -502,7 +701,7 @@ export class AudioProcessor {
           }
 
           if (!timelineMedia.paused && !timelineMedia.ended) {
-            rafId = requestAnimationFrame(tick)
+            tickTimerId = setTimeout(tick, 16)
           } else {
             cleanup()
             resolve()
@@ -511,11 +710,11 @@ export class AudioProcessor {
 
         timelineMedia.addEventListener('error', onError, { once: true })
         timelineMedia.addEventListener('ended', onEnded, { once: true })
-        rafId = requestAnimationFrame(tick)
+        tickTimerId = setTimeout(tick, 16)
       })
     } finally {
-      if (rafId !== null) {
-        cancelAnimationFrame(rafId)
+      if (tickTimerId !== null) {
+        clearTimeout(tickTimerId)
       }
       timelineMedia.pause()
       timelineAudioSourceNode?.disconnect()
@@ -587,6 +786,28 @@ export class AudioProcessor {
     }
   }
 
+  // Loads a sidecar audio file into a WebDemuxer for direct transcoding (avoiding real-time rendering).
+  private async loadAudioFileDemuxer(audioPath: string): Promise<WebDemuxer | null> {
+    try {
+      const source = await resolveMediaElementSource(audioPath)
+      try {
+        const response = await fetch(source.src)
+        const blob = await response.blob()
+        const filename = audioPath.split('/').pop() || 'sidecar-audio'
+        const file = new File([blob], filename, { type: blob.type || 'audio/webm' })
+        const wasmUrl = new URL('./wasm/web-demuxer.wasm', window.location.href).href
+        const demuxer = new WebDemuxer({ wasmFilePath: wasmUrl })
+        await demuxer.load(file)
+        return demuxer
+      } finally {
+        source.revoke()
+      }
+    } catch (error) {
+      console.warn('[AudioProcessor] Failed to create demuxer for sidecar audio:', error)
+      return null
+    }
+  }
+
   private startAudioRecording(stream: MediaStream): {
     recorder: MediaRecorder
     recordedBlobPromise: Promise<Blob>
@@ -635,6 +856,8 @@ export class AudioProcessor {
     }
 
     return new Promise<void>((resolve, reject) => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null
+
       const onLoaded = () => {
         cleanup()
         resolve()
@@ -643,11 +866,20 @@ export class AudioProcessor {
         cleanup()
         reject(new Error('Failed to load media metadata for speed-adjusted audio'))
       }
+      const onTimeout = () => {
+        cleanup()
+        reject(new Error('Timed out waiting for media metadata (30s)'))
+      }
       const cleanup = () => {
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
         media.removeEventListener('loadedmetadata', onLoaded)
         media.removeEventListener('error', onError)
       }
 
+      timeoutId = setTimeout(onTimeout, 30_000)
       media.addEventListener('loadedmetadata', onLoaded)
       media.addEventListener('error', onError, { once: true })
     })
@@ -659,6 +891,8 @@ export class AudioProcessor {
     }
 
     return new Promise<void>((resolve, reject) => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null
+
       const onSeeked = () => {
         cleanup()
         resolve()
@@ -667,11 +901,20 @@ export class AudioProcessor {
         cleanup()
         reject(new Error('Failed to seek media for speed-adjusted audio'))
       }
+      const onTimeout = () => {
+        cleanup()
+        reject(new Error('Timed out waiting for media seek (30s)'))
+      }
       const cleanup = () => {
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId)
+          timeoutId = null
+        }
         media.removeEventListener('seeked', onSeeked)
         media.removeEventListener('error', onError)
       }
 
+      timeoutId = setTimeout(onTimeout, 30_000)
       media.addEventListener('seeked', onSeeked, { once: true })
       media.addEventListener('error', onError, { once: true })
       media.currentTime = targetSec
@@ -680,8 +923,8 @@ export class AudioProcessor {
 
   private findActiveTrimRegion(
     currentTimeMs: number,
-    trimRegions: TrimRegion[],
-  ): TrimRegion | null {
+    trimRegions: TrimLikeRegion[],
+  ): TrimLikeRegion | null {
     return (
       trimRegions.find(
         (region) => currentTimeMs >= region.startMs && currentTimeMs < region.endMs,
@@ -728,11 +971,26 @@ export class AudioProcessor {
     })
   }
 
-  private isInTrimRegion(timestampMs: number, trims: TrimRegion[]) {
+  private cloneEncodedAudioChunkWithTimestamp(
+    src: EncodedAudioChunk,
+    newTimestamp: number,
+  ): EncodedAudioChunk {
+    const data = new Uint8Array(src.byteLength)
+    src.copyTo(data)
+
+    return new EncodedAudioChunk({
+      type: src.type,
+      timestamp: newTimestamp,
+      duration: src.duration ?? undefined,
+      data,
+    })
+  }
+
+  private isInTrimRegion(timestampMs: number, trims: TrimLikeRegion[]) {
     return trims.some((trim) => timestampMs >= trim.startMs && timestampMs < trim.endMs)
   }
 
-  private computeTrimOffset(timestampMs: number, trims: TrimRegion[]) {
+  private computeTrimOffset(timestampMs: number, trims: TrimLikeRegion[]) {
     let offset = 0
     for (const trim of trims) {
       if (trim.endMs <= timestampMs) {

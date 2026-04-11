@@ -1,9 +1,11 @@
 import fs from "node:fs";
 import { createRequire } from "node:module";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { USER_DATA_PATH } from "./appPaths";
+import { getPackagedRendererBaseUrl } from "./rendererServer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nodeRequire = createRequire(import.meta.url);
@@ -41,8 +43,81 @@ let hudOverlayCompactWidth = HUD_MIN_WINDOW_WIDTH;
 let hudOverlayCompactHeight = HUD_COMPACT_HEIGHT;
 let hudOverlayExpandedHeight = HUD_MIN_EXPANDED_HEIGHT;
 
+function getEditorWindowQuery(): Record<string, string> {
+	const query: Record<string, string> = {
+		windowType: "editor",
+	};
+
+	if (process.env.RECORDLY_SMOKE_EXPORT === "1") {
+		query.smokeExport = "1";
+		if (process.env.RECORDLY_SMOKE_EXPORT_INPUT) {
+			query.smokeInput = process.env.RECORDLY_SMOKE_EXPORT_INPUT;
+		}
+		if (process.env.RECORDLY_SMOKE_EXPORT_OUTPUT) {
+			query.smokeOutput = process.env.RECORDLY_SMOKE_EXPORT_OUTPUT;
+		}
+		if (process.env.RECORDLY_SMOKE_EXPORT_USE_NATIVE === "1") {
+			query.smokeUseNativeExport = "1";
+		}
+		if (process.env.RECORDLY_SMOKE_EXPORT_ENCODING_MODE) {
+			query.smokeEncodingMode = process.env.RECORDLY_SMOKE_EXPORT_ENCODING_MODE;
+		}
+		if (process.env.RECORDLY_SMOKE_EXPORT_SHADOW_INTENSITY) {
+			query.smokeShadowIntensity = process.env.RECORDLY_SMOKE_EXPORT_SHADOW_INTENSITY;
+		}
+		if (process.env.RECORDLY_SMOKE_EXPORT_WEBCAM_INPUT) {
+			query.smokeWebcamInput = process.env.RECORDLY_SMOKE_EXPORT_WEBCAM_INPUT;
+		}
+		if (process.env.RECORDLY_SMOKE_EXPORT_WEBCAM_SHADOW) {
+			query.smokeWebcamShadow = process.env.RECORDLY_SMOKE_EXPORT_WEBCAM_SHADOW;
+		}
+		if (process.env.RECORDLY_SMOKE_EXPORT_WEBCAM_SIZE) {
+			query.smokeWebcamSize = process.env.RECORDLY_SMOKE_EXPORT_WEBCAM_SIZE;
+		}
+		if (process.env.RECORDLY_SMOKE_EXPORT_PIPELINE) {
+			query.smokePipelineModel = process.env.RECORDLY_SMOKE_EXPORT_PIPELINE;
+		}
+		if (process.env.RECORDLY_SMOKE_EXPORT_BACKEND) {
+			query.smokeBackendPreference = process.env.RECORDLY_SMOKE_EXPORT_BACKEND;
+		}
+		if (process.env.RECORDLY_SMOKE_EXPORT_MAX_ENCODE_QUEUE) {
+			query.smokeMaxEncodeQueue = process.env.RECORDLY_SMOKE_EXPORT_MAX_ENCODE_QUEUE;
+		}
+		if (process.env.RECORDLY_SMOKE_EXPORT_MAX_DECODE_QUEUE) {
+			query.smokeMaxDecodeQueue = process.env.RECORDLY_SMOKE_EXPORT_MAX_DECODE_QUEUE;
+		}
+		if (process.env.RECORDLY_SMOKE_EXPORT_MAX_PENDING_FRAMES) {
+			query.smokeMaxPendingFrames = process.env.RECORDLY_SMOKE_EXPORT_MAX_PENDING_FRAMES;
+		}
+	}
+
+	return query;
+}
+
 function isHudOverlayCaptureProtectionSupported(): boolean {
 	return process.platform !== "linux";
+}
+
+function getWindowsBuildNumber(): number | null {
+	if (process.platform !== "win32") {
+		return null;
+	}
+
+	const build = Number.parseInt(os.release().split(".")[2] ?? "", 10);
+	return Number.isFinite(build) ? build : null;
+}
+
+export function isHudOverlayMousePassthroughSupported(): boolean {
+	if (process.platform === "linux") {
+		return false;
+	}
+
+	const build = getWindowsBuildNumber();
+	if (build !== null && build < 22000) {
+		return false;
+	}
+
+	return true;
 }
 
 function loadHudOverlayCaptureProtectionSetting(): boolean {
@@ -83,14 +158,23 @@ function persistHudOverlayCaptureProtectionSetting(enabled: boolean): void {
 
 function getScreen() {
 	if (!app.isReady()) {
-		throw new Error("getScreen() called before app is ready. Ensure all screen access happens after app.whenReady().");
+		throw new Error(
+			"getScreen() called before app is ready. Ensure all screen access happens after app.whenReady().",
+		);
 	}
 	return nodeRequire("electron").screen as typeof import("electron").screen;
 }
 
+function getHudOverlayDisplay() {
+	const hudWindow = getHudOverlayWindow();
+	if (hudWindow) {
+		return getScreen().getDisplayMatching(hudWindow.getBounds());
+	}
+	return getScreen().getPrimaryDisplay();
+}
+
 function getHudOverlayBounds(expanded: boolean) {
-	const primaryDisplay = getScreen().getPrimaryDisplay();
-	const { bounds, workArea } = primaryDisplay;
+	const { bounds, workArea } = getHudOverlayDisplay();
 	const maxWindowWidth = Math.max(HUD_MIN_WINDOW_WIDTH, workArea.width - HUD_EDGE_MARGIN_DIP * 2);
 	const windowWidth = Math.min(
 		maxWindowWidth,
@@ -174,15 +258,23 @@ function positionUpdateToastWindow() {
 
 ipcMain.on("hud-overlay-set-ignore-mouse", (_event, ignore: boolean) => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
+		if (!isHudOverlayMousePassthroughSupported()) {
+			hudOverlayWindow.setIgnoreMouseEvents(false);
+			return;
+		}
+
 		if (ignore) {
 			hudOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
-		} else {
-			hudOverlayWindow.setIgnoreMouseEvents(false);
+			return;
 		}
+
+		hudOverlayWindow.setIgnoreMouseEvents(false);
 	}
 });
 
 let hudDragOffset: { x: number; y: number } | null = null;
+let hudDragLastCursor: { x: number; y: number } | null = null;
+let hudDragFixedSize: { width: number; height: number } | null = null;
 
 ipcMain.on("hud-overlay-drag", (_event, phase: string, screenX: number, screenY: number) => {
 	if (!hudOverlayWindow || hudOverlayWindow.isDestroyed()) return;
@@ -190,13 +282,31 @@ ipcMain.on("hud-overlay-drag", (_event, phase: string, screenX: number, screenY:
 	if (phase === "start") {
 		const bounds = hudOverlayWindow.getBounds();
 		hudDragOffset = { x: screenX - bounds.x, y: screenY - bounds.y };
+		hudDragLastCursor = { x: screenX, y: screenY };
+		hudDragFixedSize = { width: bounds.width, height: bounds.height };
 	} else if (phase === "move" && hudDragOffset) {
-		hudOverlayWindow.setPosition(
-			Math.round(screenX - hudDragOffset.x),
-			Math.round(screenY - hudDragOffset.y),
+		if (hudDragLastCursor && hudDragLastCursor.x === screenX && hudDragLastCursor.y === screenY) {
+			return;
+		}
+
+		hudDragLastCursor = { x: screenX, y: screenY };
+		const targetX = Math.round(screenX - hudDragOffset.x);
+		const targetY = Math.round(screenY - hudDragOffset.y);
+		const fixedWidth = hudDragFixedSize?.width ?? hudOverlayWindow.getBounds().width;
+		const fixedHeight = hudDragFixedSize?.height ?? hudOverlayWindow.getBounds().height;
+		hudOverlayWindow.setBounds(
+			{
+				x: targetX,
+				y: targetY,
+				width: fixedWidth,
+				height: fixedHeight,
+			},
+			false,
 		);
 	} else if (phase === "end") {
 		hudDragOffset = null;
+		hudDragLastCursor = null;
+		hudDragFixedSize = null;
 	}
 });
 
@@ -215,10 +325,9 @@ ipcMain.on("set-hud-overlay-compact-width", (_event, width: number) => {
 		return;
 	}
 
-	const primaryDisplay = getScreen().getPrimaryDisplay();
 	const maxWindowWidth = Math.max(
 		HUD_MIN_WINDOW_WIDTH,
-		primaryDisplay.workArea.width - HUD_EDGE_MARGIN_DIP * 2,
+		getHudOverlayDisplay().workArea.width - HUD_EDGE_MARGIN_DIP * 2,
 	);
 	const nextWidth = Math.min(maxWindowWidth, Math.max(HUD_MIN_WINDOW_WIDTH, Math.round(width)));
 
@@ -235,10 +344,9 @@ ipcMain.on("set-hud-overlay-measured-height", (_event, height: number, expanded:
 		return;
 	}
 
-	const primaryDisplay = getScreen().getPrimaryDisplay();
 	const maxWindowHeight = Math.max(
 		HUD_COMPACT_HEIGHT,
-		primaryDisplay.workArea.height - HUD_EDGE_MARGIN_DIP * 2,
+		getHudOverlayDisplay().workArea.height - HUD_EDGE_MARGIN_DIP * 2,
 	);
 	const nextHeight = Math.min(maxWindowHeight, Math.max(HUD_COMPACT_HEIGHT, Math.round(height)));
 
@@ -296,7 +404,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 		minHeight: HUD_COMPACT_HEIGHT,
 		maxHeight: Math.max(
 			HUD_COMPACT_HEIGHT,
-			getScreen().getPrimaryDisplay().workArea.height - HUD_EDGE_MARGIN_DIP * 2,
+			getHudOverlayDisplay().workArea.height - HUD_EDGE_MARGIN_DIP * 2,
 		),
 		x: initialBounds.x,
 		y: initialBounds.y,
@@ -320,14 +428,17 @@ export function createHudOverlayWindow(): BrowserWindow {
 		win.setContentProtection(hudOverlayHiddenFromCapture);
 	}
 
-	win.setIgnoreMouseEvents(true, { forward: true });
+	if (isHudOverlayMousePassthroughSupported()) {
+		win.setIgnoreMouseEvents(true, { forward: true });
+	}
 
-	// On Windows 10, focus changes (e.g. showing a native notification) can break
+	// On Windows 11+, focus changes (e.g. showing a native notification) can break
 	// setIgnoreMouseEvents forwarding on a transparent always-on-top window, making
 	// it permanently click-through without hover detection.  Re-initialise the
 	// pass-through-with-forwarding state whenever the window gains focus by toggling
 	// the flag off then back on so the native WS_EX_TRANSPARENT flag is fully reset.
-	if (process.platform === "win32") {
+	// On Windows 10 (build < 22000) passthrough is disabled entirely, so skip this.
+	if (process.platform === "win32" && isHudOverlayMousePassthroughSupported()) {
 		win.on("focus", () => {
 			if (!win.isDestroyed()) {
 				win.setIgnoreMouseEvents(false);
@@ -346,7 +457,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 			if (!win.isDestroyed()) {
 				win.show();
 				win.moveTop();
-				if (process.platform === "win32") {
+				if (process.platform === "win32" && isHudOverlayMousePassthroughSupported()) {
 					win.setIgnoreMouseEvents(false);
 					setTimeout(() => {
 						if (!win.isDestroyed()) {
@@ -465,6 +576,104 @@ export function hideUpdateToastWindow(): void {
 	updateToastWindow.hide();
 }
 
+function loadPackagedEditorWindow(win: BrowserWindow) {
+	const query = getEditorWindowQuery();
+	const queryString = new URLSearchParams(query).toString();
+	const indexHtmlPath = path.join(RENDERER_DIST, "index.html");
+	const packagedRendererBaseUrl = getPackagedRendererBaseUrl();
+	const webContents = win.webContents;
+
+	const loadFromFile = () => {
+		if (win.isDestroyed()) {
+			return;
+		}
+
+		console.log("[editor-window] load-file", indexHtmlPath);
+		void win.loadFile(indexHtmlPath, { query });
+	};
+
+	if (!packagedRendererBaseUrl) {
+		loadFromFile();
+		return;
+	}
+
+	const targetUrl = `${packagedRendererBaseUrl}/?${queryString}`;
+	let settled = false;
+	let timeoutId: NodeJS.Timeout | null = setTimeout(() => {
+		fallbackToFile("load-timeout");
+	}, 5000);
+
+	const clearTimeoutIfNeeded = () => {
+		if (timeoutId) {
+			clearTimeout(timeoutId);
+			timeoutId = null;
+		}
+	};
+
+	const detachLoadListeners = () => {
+		clearTimeoutIfNeeded();
+		if (webContents.isDestroyed()) {
+			return;
+		}
+
+		webContents.removeListener("did-fail-load", handleDidFailLoad);
+		webContents.removeListener("did-finish-load", handleDidFinishLoad);
+	};
+
+	const fallbackToFile = (reason: string, details?: Record<string, unknown>) => {
+		if (settled || win.isDestroyed()) {
+			return;
+		}
+
+		settled = true;
+		detachLoadListeners();
+		console.warn("[editor-window] packaged renderer URL failed, falling back to file", {
+			reason,
+			targetUrl,
+			...details,
+		});
+		loadFromFile();
+	};
+
+	const handleDidFailLoad = (
+		_event: Electron.Event,
+		errorCode: number,
+		errorDescription: string,
+		validatedURL: string,
+		isMainFrame: boolean,
+	) => {
+		if (!isMainFrame || validatedURL !== targetUrl) {
+			return;
+		}
+
+		fallbackToFile("did-fail-load", {
+			errorCode,
+			errorDescription,
+			validatedURL,
+		});
+	};
+
+	const handleDidFinishLoad = () => {
+		if (webContents.getURL() !== targetUrl) {
+			return;
+		}
+
+		settled = true;
+		detachLoadListeners();
+	};
+
+	webContents.on("did-fail-load", handleDidFailLoad);
+	webContents.on("did-finish-load", handleDidFinishLoad);
+	win.once("closed", clearTimeoutIfNeeded);
+
+	console.log("[editor-window] load-url", targetUrl);
+	void win.loadURL(targetUrl).catch((error) => {
+		fallbackToFile("load-url-rejected", {
+			error: error instanceof Error ? error.message : String(error),
+		});
+	});
+}
+
 export function createEditorWindow(): BrowserWindow {
 	const isMac = process.platform === "darwin";
 	const { workArea, workAreaSize } = getScreen().getPrimaryDisplay();
@@ -535,12 +744,10 @@ export function createEditorWindow(): BrowserWindow {
 	});
 
 	if (VITE_DEV_SERVER_URL) {
-		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=editor");
+		const query = new URLSearchParams(getEditorWindowQuery());
+		win.loadURL(`${VITE_DEV_SERVER_URL}?${query.toString()}`);
 	} else {
-		console.log("[editor-window] load-file", path.join(RENDERER_DIST, "index.html"));
-		win.loadFile(path.join(RENDERER_DIST, "index.html"), {
-			query: { windowType: "editor" },
-		});
+		loadPackagedEditorWindow(win);
 	}
 
 	return win;

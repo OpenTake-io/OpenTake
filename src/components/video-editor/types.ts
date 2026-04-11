@@ -5,12 +5,15 @@ export interface ZoomFocus {
 	cy: number; // normalized vertical center (0-1)
 }
 
+export type ZoomMode = "auto" | "manual";
+
 export interface ZoomRegion {
 	id: string;
 	startMs: number;
 	endMs: number;
 	depth: ZoomDepth;
 	focus: ZoomFocus;
+	mode?: ZoomMode;
 }
 
 export interface CursorTelemetryPoint {
@@ -49,7 +52,8 @@ export type CursorStyle =
 	| "parched"
 	| "chooper"
 	| "amongus"
-	| "turtle";
+	| "turtle"
+	| (string & {});  // extension-contributed cursor styles
 export const DEFAULT_CURSOR_STYLE: CursorStyle = "tahoe";
 
 export type ZoomTransitionEasing = "recordly" | "glide" | "smooth" | "snappy" | "linear";
@@ -172,7 +176,11 @@ export function trimsToClips(trims: TrimRegion[], totalDurationMs: number): Clip
 	return clips;
 }
 
-export type AnnotationType = "text" | "image" | "figure";
+export type AnnotationType = "text" | "image" | "figure" | "blur";
+export const BLUR_ANNOTATION_STRENGTH = 20;
+export const BASE_PREVIEW_WIDTH = 1920;
+export const BASE_PREVIEW_HEIGHT = 1080;
+
 
 export type ArrowDirection =
 	| "up"
@@ -209,6 +217,7 @@ export interface AnnotationTextStyle {
 	fontStyle: "normal" | "italic";
 	textDecoration: "none" | "underline";
 	textAlign: "left" | "center" | "right";
+	borderRadius: number;
 }
 
 function getDefaultAnnotationFontFamily() {
@@ -240,6 +249,8 @@ export interface AnnotationRegion {
 	style: AnnotationTextStyle;
 	zIndex: number;
 	figureData?: FigureData;
+	blurIntensity?: number;
+	blurColor?: string;
 }
 
 export const DEFAULT_ANNOTATION_POSITION: AnnotationPosition = {
@@ -261,6 +272,7 @@ export const DEFAULT_ANNOTATION_STYLE: AnnotationTextStyle = {
 	fontStyle: "normal",
 	textDecoration: "none",
 	textAlign: "center",
+	borderRadius: 8,
 };
 
 export const DEFAULT_FIGURE_DATA: FigureData = {
@@ -369,6 +381,7 @@ export const ZOOM_DEPTH_SCALES: Record<ZoomDepth, number> = {
 };
 
 export const DEFAULT_ZOOM_DEPTH: ZoomDepth = 3;
+export const DEFAULT_AUTO_ZOOM_DEPTH: ZoomDepth = 2;
 
 export function clampFocusToDepth(focus: ZoomFocus, _depth: ZoomDepth): ZoomFocus {
 	return {

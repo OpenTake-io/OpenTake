@@ -28,6 +28,20 @@ import esLaunch from '@/i18n/locales/es/launch.json'
 import esSettings from '@/i18n/locales/es/settings.json'
 import esShortcuts from '@/i18n/locales/es/shortcuts.json'
 import esTimeline from '@/i18n/locales/es/timeline.json'
+import nlCommon from '@/i18n/locales/nl/common.json'
+import nlDialogs from '@/i18n/locales/nl/dialogs.json'
+import nlEditor from '@/i18n/locales/nl/editor.json'
+import nlLaunch from '@/i18n/locales/nl/launch.json'
+import nlSettings from '@/i18n/locales/nl/settings.json'
+import nlShortcuts from '@/i18n/locales/nl/shortcuts.json'
+import nlTimeline from '@/i18n/locales/nl/timeline.json'
+import koCommon from '@/i18n/locales/ko/common.json'
+import koDialogs from '@/i18n/locales/ko/dialogs.json'
+import koEditor from '@/i18n/locales/ko/editor.json'
+import koLaunch from '@/i18n/locales/ko/launch.json'
+import koSettings from '@/i18n/locales/ko/settings.json'
+import koShortcuts from '@/i18n/locales/ko/shortcuts.json'
+import koTimeline from '@/i18n/locales/ko/timeline.json'
 import zhCNCommon from '@/i18n/locales/zh-CN/common.json'
 import zhCNDialogs from '@/i18n/locales/zh-CN/dialogs.json'
 import zhCNEditor from '@/i18n/locales/zh-CN/editor.json'
@@ -58,6 +72,24 @@ const messages: Record<AppLocale, LocaleBundle> = {
     settings: esSettings,
     dialogs: esDialogs,
     shortcuts: esShortcuts,
+  },
+  nl: {
+    common: nlCommon,
+    launch: nlLaunch,
+    editor: nlEditor,
+    timeline: nlTimeline,
+    settings: nlSettings,
+    dialogs: nlDialogs,
+    shortcuts: nlShortcuts,
+  },
+  ko: {
+    common: koCommon,
+    launch: koLaunch,
+    editor: koEditor,
+    timeline: koTimeline,
+    settings: koSettings,
+    dialogs: koDialogs,
+    shortcuts: koShortcuts,
   },
   'zh-CN': {
     common: zhCNCommon,

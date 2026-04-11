@@ -9,6 +9,7 @@
 		"text": "文本",
 		"image": "图片",
 		"arrow": "箭头",
+		"blur": "模糊",
 		"textContent": "文本内容",
 		"textPlaceholder": "输入文本...",
 		"fontStyle": "字体样式",
@@ -35,8 +36,12 @@
 		"tipCycleForward": "使用 Tab 循环切换重叠项目。",
 		"tipCycleBackward": "使用 Shift+Tab 反向循环切换。",
 		"imageUploadSuccess": "图片上传成功！",
-		"imageUploadError": "请上传 JPG、PNG、GIF 或 WebP 图片文件。"
+		"imageUploadError": "请上传 JPG、PNG、GIF 或 WebP 图片文件。",
+		"blurStrength": "模糊强度: {{strength}}",
+		"solidColor": "纯色 (审查)",
+		"borderRadius": "边框半径"
 	},
+
 	"fontStyles": {
 		"classic": "经典",
 		"editor": "编辑器",

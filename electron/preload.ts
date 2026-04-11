@@ -1,5 +1,67 @@
 import { contextBridge, ipcRenderer } from "electron";
 
+type NativeVideoExportWriteResult = { success: boolean; error?: string };
+
+const nativeVideoExportWriteRequests = new Map<
+	number,
+	{
+		sessionId: string;
+		resolve: (result: NativeVideoExportWriteResult) => void;
+	}
+>();
+
+let nextNativeVideoExportWriteRequestId = 1;
+let nativeVideoExportWriteResultListenerAttached = false;
+
+function ensureNativeVideoExportWriteResultListener() {
+	if (nativeVideoExportWriteResultListenerAttached) {
+		return;
+	}
+
+	nativeVideoExportWriteResultListenerAttached = true;
+	ipcRenderer.on(
+		"native-video-export-write-frame-result",
+		(
+			_event,
+			payload: {
+				sessionId?: string;
+				requestId?: number;
+				success?: boolean;
+				error?: string;
+			},
+		) => {
+			if (typeof payload?.requestId !== "number") {
+				return;
+			}
+
+			const pendingRequest = nativeVideoExportWriteRequests.get(payload.requestId);
+			if (!pendingRequest) {
+				return;
+			}
+
+			nativeVideoExportWriteRequests.delete(payload.requestId);
+			pendingRequest.resolve({
+				success: payload.success === true,
+				error: payload.error,
+			});
+		},
+	);
+}
+
+function settleNativeVideoExportPendingRequests(
+	sessionId: string,
+	result: NativeVideoExportWriteResult,
+) {
+	for (const [requestId, pendingRequest] of nativeVideoExportWriteRequests.entries()) {
+		if (pendingRequest.sessionId !== sessionId) {
+			continue;
+		}
+
+		nativeVideoExportWriteRequests.delete(requestId);
+		pendingRequest.resolve(result);
+	}
+}
+
 contextBridge.exposeInMainWorld("electronAPI", {
 	hudOverlaySetIgnoreMouse: (ignore: boolean) => {
 		ipcRenderer.send("hud-overlay-set-ignore-mouse", ignore);
@@ -36,6 +98,68 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	readLocalFile: (filePath: string) => {
 		return ipcRenderer.invoke("read-local-file", filePath);
+	},
+	generateWallpaperThumbnail: (filePath: string) => {
+		return ipcRenderer.invoke("generate-wallpaper-thumbnail", filePath);
+	},
+	nativeVideoExportStart: (options: {
+		width: number;
+		height: number;
+		frameRate: number;
+		bitrate: number;
+		encodingMode: "fast" | "balanced" | "quality";
+	}) => {
+		return ipcRenderer.invoke("native-video-export-start", options);
+	},
+	nativeVideoExportWriteFrame: (sessionId: string, frameData: Uint8Array) => {
+		ensureNativeVideoExportWriteResultListener();
+
+		return new Promise<NativeVideoExportWriteResult>((resolve) => {
+			const requestId = nextNativeVideoExportWriteRequestId++;
+			nativeVideoExportWriteRequests.set(requestId, {
+				sessionId,
+				resolve,
+			});
+
+			ipcRenderer.send("native-video-export-write-frame-async", {
+				sessionId,
+				requestId,
+				frameData,
+			});
+		});
+	},
+	nativeVideoExportFinish: (
+		sessionId: string,
+		options?: {
+			audioMode?: "none" | "copy-source" | "trim-source" | "edited-track";
+			audioSourcePath?: string | null;
+			trimSegments?: Array<{ startMs: number; endMs: number }>;
+			editedAudioData?: ArrayBuffer;
+			editedAudioMimeType?: string | null;
+		},
+	) => {
+		return ipcRenderer.invoke("native-video-export-finish", sessionId, options).then((result) => {
+			settleNativeVideoExportPendingRequests(sessionId, result?.success
+				? { success: true }
+				: {
+					success: false,
+					error:
+						typeof result?.error === "string"
+							? result.error
+							: "Native video export session finished before all frame writes settled.",
+				},
+			);
+
+			return result;
+		});
+	},
+	nativeVideoExportCancel: (sessionId: string) => {
+		return ipcRenderer.invoke("native-video-export-cancel", sessionId).finally(() => {
+			settleNativeVideoExportPendingRequests(sessionId, {
+				success: false,
+				error: "Native video export session was cancelled",
+			});
+		});
 	},
 	getVideoAudioFallbackPaths: (videoPath: string) => {
 		return ipcRenderer.invoke("get-video-audio-fallback-paths", videoPath);
@@ -166,6 +290,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	saveExportedVideo: (videoData: ArrayBuffer, fileName: string) => {
 		return ipcRenderer.invoke("save-exported-video", videoData, fileName);
+	},
+	writeExportedVideoToPath: (videoData: ArrayBuffer, outputPath: string) => {
+		return ipcRenderer.invoke("write-exported-video-to-path", videoData, outputPath);
 	},
 	openVideoFilePicker: () => {
 		return ipcRenderer.invoke("open-video-file-picker");
@@ -394,4 +521,35 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("countdown-tick", listener);
 		return () => ipcRenderer.removeListener("countdown-tick", listener);
 	},
+
+	// ── Extensions ──────────────────────────────────────────────────────
+	extensionsDiscover: () => ipcRenderer.invoke("extensions:discover"),
+	extensionsList: () => ipcRenderer.invoke("extensions:list"),
+	extensionsGet: (id: string) => ipcRenderer.invoke("extensions:get", id),
+	extensionsEnable: (id: string) => ipcRenderer.invoke("extensions:enable", id),
+	extensionsDisable: (id: string) => ipcRenderer.invoke("extensions:disable", id),
+	extensionsInstallFromFolder: () => ipcRenderer.invoke("extensions:install-from-folder"),
+	extensionsUninstall: (id: string) => ipcRenderer.invoke("extensions:uninstall", id),
+	extensionsGetDirectory: () => ipcRenderer.invoke("extensions:get-directory"),
+	extensionsOpenDirectory: () => ipcRenderer.invoke("extensions:open-directory"),
+
+	// ── Extensions — Marketplace ────────────────────────────────────────
+	extensionsMarketplaceSearch: (params: {
+		query?: string;
+		tags?: string[];
+		sort?: string;
+		page?: number;
+		pageSize?: number;
+	}) => ipcRenderer.invoke("extensions:marketplace-search", params),
+	extensionsMarketplaceGet: (id: string) => ipcRenderer.invoke("extensions:marketplace-get", id),
+	extensionsMarketplaceInstall: (extensionId: string, downloadUrl: string) =>
+		ipcRenderer.invoke("extensions:marketplace-install", extensionId, downloadUrl),
+	extensionsMarketplaceSubmit: (extensionId: string) =>
+		ipcRenderer.invoke("extensions:marketplace-submit", extensionId),
+
+	// ── Extensions — Admin Review ───────────────────────────────────────
+	extensionsReviewsList: (params: { status?: string; page?: number; pageSize?: number }) =>
+		ipcRenderer.invoke("extensions:reviews-list", params),
+	extensionsReviewUpdate: (reviewId: string, status: string, notes?: string) =>
+		ipcRenderer.invoke("extensions:review-update", reviewId, status, notes),
 });

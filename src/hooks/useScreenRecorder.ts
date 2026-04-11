@@ -101,6 +101,32 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
   const accumulatedPausedDurationMs = useRef(0);
   const pauseStartedAtMs = useRef<number | null>(null);
   const pauseSegmentsRef = useRef<PauseSegment[]>([]);
+  const recordingFinalizationToastId = useRef<string | number | null>(null);
+
+  const showRecordingFinalizationToast = useCallback((message = "Preparing recording...") => {
+    recordingFinalizationToastId.current = toast.loading(message, {
+      id: recordingFinalizationToastId.current ?? undefined,
+      duration: Number.POSITIVE_INFINITY,
+    });
+  }, []);
+
+  const clearRecordingFinalizationToast = useCallback(() => {
+    const toastId = recordingFinalizationToastId.current;
+    if (toastId === null) {
+      return;
+    }
+
+    toast.dismiss(toastId);
+    recordingFinalizationToastId.current = null;
+  }, []);
+
+  const notifyRecordingFinalizationFailure = useCallback(
+    async (message: string) => {
+      clearRecordingFinalizationToast();
+      toast.error(message, { duration: 10000 });
+    },
+    [clearRecordingFinalizationToast],
+  );
 
   const logNativeCaptureDiagnostics = useCallback(async (context: string) => {
     if (typeof window.electronAPI?.getLastNativeCaptureDiagnostics !== "function") {
@@ -344,8 +370,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       }
     }
 
+    clearRecordingFinalizationToast();
     await window.electronAPI.switchToEditor();
-  }, []);
+  }, [clearRecordingFinalizationToast]);
 
   const stopWebcamRecorder = useCallback(async () => {
     const recorder = webcamRecorder.current;
@@ -498,6 +525,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
       setRecording(false);
 
       void (async () => {
+        showRecordingFinalizationToast();
         const webcamPath = await stopWebcamRecorder();
         const isNativeWindows = nativeWindowsRecording.current;
         markRecordingResumed(Date.now());
@@ -525,7 +553,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
               ? "Failed to finish the macOS recording, so the editor was not opened."
               : "Failed to finish the recording, so the editor was not opened.",
           );
-          toast.error(failureMessage, { duration: 10000 });
+          await notifyRecordingFinalizationFailure(failureMessage);
           return;
         }
 
@@ -982,6 +1010,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
         cleanupCapturedMedia();
         if (chunks.current.length === 0) return;
 
+        showRecordingFinalizationToast();
+
         const duration = getRecordingDurationMs(Date.now());
         const recordedChunks = chunks.current;
         const buggyBlob = new Blob(recordedChunks, { type: mimeType });
@@ -995,6 +1025,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
           const videoResult = await window.electronAPI.storeRecordedVideo(arrayBuffer, videoFileName);
           if (!videoResult.success) {
             console.error("Failed to store video:", videoResult.message);
+            await notifyRecordingFinalizationFailure(videoResult.message || "Failed to store the recording.");
             return;
           }
 
@@ -1003,9 +1034,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
               ? await pendingWebcamPathPromise.current
               : resolvedWebcamPath.current;
             await finalizeRecordingSession(videoResult.path, webcamPath);
+          } else {
+            await notifyRecordingFinalizationFailure("Failed to save the recording.");
           }
         } catch (error) {
           console.error("Error saving recording:", error);
+          const message = error instanceof Error ? error.message : String(error);
+          await notifyRecordingFinalizationFailure(`Failed to finalize the recording. ${message}`);
         }
       };
       recorder.onerror = () => {

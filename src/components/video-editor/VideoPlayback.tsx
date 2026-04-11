@@ -42,9 +42,14 @@ import {
 } from "./types";
 import {
   DEFAULT_FOCUS,
-  ZOOM_SCALE_DEADZONE,
-  ZOOM_TRANSLATION_DEADZONE_PX,
 } from "./videoPlayback/constants";
+import {
+  type SpringState,
+  createSpringState,
+  resetSpringState,
+  stepSpringValue,
+  getZoomSpringConfig,
+} from "./videoPlayback/motionSmoothing";
 import {
   DEFAULT_CURSOR_CONFIG,
   PixiCursorOverlay,
@@ -63,7 +68,25 @@ import {
   getCaptionWordVisualState,
 } from "./captionStyle";
 import { clamp01 } from "./videoPlayback/mathUtils";
+
+function getContributedCursorStylesSignature() {
+  return extensionHost
+    .getContributedCursorStyles()
+    .map(
+      (cursorStyle) =>
+        `${cursorStyle.id}:${cursorStyle.resolvedDefaultUrl}:${cursorStyle.resolvedClickUrl ?? ""}:${cursorStyle.cursorStyle.hotspot?.x ?? ""}:${cursorStyle.cursorStyle.hotspot?.y ?? ""}`,
+    )
+    .sort()
+    .join("|");
+}
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
+import {
+  type CursorFollowCameraState,
+  createCursorFollowCameraState,
+  resetCursorFollowCamera,
+  computeCursorFollowFocus,
+  SNAP_TO_EDGES_RATIO_AUTO,
+} from "./videoPlayback/cursorFollowCamera";
 import { clampFocusToStage as clampFocusToStageUtil } from "./videoPlayback/focusUtils";
 import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
 import { layoutVideoContent as layoutVideoContentUtil } from "./videoPlayback/layoutUtils";
@@ -80,6 +103,18 @@ import {
   formatAspectRatioForCSS,
 } from "@/utils/aspectRatioUtils";
 import { AnnotationOverlay } from "./AnnotationOverlay";
+import { extensionHost } from "@/lib/extensions";
+import {
+  mapCursorToCanvasNormalized,
+  mapSmoothedCursorToCanvasNormalized,
+} from "@/lib/extensions/cursorCoordinates";
+import { applyCanvasSceneTransform } from "@/lib/extensions/sceneTransform";
+import {
+  notifyCursorInteraction,
+  executeExtensionCursorEffects,
+  executeExtensionRenderHooks,
+  clearCursorEffects,
+} from "@/lib/extensions/renderHooks";
 import {
   DEFAULT_CURSOR_CLICK_BOUNCE,
   DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
@@ -124,6 +159,41 @@ function createPlaybackAnimationState(): PlaybackAnimationState {
     x: 0,
     y: 0,
   };
+}
+
+function getCursorPositionAtTime(
+  telemetry: CursorTelemetryPoint[],
+  timeMs: number,
+  params?: {
+    maskRect?: { x: number; y: number; width: number; height: number } | null;
+    canvasWidth: number;
+    canvasHeight: number;
+  },
+): { cx: number; cy: number; interactionType?: string } | null {
+  if (telemetry.length === 0) {
+    return null;
+  }
+
+  let closest = telemetry[0];
+  let minDist = Math.abs(telemetry[0].timeMs - timeMs);
+
+  for (let index = 1; index < telemetry.length; index++) {
+    const point = telemetry[index];
+    const distance = Math.abs(point.timeMs - timeMs);
+    if (distance < minDist) {
+      minDist = distance;
+      closest = point;
+    }
+    if (point.timeMs > timeMs) {
+      break;
+    }
+  }
+
+  return mapCursorToCanvasNormalized({
+    cx: closest.cx,
+    cy: closest.cy,
+    interactionType: closest.interactionType,
+  }, params ?? { canvasWidth: 1, canvasHeight: 1 });
 }
 
 function getEffectiveNativeAspectRatio(
@@ -175,6 +245,7 @@ interface VideoPlaybackProps {
   connectedZoomEasing?: ZoomTransitionEasing;
   borderRadius?: number;
   padding?: number;
+  frame?: string | null;
   cropRegion?: import("./types").CropRegion;
   webcam?: WebcamOverlaySettings;
   webcamVideoPath?: string | null;
@@ -199,6 +270,8 @@ interface VideoPlaybackProps {
   cursorStyle?: CursorStyle;
   cursorSize?: number;
   cursorSmoothing?: number;
+  zoomSmoothness?: number;
+  zoomClassicMode?: boolean;
   cursorMotionBlur?: number;
   cursorClickBounce?: number;
   cursorClickBounceDuration?: number;
@@ -248,6 +321,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       connectedZoomEasing = DEFAULT_CONNECTED_ZOOM_EASING,
       borderRadius = 0,
       padding = 50,
+      frame = null,
       cropRegion,
       webcam,
       webcamVideoPath,
@@ -266,6 +340,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       cursorStyle = "tahoe",
       cursorSize = DEFAULT_CURSOR_SIZE,
       cursorSmoothing = DEFAULT_CURSOR_SMOOTHING,
+      zoomSmoothness = 0.5,
+      zoomClassicMode = false,
       cursorMotionBlur = DEFAULT_CURSOR_MOTION_BLUR,
       cursorClickBounce = DEFAULT_CURSOR_CLICK_BOUNCE,
       cursorClickBounceDuration = DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
@@ -317,6 +393,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     }>({ x: 0, y: 0, width: 0, height: 0 });
     const cropBoundsRef = useRef({ startX: 0, endX: 0, startY: 0, endY: 0 });
     const maskGraphicsRef = useRef<Graphics | null>(null);
+    const frameSpriteRef = useRef<Sprite | null>(null);
+    const frameContainerRef = useRef<Container | null>(null);
+    const frameIdRef = useRef<string | null>(frame);
     const isPlayingRef = useRef(isPlaying);
     const isSeekingRef = useRef(false);
     const allowPlaybackRef = useRef(false);
@@ -341,6 +420,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const connectedZoomEasingRef = useRef(connectedZoomEasing);
     const videoReadyRafRef = useRef<number | null>(null);
     const cursorOverlayRef = useRef<PixiCursorOverlay | null>(null);
+    const cursorEffectsCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const cursorTelemetryRef = useRef<CursorTelemetryPoint[]>([]);
     const showCursorRef = useRef(showCursor);
     const cursorSizeRef = useRef(cursorSize);
@@ -350,6 +430,16 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     const cursorClickBounceRef = useRef(cursorClickBounce);
     const cursorClickBounceDurationRef = useRef(cursorClickBounceDuration);
     const cursorSwayRef = useRef(cursorSway);
+    const lastEmittedClickTimeMsRef = useRef(-1);
+
+    // Spring animation state for smooth zoom transitions
+    const springScaleRef = useRef<SpringState>(createSpringState(1));
+    const springXRef = useRef<SpringState>(createSpringState(0));
+    const springYRef = useRef<SpringState>(createSpringState(0));
+    const lastTickTimeRef = useRef<number | null>(null);
+    const zoomSmoothnessRef = useRef(zoomSmoothness);
+    const zoomClassicModeRef = useRef(zoomClassicMode);
+    const cursorFollowCameraRef = useRef<CursorFollowCameraState>(createCursorFollowCameraState());
 
     const activeCaptionLayout = useMemo(() => {
       if (!autoCaptionSettings?.enabled || autoCaptions.length === 0 || typeof document === "undefined") {
@@ -542,6 +632,16 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         };
       }
 
+      // Look up device frame insets so layout centers the full frame (video + bezels)
+      let frameInsets: { top: number; right: number; bottom: number; left: number } | null = null;
+      if (frame) {
+        const frames = extensionHost.getFrames();
+        const frameData = frames.find((f) => f.id === frame);
+        if (frameData?.screenInsets) {
+          frameInsets = frameData.screenInsets;
+        }
+      }
+
       const result = layoutVideoContentUtil({
         container,
         app,
@@ -552,6 +652,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         lockedVideoDimensions: lockedVideoDimensionsRef.current,
         borderRadius,
         padding,
+        frameInsets,
       });
 
       if (result) {
@@ -561,6 +662,57 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         baseOffsetRef.current = result.baseOffset;
         baseMaskRef.current = result.maskRect;
         cropBoundsRef.current = result.cropBounds;
+
+        // Sync extension cursor effects canvas resolution with renderer
+        const effectsCanvas = cursorEffectsCanvasRef.current;
+        if (effectsCanvas) {
+          const w = result.stageSize.width;
+          const h = result.stageSize.height;
+          if (effectsCanvas.width !== w || effectsCanvas.height !== h) {
+            effectsCanvas.width = w;
+            effectsCanvas.height = h;
+          }
+        }
+
+        // Push layout info to extension host for query APIs
+        extensionHost.setVideoLayout({
+          maskRect: { x: result.maskRect.x, y: result.maskRect.y, width: result.maskRect.width, height: result.maskRect.height },
+          canvasWidth: result.stageSize.width,
+          canvasHeight: result.stageSize.height,
+          borderRadius,
+          padding,
+        });
+        extensionHost.setShadowConfig({
+          enabled: Boolean(showShadow) && shadowIntensity > 0,
+          intensity: shadowIntensity,
+        });
+
+        // Position device frame sprite to fill the stage
+        const frameSprite = frameSpriteRef.current;
+        if (frameSprite && frame) {
+          const frames = extensionHost.getFrames();
+          const frameData = frames.find((f) => f.id === frame);
+          if (frameData) {
+            const maskRect = result.maskRect;
+            const insets = frameData.screenInsets;
+            if (insets) {
+              // Frame is larger than screen area — compute full frame size from insets
+              const screenW = maskRect.width;
+              const screenH = maskRect.height;
+              const frameW = screenW / (1 - insets.left - insets.right);
+              const frameH = screenH / (1 - insets.top - insets.bottom);
+              const frameX = maskRect.x - insets.left * frameW;
+              const frameY = maskRect.y - insets.top * frameH;
+              frameSprite.position.set(frameX, frameY);
+              frameSprite.width = frameW;
+              frameSprite.height = frameH;
+            } else {
+              frameSprite.position.set(maskRect.x, maskRect.y);
+              frameSprite.width = maskRect.width;
+              frameSprite.height = maskRect.height;
+            }
+          }
+        }
 
         // Reset camera container to identity
         cameraContainer.scale.set(1);
@@ -576,7 +728,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         updateOverlayForRegion(activeRegion);
         applyWebcamBubbleLayout(animationStateRef.current.appliedScale || 1);
       }
-    }, [updateOverlayForRegion, cropRegion, borderRadius, padding, applyWebcamBubbleLayout]);
+    }, [updateOverlayForRegion, cropRegion, borderRadius, padding, frame, showShadow, shadowIntensity, applyWebcamBubbleLayout]);
 
     useEffect(() => {
       const video = videoRef.current;
@@ -590,6 +742,81 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     useEffect(() => {
       layoutVideoContentRef.current = layoutVideoContent;
     }, [layoutVideoContent]);
+
+    // Sync device frame ref
+    useEffect(() => {
+      frameIdRef.current = frame;
+      extensionHost.setActiveFrame(frame ?? null);
+    }, [frame]);
+
+    // Manage device frame sprite
+    useEffect(() => {
+      const frameContainer = frameContainerRef.current;
+      if (!frameContainer) return;
+
+      // Clear existing frame sprite
+      if (frameSpriteRef.current) {
+        frameContainer.removeChild(frameSpriteRef.current);
+        frameSpriteRef.current.destroy();
+        frameSpriteRef.current = null;
+      }
+
+      if (!frame) {
+        layoutVideoContentRef.current?.();
+        return;
+      }
+
+      let cancelled = false;
+
+      function tryLoadFrame() {
+        if (cancelled) return;
+        const container = frameContainerRef.current;
+        if (!container) return false;
+        const frames = extensionHost.getFrames();
+        const frameData = frames.find((f) => f.id === frame);
+        if (!frameData) return false;
+
+        if (frameData.draw) {
+          // Resolution-independent: draw at a reasonable size, Pixi handles the rest
+          const drawW = 1920;
+          const drawH = 1080;
+          const canvas = document.createElement('canvas');
+          canvas.width = drawW;
+          canvas.height = drawH;
+          const ctx = canvas.getContext('2d');
+          if (ctx) frameData.draw(ctx, drawW, drawH);
+          if (cancelled || frameIdRef.current !== frame) return true;
+          const texture = Texture.from(canvas);
+          const sprite = new Sprite(texture);
+          frameSpriteRef.current = sprite;
+          container.addChild(sprite);
+          layoutVideoContentRef.current?.();
+        } else {
+          const img = new Image();
+          img.onload = () => {
+            if (cancelled || frameIdRef.current !== frame) return;
+            const texture = Texture.from(img);
+            const sprite = new Sprite(texture);
+            frameSpriteRef.current = sprite;
+            container.addChild(sprite);
+            layoutVideoContentRef.current?.();
+          };
+          img.src = frameData.filePath;
+        }
+        return true;
+      }
+
+      // Try immediately; if extension hasn't registered frames yet,
+      // listen for changes and retry once they become available.
+      if (!tryLoadFrame()) {
+        const unsub = extensionHost.onChange(() => {
+          if (tryLoadFrame()) unsub();
+        });
+        return () => { cancelled = true; unsub(); };
+      }
+
+      return () => { cancelled = true; };
+    }, [frame]);
 
     const selectedZoom = useMemo(() => {
       if (!selectedZoomId) return null;
@@ -753,6 +980,15 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
     useEffect(() => {
       isPlayingRef.current = isPlaying;
+      extensionHost.emitEvent({ type: isPlaying ? 'playback:play' : 'playback:pause', timeMs: currentTimeRef.current });
+      // Snap springs to current position when pausing so scrubbing is instant
+      if (!isPlaying) {
+        resetSpringState(springScaleRef.current);
+        resetSpringState(springXRef.current);
+        resetSpringState(springYRef.current);
+        resetCursorFollowCamera(cursorFollowCameraRef.current);
+        lastTickTimeRef.current = null;
+      }
       const bgVideo = bgVideoRef.current;
       if (bgVideo) {
         if (isPlaying) {
@@ -822,6 +1058,16 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
     useEffect(() => {
       cursorTelemetryRef.current = cursorTelemetry;
+      // Push to extension host for query APIs
+      extensionHost.setCursorTelemetry(
+        cursorTelemetry.map(p => ({
+          timeMs: p.timeMs,
+          cx: p.cx,
+          cy: p.cy,
+          interactionType: p.interactionType,
+          pressure: (p as any).pressure,
+        })),
+      );
     }, [cursorTelemetry]);
 
     useEffect(() => {
@@ -841,6 +1087,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     }, [cursorSmoothing]);
 
     useEffect(() => {
+      zoomSmoothnessRef.current = zoomSmoothness;
+    }, [zoomSmoothness]);
+
+    useEffect(() => {
+      zoomClassicModeRef.current = zoomClassicMode;
+    }, [zoomClassicMode]);
+
+    useEffect(() => {
       cursorMotionBlurRef.current = cursorMotionBlur;
     }, [cursorMotionBlur]);
 
@@ -857,8 +1111,15 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
     }, [cursorSway]);
 
     useEffect(() => {
-      currentTimeRef.current = currentTime * 1000;
-    }, [currentTime]);
+      const timeMs = currentTime * 1000;
+      currentTimeRef.current = timeMs;
+      const videoInfo = extensionHost.getVideoInfoSnapshot();
+      extensionHost.setPlaybackState({
+        currentTimeMs: timeMs,
+        durationMs: videoInfo?.durationMs ?? 0,
+        isPlaying,
+      });
+    }, [currentTime, isPlaying]);
 
     useEffect(() => {
       if (!pixiReady || !videoReady) return;
@@ -1044,8 +1305,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
           height: container.clientHeight,
           backgroundAlpha: 0,
           antialias: true,
+          failIfMajorPerformanceCaveat: false,
           resolution: window.devicePixelRatio || 1,
           autoDensity: true,
+          preference: "webgl",
         });
 
         app.ticker.maxFPS = 60;
@@ -1071,6 +1334,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         const videoContainer = new Container();
         videoContainerRef.current = videoContainer;
         cameraContainer.addChild(videoContainer);
+
+        // Device frame overlay container — sits above video but below cursor
+        const frameContainer = new Container();
+        frameContainerRef.current = frameContainer;
+        cameraContainer.addChild(frameContainer);
 
         const cursorContainer = new Container();
         cursorContainerRef.current = cursorContainer;
@@ -1121,6 +1389,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         appRef.current = null;
         cameraContainerRef.current = null;
         videoContainerRef.current = null;
+        frameContainerRef.current = null;
+        frameSpriteRef.current = null;
         cursorContainerRef.current = null;
         videoSpriteRef.current = null;
       };
@@ -1308,7 +1578,20 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
         if (region && strength > 0 && !shouldShowUnzoomedView) {
           const zoomScale = blendedScale ?? ZOOM_DEPTH_SCALES[region.depth];
-          const regionFocus = region.focus;
+
+          // Cursor follow: use cursor-follow camera for non-manual zoom regions
+          let regionFocus = region.focus;
+          if (!zoomClassicModeRef.current && region.mode !== 'manual' && cursorTelemetryRef.current.length > 0) {
+            regionFocus = computeCursorFollowFocus(
+              cursorFollowCameraRef.current,
+              cursorTelemetryRef.current,
+              currentTimeRef.current,
+              zoomScale,
+              strength,
+              region.focus,
+              { snapToEdgesRatio: SNAP_TO_EDGES_RATIO_AUTO },
+            );
+          }
 
           targetScaleFactor = zoomScale;
           targetFocus = regionFocus;
@@ -1367,6 +1650,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         state.focusY = targetFocus.cy;
         state.progress = targetProgress;
 
+        // Push zoom state to extension host for query APIs
+        extensionHost.setZoomState({
+          scale: targetScaleFactor,
+          focusX: targetFocus.cx,
+          focusY: targetFocus.cy,
+          progress: targetProgress,
+        });
+
         const projectedTransform = computeZoomTransform({
           stageSize: stageSizeRef.current,
           baseMask: baseMaskRef.current,
@@ -1376,18 +1667,33 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
           focusY: state.focusY,
         });
 
-        const appliedScale =
-          Math.abs(projectedTransform.scale - prevScale) < ZOOM_SCALE_DEADZONE
-            ? projectedTransform.scale
-            : projectedTransform.scale;
-        const appliedX =
-          Math.abs(projectedTransform.x - prevX) < ZOOM_TRANSLATION_DEADZONE_PX
-            ? projectedTransform.x
-            : projectedTransform.x;
-        const appliedY =
-          Math.abs(projectedTransform.y - prevY) < ZOOM_TRANSLATION_DEADZONE_PX
-            ? projectedTransform.y
-            : projectedTransform.y;
+        // Spring-driven zoom animation
+        const now = performance.now();
+        const deltaMs = lastTickTimeRef.current !== null
+          ? now - lastTickTimeRef.current
+          : 1000 / 60;
+        lastTickTimeRef.current = now;
+
+        const zoomSpringConfig = getZoomSpringConfig(zoomSmoothnessRef.current);
+        const useSpring = isPlayingRef.current && !isSeekingRef.current && !zoomClassicModeRef.current;
+
+        let appliedScale: number;
+        let appliedX: number;
+        let appliedY: number;
+
+        if (useSpring) {
+          appliedScale = stepSpringValue(springScaleRef.current, projectedTransform.scale, deltaMs, zoomSpringConfig);
+          appliedX = stepSpringValue(springXRef.current, projectedTransform.x, deltaMs, zoomSpringConfig);
+          appliedY = stepSpringValue(springYRef.current, projectedTransform.y, deltaMs, zoomSpringConfig);
+        } else {
+          // Snap instantly when paused, seeking, or in classic mode
+          appliedScale = projectedTransform.scale;
+          appliedX = projectedTransform.x;
+          appliedY = projectedTransform.y;
+          resetSpringState(springScaleRef.current, appliedScale);
+          resetSpringState(springXRef.current, appliedX);
+          resetSpringState(springYRef.current, appliedY);
+        }
 
         const motionIntensity = Math.max(
           Math.abs(appliedScale - prevScale),
@@ -1408,17 +1714,182 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         );
         applyWebcamBubbleLayout(animationStateRef.current.appliedScale || 1);
 
-        // Update cursor overlay
+        const timeMs = currentTimeRef.current;
+        const effectsCanvas = cursorEffectsCanvasRef.current;
+        const extensionCanvasWidth = effectsCanvas?.width || stageSizeRef.current.width;
+        const extensionCanvasHeight = effectsCanvas?.height || stageSizeRef.current.height;
+        let smoothedCursorForHooks: {
+          cx: number;
+          cy: number;
+          trail: Array<{ cx: number; cy: number }>;
+        } | null = null;
+
+        // Update cursor overlay + emit cursor events
         const cursorOverlay = cursorOverlayRef.current;
         if (cursorOverlay) {
-          const timeMs = currentTimeRef.current;
+          const telemetry = cursorTelemetryRef.current;
           cursorOverlay.update(
-            cursorTelemetryRef.current,
+            telemetry,
             timeMs,
             baseMaskRef.current,
             showCursorRef.current,
             !isPlayingRef.current || isSeekingRef.current,
           );
+
+          smoothedCursorForHooks = mapSmoothedCursorToCanvasNormalized(
+            cursorOverlay.getSmoothedCursorSnapshot(),
+            {
+              maskRect: baseMaskRef.current,
+              canvasWidth: extensionCanvasWidth,
+              canvasHeight: extensionCanvasHeight,
+            },
+          );
+          extensionHost.setSmoothedCursor(
+            smoothedCursorForHooks
+              ? {
+                  timeMs,
+                  cx: smoothedCursorForHooks.cx,
+                  cy: smoothedCursorForHooks.cy,
+                  trail: smoothedCursorForHooks.trail,
+                }
+              : null,
+          );
+
+          // Emit cursor:click events for extensions
+          if (isPlayingRef.current && telemetry.length > 0) {
+            for (let i = telemetry.length - 1; i >= 0; i--) {
+              const p = telemetry[i];
+              if (p.timeMs > timeMs) continue;
+              if (p.timeMs < timeMs - 100) break;
+              if (
+                p.interactionType &&
+                p.interactionType !== 'move' &&
+                p.timeMs !== lastEmittedClickTimeMsRef.current
+              ) {
+                const extensionCursor = mapCursorToCanvasNormalized(
+                  {
+                    cx: p.cx,
+                    cy: p.cy,
+                    interactionType: p.interactionType,
+                  },
+                  {
+                    maskRect: baseMaskRef.current,
+                    canvasWidth: extensionCanvasWidth,
+                    canvasHeight: extensionCanvasHeight,
+                  },
+                );
+                lastEmittedClickTimeMsRef.current = p.timeMs;
+                extensionHost.emitEvent({
+                  type: 'cursor:click',
+                  timeMs: p.timeMs,
+                  data: extensionCursor,
+                });
+                if (extensionCursor) {
+                  notifyCursorInteraction(
+                    p.timeMs,
+                    extensionCursor.cx,
+                    extensionCursor.cy,
+                    p.interactionType,
+                  );
+                }
+              }
+              break;
+            }
+          }
+        }
+
+        if (!cursorOverlay) {
+	        extensionHost.setSmoothedCursor(null);
+	      }
+
+        if (effectsCanvas && effectsCanvas.width > 0 && effectsCanvas.height > 0) {
+          const ctx2d = effectsCanvas.getContext("2d");
+          if (ctx2d) {
+            ctx2d.clearRect(0, 0, effectsCanvas.width, effectsCanvas.height);
+
+            const maskRect = baseMaskRef.current;
+            const animationState = animationStateRef.current;
+            const videoInfo = extensionHost.getVideoInfoSnapshot();
+            const rawCursor = getCursorPositionAtTime(cursorTelemetryRef.current, timeMs, {
+              maskRect,
+              canvasWidth: effectsCanvas.width,
+              canvasHeight: effectsCanvas.height,
+            });
+            const hookParams = {
+              width: effectsCanvas.width,
+              height: effectsCanvas.height,
+              timeMs,
+              durationMs: videoInfo?.durationMs ?? 0,
+              cursor: smoothedCursorForHooks
+                ? {
+                    cx: smoothedCursorForHooks.cx,
+                    cy: smoothedCursorForHooks.cy,
+                    interactionType: rawCursor?.interactionType,
+                  }
+                : rawCursor,
+              smoothedCursor: smoothedCursorForHooks,
+              videoLayout:
+                maskRect.width > 0 && maskRect.height > 0
+                  ? {
+                      maskRect: {
+                        x: maskRect.x,
+                        y: maskRect.y,
+                        width: maskRect.width,
+                        height: maskRect.height,
+                      },
+                      borderRadius,
+                      padding,
+                    }
+                  : undefined,
+              zoom: {
+                scale: animationState.scale,
+                focusX: animationState.focusX,
+                focusY: animationState.focusY,
+                progress: animationState.progress,
+              },
+              shadow: {
+                enabled: Boolean(showShadow) && shadowIntensity > 0,
+                intensity: shadowIntensity,
+              },
+              sceneTransform: {
+                scale: animationState.appliedScale,
+                x: animationState.x,
+                y: animationState.y,
+              },
+            };
+
+            ctx2d.save();
+            applyCanvasSceneTransform(ctx2d, {
+              scale: animationState.appliedScale,
+              x: animationState.x,
+              y: animationState.y,
+            });
+            executeExtensionRenderHooks("post-video", ctx2d, hookParams);
+            executeExtensionRenderHooks("post-zoom", ctx2d, hookParams);
+            executeExtensionRenderHooks("post-cursor", ctx2d, hookParams);
+
+            if (isSeekingRef.current) {
+              clearCursorEffects();
+            } else {
+              executeExtensionCursorEffects(
+                ctx2d,
+                timeMs,
+                effectsCanvas.width,
+                effectsCanvas.height,
+                {
+                  zoom: hookParams.zoom,
+                  sceneTransform: hookParams.sceneTransform,
+                  videoLayout: hookParams.videoLayout,
+                },
+              );
+            }
+            ctx2d.restore();
+
+            executeExtensionRenderHooks("post-webcam", ctx2d, hookParams);
+            executeExtensionRenderHooks("post-annotations", ctx2d, hookParams);
+
+            executeExtensionRenderHooks("final", ctx2d, hookParams);
+          }
         }
       };
 
@@ -1428,7 +1899,16 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
           app.ticker.remove(ticker);
         }
       };
-    }, [pixiReady, videoReady, clampFocusToStage, applyWebcamBubbleLayout]);
+    }, [
+      pixiReady,
+      videoReady,
+      clampFocusToStage,
+      applyWebcamBubbleLayout,
+      borderRadius,
+      padding,
+      showShadow,
+      shadowIntensity,
+    ]);
 
     useEffect(() => {
       const overlay = cursorOverlayRef.current;
@@ -1436,14 +1916,34 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
         return;
       }
 
+      let cancelled = false;
+
       overlay.setDotRadius(DEFAULT_CURSOR_CONFIG.dotRadius * cursorSize);
-      overlay.setStyle(cursorStyle);
       overlay.setSmoothingFactor(cursorSmoothing);
       overlay.setMotionBlur(cursorMotionBlur);
       overlay.setClickBounce(cursorClickBounce);
       overlay.setClickBounceDuration(cursorClickBounceDuration);
       overlay.setSway(cursorSway);
-      overlay.reset();
+
+      void (async () => {
+        try {
+          await preloadCursorAssets();
+        } catch (error) {
+          console.warn("Failed to refresh cursor assets for preview:", error);
+          return;
+        }
+
+        if (cancelled || cursorOverlayRef.current !== overlay) {
+          return;
+        }
+
+        overlay.setStyle(cursorStyle);
+        overlay.reset();
+      })();
+
+      return () => {
+        cancelled = true;
+      };
     }, [
       cursorStyle,
       cursorSize,
@@ -1454,11 +1954,60 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
       cursorSway,
     ]);
 
+    useEffect(() => {
+      let cancelled = false;
+      let signature = getContributedCursorStylesSignature();
+
+      const refreshSelectedCursorStyle = async () => {
+        const overlay = cursorOverlayRef.current;
+        if (!overlay) {
+          return;
+        }
+
+        try {
+          await preloadCursorAssets();
+        } catch (error) {
+          console.warn("Failed to refresh contributed cursor styles in preview:", error);
+          return;
+        }
+
+        if (cancelled || cursorOverlayRef.current !== overlay) {
+          return;
+        }
+
+        overlay.setStyle(cursorStyleRef.current);
+        overlay.reset();
+      };
+
+      const unsubscribe = extensionHost.onChange(() => {
+        const nextSignature = getContributedCursorStylesSignature();
+        if (nextSignature === signature) {
+          return;
+        }
+
+        signature = nextSignature;
+        void refreshSelectedCursorStyle();
+      });
+
+      return () => {
+        cancelled = true;
+        unsubscribe();
+      };
+    }, []);
+
     const handleLoadedMetadata = (
       e: React.SyntheticEvent<HTMLVideoElement, Event>,
     ) => {
       const video = e.currentTarget;
       onDurationChange(video.duration);
+
+      // Push video info to extension host for query APIs
+      extensionHost.setVideoInfo({
+        width: video.videoWidth,
+        height: video.videoHeight,
+        durationMs: Number.isFinite(video.duration) ? video.duration * 1000 : 0,
+        fps: 60, // Not available from HTMLVideoElement; default to 60
+      });
       const targetTime = clampMediaTimeToDuration(
         currentTime,
         Number.isFinite(video.duration) ? video.duration : null,
@@ -1657,6 +2206,12 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
                 ? `drop-shadow(0 ${shadowIntensity * 12}px ${shadowIntensity * 48}px rgba(0,0,0,${shadowIntensity * 0.7})) drop-shadow(0 ${shadowIntensity * 4}px ${shadowIntensity * 16}px rgba(0,0,0,${shadowIntensity * 0.5})) drop-shadow(0 ${shadowIntensity * 2}px ${shadowIntensity * 8}px rgba(0,0,0,${shadowIntensity * 0.3}))`
                 : "none",
           }}
+        />
+        {/* Canvas overlay for extension cursor effects (drawn via Canvas 2D API) */}
+        <canvas
+          ref={cursorEffectsCanvasRef}
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          style={{ zIndex: 1 }}
         />
         {/* Only render overlay after PIXI and video are fully initialized */}
         {pixiReady && videoReady && (

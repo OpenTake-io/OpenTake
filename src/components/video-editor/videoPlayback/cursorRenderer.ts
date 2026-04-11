@@ -1,5 +1,7 @@
 import { Assets, BlurFilter, Container, Graphics, Sprite, Texture } from "pixi.js";
 import { MotionBlurFilter } from "pixi-filters/motion-blur";
+import { getRenderableAssetUrl } from "@/lib/assetPath";
+import { extensionHost } from "@/lib/extensions";
 import minimalCursorUrl from "../../../../Minimal Cursor.svg";
 import amongusDefaultCursorUrl from "../../../assets/cursors/amongus/default.png";
 import amongusPointerCursorUrl from "../../../assets/cursors/amongus/pointer.png";
@@ -91,7 +93,7 @@ export const DEFAULT_CURSOR_CONFIG: CursorRenderConfig = {
 
 const REFERENCE_WIDTH = 1920;
 const MIN_CURSOR_VIEWPORT_SCALE = 0.55;
-const CLICK_RING_FADE_MS = 240;
+const CLICK_RING_FADE_MS = 600;
 const CURSOR_MOTION_BLUR_BASE_MULTIPLIER = 0.08;
 const CURSOR_TIME_DISCONTINUITY_MS = 100;
 const CURSOR_SWAY_SMOOTHING_MULTIPLIER = 0.7;
@@ -105,11 +107,13 @@ const CURSOR_SHADOW_BLUR = 3;
 const CURSOR_SHADOW_PADDING = 12;
 
 let cursorAssetsPromise: Promise<void> | null = null;
+let cursorPackAssetsPromise: Promise<void> | null = null;
+let loadedCursorPackSourcesSignature = "";
 let loadedCursorAssets: Partial<Record<CursorAssetKey, LoadedCursorAsset>> = {};
 let loadedInvertedCursorAssets: Partial<Record<CursorAssetKey, LoadedCursorAsset>> = {};
 let loadedCursorStyleAssets: Partial<Record<SingleCursorStyle, LoadedCursorAsset>> = {};
-let loadedCursorPackAssets: Partial<Record<CursorPackStyle, LoadedCursorPackAssets>> = {};
-const warnedMissingCursorPackStyles = new Set<CursorPackStyle>();
+let loadedCursorPackAssets: Partial<Record<string, LoadedCursorPackAssets>> = {};
+const warnedMissingCursorPackStyles = new Set<string>();
 const SUPPORTED_CURSOR_KEYS: CursorAssetKey[] = [
 	"arrow",
 	"text",
@@ -126,7 +130,7 @@ const DEFAULT_CURSOR_PACK_ANCHOR = { x: 0.08, y: 0.08 } as const;
 const POINTER_CURSOR_PACK_ANCHOR = { x: 0.48, y: 0.1 } as const;
 const CENTERED_CURSOR_PACK_ANCHOR = { x: 0.5, y: 0.5 } as const;
 const CURSOR_PACK_POINTER_TYPES = new Set<CursorAssetKey>(["pointer", "open-hand", "closed-hand"]);
-const CURSOR_PACK_SOURCES: Record<CursorPackStyle, CursorPackSource> = {
+const BUILTIN_CURSOR_PACK_SOURCES: Record<string, CursorPackSource> = {
 	lavender: {
 		defaultUrl: lavenderDefaultCursorUrl,
 		pointerUrl: lavenderPointerCursorUrl,
@@ -158,6 +162,32 @@ const CURSOR_PACK_SOURCES: Record<CursorPackStyle, CursorPackSource> = {
 		pointerAnchor: CENTERED_CURSOR_PACK_ANCHOR,
 	},
 };
+
+function getCursorPackSources(): Record<string, CursorPackSource> {
+	const sources: Record<string, CursorPackSource> = { ...BUILTIN_CURSOR_PACK_SOURCES };
+
+	for (const cursorStyle of extensionHost.getContributedCursorStyles()) {
+		const hotspot = cursorStyle.cursorStyle.hotspot ?? DEFAULT_CURSOR_PACK_ANCHOR;
+		sources[cursorStyle.id] = {
+			defaultUrl: cursorStyle.resolvedDefaultUrl,
+			pointerUrl: cursorStyle.resolvedClickUrl ?? cursorStyle.resolvedDefaultUrl,
+			defaultAnchor: hotspot,
+			pointerAnchor: hotspot,
+		};
+	}
+
+	return sources;
+}
+
+function buildCursorPackSourcesSignature(sources: Record<string, CursorPackSource>): string {
+	return Object.entries(sources)
+		.sort(([left], [right]) => left.localeCompare(right))
+		.map(
+			([style, source]) =>
+				`${style}:${source.defaultUrl}:${source.pointerUrl}:${source.defaultAnchor.x}:${source.defaultAnchor.y}:${source.pointerAnchor.x}:${source.pointerAnchor.y}`,
+		)
+		.join("|");
+}
 
 function isStatefulCursorStyle(style: CursorStyle): style is StatefulCursorStyle {
 	return style === "tahoe" || style === "mono";
@@ -226,9 +256,10 @@ async function createCursorPackAsset(
 	url: string,
 	anchor: { x: number; y: number },
 ): Promise<LoadedCursorAsset> {
-	await Assets.load(url);
-	const image = await loadImage(url);
-	const texture = Texture.from(url);
+	const renderableUrl = await getRenderableAssetUrl(url);
+	await Assets.load(renderableUrl);
+	const image = await loadImage(renderableUrl);
+	const texture = Texture.from(renderableUrl);
 
 	return {
 		texture,
@@ -459,6 +490,41 @@ function getStatefulCursorAsset(style: StatefulCursorStyle, key: CursorAssetKey)
 	return asset;
 }
 
+async function ensureCursorPackAssetsLoaded() {
+	const sources = getCursorPackSources();
+	const signature = buildCursorPackSourcesSignature(sources);
+
+	if (!cursorPackAssetsPromise || loadedCursorPackSourcesSignature !== signature) {
+		loadedCursorPackSourcesSignature = signature;
+		warnedMissingCursorPackStyles.clear();
+		cursorPackAssetsPromise = (async () => {
+			const cursorPackEntries = await Promise.all(
+				Object.entries(sources).map(async ([style, source]) => {
+					try {
+						const [defaultAsset, pointerAsset] = await Promise.all([
+							createCursorPackAsset(source.defaultUrl, source.defaultAnchor),
+							createCursorPackAsset(source.pointerUrl, source.pointerAnchor),
+						]);
+						return [style, { default: defaultAsset, pointer: pointerAsset }] as const;
+					} catch (error) {
+						console.warn(
+							`[CursorRenderer] Failed to load cursor pack style for: ${style}`,
+							error,
+						);
+						return null;
+					}
+				}),
+			);
+
+			loadedCursorPackAssets = Object.fromEntries(
+				cursorPackEntries.filter(Boolean).map((entry) => entry!),
+			) as Partial<Record<string, LoadedCursorPackAssets>>;
+		})();
+	}
+
+	await cursorPackAssetsPromise;
+}
+
 export async function preloadCursorAssets() {
 	if (!cursorAssetsPromise) {
 		cursorAssetsPromise = (async () => {
@@ -566,37 +632,14 @@ export async function preloadCursorAssets() {
 				Record<SingleCursorStyle, LoadedCursorAsset>
 			>;
 
-			const cursorPackEntries = await Promise.all(
-				(Object.entries(CURSOR_PACK_SOURCES) as Array<[CursorPackStyle, CursorPackSource]>).map(
-					async ([style, source]) => {
-						try {
-							const [defaultAsset, pointerAsset] = await Promise.all([
-								createCursorPackAsset(source.defaultUrl, source.defaultAnchor),
-								createCursorPackAsset(source.pointerUrl, source.pointerAnchor),
-							]);
-							return [style, { default: defaultAsset, pointer: pointerAsset }] as const;
-						} catch (error) {
-							console.warn(
-								`[CursorRenderer] Failed to load cursor pack style for: ${style}`,
-								error,
-							);
-							return null;
-						}
-					},
-				),
-			);
-
-			loadedCursorPackAssets = Object.fromEntries(
-				cursorPackEntries.filter(Boolean).map((entry) => entry!),
-			) as Partial<Record<CursorPackStyle, LoadedCursorPackAssets>>;
-
 			if (!loadedCursorAssets.arrow) {
 				throw new Error("Failed to initialize the fallback arrow cursor asset");
 			}
 		})();
 	}
 
-	return cursorAssetsPromise;
+	await cursorAssetsPromise;
+	await ensureCursorPackAssetsLoaded();
 }
 
 /**
@@ -852,13 +895,6 @@ export class SmoothedCursorState {
 	}
 }
 
-function drawClickRing(graphics: Graphics, px: number, py: number, h: number, progress: number) {
-	void graphics;
-	void px;
-	void py;
-	void h;
-	void progress;
-}
 
 export class PixiCursorOverlay {
 	public readonly container: Container;
@@ -1000,6 +1036,22 @@ export class PixiCursorOverlay {
 		this.customCursorSprite.anchor.set(asset.anchorX, asset.anchorY);
 	}
 
+	getSmoothedCursorSnapshot(): {
+		cx: number;
+		cy: number;
+		trail: Array<{ cx: number; cy: number }>;
+	} | null {
+		if (!this.container.visible) {
+			return null;
+		}
+
+		return {
+			cx: this.state.x,
+			cy: this.state.y,
+			trail: this.state.trail.map((point) => ({ cx: point.x, cy: point.y })),
+		};
+	}
+
 	update(
 		samples: CursorTelemetryPoint[],
 		timeMs: number,
@@ -1053,7 +1105,7 @@ export class PixiCursorOverlay {
 		const px = viewport.x + this.state.x * viewport.width;
 		const py = viewport.y + this.state.y * viewport.height;
 		const h = this.config.dotRadius * getCursorViewportScale(viewport);
-		const { cursorType, clickBounceProgress, clickProgress } = getCursorVisualState(
+		const { cursorType, clickBounceProgress } = getCursorVisualState(
 			samples,
 			timeMs,
 			this.config.clickBounceDuration,
@@ -1066,7 +1118,6 @@ export class PixiCursorOverlay {
 		const swayRotation = this.updateCursorSway(px, py, timeMs, shouldFreezeCursorMotion);
 
 		this.clickRingGraphics.clear();
-		drawClickRing(this.clickRingGraphics, px, py, h, clickProgress);
 
 		const spriteKey = (cursorType in this.cursorSprites ? cursorType : "arrow") as CursorAssetKey;
 

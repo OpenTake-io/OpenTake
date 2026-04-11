@@ -174,12 +174,15 @@ export function buildLoopedCursorTelemetry(
   const sourceStartMs = firstSample.timeMs;
   const sourceEndMs = Math.max(sourceStartMs, findLastMovingSampleTime(boundedSamples));
   const sourceDurationMs = Math.max(1, sourceEndMs - sourceStartMs);
-  const playbackWindowMs = Math.max(1, motionEndMs);
+  // Keep remapped times in source-time coordinates so cursor lookups
+  // (which always use video.currentTime, i.e. source time) stay correct
+  // even when the visible timeline window doesn't start at 0.
+  const motionDurationMs = Math.max(1, motionEndMs - timelineStartClampedMs);
   const startingCursorType = findFirstStableCursorType(boundedSamples);
   const loopedSamples: CursorTelemetryPoint[] = [
     {
       ...firstSample,
-      timeMs: 0,
+      timeMs: timelineStartClampedMs,
       interactionType: undefined,
       cursorType: startingCursorType,
     },
@@ -187,7 +190,7 @@ export function buildLoopedCursorTelemetry(
 
   for (const sample of boundedSamples) {
     const progress = clamp((sample.timeMs - sourceStartMs) / sourceDurationMs, 0, 1);
-    const mappedTimeMs = Math.round(playbackWindowMs * progress);
+    const mappedTimeMs = Math.round(timelineStartClampedMs + motionDurationMs * progress);
 
     if (mappedTimeMs <= loopedSamples[loopedSamples.length - 1].timeMs) {
       loopedSamples[loopedSamples.length - 1] = {

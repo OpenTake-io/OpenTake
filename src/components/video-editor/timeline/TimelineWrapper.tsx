@@ -21,7 +21,7 @@ interface TimelineWrapperProps {
   minVisibleRangeMs: number;
   gridSizeMs?: number;
   onItemSpanChange: (id: string, span: Span) => void;
-  allRegionSpans?: { id: string; start: number; end: number }[];
+  allRegionSpans?: { id: string; start: number; end: number; rowId: string }[];
 }
 
 export default function TimelineWrapper({
@@ -94,10 +94,25 @@ export default function TimelineWrapper({
     [minVisibleRangeMs, totalMs],
   );
 
-  // When a span overlaps neighbours, clamp it to the nearest boundary
-  const clampToNeighbours = useCallback(
+  const getSiblingSpans = useCallback(
+    (activeItemId: string) => {
+      const activeItem = allRegionSpans.find((region) => region.id === activeItemId);
+      if (!activeItem) {
+        return [];
+      }
+
+      return allRegionSpans
+        .filter((region) => region.id !== activeItemId && region.rowId === activeItem.rowId)
+        .sort((left, right) => left.start - right.start);
+    },
+    [allRegionSpans],
+  );
+
+  // When a resize overlaps neighbours, clamp the resized edge to the nearest boundary.
+  const clampResizedSpanToNeighbours = useCallback(
     (span: Span, activeItemId: string): Span => {
-      const siblings = allRegionSpans.filter((r) => r.id !== activeItemId);
+      const siblings = getSiblingSpans(activeItemId);
+      const activeItem = allRegionSpans.find((region) => region.id === activeItemId);
       let { start, end } = span;
 
       for (const r of siblings) {
@@ -114,17 +129,48 @@ export default function TimelineWrapper({
       // Ensure minimum duration after clamping
       const minDur = Math.min(minItemDurationMs, totalMs || minItemDurationMs);
       if (end - start < minDur) {
-        // Try extending in the direction that has room
-        if (end + minDur - (end - start) <= totalMs) {
-          end = start + minDur;
-        } else {
+        const resizedLeft = Boolean(activeItem && span.start !== activeItem.start && span.end === activeItem.end);
+        if (resizedLeft) {
           start = end - minDur;
+        } else {
+          end = start + minDur;
         }
       }
 
       return { start: Math.max(0, start), end: Math.min(end, totalMs || end) };
     },
-    [allRegionSpans, minItemDurationMs, totalMs],
+    [allRegionSpans, getSiblingSpans, minItemDurationMs, totalMs],
+  );
+
+  // When a drag overlaps neighbours, keep duration fixed and stop at the nearest gap boundary.
+  const clampDraggedSpanToNeighbours = useCallback(
+    (span: Span, activeItemId: string): Span => {
+      const activeItem = allRegionSpans.find((region) => region.id === activeItemId);
+      if (!activeItem) {
+        return clampSpanToBounds(span);
+      }
+
+      const siblings = getSiblingSpans(activeItemId);
+      const duration = Math.max(
+        activeItem.end - activeItem.start,
+        Math.min(minItemDurationMs, totalMs || minItemDurationMs),
+      );
+      const proposedStart = Number.isFinite(span.start) ? span.start : activeItem.start;
+
+      const previousSibling = [...siblings].reverse().find((region) => region.end <= activeItem.start);
+      const nextSibling = siblings.find((region) => region.start >= activeItem.end);
+
+      const minStart = previousSibling ? previousSibling.end : 0;
+      const maxStart = nextSibling
+        ? nextSibling.start - duration
+        : totalMs > 0
+          ? totalMs - duration
+          : proposedStart;
+
+      const start = Math.max(minStart, Math.min(proposedStart, maxStart));
+      return clampSpanToBounds({ start, end: start + duration });
+    },
+    [allRegionSpans, clampSpanToBounds, getSiblingSpans, minItemDurationMs, totalMs],
   );
 
   const onResizeEnd = useCallback(
@@ -144,7 +190,7 @@ export default function TimelineWrapper({
 
       // Clamp to neighbour boundaries instead of rejecting
       if (hasOverlap(clampedSpan, activeItemId)) {
-        clampedSpan = clampToNeighbours(clampedSpan, activeItemId);
+        clampedSpan = clampSpanToBounds(clampResizedSpanToNeighbours(clampedSpan, activeItemId));
         // If still overlapping after clamping, fall back to original position
         if (hasOverlap(clampedSpan, activeItemId)) {
           return;
@@ -153,7 +199,7 @@ export default function TimelineWrapper({
 
       onItemSpanChange(activeItemId, clampedSpan);
     },
-    [clampSpanToBounds, clampToNeighbours, hasOverlap, minItemDurationMs, onItemSpanChange, totalMs]
+    [clampResizedSpanToNeighbours, clampSpanToBounds, hasOverlap, minItemDurationMs, onItemSpanChange, totalMs]
   );
 
   const onDragEnd = useCallback(
@@ -163,11 +209,21 @@ export default function TimelineWrapper({
       if (!updatedSpan || !activeRowId) return;
 
       const activeItemId = event.active.id as string;
-      let clampedSpan = clampSpanToBounds(updatedSpan);
+
+      // Drags are pure translations — always preserve the original duration.
+      // The span from getSpanFromDragEvent can drift due to pixel-to-ms
+      // rounding at different zoom levels, so pin to the known duration.
+      const activeItem = allRegionSpans.find((r) => r.id === activeItemId);
+      const originalDuration = activeItem
+        ? activeItem.end - activeItem.start
+        : updatedSpan.end - updatedSpan.start;
+      const dragSpan: Span = { start: updatedSpan.start, end: updatedSpan.start + originalDuration };
+
+      let clampedSpan = clampSpanToBounds(dragSpan);
 
       // Clamp to neighbour boundaries instead of rejecting
       if (hasOverlap(clampedSpan, activeItemId)) {
-        clampedSpan = clampToNeighbours(clampedSpan, activeItemId);
+        clampedSpan = clampDraggedSpanToNeighbours(clampedSpan, activeItemId);
         if (hasOverlap(clampedSpan, activeItemId)) {
           return;
         }
@@ -175,7 +231,7 @@ export default function TimelineWrapper({
 
       onItemSpanChange(activeItemId, clampedSpan);
     },
-    [clampSpanToBounds, clampToNeighbours, hasOverlap, onItemSpanChange]
+    [allRegionSpans, clampDraggedSpanToNeighbours, clampSpanToBounds, hasOverlap, onItemSpanChange]
   );
 
   // Drag/resize tooltip (direct DOM updates, no re-renders)

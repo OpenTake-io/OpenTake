@@ -1,16 +1,27 @@
-import type { ChildProcessWithoutNullStreams } from 'node:child_process'
+import type { ChildProcessByStdio, ChildProcessWithoutNullStreams } from 'node:child_process'
 import { execFile, spawn, spawnSync } from 'node:child_process'
 import { createWriteStream, constants as fsConstants, existsSync } from 'node:fs'
 import fs from 'node:fs/promises'
 import { get as httpsGet } from 'node:https'
 import { createRequire } from 'node:module'
 import path from 'node:path'
+import type { Readable, Writable } from 'node:stream'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
-import type { SaveDialogOptions } from 'electron'
+import type { SaveDialogOptions, WebContents } from 'electron'
 import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, shell, systemPreferences } from 'electron'
 import { RECORDINGS_DIR, USER_DATA_PATH } from '../appPaths'
 import { hideCursor, showCursor } from '../cursorHider'
+import {
+  buildNativeVideoExportArgs,
+  buildTrimmedSourceAudioFilter,
+  getEditedAudioExtension,
+  getNativeVideoInputByteSize,
+  getPreferredNativeVideoEncoders,
+  parseAvailableFfmpegEncoders,
+  type NativeExportEncodingMode,
+  type NativeVideoExportFinishOptions,
+} from './nativeVideoExport'
 import { closeCountdownWindow, createCountdownWindow, getCountdownWindow } from '../windows'
 import { resolveWindowsCaptureDisplay } from './windowsCaptureSelection'
 
@@ -1166,36 +1177,509 @@ function getFfmpegBinaryPath() {
   return ffmpegStatic
 }
 
-/** Probe the duration of a media file (in seconds) using ffmpeg. */
+type NativeVideoExportSession = {
+  ffmpegProcess: ChildProcessByStdio<Writable, null, Readable>
+  outputPath: string
+  inputByteSize: number
+  maxQueuedWriteBytes: number
+  stderrOutput: string
+  encoderName: string
+  processError: Error | null
+  stdinError: Error | null
+  terminating: boolean
+  writeSequence: Promise<void>
+  completionPromise: Promise<void>
+  sender: WebContents | null
+  pendingWriteRequestIds: Set<number>
+}
+
+const nativeVideoExportSessions = new Map<string, NativeVideoExportSession>()
+let cachedNativeVideoEncoder: { ffmpegPath: string; encoderName: string } | null = null
+
+export function cleanupNativeVideoExportSessions() {
+  for (const [sessionId, session] of nativeVideoExportSessions) {
+    session.terminating = true
+    try {
+      if (!session.ffmpegProcess.stdin.destroyed) {
+        session.ffmpegProcess.stdin.destroy()
+      }
+    } catch { /* stream may already be closed */ }
+    try {
+      session.ffmpegProcess.kill('SIGKILL')
+    } catch { /* process may already be exited */ }
+    nativeVideoExportSessions.delete(sessionId)
+  }
+}
+
+function getNativeVideoExportMaxQueuedWriteBytes(inputByteSize: number) {
+  return Math.min(
+    64 * 1024 * 1024,
+    Math.max(16 * 1024 * 1024, inputByteSize * 4),
+  )
+}
+
+function isHardwareAcceleratedVideoEncoder(encoderName: string) {
+  return /(videotoolbox|nvenc|qsv|amf|mf)/i.test(encoderName)
+}
+
+async function removeTemporaryExportFile(filePath: string | null | undefined) {
+  if (!filePath) {
+    return
+  }
+
+  try {
+    await fs.rm(filePath, { force: true })
+  } catch {
+    // Ignore cleanup failures for temp export artifacts.
+  }
+}
+
+function getNativeVideoExportSessionError(
+  session: NativeVideoExportSession,
+  fallback: string,
+) {
+  return (
+    session.stdinError?.message ||
+    session.processError?.message ||
+    session.stderrOutput.trim() ||
+    fallback
+  )
+}
+
+function sendNativeVideoExportWriteFrameResult(
+  sender: WebContents | null | undefined,
+  sessionId: string,
+  requestId: number,
+  result: { success: boolean; error?: string },
+) {
+  if (!sender || sender.isDestroyed()) {
+    return
+  }
+
+  sender.send('native-video-export-write-frame-result', {
+    sessionId,
+    requestId,
+    ...result,
+  })
+}
+
+function settleNativeVideoExportWriteFrameRequest(
+  sessionId: string,
+  session: NativeVideoExportSession,
+  requestId: number,
+  result: { success: boolean; error?: string },
+) {
+  session.pendingWriteRequestIds.delete(requestId)
+  sendNativeVideoExportWriteFrameResult(session.sender, sessionId, requestId, result)
+}
+
+function flushNativeVideoExportPendingWriteRequests(
+  sessionId: string,
+  session: NativeVideoExportSession,
+  error: string,
+) {
+  for (const requestId of session.pendingWriteRequestIds) {
+    sendNativeVideoExportWriteFrameResult(session.sender, sessionId, requestId, {
+      success: false,
+      error,
+    })
+  }
+
+  session.pendingWriteRequestIds.clear()
+}
+
+function isIgnorableNativeVideoExportStreamError(error: Error | null | undefined): boolean {
+  if (!error) {
+    return false
+  }
+
+  const errno = error as NodeJS.ErrnoException
+  return (
+    errno.code === 'EPIPE' ||
+    errno.code === 'ERR_STREAM_DESTROYED' ||
+    /broken pipe|stream destroyed|eof/i.test(error.message)
+  )
+}
+
+async function waitForNativeVideoExportDrain(session: NativeVideoExportSession) {
+  if (
+    session.stdinError ||
+    session.processError ||
+    session.ffmpegProcess.stdin.destroyed ||
+    session.ffmpegProcess.stdin.writableEnded ||
+    !session.ffmpegProcess.stdin.writable ||
+    session.ffmpegProcess.stdin.writableLength <= 0
+  ) {
+    return
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup()
+      reject(new Error('Timed out while waiting for native export writer backpressure to clear'))
+    }, 15000)
+
+    const cleanup = () => {
+      clearTimeout(timeout)
+      session.ffmpegProcess.stdin.off('drain', handleDrain)
+      session.ffmpegProcess.stdin.off('error', handleError)
+      session.ffmpegProcess.off('close', handleClose)
+    }
+
+    const handleDrain = () => {
+      cleanup()
+      resolve()
+    }
+
+    const handleError = (error: Error) => {
+      cleanup()
+      reject(error)
+    }
+
+    const handleClose = () => {
+      cleanup()
+      reject(
+        new Error(
+          getNativeVideoExportSessionError(
+            session,
+            'Native video export writer closed before draining',
+          ),
+        ),
+      )
+    }
+
+    session.ffmpegProcess.stdin.once('drain', handleDrain)
+    session.ffmpegProcess.stdin.once('error', handleError)
+    session.ffmpegProcess.once('close', handleClose)
+  })
+}
+
+function getNativeVideoExportFrameLength(frameData: Uint8Array | ArrayBuffer) {
+  return frameData.byteLength
+}
+
+async function writeNativeVideoExportFrame(
+  session: NativeVideoExportSession,
+  frameData: Uint8Array | ArrayBuffer,
+) {
+  if (getNativeVideoExportFrameLength(frameData) !== session.inputByteSize) {
+    throw new Error(
+      `Native video export expected ${session.inputByteSize} bytes per frame but received ${getNativeVideoExportFrameLength(frameData)}`,
+    )
+  }
+
+  if (
+    session.stdinError ||
+    session.processError ||
+    session.ffmpegProcess.stdin.destroyed ||
+    session.ffmpegProcess.stdin.writableEnded ||
+    !session.ffmpegProcess.stdin.writable
+  ) {
+    throw new Error(
+      getNativeVideoExportSessionError(
+        session,
+        'Native video export encoder is not accepting frames',
+      ),
+    )
+  }
+
+  const frameBuffer = frameData instanceof ArrayBuffer
+    ? Buffer.from(frameData)
+    : Buffer.from(frameData.buffer, frameData.byteOffset, frameData.byteLength)
+
+  try {
+    session.ffmpegProcess.stdin.write(frameBuffer)
+  } catch (error) {
+    session.stdinError = error instanceof Error ? error : new Error(String(error))
+    throw session.stdinError
+  }
+
+  if (session.ffmpegProcess.stdin.writableLength >= session.maxQueuedWriteBytes) {
+    try {
+      await waitForNativeVideoExportDrain(session)
+    } catch (error) {
+      session.stdinError = error instanceof Error ? error : new Error(String(error))
+      throw session.stdinError
+    }
+  }
+}
+
+async function enqueueNativeVideoExportFrameWrite(
+  session: NativeVideoExportSession,
+  frameData: Uint8Array | ArrayBuffer,
+) {
+  const writePromise = session.writeSequence.then(async () => {
+    if (session.terminating) {
+      throw new Error('Native video export session was cancelled')
+    }
+
+    await writeNativeVideoExportFrame(session, frameData)
+  })
+
+  session.writeSequence = writePromise.catch(() => undefined)
+  await writePromise
+}
+
+async function getAvailableNativeVideoEncoders(ffmpegPath: string) {
+  const { stdout } = await execFileAsync(ffmpegPath, ['-hide_banner', '-encoders'], {
+    timeout: 15000,
+    maxBuffer: 20 * 1024 * 1024,
+  })
+
+  return parseAvailableFfmpegEncoders(stdout)
+}
+
+async function probeNativeVideoEncoder(
+  ffmpegPath: string,
+  encoderName: string,
+  encodingMode: NativeExportEncodingMode,
+) {
+  const outputPath = path.join(
+    app.getPath('temp'),
+    `recordly-export-probe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`,
+  )
+  const args = buildNativeVideoExportArgs(
+    encoderName,
+    {
+      width: 64,
+      height: 64,
+      frameRate: 1,
+      bitrate: 1_500_000,
+      encodingMode,
+    },
+    outputPath,
+  )
+
+  return new Promise<boolean>((resolve) => {
+    const process = spawn(ffmpegPath, args, {
+      stdio: ['pipe', 'ignore', 'pipe'],
+    })
+    let stderrOutput = ''
+    const timeout = setTimeout(() => {
+      try {
+        process.kill('SIGKILL')
+      } catch {
+        // ignore
+      }
+      resolve(false)
+    }, 15000)
+
+    process.stderr.on('data', (chunk: Buffer) => {
+      stderrOutput += chunk.toString()
+    })
+
+    process.on('close', (code) => {
+      clearTimeout(timeout)
+      void removeTemporaryExportFile(outputPath)
+      if (code !== 0 && stderrOutput.trim().length > 0) {
+        console.warn(
+          `[native-export] Encoder probe failed for ${encoderName}:`,
+          stderrOutput.trim(),
+        )
+      }
+      resolve(code === 0)
+    })
+
+    process.stdin.end(Buffer.alloc(getNativeVideoInputByteSize(64, 64), 0))
+  })
+}
+
+async function resolveNativeVideoEncoder(
+  ffmpegPath: string,
+  encodingMode: NativeExportEncodingMode,
+) {
+  if (cachedNativeVideoEncoder?.ffmpegPath === ffmpegPath) {
+    return cachedNativeVideoEncoder.encoderName
+  }
+
+  const availableEncoders = await getAvailableNativeVideoEncoders(ffmpegPath)
+  const candidates = [...new Set([...getPreferredNativeVideoEncoders(process.platform), 'libx264'])]
+
+  for (const encoderName of candidates) {
+    if (!availableEncoders.has(encoderName)) {
+      continue
+    }
+
+    if (await probeNativeVideoEncoder(ffmpegPath, encoderName, encodingMode)) {
+      cachedNativeVideoEncoder = { ffmpegPath, encoderName }
+      return encoderName
+    }
+  }
+
+  throw new Error('No usable FFmpeg encoder was available for native export')
+}
+
+async function muxNativeVideoExportAudio(
+  videoPath: string,
+  options: NativeVideoExportFinishOptions,
+) {
+  const audioMode = options.audioMode ?? 'none'
+  if (audioMode === 'none') {
+    return videoPath
+  }
+
+  const ffmpegPath = getFfmpegBinaryPath()
+  const tempArtifacts: string[] = []
+  let audioInputPath = options.audioSourcePath ?? null
+
+  if (audioMode === 'edited-track') {
+    if (!options.editedAudioData) {
+      throw new Error('Edited audio data is missing for native export')
+    }
+
+    const extension = getEditedAudioExtension(options.editedAudioMimeType)
+    audioInputPath = path.join(
+      app.getPath('temp'),
+      `recordly-export-audio-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${extension}`,
+    )
+    await fs.writeFile(audioInputPath, Buffer.from(options.editedAudioData))
+    tempArtifacts.push(audioInputPath)
+  }
+
+  if (!audioInputPath) {
+    return videoPath
+  }
+
+  const outputPath = path.join(
+    path.dirname(videoPath),
+    `${path.basename(videoPath, path.extname(videoPath))}-final.mp4`,
+  )
+
+  const args = ['-y', '-hide_banner', '-loglevel', 'error', '-i', videoPath, '-i', audioInputPath]
+
+  if (audioMode === 'trim-source') {
+    const filter = buildTrimmedSourceAudioFilter(options.trimSegments ?? [])
+    if (filter) {
+      args.push('-filter_complex', filter, '-map', '0:v:0', '-map', '[aout]')
+    } else {
+      args.push('-map', '0:v:0', '-map', '1:a:0')
+    }
+  } else {
+    args.push('-map', '0:v:0', '-map', '1:a:0')
+  }
+
+  args.push(
+    '-c:v',
+    'copy',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '192k',
+    '-shortest',
+    '-movflags',
+    '+faststart',
+    outputPath,
+  )
+
+  try {
+    await execFileAsync(ffmpegPath, args, {
+      timeout: 15 * 60 * 1000,
+      maxBuffer: 20 * 1024 * 1024,
+    })
+    await removeTemporaryExportFile(videoPath)
+    return outputPath
+  } finally {
+    await Promise.allSettled(
+      tempArtifacts.map((artifactPath) => removeTemporaryExportFile(artifactPath)),
+    )
+  }
+}
+
+/** Probe the duration of a media file (in seconds) using the container header. */
 async function probeMediaDurationSeconds(filePath: string): Promise<number> {
   const ffmpegPath = getFfmpegBinaryPath()
   try {
-    await execFileAsync(ffmpegPath, ['-i', filePath, '-f', 'null', '-'], { timeout: 30000, maxBuffer: 2 * 1024 * 1024 })
+    await execFileAsync(ffmpegPath, ['-i', filePath, '-hide_banner'], { timeout: 5000 })
   } catch (error) {
-    // ffmpeg reports info on stderr even on "success" — parse it from the error
     const stderr = (error as NodeJS.ErrnoException & { stderr?: string })?.stderr ?? ''
-    // Match "Duration: HH:MM:SS.mm" or "time=HH:MM:SS.mm" (from progress output)
-    // Prefer the last "time=" value (actual decoded duration) over the container Duration header
-    const timeMatches = [...stderr.matchAll(/time=(\d{2}):(\d{2}):(\d{2})\.(\d{2,3})/g)]
-    if (timeMatches.length > 0) {
-      const last = timeMatches[timeMatches.length - 1]
-      const h = Number(last[1])
-      const m = Number(last[2])
-      const s = Number(last[3])
-      const frac = Number(last[4]) / (last[4].length === 3 ? 1000 : 100)
-      return h * 3600 + m * 60 + s + frac
-    }
-    // Fall back to Duration header
-    const durationMatch = stderr.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2})\.(\d{2,3})/)
-    if (durationMatch) {
-      const h = Number(durationMatch[1])
-      const m = Number(durationMatch[2])
-      const s = Number(durationMatch[3])
-      const frac = Number(durationMatch[4]) / (durationMatch[4].length === 3 ? 1000 : 100)
+    const match = stderr.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2})\.(\d{2,3})/)
+    if (match) {
+      const h = Number(match[1])
+      const m = Number(match[2])
+      const s = Number(match[3])
+      const frac = Number(match[4]) / (match[4].length === 3 ? 1000 : 100)
       return h * 3600 + m * 60 + s + frac
     }
   }
   return 0
+}
+
+type AudioSyncAdjustment = {
+  mode: 'none' | 'tempo' | 'delay'
+  delayMs: number
+  tempoRatio: number
+  durationDeltaMs: number
+}
+
+function buildAtempoFilters(tempoRatio: number) {
+  if (!Number.isFinite(tempoRatio) || tempoRatio <= 0) {
+    return []
+  }
+
+  const filters: string[] = []
+  let remaining = tempoRatio
+
+  while (remaining < 0.5) {
+    filters.push('atempo=0.5')
+    remaining /= 0.5
+  }
+
+  while (remaining > 2) {
+    filters.push('atempo=2.0')
+    remaining /= 2.0
+  }
+
+  if (Math.abs(remaining - 1) > 0.0005) {
+    filters.push(`atempo=${remaining.toFixed(6)}`)
+  }
+
+  return filters
+}
+
+function getAudioSyncAdjustment(videoDuration: number, audioDuration: number): AudioSyncAdjustment {
+  if (
+    !Number.isFinite(videoDuration) ||
+    !Number.isFinite(audioDuration) ||
+    videoDuration <= 0 ||
+    audioDuration <= 0
+  ) {
+    return { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
+  }
+
+  const durationDeltaMs = Math.round((videoDuration - audioDuration) * 1000)
+  const absDeltaMs = Math.abs(durationDeltaMs)
+  if (absDeltaMs <= 50) {
+    return { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs }
+  }
+
+  const tempoRatio = Math.max(0.5, Math.min(2, audioDuration / videoDuration))
+  const relativeDelta = absDeltaMs / Math.max(videoDuration * 1000, 1)
+
+  if (relativeDelta <= 0.03 || absDeltaMs <= 1500 || durationDeltaMs < 0) {
+    return { mode: 'tempo', delayMs: 0, tempoRatio, durationDeltaMs }
+  }
+
+  return { mode: 'delay', delayMs: durationDeltaMs, tempoRatio: 1, durationDeltaMs }
+}
+
+function appendSyncedAudioFilter(
+  filterParts: string[],
+  inputLabel: string,
+  outputLabel: string,
+  adjustment: AudioSyncAdjustment,
+) {
+  const filters: string[] = []
+
+  if (adjustment.mode === 'delay' && adjustment.delayMs > 0) {
+    filters.push(`adelay=${adjustment.delayMs}|${adjustment.delayMs}`)
+  }
+
+  if (adjustment.mode === 'tempo') {
+    filters.push(...buildAtempoFilters(adjustment.tempoRatio))
+  }
+
+  filters.push('aresample=async=1:first_pts=0', 'asetpts=PTS-STARTPTS')
+  filterParts.push(`${inputLabel}${filters.join(',')}[${outputLabel}]`)
 }
 
 function sendWhisperModelDownloadProgress(
@@ -2132,27 +2616,35 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
 
   if (audioInputs.length === 0) return
 
-  // Probe durations to compute audio delay offsets.
-  // If an audio file is shorter than the video it means the audio device
-  // started delivering samples late (common with Bluetooth / iPhone mics).
+  // Match each audio track to the captured video duration.
+  // Small duration deltas are more often clock drift than a true late start,
+  // so prefer tempo correction there and reserve leading silence for larger gaps.
   const videoDuration = await probeMediaDurationSeconds(videoPath)
-  const audioDelays: Map<string, number> = new Map()
+  const audioAdjustments: Map<string, AudioSyncAdjustment> = new Map()
 
   if (videoDuration > 0) {
     for (let i = 0; i < audioFilePaths.length; i++) {
       const audioDuration = await probeMediaDurationSeconds(audioFilePaths[i])
-      const delayMs = audioDuration > 0 ? Math.max(0, Math.round((videoDuration - audioDuration) * 1000)) : 0
-      audioDelays.set(audioInputs[i], delayMs)
-      if (delayMs > 0) {
-        console.log(`[mux-win] ${audioInputs[i]} audio is ${(delayMs / 1000).toFixed(2)}s shorter than video — adding ${delayMs}ms delay`)
+      const adjustment = getAudioSyncAdjustment(videoDuration, audioDuration)
+      audioAdjustments.set(audioInputs[i], adjustment)
+      if (adjustment.mode === 'tempo') {
+        console.log(
+          `[mux-win] ${audioInputs[i]} audio differs from video by ${adjustment.durationDeltaMs}ms — applying tempo ratio ${adjustment.tempoRatio.toFixed(6)}`,
+        )
+      } else if (adjustment.mode === 'delay' && adjustment.delayMs > 0) {
+        console.log(
+          `[mux-win] ${audioInputs[i]} audio appears to start late by ${adjustment.delayMs}ms — adding leading silence`,
+        )
       }
     }
   }
 
   const mixedOutputPath = `${videoPath}.muxed.mp4`
   const normalizedPauseSegments = normalizePauseSegments(pauseSegments)
-  const systemDelayMs = audioDelays.get('system') ?? 0
-  const micDelayMs = audioDelays.get('mic') ?? 0
+  const systemAdjustment =
+    audioAdjustments.get('system') ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
+  const micAdjustment =
+    audioAdjustments.get('mic') ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
 
   if (audioInputs.length === 2) {
     // Both system + mic audio: mix them
@@ -2170,19 +2662,9 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
     const systemLabel = systemPauseFilter ? '[system_trimmed]' : '[1:a]'
     const micLabel = micPauseFilter ? '[mic_trimmed]' : '[2:a]'
 
-    // Apply delay to compensate for late audio start
-    if (micDelayMs > 0) {
-      filterParts.push(`${micLabel}adelay=${micDelayMs}|${micDelayMs},asetpts=PTS-STARTPTS[m]`)
-    } else {
-      filterParts.push(`${micLabel}asetpts=PTS-STARTPTS[m]`)
-    }
-
-    if (systemDelayMs > 0) {
-      filterParts.push(`${systemLabel}adelay=${systemDelayMs}|${systemDelayMs},asetpts=PTS-STARTPTS[s]`)
-      filterParts.push(`[s][m]amix=inputs=2:duration=longest:normalize=0[aout]`)
-    } else {
-      filterParts.push(`${systemLabel}[m]amix=inputs=2:duration=longest:normalize=0[aout]`)
-    }
+    appendSyncedAudioFilter(filterParts, systemLabel, 's', systemAdjustment)
+    appendSyncedAudioFilter(filterParts, micLabel, 'm', micAdjustment)
+    filterParts.push('[s][m]amix=inputs=2:duration=longest:normalize=0[aout]')
 
     await execFileAsync(
       ffmpegPath,
@@ -2202,19 +2684,17 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
     )
   } else {
     // Single audio track
-    const pauseFilter = buildPausedAudioFilter('1:a', 'aout', normalizedPauseSegments)
-    const singleDelayMs = audioDelays.get(audioInputs[0]) ?? 0
+    const pauseFilter = buildPausedAudioFilter('1:a', 'trimmed_audio', normalizedPauseSegments)
+    const singleAdjustment =
+      audioAdjustments.get(audioInputs[0]) ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
 
-    if (pauseFilter || singleDelayMs > 0) {
+    if (pauseFilter || singleAdjustment.mode !== 'none') {
       const filterParts: string[] = []
       if (pauseFilter) {
         filterParts.push(pauseFilter)
       }
-      const srcLabel = pauseFilter ? '[aout]' : '[1:a]'
-      if (singleDelayMs > 0) {
-        filterParts.push(`${srcLabel}adelay=${singleDelayMs}|${singleDelayMs},asetpts=PTS-STARTPTS[delayed]`)
-      }
-      const outLabel = singleDelayMs > 0 ? '[delayed]' : '[aout]'
+      const srcLabel = pauseFilter ? '[trimmed_audio]' : '[1:a]'
+      appendSyncedAudioFilter(filterParts, srcLabel, 'aout', singleAdjustment)
 
       await execFileAsync(
         ffmpegPath,
@@ -2223,7 +2703,7 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
           ...inputs,
           '-filter_complex', filterParts.join(';'),
           '-map', '0:v:0',
-          '-map', outLabel,
+          '-map', '[aout]',
           '-c:v', 'copy',
           '-c:a', 'aac',
           '-b:a', '192k',
@@ -2461,39 +2941,40 @@ async function muxNativeMacRecordingWithAudio(
     return
   }
 
-  // Probe durations — if audio is shorter than video it means the audio device
-  // started late (e.g. iPhone mic over Continuity Camera). Add leading silence.
+  // Match each audio track to the captured video duration.
   const videoDuration = await probeMediaDurationSeconds(videoPath)
-  const audioDelays: Map<string, number> = new Map()
+  const audioAdjustments: Map<string, AudioSyncAdjustment> = new Map()
 
   if (videoDuration > 0) {
     for (let i = 0; i < audioFilePaths.length; i++) {
       const audioDuration = await probeMediaDurationSeconds(audioFilePaths[i])
-      const delayMs = audioDuration > 0 ? Math.max(0, Math.round((videoDuration - audioDuration) * 1000)) : 0
-      audioDelays.set(availableAudioInputs[i], delayMs)
-      if (delayMs > 0) {
-        console.log(`[mux] ${availableAudioInputs[i]} audio is ${(delayMs / 1000).toFixed(2)}s shorter than video — adding ${delayMs}ms delay`)
+      const adjustment = getAudioSyncAdjustment(videoDuration, audioDuration)
+      audioAdjustments.set(availableAudioInputs[i], adjustment)
+      if (adjustment.mode === 'tempo') {
+        console.log(
+          `[mux] ${availableAudioInputs[i]} audio differs from video by ${adjustment.durationDeltaMs}ms — applying tempo ratio ${adjustment.tempoRatio.toFixed(6)}`,
+        )
+      } else if (adjustment.mode === 'delay' && adjustment.delayMs > 0) {
+        console.log(
+          `[mux] ${availableAudioInputs[i]} audio appears to start late by ${adjustment.delayMs}ms — adding leading silence`,
+        )
       }
     }
   }
 
-  const systemDelayMs = audioDelays.get('system') ?? 0
-  const micDelayMs = audioDelays.get('microphone') ?? 0
-  const needsFilter = systemDelayMs > 0 || micDelayMs > 0
+  const systemAdjustment =
+    audioAdjustments.get('system') ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
+  const micAdjustment =
+    audioAdjustments.get('microphone') ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
+  const needsFilter = systemAdjustment.mode !== 'none' || micAdjustment.mode !== 'none'
 
   let args: string[]
   if (availableAudioInputs.length === 2) {
     if (needsFilter) {
       const filterParts: string[] = []
-      if (systemDelayMs > 0) {
-        filterParts.push(`[1:a]adelay=${systemDelayMs}|${systemDelayMs},asetpts=PTS-STARTPTS[s]`)
-      }
-      if (micDelayMs > 0) {
-        filterParts.push(`[2:a]adelay=${micDelayMs}|${micDelayMs},asetpts=PTS-STARTPTS[m]`)
-      }
-      const sLabel = systemDelayMs > 0 ? '[s]' : '[1:a]'
-      const mLabel = micDelayMs > 0 ? '[m]' : '[2:a]'
-      filterParts.push(`${sLabel}${mLabel}amix=inputs=2:duration=longest:normalize=0[aout]`)
+      appendSyncedAudioFilter(filterParts, '[1:a]', 's', systemAdjustment)
+      appendSyncedAudioFilter(filterParts, '[2:a]', 'm', micAdjustment)
+      filterParts.push('[s][m]amix=inputs=2:duration=longest:normalize=0[aout]')
       args = [
         '-y',
         ...inputs,
@@ -2521,12 +3002,15 @@ async function muxNativeMacRecordingWithAudio(
       ]
     }
   } else {
-    if (needsFilter) {
-      const delayMs = systemDelayMs || micDelayMs
+    const singleAdjustment =
+      audioAdjustments.get(availableAudioInputs[0]) ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
+    if (singleAdjustment.mode !== 'none') {
+      const filterParts: string[] = []
+      appendSyncedAudioFilter(filterParts, '[1:a]', 'aout', singleAdjustment)
       args = [
         '-y',
         ...inputs,
-        '-filter_complex', `[1:a]adelay=${delayMs}|${delayMs},asetpts=PTS-STARTPTS[aout]`,
+        '-filter_complex', filterParts.join(';'),
         '-map', '0:v:0',
         '-map', '[aout]',
         '-c:v', 'copy',
@@ -2690,9 +3174,10 @@ async function startNativeCursorMonitor() {
     if (process.platform === 'win32') {
       helperPath = getCursorMonitorExePath()
       try {
-        await fs.access(helperPath, fsConstants.X_OK)
+        // Use F_OK on Windows — X_OK is meaningless and can give false positives
+        await fs.access(helperPath, fsConstants.F_OK)
       } catch {
-        console.warn('Windows cursor monitor helper missing or not executable:', helperPath)
+        console.warn('Windows cursor monitor helper missing:', helperPath)
         currentCursorVisualType = 'arrow'
         return
       }
@@ -2702,9 +3187,17 @@ async function startNativeCursorMonitor() {
 
     nativeCursorMonitorOutputBuffer = ''
     currentCursorVisualType = 'arrow'
-    nativeCursorMonitorProcess = spawn(helperPath, [], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-    })
+
+    try {
+      nativeCursorMonitorProcess = spawn(helperPath, [], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+    } catch (spawnError) {
+      console.warn('Failed to spawn cursor monitor:', spawnError)
+      nativeCursorMonitorProcess = null
+      currentCursorVisualType = 'arrow'
+      return
+    }
 
     nativeCursorMonitorProcess.once('error', (error) => {
       console.warn('Native cursor monitor process error:', error)
@@ -2928,18 +3421,36 @@ function getNormalizedCursorPoint() {
   const isLinuxCacheFresh = !!linuxCursorCache
     && Date.now() - linuxCursorCache.updatedAt <= 1000
 
+  // On Windows/Linux, platform APIs (iohook, GetWindowRect, xwininfo) return
+  // physical pixel coordinates, while Electron's getCursorScreenPoint() and
+  // display.bounds return DIP (logical) coordinates. Apply a DPI correction
+  // so all values are in the same coordinate space before normalizing.
+  // Use the display containing the window (or cursor) rather than the primary
+  // display so multi-monitor setups with different DPI scales work correctly.
+  const primarySf = process.platform !== 'darwin'
+    ? (getScreen().getPrimaryDisplay().scaleFactor || 1)
+    : 1
+
   const cursor = isLinuxCacheFresh
-    ? { x: linuxCursorCache.x, y: linuxCursorCache.y }
+    ? { x: linuxCursorCache.x / primarySf, y: linuxCursorCache.y / primarySf }
     : fallbackCursor
 
   const windowBounds = selectedSource?.id?.startsWith('window:') ? selectedWindowBounds : null
   if (windowBounds) {
-    const width = Math.max(1, windowBounds.width)
-    const height = Math.max(1, windowBounds.height)
+    // Resolve the scale factor for the display that contains the target window
+    // centre point, falling back to the primary display scale factor.
+    const sf = process.platform !== 'darwin'
+      ? (getScreen().getDisplayNearestPoint({
+          x: windowBounds.x / primarySf,
+          y: windowBounds.y / primarySf,
+        }).scaleFactor || 1)
+      : 1
+    const width = Math.max(1, windowBounds.width / sf)
+    const height = Math.max(1, windowBounds.height / sf)
 
     return {
-      cx: clamp((cursor.x - windowBounds.x) / width, 0, 1),
-      cy: clamp((cursor.y - windowBounds.y) / height, 0, 1),
+      cx: clamp((cursor.x - windowBounds.x / sf) / width, 0, 1),
+      cy: clamp((cursor.y - windowBounds.y / sf) / height, 0, 1),
     }
   }
 
@@ -3605,9 +4116,12 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
     createSourceSelectorWindow()
   })
-
   ipcMain.handle('switch-to-editor', () => {
     console.log('[switch-to-editor] Opening editor window')
+    const sourceSelectorWin = getSourceSelectorWindow()
+    if (sourceSelectorWin && !sourceSelectorWin.isDestroyed()) {
+      sourceSelectorWin.close()
+    }
     createEditorWindow()
   })
 
@@ -4574,6 +5088,11 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
   ipcMain.handle('open-external-url', async (_, url: string) => {
     try {
+      // Security: only allow http/https URLs to prevent file:// or custom protocol abuse
+      const parsed = new URL(url)
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        return { success: false, error: `Blocked non-HTTP URL: ${parsed.protocol}` }
+      }
       await shell.openExternal(url)
       return { success: true }
     } catch (error) {
@@ -4650,6 +5169,70 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
   })
 
+  // Generate a tiny thumbnail for a wallpaper image and cache it in userData.
+  // Returns the cached thumbnail as raw JPEG bytes for fast grid rendering.
+  // Serialized to prevent concurrent nativeImage operations from eating memory.
+  const THUMB_SIZE = 96
+  const thumbCacheDir = path.join(USER_DATA_PATH, 'wallpaper-thumbs')
+  let thumbGenerationQueue: Promise<void> = Promise.resolve()
+
+  ipcMain.handle('generate-wallpaper-thumbnail', async (_, filePath: string) => {
+    try {
+      const resolved = path.resolve(filePath)
+
+      // Security: only allow reads from known safe directories
+      const allowedPrefixes = [
+        RECORDINGS_DIR,
+        USER_DATA_PATH,
+        getAssetRootPath(),
+        app.getPath('temp'),
+      ]
+      if (!allowedPrefixes.some((prefix) => resolved.startsWith(path.resolve(prefix)))) {
+        return { success: false, error: 'Access denied' }
+      }
+
+      // Deterministic cache key from file path + mtime
+      const stat = await fs.stat(resolved)
+      const cacheKey = Buffer.from(`${resolved}:${stat.mtimeMs}`).toString('base64url')
+      const thumbPath = path.join(thumbCacheDir, `${cacheKey}.jpg`)
+
+      // Return cached thumbnail if it exists (no queue needed)
+      if (existsSync(thumbPath)) {
+        const data = await fs.readFile(thumbPath)
+        return { success: true, data }
+      }
+
+      // Serialize nativeImage operations to avoid OOM from concurrent full-res decodes
+      let jpegData: Buffer
+      const generation = thumbGenerationQueue.then(async () => {
+        const { nativeImage } = await import('electron')
+        const img = nativeImage.createFromPath(resolved)
+        if (img.isEmpty()) {
+          throw new Error('Failed to load image')
+        }
+        const { width, height } = img.getSize()
+        const scale = THUMB_SIZE / Math.min(width, height)
+        const resized = img.resize({
+          width: Math.round(width * scale),
+          height: Math.round(height * scale),
+          quality: 'good',
+        })
+        jpegData = resized.toJPEG(70)
+
+        // Cache to disk
+        await fs.mkdir(thumbCacheDir, { recursive: true })
+        await fs.writeFile(thumbPath, jpegData)
+      })
+      // Keep the queue moving even if one fails
+      thumbGenerationQueue = generation.catch(() => {})
+      await generation
+
+      return { success: true, data: jpegData! }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
+  })
+
   // Return base path for assets so renderer can resolve file:// paths in production
   ipcMain.handle('get-asset-base-path', () => {
     try {
@@ -4688,12 +5271,275 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
   ipcMain.handle('read-local-file', async (_, filePath: string) => {
     try {
-      const data = await fs.readFile(filePath)
+      // Security: only allow reads from known safe directories to prevent
+      // malicious code from reading arbitrary files (SSH keys, credentials, etc.)
+      const resolved = path.resolve(filePath)
+      const allowedPrefixes = [
+        RECORDINGS_DIR,
+        USER_DATA_PATH,
+        getAssetRootPath(),
+        app.getPath('temp'),
+      ]
+      if (!allowedPrefixes.some((prefix) => resolved.startsWith(path.resolve(prefix)))) {
+        console.warn(`[read-local-file] Blocked read outside allowed directories: ${resolved}`)
+        return { success: false, error: 'Access denied: path outside allowed directories' }
+      }
+
+      const data = await fs.readFile(resolved)
       return { success: true, data }
     } catch (error) {
       console.error('Failed to read local file:', error)
       return { success: false, error: String(error) }
     }
+  })
+
+  ipcMain.handle(
+    'native-video-export-start',
+    async (
+      event,
+      options: {
+        width: number
+        height: number
+        frameRate: number
+        bitrate: number
+        encodingMode: NativeExportEncodingMode
+      },
+    ) => {
+      try {
+        if (options.width % 2 !== 0 || options.height % 2 !== 0) {
+          throw new Error('Native export requires even output dimensions')
+        }
+
+        const ffmpegPath = getFfmpegBinaryPath()
+        const encoderName = await resolveNativeVideoEncoder(ffmpegPath, options.encodingMode)
+        const sessionId = `recordly-export-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        const outputPath = path.join(app.getPath('temp'), `${sessionId}.mp4`)
+        const ffmpegArgs = buildNativeVideoExportArgs(encoderName, options, outputPath)
+        const ffmpegProcess = spawn(ffmpegPath, ffmpegArgs, {
+          stdio: ['pipe', 'ignore', 'pipe'],
+        }) as ChildProcessByStdio<Writable, null, Readable>
+        const inputByteSize = getNativeVideoInputByteSize(options.width, options.height)
+
+        const session: NativeVideoExportSession = {
+          ffmpegProcess,
+          outputPath,
+          inputByteSize,
+          maxQueuedWriteBytes: getNativeVideoExportMaxQueuedWriteBytes(inputByteSize),
+          stderrOutput: '',
+          encoderName,
+          processError: null,
+          stdinError: null,
+          terminating: false,
+          writeSequence: Promise.resolve(),
+          sender: event.sender,
+          pendingWriteRequestIds: new Set<number>(),
+          completionPromise: new Promise<void>((resolve, reject) => {
+            ffmpegProcess.once('error', (error) => {
+              const processError = error instanceof Error ? error : new Error(String(error))
+              if (session.terminating) {
+                resolve()
+                return
+              }
+
+              session.processError = processError
+              reject(processError)
+            })
+            ffmpegProcess.stdin.once('error', (error) => {
+              const stdinError = error instanceof Error ? error : new Error(String(error))
+              if (session.terminating && isIgnorableNativeVideoExportStreamError(stdinError)) {
+                return
+              }
+
+              session.stdinError = stdinError
+            })
+            ffmpegProcess.once('close', (code, signal) => {
+              if (session.terminating) {
+                resolve()
+                return
+              }
+
+              if (code === 0) {
+                resolve()
+                return
+              }
+
+              reject(
+                new Error(
+                  getNativeVideoExportSessionError(
+                    session,
+                    `FFmpeg exited with code ${code ?? 'unknown'}${signal ? ` (signal ${signal})` : ''}`,
+                  ),
+                ),
+              )
+            })
+          }),
+        }
+        void session.completionPromise.catch(() => undefined)
+
+        ffmpegProcess.stderr.on('data', (chunk: Buffer) => {
+          session.stderrOutput += chunk.toString()
+        })
+
+        nativeVideoExportSessions.set(sessionId, session)
+
+        console.log(
+          `[native-export] Started ${isHardwareAcceleratedVideoEncoder(encoderName) ? 'hardware' : 'software'} session ${sessionId} with ${encoderName}`,
+        )
+
+        return {
+          success: true,
+          sessionId,
+          encoderName,
+        }
+      } catch (error) {
+        console.error('[native-export] Failed to start native video export session:', error)
+        return {
+          success: false,
+          error: String(error),
+        }
+      }
+    },
+  )
+
+  ipcMain.on(
+    'native-video-export-write-frame-async',
+    (
+      event,
+      payload: {
+        sessionId: string
+        requestId: number
+        frameData: Uint8Array
+      },
+    ) => {
+      const sessionId = payload?.sessionId
+      const requestId = payload?.requestId
+      const frameData = payload?.frameData
+
+      if (typeof sessionId !== 'string' || typeof requestId !== 'number' || !frameData) {
+        return
+      }
+
+      const session = nativeVideoExportSessions.get(sessionId)
+      if (!session) {
+        sendNativeVideoExportWriteFrameResult(event.sender, sessionId, requestId, {
+          success: false,
+          error: 'Invalid native export session',
+        })
+        return
+      }
+
+      session.sender = event.sender
+      session.pendingWriteRequestIds.add(requestId)
+
+      if (session.terminating) {
+        settleNativeVideoExportWriteFrameRequest(sessionId, session, requestId, {
+          success: false,
+          error: 'Native video export session was cancelled',
+        })
+        return
+      }
+
+      if (frameData.byteLength !== session.inputByteSize) {
+        settleNativeVideoExportWriteFrameRequest(sessionId, session, requestId, {
+          success: false,
+          error: `Native video export expected ${session.inputByteSize} bytes per frame but received ${frameData.byteLength}`,
+        })
+        return
+      }
+
+      void enqueueNativeVideoExportFrameWrite(session, frameData)
+        .then(() => {
+          settleNativeVideoExportWriteFrameRequest(sessionId, session, requestId, {
+            success: true,
+          })
+        })
+        .catch((error) => {
+          session.stdinError = error instanceof Error ? error : new Error(String(error))
+          settleNativeVideoExportWriteFrameRequest(sessionId, session, requestId, {
+            success: false,
+            error: getNativeVideoExportSessionError(
+              session,
+              session.stdinError.message,
+            ),
+          })
+        })
+    },
+  )
+
+  ipcMain.handle(
+    'native-video-export-finish',
+    async (_, sessionId: string, options?: NativeVideoExportFinishOptions) => {
+      const session = nativeVideoExportSessions.get(sessionId)
+      if (!session) {
+        return { success: false, error: 'Invalid native export session' }
+      }
+
+      try {
+        await session.writeSequence
+        if (!session.ffmpegProcess.stdin.destroyed && !session.ffmpegProcess.stdin.writableEnded) {
+          session.ffmpegProcess.stdin.end()
+        }
+        await session.completionPromise
+
+        const finalizedPath = await muxNativeVideoExportAudio(session.outputPath, options ?? {})
+        const data = await fs.readFile(finalizedPath)
+        nativeVideoExportSessions.delete(sessionId)
+        await removeTemporaryExportFile(finalizedPath)
+
+        return {
+          success: true,
+          data: new Uint8Array(data),
+          encoderName: session.encoderName,
+        }
+      } catch (error) {
+        flushNativeVideoExportPendingWriteRequests(
+          sessionId,
+          session,
+          String(error),
+        )
+        nativeVideoExportSessions.delete(sessionId)
+        await removeTemporaryExportFile(session.outputPath)
+        const finalizedSuffix = session.outputPath.replace(/\.mp4$/, '-final.mp4')
+        await removeTemporaryExportFile(finalizedSuffix)
+        return {
+          success: false,
+          error: String(error),
+        }
+      }
+    },
+  )
+
+  ipcMain.handle('native-video-export-cancel', async (_, sessionId: string) => {
+    const session = nativeVideoExportSessions.get(sessionId)
+    if (!session) {
+      return { success: true }
+    }
+
+    session.terminating = true
+    nativeVideoExportSessions.delete(sessionId)
+    flushNativeVideoExportPendingWriteRequests(
+      sessionId,
+      session,
+      'Native video export session was cancelled',
+    )
+
+    try {
+      if (!session.ffmpegProcess.stdin.destroyed && !session.ffmpegProcess.stdin.writableEnded) {
+        session.ffmpegProcess.stdin.destroy()
+      }
+    } catch {
+      // Stream may already be closed.
+    }
+
+    try {
+      session.ffmpegProcess.kill('SIGKILL')
+    } catch {
+      // Process may already be closed.
+    }
+
+    await session.completionPromise.catch(() => undefined)
+    await removeTemporaryExportFile(session.outputPath)
+    return { success: true }
   })
 
   ipcMain.handle('save-exported-video', async (event, videoData: ArrayBuffer, fileName: string) => {
@@ -4735,6 +5581,37 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       return {
         success: false,
         message: 'Failed to save exported video',
+        error: String(error)
+      }
+    }
+  })
+
+  ipcMain.handle('write-exported-video-to-path', async (_event, videoData: ArrayBuffer, outputPath: string) => {
+    try {
+      const resolvedPath = path.resolve(outputPath)
+      const allowedPrefixes = [app.getPath('temp'), app.getPath('downloads'), RECORDINGS_DIR]
+      if (!allowedPrefixes.some((prefix) => resolvedPath.startsWith(prefix))) {
+        return {
+          success: false,
+          message: 'Output path is not in an allowed directory',
+          canceled: false,
+        }
+      }
+      await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
+      await fs.writeFile(resolvedPath, Buffer.from(videoData));
+
+      return {
+        success: true,
+        path: outputPath,
+        message: 'Video exported successfully',
+        canceled: false,
+      };
+    } catch (error) {
+      console.error('Failed to write exported video to path:', error)
+      return {
+        success: false,
+        message: 'Failed to write exported video',
+        canceled: false,
         error: String(error)
       }
     }
@@ -4884,6 +5761,23 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       return { success: true }
     } catch (error) {
       console.error('Failed to delete Whisper small model:', error)
+      // Verify whether the file was actually removed despite the error
+      const status = await getWhisperSmallModelStatus()
+      if (!status.exists) {
+        // File is gone — treat as success
+        sendWhisperModelDownloadProgress(event.sender, {
+          status: 'idle',
+          progress: 0,
+          path: null,
+        })
+        return { success: true }
+      }
+      sendWhisperModelDownloadProgress(event.sender, {
+        status: 'error',
+        progress: 0,
+        path: null,
+        error: String(error),
+      })
       return { success: false, error: String(error) }
     }
   })

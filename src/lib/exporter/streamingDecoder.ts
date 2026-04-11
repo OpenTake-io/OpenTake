@@ -1,10 +1,16 @@
 import { WebDemuxer } from 'web-demuxer';
 import type { TrimRegion, SpeedRegion } from '@/components/video-editor/types';
+import { getEffectiveVideoStreamDurationSeconds } from '@/lib/mediaTiming';
+
+const DEFAULT_MAX_DECODE_QUEUE = 12;
+const DEFAULT_MAX_PENDING_FRAMES = 32;
 
 export interface DecodedVideoInfo {
   width: number;
   height: number;
   duration: number; // seconds
+  mediaStartTime?: number; // seconds
+  streamStartTime?: number; // seconds
   streamDuration?: number; // seconds
   frameRate: number;
   codec: string;
@@ -16,8 +22,35 @@ export interface DecodedVideoInfo {
 type OnFrameCallback = (
   frame: VideoFrame,
   exportTimestampUs: number,
-  sourceTimestampMs: number
+  sourceTimestampMs: number,
+  cursorTimestampMs: number
 ) => Promise<void>;
+
+export function getDecodedFrameStartupOffsetUs(
+  firstDecodedFrameTimestampUs: number,
+  metadata: Pick<DecodedVideoInfo, 'mediaStartTime' | 'streamStartTime'>
+): number {
+  const streamStartTimeUs = Math.round(
+    (metadata.streamStartTime ?? metadata.mediaStartTime ?? 0) * 1_000_000
+  );
+
+  return Math.max(0, firstDecodedFrameTimestampUs - streamStartTimeUs);
+}
+
+export function getDecodedFrameTimelineOffsetUs(
+  firstDecodedFrameTimestampUs: number,
+  metadata: Pick<DecodedVideoInfo, 'mediaStartTime' | 'streamStartTime'>
+): number {
+  const mediaStartTimeUs = Math.round((metadata.mediaStartTime ?? 0) * 1_000_000);
+  const streamStartTimeUs = Math.round(
+    (metadata.streamStartTime ?? metadata.mediaStartTime ?? 0) * 1_000_000
+  );
+
+  return (
+    Math.max(0, streamStartTimeUs - mediaStartTimeUs) +
+    getDecodedFrameStartupOffsetUs(firstDecodedFrameTimestampUs, metadata)
+  );
+}
 
 /**
  * Decodes video frames via web-demuxer + VideoDecoder in a single forward pass.
@@ -32,6 +65,13 @@ export class StreamingVideoDecoder {
   private cancelled = false;
   private metadata: DecodedVideoInfo | null = null;
   private pendingFrames: VideoFrame[] = [];
+  private readonly maxDecodeQueue: number;
+  private readonly maxPendingFrames: number;
+
+  constructor(options?: { maxDecodeQueue?: number; maxPendingFrames?: number }) {
+    this.maxDecodeQueue = Math.max(1, Math.floor(options?.maxDecodeQueue ?? DEFAULT_MAX_DECODE_QUEUE));
+    this.maxPendingFrames = Math.max(1, Math.floor(options?.maxPendingFrames ?? DEFAULT_MAX_PENDING_FRAMES));
+  }
 
   private toLocalFilePath(resourceUrl: string): string | null {
     if (!resourceUrl.startsWith('file:')) {
@@ -115,6 +155,14 @@ export class StreamingVideoDecoder {
     const mediaInfo = await this.demuxer.getMediaInfo();
     const videoStream = mediaInfo.streams.find(s => s.codec_type_string === 'video');
     const audioStream = mediaInfo.streams.find(s => s.codec_type_string === 'audio');
+    const mediaStartTime =
+      typeof mediaInfo.start_time === 'number' && Number.isFinite(mediaInfo.start_time)
+        ? mediaInfo.start_time
+        : 0;
+    const streamStartTime =
+      typeof videoStream?.start_time === 'number' && Number.isFinite(videoStream.start_time)
+        ? videoStream.start_time
+        : mediaStartTime;
 
     let frameRate = 60;
     if (videoStream?.avg_frame_rate) {
@@ -130,6 +178,8 @@ export class StreamingVideoDecoder {
       width: videoStream?.width || 1920,
       height: videoStream?.height || 1080,
       duration: mediaInfo.duration,
+      mediaStartTime,
+      streamStartTime,
       streamDuration:
         typeof videoStream?.duration === 'number' && Number.isFinite(videoStream.duration)
           ? videoStream.duration
@@ -156,8 +206,12 @@ export class StreamingVideoDecoder {
     const decoderConfig = await this.demuxer.getDecoderConfig('video');
     const codec = this.metadata.codec.toLowerCase();
     const shouldPreferSoftwareDecode = codec.includes('av01') || codec.includes('av1');
+    const effectiveVideoDuration = getEffectiveVideoStreamDurationSeconds({
+      duration: this.metadata.duration,
+      streamDuration: this.metadata.streamDuration,
+    });
     const segments = this.splitBySpeed(
-      this.computeSegments(this.metadata.duration, trimRegions),
+      this.computeSegments(effectiveVideoDuration, trimRegions),
       speedRegions
     );
     const segmentOutputFrameCounts = segments.map(segment =>
@@ -166,6 +220,14 @@ export class StreamingVideoDecoder {
     const expectedOutputFrames = segmentOutputFrameCounts.reduce((sum, count) => sum + count, 0);
     const frameDurationUs = 1_000_000 / targetFrameRate;
     const epsilonSec = 0.001;
+    const startupStabilizationSeconds = 3;
+    const startupFrameBudget = Math.max(1, Math.round(targetFrameRate * startupStabilizationSeconds));
+    let exportFrameIndex = 0;
+    let loggedSteadyStateBackpressure = false;
+
+    console.log(
+      `[StreamingVideoDecoder] Startup-safe decode backpressure active for first ${startupStabilizationSeconds}s (${startupFrameBudget} frames)`,
+    );
 
     // Async frame queue — decoder pushes, consumer pulls
     this.pendingFrames.length = 0
@@ -173,6 +235,8 @@ export class StreamingVideoDecoder {
     let frameResolve: ((frame: VideoFrame | null) => void) | null = null;
     let decodeError: Error | null = null;
     let decodeDone = false;
+    let firstDecodedFrameTimestampUs: number | null = null;
+    let decodedFrameTimelineOffsetUs = 0;
 
     this.decoder = new VideoDecoder({
       output: (frame: VideoFrame) => {
@@ -219,7 +283,11 @@ export class StreamingVideoDecoder {
 
     // One forward stream through the whole file.
     // Pass explicit range because some containers are truncated when no end is provided.
-    const readEndSec = Math.max(this.metadata.duration, this.metadata.streamDuration ?? 0) + 0.5;
+    const readEndSec = Math.max(
+      this.metadata.duration + (this.metadata.mediaStartTime ?? 0),
+      (this.metadata.streamDuration ?? this.metadata.duration) +
+        (this.metadata.streamStartTime ?? this.metadata.mediaStartTime ?? 0)
+    ) + 0.5;
     const reader = this.demuxer.read('video', 0, readEndSec).getReader();
 
     // Feed chunks to decoder in background with backpressure
@@ -229,9 +297,26 @@ export class StreamingVideoDecoder {
           const { done, value: chunk } = await reader.read();
           if (done || !chunk) break;
 
+          if (!loggedSteadyStateBackpressure && exportFrameIndex >= startupFrameBudget) {
+            loggedSteadyStateBackpressure = true;
+            console.log("[StreamingVideoDecoder] Switched to steady-state decode backpressure");
+          }
+
+          const decodeQueueLimit =
+            exportFrameIndex < startupFrameBudget
+              ? Math.min(this.maxDecodeQueue, 10)
+              : this.maxDecodeQueue;
+          const pendingFrameLimit =
+            exportFrameIndex < startupFrameBudget
+              ? Math.min(this.maxPendingFrames, 24)
+              : this.maxPendingFrames;
+
           // Backpressure on both decode queue and decoded frame backlog.
           while (
-            (this.decoder!.decodeQueueSize > 10 || pendingFrames.length > 24) &&
+            (
+              this.decoder!.decodeQueueSize > decodeQueueLimit ||
+              pendingFrames.length > pendingFrameLimit
+            ) &&
             !this.cancelled
           ) {
             await new Promise(resolve => setTimeout(resolve, 1));
@@ -259,7 +344,6 @@ export class StreamingVideoDecoder {
     // Route decoded frames into segments by timestamp, then deliver with VFR→CFR resampling
     let segmentIdx = 0;
     let segmentFrameIndex = 0;
-    let exportFrameIndex = 0;
     let lastDecodedFrameSec: number | null = null;
     let heldFrame: VideoFrame | null = null;
     let heldFrameSec = 0;
@@ -279,7 +363,13 @@ export class StreamingVideoDecoder {
       if (sourceTimeSec >= segment.endSec - epsilonSec) return false;
 
       const clone = new VideoFrame(heldFrame, { timestamp: heldFrame.timestamp });
-      await onFrame(clone, exportFrameIndex * frameDurationUs, sourceTimeSec * 1000);
+      const sourceTimestampMs = sourceTimeSec * 1000;
+      await onFrame(
+        clone,
+        exportFrameIndex * frameDurationUs,
+        sourceTimestampMs,
+        sourceTimestampMs,
+      );
       segmentFrameIndex++;
       exportFrameIndex++;
       return true;
@@ -289,7 +379,23 @@ export class StreamingVideoDecoder {
       const frame = await getNextFrame();
       if (!frame) break;
 
-      const frameTimeSec = frame.timestamp / 1_000_000;
+      if (firstDecodedFrameTimestampUs === null) {
+        firstDecodedFrameTimestampUs = frame.timestamp;
+        decodedFrameTimelineOffsetUs = getDecodedFrameTimelineOffsetUs(
+          firstDecodedFrameTimestampUs,
+          this.metadata
+        );
+      }
+
+      const normalizedFrameTimeSec = Math.max(
+        0,
+        (frame.timestamp - firstDecodedFrameTimestampUs + decodedFrameTimelineOffsetUs) /
+          1_000_000,
+      );
+      const frameTimeSec: number =
+        lastDecodedFrameSec === null
+          ? normalizedFrameTimeSec
+          : Math.max(lastDecodedFrameSec, normalizedFrameTimeSec);
       lastDecodedFrameSec = frameTimeSec;
 
       // Finalize completed segments before handling this frame.
@@ -352,7 +458,13 @@ export class StreamingVideoDecoder {
         }
 
         const clone = new VideoFrame(heldFrame, { timestamp: heldFrame.timestamp });
-        await onFrame(clone, exportFrameIndex * frameDurationUs, sourceTimeSec * 1000);
+        const sourceTimestampMs = sourceTimeSec * 1000;
+        await onFrame(
+          clone,
+          exportFrameIndex * frameDurationUs,
+          sourceTimestampMs,
+          sourceTimestampMs,
+        );
         segmentFrameIndex++;
         exportFrameIndex++;
       }
@@ -383,6 +495,9 @@ export class StreamingVideoDecoder {
           break;
         }
       }
+      heldFrame.close();
+      heldFrame = null;
+    } else if (heldFrame) {
       heldFrame.close();
       heldFrame = null;
     }
@@ -447,7 +562,13 @@ export class StreamingVideoDecoder {
 
   getEffectiveDuration(trimRegions?: TrimRegion[], speedRegions?: SpeedRegion[]): number {
     if (!this.metadata) throw new Error('Must call loadMetadata() first');
-    const trimSegments = this.computeSegments(this.metadata.duration, trimRegions);
+    const trimSegments = this.computeSegments(
+      getEffectiveVideoStreamDurationSeconds({
+        duration: this.metadata.duration,
+        streamDuration: this.metadata.streamDuration,
+      }),
+      trimRegions,
+    );
     const speedSegments = this.splitBySpeed(trimSegments, speedRegions);
     return speedSegments.reduce((sum, seg) => sum + (seg.endSec - seg.startSec) / seg.speed, 0);
   }

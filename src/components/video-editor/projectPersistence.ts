@@ -1,4 +1,14 @@
-import type { ExportFormat, ExportQuality, GifFrameRate, GifSizePreset } from "@/lib/exporter";
+import type {
+	ExportBackendPreference,
+	ExportEncodingMode,
+	ExportFormat,
+	ExportMp4FrameRate,
+	ExportPipelineModel,
+	ExportQuality,
+	GifFrameRate,
+	GifSizePreset,
+} from "@/lib/exporter";
+import { isValidMp4FrameRate } from "@/lib/exporter";
 import { DEFAULT_WALLPAPER_PATH } from "@/lib/wallpapers";
 import { ASPECT_RATIOS, type AspectRatio, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
 import {
@@ -74,12 +84,16 @@ export interface ProjectEditorState {
 	cursorStyle: CursorStyle;
 	cursorSize: number;
 	cursorSmoothing: number;
+	zoomSmoothness: number;
+	zoomClassicMode: boolean;
 	cursorMotionBlur: number;
 	cursorClickBounce: number;
 	cursorClickBounceDuration: number;
 	cursorSway: number;
 	borderRadius: number;
 	padding: number;
+	/** Selected frame ID (e.g. "recordly.frames/browser-dark"), or null for none */
+	frame: string | null;
 	cropRegion: CropRegion;
 	zoomRegions: ZoomRegion[];
 	trimRegions: TrimRegion[];
@@ -91,7 +105,11 @@ export interface ProjectEditorState {
 	autoCaptionSettings: AutoCaptionSettings;
 	webcam: WebcamOverlaySettings;
 	aspectRatio: AspectRatio;
+	exportEncodingMode: ExportEncodingMode;
+	exportBackendPreference: ExportBackendPreference;
+	exportPipelineModel: ExportPipelineModel;
 	exportQuality: ExportQuality;
+	mp4FrameRate: ExportMp4FrameRate;
 	exportFormat: ExportFormat;
 	gifFrameRate: GifFrameRate;
 	gifLoop: boolean;
@@ -110,6 +128,34 @@ function isFiniteNumber(value: unknown): value is number {
 
 function clamp(value: number, min: number, max: number) {
 	return Math.min(max, Math.max(min, value));
+}
+
+export function normalizeExportEncodingMode(value: unknown): ExportEncodingMode {
+	if (value === "fast" || value === "balanced" || value === "quality") {
+		return value;
+	}
+
+	return "balanced";
+}
+
+export function normalizeExportBackendPreference(value: unknown): ExportBackendPreference {
+	if (value === "auto" || value === "webcodecs" || value === "breeze") {
+		return value;
+	}
+
+	return "auto";
+}
+
+export function normalizeExportPipelineModel(value: unknown): ExportPipelineModel {
+	if (value === "modern" || value === "legacy") {
+		return value;
+	}
+
+	return "legacy";
+}
+
+export function normalizeExportMp4FrameRate(value: unknown): ExportMp4FrameRate {
+	return typeof value === "number" && isValidMp4FrameRate(value) ? value : 30;
 }
 
 function normalizeZoomTransitionEasing(
@@ -355,7 +401,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						id: region.id,
 						startMs,
 						endMs,
-						type: region.type === "image" || region.type === "figure" ? region.type : "text",
+						type: region.type === "image" || region.type === "figure" || region.type === "blur" ? region.type : "text",
 						content: typeof region.content === "string" ? region.content : "",
 						textContent: typeof region.textContent === "string" ? region.textContent : undefined,
 						imageContent: typeof region.imageContent === "string" ? region.imageContent : undefined,
@@ -402,6 +448,10 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 									...region.figureData,
 								}
 							: undefined,
+						blurIntensity: isFiniteNumber(region.blurIntensity) 
+							? clamp(region.blurIntensity, 1, 100) 
+							: 20,
+						blurColor: typeof region.blurColor === "string" ? region.blurColor : undefined,
 					};
 				})
 		: [];
@@ -568,15 +618,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		showCursor: typeof editor.showCursor === "boolean" ? editor.showCursor : true,
 		loopCursor: typeof editor.loopCursor === "boolean" ? editor.loopCursor : false,
 		cursorStyle:
-			editor.cursorStyle === "dot" ||
-			editor.cursorStyle === "figma" ||
-			editor.cursorStyle === "mono" ||
-			editor.cursorStyle === "tahoe" ||
-			editor.cursorStyle === "lavender" ||
-			editor.cursorStyle === "parched" ||
-			editor.cursorStyle === "chooper" ||
-			editor.cursorStyle === "amongus" ||
-			editor.cursorStyle === "turtle"
+			typeof editor.cursorStyle === "string" && editor.cursorStyle.trim().length > 0
 				? editor.cursorStyle
 				: DEFAULT_CURSOR_STYLE,
 		cursorSize: isFiniteNumber(editor.cursorSize)
@@ -585,6 +627,12 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		cursorSmoothing: isFiniteNumber(editor.cursorSmoothing)
 			? clamp(editor.cursorSmoothing, 0, 2)
 			: DEFAULT_CURSOR_SMOOTHING,
+		zoomSmoothness: isFiniteNumber((editor as any).zoomSmoothness)
+			? clamp((editor as any).zoomSmoothness as number, 0, 1)
+			: 0.5,
+		zoomClassicMode: typeof (editor as any).zoomClassicMode === 'boolean'
+			? (editor as any).zoomClassicMode
+			: false,
 		cursorMotionBlur: isFiniteNumber((editor as Partial<ProjectEditorState>).cursorMotionBlur)
 			? clamp((editor as Partial<ProjectEditorState>).cursorMotionBlur as number, 0, 2)
 			: DEFAULT_CURSOR_MOTION_BLUR,
@@ -601,6 +649,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			: DEFAULT_CURSOR_SWAY,
 		borderRadius: typeof editor.borderRadius === "number" ? editor.borderRadius : 12.5,
 		padding: isFiniteNumber(editor.padding) ? clamp(editor.padding, 0, 100) : 20,
+		frame: typeof editor.frame === "string" ? editor.frame : null,
 		cropRegion: {
 			x: cropX,
 			y: cropY,
@@ -673,6 +722,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				isCustomAspectRatio(editor.aspectRatio))
 				? (editor.aspectRatio as AspectRatio)
 				: "16:9",
+		exportEncodingMode: normalizeExportEncodingMode(editor.exportEncodingMode),
+		exportBackendPreference: normalizeExportBackendPreference(editor.exportBackendPreference),
+		exportPipelineModel: normalizeExportPipelineModel(editor.exportPipelineModel),
 		exportQuality:
 			editor.exportQuality === "medium" ||
 			editor.exportQuality === "good" ||
@@ -680,6 +732,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			editor.exportQuality === "source"
 				? editor.exportQuality
 				: "good",
+		mp4FrameRate: normalizeExportMp4FrameRate(editor.mp4FrameRate),
 		exportFormat: editor.exportFormat === "gif" ? "gif" : "mp4",
 		gifFrameRate:
 			editor.gifFrameRate === 15 ||

@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useMemo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Trash2, Type, Image as ImageIcon, Upload, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, ChevronDown, Info } from "lucide-react";
+import { Trash2, Type, Image as ImageIcon, Upload, Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, ChevronDown, Info, SquareDashed } from "lucide-react";
 import { toast } from "sonner";
 import Block from '@uiw/react-color-block';
 import type { AnnotationRegion, AnnotationType, ArrowDirection, FigureData } from "./types";
@@ -21,6 +21,8 @@ interface AnnotationSettingsPanelProps {
   onTypeChange: (type: AnnotationType) => void;
   onStyleChange: (style: Partial<AnnotationRegion['style']>) => void;
   onFigureDataChange?: (figureData: FigureData) => void;
+  onBlurIntensityChange?: (intensity: number) => void;
+  onBlurColorChange?: (color: string) => void;
   onDelete: () => void;
 }
 
@@ -43,6 +45,8 @@ export function AnnotationSettingsPanel({
   onTypeChange,
   onStyleChange,
   onFigureDataChange,
+  onBlurIntensityChange,
+  onBlurColorChange,
   onDelete,
 }: AnnotationSettingsPanelProps) {
   const t = useScopedT('editor');
@@ -128,7 +132,7 @@ export function AnnotationSettingsPanel({
         
         {/* Type Selector */}
         <Tabs value={annotation.type} onValueChange={(value) => onTypeChange(value as AnnotationType)} className="mb-6">
-          <TabsList className="mb-4 bg-white/5 border border-white/5 p-1 w-full grid grid-cols-3 h-auto rounded-xl">
+          <TabsList className="mb-4 bg-white/5 border border-white/5 p-1 w-full grid grid-cols-4 h-auto rounded-xl">
             <TabsTrigger value="text" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 py-2 rounded-lg transition-all gap-2">
               <Type className="w-4 h-4" />
               {t('annotations.text')}
@@ -142,6 +146,10 @@ export function AnnotationSettingsPanel({
                 <path d="M4 12h16m0 0l-6-6m6 6l-6 6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               {t('annotations.arrow')}
+            </TabsTrigger>
+            <TabsTrigger value="blur" className="data-[state=active]:bg-[#2563EB] data-[state=active]:text-white text-slate-400 py-2 rounded-lg transition-all gap-2">
+              <SquareDashed className="w-4 h-4" />
+              {t('annotations.blur')}
             </TabsTrigger>
           </TabsList>
 
@@ -497,6 +505,95 @@ export function AnnotationSettingsPanel({
                   />
                 </PopoverContent>
               </Popover>
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="blur" className="mt-0 space-y-4">
+            <div className="p-4 bg-white/5 rounded-xl border border-white/10 flex flex-col items-center">
+              <div className="w-full space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-200">
+                    {t('annotations.blurStrength', undefined, { strength: annotation.blurIntensity ?? 20 })}
+                  </span>
+                </div>
+                <Slider
+                  value={[annotation.blurIntensity ?? 20]}
+                  onValueChange={([value]) => onBlurIntensityChange?.(value)}
+                  min={1}
+                  max={100}
+                  step={1}
+                  className="w-full"
+                />
+              </div>
+
+              <div className="w-full space-y-3 mt-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-slate-200">
+                    {t('annotations.solidColor', 'Solid Color (Censorship)')}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => onBlurColorChange?.('')}
+                    className={cn(
+                      "w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all",
+                      !annotation.blurColor || annotation.blurColor === 'transparent' ? "border-[#2563EB] scale-110" : "border-transparent hover:border-white/20"
+                    )}
+                    title={t('annotations.none', 'None')}
+                  >
+                    <div className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center overflow-hidden relative">
+                       <div className="absolute w-full h-0.5 bg-red-500 rotate-45" />
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => onBlurColorChange?.('#000000')}
+                    className={cn(
+                      "w-8 h-8 rounded-full border-2 transition-all bg-black",
+                      annotation.blurColor === '#000000' ? "border-[#2563EB] scale-110" : "border-transparent hover:border-white/20"
+                    )}
+                    title="Black"
+                  />
+                  <button
+                    onClick={() => onBlurColorChange?.('#FFFFFF')}
+                    className={cn(
+                      "w-8 h-8 rounded-full border-2 transition-all bg-white",
+                      annotation.blurColor === '#FFFFFF' ? "border-[#2563EB] scale-110" : "border-transparent hover:border-white/20"
+                    )}
+                    title="White"
+                  />
+                  
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        className={cn(
+                          "w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center overflow-hidden relative",
+                          annotation.blurColor && !['#000000', '#FFFFFF', 'transparent', ''].includes(annotation.blurColor) ? "border-[#2563EB] scale-110" : "border-transparent hover:border-white/20"
+                        )}
+                        style={{ backgroundColor: (annotation.blurColor && !['#000000', '#FFFFFF', 'transparent', ''].includes(annotation.blurColor)) ? annotation.blurColor : 'transparent' }}
+                        title="Custom Color"
+                      >
+                        {(!annotation.blurColor || ['#000000', '#FFFFFF', 'transparent', ''].includes(annotation.blurColor)) && (
+                          <div className="w-full h-full flex items-center justify-center bg-white/5">
+                            <div className="w-full h-full bg-gradient-to-tr from-red-500 via-green-500 to-blue-500 opacity-50" />
+                          </div>
+                        )}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[260px] p-3 bg-[#1a1a1c] border border-white/10 rounded-xl shadow-xl">
+                      <Block
+                        color={annotation.blurColor || '#2563EB'}
+                        colors={colorPalette}
+                        onChange={(color) => {
+                          onBlurColorChange?.(color.hex);
+                        }}
+                        style={{
+                          borderRadius: '8px',
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
             </div>
           </TabsContent>
         </Tabs>
