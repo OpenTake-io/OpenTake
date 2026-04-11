@@ -224,6 +224,7 @@ interface SettingsPanelProps {
 	onAnnotationStyleChange?: (id: string, style: Partial<AnnotationRegion["style"]>) => void;
 	onAnnotationFigureDataChange?: (id: string, figureData: FigureData) => void;
 	onAnnotationBlurIntensityChange?: (id: string, intensity: number) => void;
+	onAnnotationBlurColorChange?: (id: string, color: string) => void;
 	onAnnotationDelete?: (id: string) => void;
 	autoCaptions?: CaptionCue[];
 	autoCaptionSettings?: AutoCaptionSettings;
@@ -572,6 +573,7 @@ export function SettingsPanel({
 	onAnnotationStyleChange,
 	onAnnotationFigureDataChange,
 	onAnnotationBlurIntensityChange,
+	onAnnotationBlurColorChange,
 	onAnnotationDelete,
 	autoCaptions = [],
 	autoCaptionSettings = DEFAULT_AUTO_CAPTION_SETTINGS,
@@ -1306,6 +1308,11 @@ export function SettingsPanel({
 				onBlurIntensityChange={
 					onAnnotationBlurIntensityChange
 						? (intensity) => onAnnotationBlurIntensityChange(selectedAnnotation.id, intensity)
+						: undefined
+				}
+				onBlurColorChange={
+					onAnnotationBlurColorChange
+						? (color) => onAnnotationBlurColorChange(selectedAnnotation.id, color)
 						: undefined
 				}
 				onDelete={() => onAnnotationDelete(selectedAnnotation.id)}

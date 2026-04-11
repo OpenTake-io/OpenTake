@@ -1,5 +1,4 @@
-import type { AnnotationRegion, ArrowDirection } from "@/components/video-editor/types";
-import { BLUR_ANNOTATION_STRENGTH } from "@/components/video-editor/types";
+import { BLUR_ANNOTATION_STRENGTH, type AnnotationRegion, type ArrowDirection } from "@/components/video-editor/types";
 
 
 export interface AnnotationRenderAssets {
@@ -372,13 +371,14 @@ export async function renderAnnotations(
         break;
 
       case "blur": {
-        const blurStrength = BLUR_ANNOTATION_STRENGTH * scaleFactor;
+        const blurStrength = (annotation.blurIntensity ?? BLUR_ANNOTATION_STRENGTH) * scaleFactor;
         const padding = Math.ceil(blurStrength * 2);
         
         ctx.save();
         
         ctx.beginPath();
-        ctx.rect(x, y, width, height);
+        const borderRadius = (annotation.style.borderRadius ?? 0) * scaleFactor;
+        ctx.roundRect(x, y, width, height, borderRadius);
         ctx.clip();
         
         const sx = Math.max(0, x - padding);
@@ -396,6 +396,12 @@ export async function renderAnnotations(
             
             ctx.filter = `blur(${blurStrength}px)`;
             ctx.drawImage(buffer, sx, sy);
+
+            if (annotation.blurColor && annotation.blurColor !== "transparent") {
+              ctx.filter = "none";
+              ctx.fillStyle = annotation.blurColor;
+              ctx.fillRect(x, y, width, height);
+            }
           }
         }
         
