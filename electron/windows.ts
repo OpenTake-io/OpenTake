@@ -520,9 +520,9 @@ export function createHudOverlayWindow(): BrowserWindow {
 			);
 			if (!onScreen) {
 				hudUserPosition = null;
-				applyHudOverlayBounds(hudOverlayExpanded);
 			}
 		}
+		applyHudOverlayBounds(hudOverlayExpanded);
 	});
 
 	if (VITE_DEV_SERVER_URL) {
