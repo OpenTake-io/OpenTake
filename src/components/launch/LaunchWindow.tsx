@@ -63,6 +63,9 @@ const LOCALE_LABELS: Record<string, string> = {
 };
 
 const COUNTDOWN_OPTIONS = [0, 3, 5, 10];
+const WEBCAM_PREVIEW_DRAG_THRESHOLD = 6;
+const DEFAULT_WEBCAM_PREVIEW_OFFSET = { x: 0, y: 0 };
+const DEFAULT_RECORDING_HUD_OFFSET = { x: 0, y: 0 };
 
 function IconButton({
 	onClick,
@@ -140,7 +143,9 @@ function MicDeviceRow({
 			className={`${styles.ddItem} ${selected ? styles.ddItemSelected : ""}`}
 			onClick={onSelect}
 		>
-			<span className="shrink-0">{selected ? <Mic size={16} /> : <MicOff size={16} />}</span>
+			<span className="shrink-0">
+				{selected ? <Mic size={16} /> : <MicOff size={16} />}
+			</span>
 			<span className="truncate flex-1">{device.label}</span>
 			<AudioLevelMeter level={level} className="w-16 shrink-0" />
 		</button>
@@ -184,15 +189,32 @@ export function LaunchWindow() {
 	const [activeDropdown, setActiveDropdown] = useState<
 		"none" | "sources" | "more" | "mic" | "countdown" | "webcam"
 	>("none");
-	const [projectLibraryEntries, setProjectLibraryEntries] = useState<ProjectLibraryEntry[]>([]);
+	const [projectLibraryEntries, setProjectLibraryEntries] = useState<
+		ProjectLibraryEntry[]
+	>([]);
 	const [projectBrowserOpen, setProjectBrowserOpen] = useState(false);
 	const [sources, setSources] = useState<DesktopSource[]>([]);
 	const [sourcesLoading, setSourcesLoading] = useState(false);
 	const [hideHudFromCapture, setHideHudFromCapture] = useState(true);
+	const [showFloatingWebcamPreview, setShowFloatingWebcamPreview] =
+		useState(true);
+	const [webcamPreviewOffset, setWebcamPreviewOffset] = useState(
+		DEFAULT_WEBCAM_PREVIEW_OFFSET,
+	);
+	const [recordingHudOffset, setRecordingHudOffset] = useState(
+		DEFAULT_RECORDING_HUD_OFFSET,
+	);
 	const [platform, setPlatform] = useState<string | null>(null);
 	const [appVersion, setAppVersion] = useState<string | null>(null);
 	const [updateStatus, setUpdateStatus] = useState<{
-		status: "idle" | "checking" | "up-to-date" | "available" | "downloading" | "ready" | "error";
+		status:
+			| "idle"
+			| "checking"
+			| "up-to-date"
+			| "available"
+			| "downloading"
+			| "ready"
+			| "error";
 		currentVersion: string;
 		availableVersion: string | null;
 		detail?: string;
@@ -207,15 +229,59 @@ export function LaunchWindow() {
 	const hudBarRef = useRef<HTMLDivElement>(null);
 	const moreButtonRef = useRef<HTMLButtonElement | null>(null);
 	const webcamPreviewRef = useRef<HTMLVideoElement | null>(null);
-	const isDraggingRef = useRef(false);
+	const recordingWebcamPreviewRef = useRef<HTMLVideoElement | null>(null);
+	const recordingWebcamPreviewContainerRef = useRef<HTMLDivElement | null>(
+		null,
+	);
+	const previewStreamRef = useRef<MediaStream | null>(null);
+	const webcamPreviewDragStartRef = useRef<{
+		pointerId: number;
+		startX: number;
+		startY: number;
+		originX: number;
+		originY: number;
+		initialLeft: number;
+		initialTop: number;
+		previewWidth: number;
+		previewHeight: number;
+		dragging: boolean;
+	} | null>(null);
+	const hudDragStartRef = useRef<
+		| {
+				pointerId: number;
+				mode: "webcam-preview";
+				startX: number;
+				startY: number;
+				originX: number;
+				originY: number;
+				initialLeft: number;
+				initialTop: number;
+				hudWidth: number;
+				hudHeight: number;
+		  }
+		| {
+				pointerId: number;
+				mode: "overlay";
+		  }
+		| null
+	>(null);
+	const isHudDraggingRef = useRef(false);
+	const isWebcamPreviewDraggingRef = useRef(false);
 
 	const micDropdownOpen = activeDropdown === "mic";
 	const webcamDropdownOpen = activeDropdown === "webcam";
 	const showWebcamControls = webcamEnabled && !recording;
-	const { devices, selectedDeviceId, setSelectedDeviceId } = useMicrophoneDevices(
-		microphoneEnabled || micDropdownOpen,
-		microphoneDeviceId,
-	);
+	const showRecordingWebcamPreview =
+		webcamEnabled && showFloatingWebcamPreview;
+	const shouldStreamWebcamPreview =
+		webcamEnabled &&
+		(showFloatingWebcamPreview ||
+			(showWebcamControls && webcamDropdownOpen));
+	const { devices, selectedDeviceId, setSelectedDeviceId } =
+		useMicrophoneDevices(
+			microphoneEnabled || micDropdownOpen,
+			microphoneDeviceId,
+		);
 	const {
 		devices: videoDevices,
 		selectedDeviceId: selectedVideoDeviceId,
@@ -229,7 +295,9 @@ export function LaunchWindow() {
 			return;
 		}
 
-		setMicrophoneDeviceId(selectedDeviceId === "default" ? undefined : selectedDeviceId);
+		setMicrophoneDeviceId(
+			selectedDeviceId === "default" ? undefined : selectedDeviceId,
+		);
 	}, [selectedDeviceId, setMicrophoneDeviceId]);
 
 	useEffect(() => {
@@ -239,43 +307,294 @@ export function LaunchWindow() {
 	}, [selectedVideoDeviceId, setWebcamDeviceId]);
 
 	useEffect(() => {
+		if (!webcamEnabled) {
+			setWebcamPreviewOffset(DEFAULT_WEBCAM_PREVIEW_OFFSET);
+			setRecordingHudOffset(DEFAULT_RECORDING_HUD_OFFSET);
+			webcamPreviewDragStartRef.current = null;
+			isWebcamPreviewDraggingRef.current = false;
+			setShowFloatingWebcamPreview(true);
+		}
+	}, [webcamEnabled]);
+
+	useEffect(() => {
+		if (!showRecordingWebcamPreview) {
+			setRecordingHudOffset(DEFAULT_RECORDING_HUD_OFFSET);
+		}
+	}, [showRecordingWebcamPreview]);
+
+	const handleWebcamPreviewPointerDown = (
+		event: React.PointerEvent<HTMLDivElement>,
+	) => {
+		if (event.button !== 0) {
+			return;
+		}
+
+		const previewRect = event.currentTarget.getBoundingClientRect();
+
+		event.preventDefault();
+		window.electronAPI?.hudOverlaySetIgnoreMouse?.(false);
+		webcamPreviewDragStartRef.current = {
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			startY: event.clientY,
+			originX: webcamPreviewOffset.x,
+			originY: webcamPreviewOffset.y,
+			initialLeft: previewRect.left,
+			initialTop: previewRect.top,
+			previewWidth: previewRect.width,
+			previewHeight: previewRect.height,
+			dragging: false,
+		};
+		event.currentTarget.setPointerCapture(event.pointerId);
+	};
+
+	const handleWebcamPreviewPointerMove = (
+		event: React.PointerEvent<HTMLDivElement>,
+	) => {
+		const dragState = webcamPreviewDragStartRef.current;
+		if (!dragState || dragState.pointerId !== event.pointerId) {
+			return;
+		}
+
+		const deltaX = event.clientX - dragState.startX;
+		const deltaY = event.clientY - dragState.startY;
+
+		if (
+			!dragState.dragging &&
+			Math.hypot(deltaX, deltaY) < WEBCAM_PREVIEW_DRAG_THRESHOLD
+		) {
+			return;
+		}
+
+		if (!dragState.dragging) {
+			dragState.dragging = true;
+			isWebcamPreviewDraggingRef.current = true;
+		}
+
+		const viewportWidth = Math.max(
+			window.innerWidth,
+			window.screen?.width ?? 0,
+		);
+		const viewportHeight = Math.max(
+			window.innerHeight,
+			window.screen?.height ?? 0,
+		);
+		const unclampedLeft = dragState.initialLeft + deltaX;
+		const unclampedTop = dragState.initialTop + deltaY;
+		const clampedLeft = Math.min(
+			Math.max(0, unclampedLeft),
+			Math.max(0, viewportWidth - dragState.previewWidth),
+		);
+		const clampedTop = Math.min(
+			Math.max(0, unclampedTop),
+			Math.max(0, viewportHeight - dragState.previewHeight),
+		);
+
+		setWebcamPreviewOffset({
+			x: dragState.originX + (clampedLeft - dragState.initialLeft),
+			y: dragState.originY + (clampedTop - dragState.initialTop),
+		});
+	};
+
+	const handleWebcamPreviewPointerUp = (
+		event: React.PointerEvent<HTMLDivElement>,
+	) => {
+		const dragState = webcamPreviewDragStartRef.current;
+		if (!dragState || dragState.pointerId !== event.pointerId) {
+			return;
+		}
+
+		const wasDragging = dragState.dragging;
+		webcamPreviewDragStartRef.current = null;
+		isWebcamPreviewDraggingRef.current = false;
+		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+			event.currentTarget.releasePointerCapture(event.pointerId);
+		}
+		if (wasDragging) {
+			window.electronAPI?.hudOverlaySetIgnoreMouse?.(true);
+		}
+	};
+
+	const handleHudBarPointerDown = (
+		event: React.PointerEvent<HTMLDivElement>,
+	) => {
+		if (event.button !== 0) {
+			return;
+		}
+
+		event.preventDefault();
+		event.currentTarget.setPointerCapture(event.pointerId);
+		isHudDraggingRef.current = true;
+		window.electronAPI?.hudOverlaySetIgnoreMouse?.(false);
+
+		if (showRecordingWebcamPreview && hudBarRef.current) {
+			const hudRect = hudBarRef.current.getBoundingClientRect();
+			hudDragStartRef.current = {
+				pointerId: event.pointerId,
+				mode: "webcam-preview",
+				startX: event.clientX,
+				startY: event.clientY,
+				originX: recordingHudOffset.x,
+				originY: recordingHudOffset.y,
+				initialLeft: hudRect.left,
+				initialTop: hudRect.top,
+				hudWidth: hudRect.width,
+				hudHeight: hudRect.height,
+			};
+			return;
+		}
+
+		hudDragStartRef.current = {
+			pointerId: event.pointerId,
+			mode: "overlay",
+		};
+		window.electronAPI?.hudOverlayDrag?.(
+			"start",
+			event.screenX,
+			event.screenY,
+		);
+	};
+
+	const handleHudBarPointerMove = (
+		event: React.PointerEvent<HTMLDivElement>,
+	) => {
+		const dragState = hudDragStartRef.current;
+		if (!dragState || dragState.pointerId !== event.pointerId) {
+			return;
+		}
+
+		if (dragState.mode === "webcam-preview") {
+			const deltaX = event.clientX - dragState.startX;
+			const deltaY = event.clientY - dragState.startY;
+			const viewportWidth = Math.max(
+				window.innerWidth,
+				window.screen?.width ?? 0,
+			);
+			const viewportHeight = Math.max(
+				window.innerHeight,
+				window.screen?.height ?? 0,
+			);
+			const unclampedLeft = dragState.initialLeft + deltaX;
+			const unclampedTop = dragState.initialTop + deltaY;
+			const clampedLeft = Math.min(
+				Math.max(0, unclampedLeft),
+				Math.max(0, viewportWidth - dragState.hudWidth),
+			);
+			const clampedTop = Math.min(
+				Math.max(0, unclampedTop),
+				Math.max(0, viewportHeight - dragState.hudHeight),
+			);
+
+			setRecordingHudOffset({
+				x: dragState.originX + (clampedLeft - dragState.initialLeft),
+				y: dragState.originY + (clampedTop - dragState.initialTop),
+			});
+			return;
+		}
+
+		window.electronAPI?.hudOverlayDrag?.(
+			"move",
+			event.screenX,
+			event.screenY,
+		);
+	};
+
+	const handleHudBarPointerUp = (
+		event: React.PointerEvent<HTMLDivElement>,
+	) => {
+		const dragState = hudDragStartRef.current;
+		if (!dragState || dragState.pointerId !== event.pointerId) {
+			return;
+		}
+
+		if (dragState.mode === "overlay") {
+			window.electronAPI?.hudOverlayDrag?.("end", 0, 0);
+		}
+
+		hudDragStartRef.current = null;
+		const wasDragging = isHudDraggingRef.current;
+		isHudDraggingRef.current = false;
+		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+			event.currentTarget.releasePointerCapture(event.pointerId);
+		}
+		if (wasDragging) {
+			window.electronAPI?.hudOverlaySetIgnoreMouse?.(true);
+		}
+	};
+
+	const attachPreviewStreamToNode = useCallback(
+		(videoElement: HTMLVideoElement | null) => {
+			const previewStream = previewStreamRef.current;
+			if (
+				!videoElement ||
+				!previewStream ||
+				videoElement.srcObject === previewStream
+			) {
+				return;
+			}
+
+			videoElement.srcObject = previewStream;
+			const playPromise = videoElement.play();
+			if (playPromise) {
+				playPromise.catch(() => {
+					// Ignore autoplay interruptions while the preview element mounts.
+				});
+			}
+		},
+		[],
+	);
+
+	const setWebcamPreviewNode = useCallback(
+		(node: HTMLVideoElement | null) => {
+			webcamPreviewRef.current = node;
+			attachPreviewStreamToNode(node);
+		},
+		[attachPreviewStreamToNode],
+	);
+
+	const setRecordingWebcamPreviewNode = useCallback(
+		(node: HTMLVideoElement | null) => {
+			recordingWebcamPreviewRef.current = node;
+			attachPreviewStreamToNode(node);
+		},
+		[attachPreviewStreamToNode],
+	);
+
+	useEffect(() => {
 		let mounted = true;
-		let previewStream: MediaStream | null = null;
 
 		const startPreview = async () => {
-			if (!showWebcamControls || !webcamPreviewRef.current) {
+			if (!shouldStreamWebcamPreview) {
 				return;
 			}
 
 			try {
-				previewStream = await navigator.mediaDevices.getUserMedia({
-					video: webcamDeviceId
-						? {
-								deviceId: { exact: webcamDeviceId },
-								width: { ideal: 320 },
-								height: { ideal: 320 },
-								frameRate: { ideal: 24, max: 30 },
-							}
-						: {
-								width: { ideal: 320 },
-								height: { ideal: 320 },
-								frameRate: { ideal: 24, max: 30 },
-							},
-					audio: false,
-				});
+				const previewStream = await navigator.mediaDevices.getUserMedia(
+					{
+						video: webcamDeviceId
+							? {
+									deviceId: { exact: webcamDeviceId },
+									width: { ideal: 320 },
+									height: { ideal: 320 },
+									frameRate: { ideal: 24, max: 30 },
+								}
+							: {
+									width: { ideal: 320 },
+									height: { ideal: 320 },
+									frameRate: { ideal: 24, max: 30 },
+								},
+						audio: false,
+					},
+				);
 
-				if (!mounted || !webcamPreviewRef.current) {
+				if (!mounted) {
 					previewStream.getTracks().forEach((track) => track.stop());
 					return;
 				}
 
-				webcamPreviewRef.current.srcObject = previewStream;
-				const playPromise = webcamPreviewRef.current.play();
-				if (playPromise) {
-					playPromise.catch(() => {
-						// Ignore autoplay interruptions while the preview element mounts.
-					});
-				}
+				previewStreamRef.current = previewStream;
+				attachPreviewStreamToNode(webcamPreviewRef.current);
+				attachPreviewStreamToNode(recordingWebcamPreviewRef.current);
 			} catch (error) {
 				console.warn("Failed to start live webcam preview:", error);
 			}
@@ -285,13 +604,22 @@ export function LaunchWindow() {
 
 		return () => {
 			mounted = false;
-			if (webcamPreviewRef.current) {
-				webcamPreviewRef.current.pause();
-				webcamPreviewRef.current.srcObject = null;
-			}
+			const previewNode = webcamPreviewRef.current;
+			const recordingPreviewNode = recordingWebcamPreviewRef.current;
+			const previewStream = previewStreamRef.current;
+
+			[previewNode, recordingPreviewNode]
+				.filter((node): node is HTMLVideoElement => Boolean(node))
+				.forEach((videoElement) => {
+					videoElement.pause();
+					videoElement.srcObject = null;
+				});
 			previewStream?.getTracks().forEach((track) => track.stop());
+			if (previewStreamRef.current === previewStream) {
+				previewStreamRef.current = null;
+			}
 		};
-	}, [showWebcamControls, webcamDeviceId]);
+	}, [attachPreviewStreamToNode, shouldStreamWebcamPreview, webcamDeviceId]);
 
 	useEffect(() => {
 		let timer: NodeJS.Timeout | null = null;
@@ -310,7 +638,12 @@ export function LaunchWindow() {
 				}
 				timer = setInterval(() => {
 					if (recordingStart) {
-						setElapsed(Math.floor((Date.now() - recordingStart - pausedTotal) / 1000));
+						setElapsed(
+							Math.floor(
+								(Date.now() - recordingStart - pausedTotal) /
+									1000,
+							),
+						);
 					}
 				}, 1000);
 			}
@@ -337,7 +670,9 @@ export function LaunchWindow() {
 	useEffect(() => {
 		let mounted = true;
 
-		const applySelectedSource = (source: { name?: string } | null | undefined) => {
+		const applySelectedSource = (
+			source: { name?: string } | null | undefined,
+		) => {
 			if (!mounted) {
 				return;
 			}
@@ -399,7 +734,8 @@ export function LaunchWindow() {
 
 		const refreshUpdateStatus = async () => {
 			try {
-				const summary = await window.electronAPI.getUpdateStatusSummary();
+				const summary =
+					await window.electronAPI.getUpdateStatusSummary();
 				if (mounted) {
 					setUpdateStatus(summary);
 				}
@@ -439,12 +775,16 @@ export function LaunchWindow() {
 		let cancelled = false;
 		const loadHudCaptureProtection = async () => {
 			try {
-				const result = await window.electronAPI.getHudOverlayCaptureProtection();
+				const result =
+					await window.electronAPI.getHudOverlayCaptureProtection();
 				if (!cancelled && result.success) {
 					setHideHudFromCapture(result.enabled);
 				}
 			} catch (error) {
-				console.error("Failed to load HUD capture protection state:", error);
+				console.error(
+					"Failed to load HUD capture protection state:",
+					error,
+				);
 			}
 		};
 		void loadHudCaptureProtection();
@@ -454,47 +794,82 @@ export function LaunchWindow() {
 	}, []);
 
 	useEffect(() => {
-		const expanded = activeDropdown !== "none" || projectBrowserOpen;
+		const expanded =
+			activeDropdown !== "none" ||
+			projectBrowserOpen ||
+			showRecordingWebcamPreview;
 		window.electronAPI.setHudOverlayExpanded(expanded);
 
 		return () => {
 			window.electronAPI.setHudOverlayExpanded(false);
 		};
-	}, [activeDropdown, projectBrowserOpen]);
+	}, [activeDropdown, projectBrowserOpen, showRecordingWebcamPreview]);
+
+	const reportHudSize = useCallback(() => {
+		const hudContent = hudContentRef.current;
+		const hudBar = hudBarRef.current;
+		if (!hudContent || !hudBar) {
+			return;
+		}
+
+		if (showRecordingWebcamPreview) {
+			const viewportWidth = Math.max(
+				window.innerWidth,
+				window.screen?.width ?? 0,
+			);
+			const viewportHeight = Math.max(
+				window.innerHeight,
+				window.screen?.height ?? 0,
+			);
+			window.electronAPI.setHudOverlayCompactWidth(
+				Math.ceil(viewportWidth),
+			);
+			window.electronAPI.setHudOverlayMeasuredHeight(
+				Math.ceil(viewportHeight),
+				true,
+			);
+			return;
+		}
+
+		const hudContentRect = hudContent.getBoundingClientRect();
+		const hudBarRect = hudBar.getBoundingClientRect();
+		const standardWidth = Math.max(
+			hudBarRect.width,
+			hudBar.scrollWidth,
+			hudContentRect.width,
+			hudContent.scrollWidth,
+		);
+		const standardHeight = Math.max(
+			hudContentRect.height,
+			hudContent.scrollHeight,
+		);
+
+		window.electronAPI.setHudOverlayCompactWidth(
+			Math.ceil(standardWidth + 24),
+		);
+		window.electronAPI.setHudOverlayMeasuredHeight(
+			Math.ceil(standardHeight + 24),
+			activeDropdown !== "none" || projectBrowserOpen,
+		);
+	}, [activeDropdown, projectBrowserOpen, showRecordingWebcamPreview]);
 
 	useEffect(() => {
 		const hudContent = hudContentRef.current;
 		const hudBar = hudBarRef.current;
+		const previewContainer = recordingWebcamPreviewContainerRef.current;
 		if (!hudContent || !hudBar || typeof ResizeObserver === "undefined") {
 			return;
 		}
 
 		let frameId = 0;
-		const reportHudSize = () => {
-			frameId = 0;
-			const measuredWidth = Math.ceil(
-				Math.max(
-					hudBar.getBoundingClientRect().width,
-					hudBar.scrollWidth,
-					hudContent.getBoundingClientRect().width,
-					hudContent.scrollWidth,
-				) + 24,
-			);
-			const measuredHeight = Math.ceil(
-				Math.max(hudContent.getBoundingClientRect().height, hudContent.scrollHeight) + 24,
-			);
-			window.electronAPI.setHudOverlayCompactWidth(measuredWidth);
-			window.electronAPI.setHudOverlayMeasuredHeight(
-				measuredHeight,
-				activeDropdown !== "none" || projectBrowserOpen,
-			);
-		};
-
 		const scheduleHudSizeReport = () => {
 			if (frameId !== 0) {
 				cancelAnimationFrame(frameId);
 			}
-			frameId = requestAnimationFrame(reportHudSize);
+			frameId = requestAnimationFrame(() => {
+				frameId = 0;
+				reportHudSize();
+			});
 		};
 
 		scheduleHudSizeReport();
@@ -504,6 +879,9 @@ export function LaunchWindow() {
 		});
 		resizeObserver.observe(hudContent);
 		resizeObserver.observe(hudBar);
+		if (previewContainer) {
+			resizeObserver.observe(previewContainer);
+		}
 
 		return () => {
 			resizeObserver.disconnect();
@@ -511,11 +889,14 @@ export function LaunchWindow() {
 				cancelAnimationFrame(frameId);
 			}
 		};
-	}, [activeDropdown, projectBrowserOpen]);
+	}, [reportHudSize]);
 
 	useEffect(() => {
 		const handleClick = (e: MouseEvent) => {
-			if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+			if (
+				dropdownRef.current &&
+				!dropdownRef.current.contains(e.target as Node)
+			) {
 				setActiveDropdown("none");
 				setProjectBrowserOpen(false);
 			}
@@ -536,13 +917,15 @@ export function LaunchWindow() {
 			setSources(
 				rawSources.map((s) => {
 					const isWindow = s.id.startsWith("window:");
-					const type = s.sourceType ?? (isWindow ? "window" : "screen");
+					const type =
+						s.sourceType ?? (isWindow ? "window" : "screen");
 					let displayName = s.name;
 					let appName = s.appName;
 					if (isWindow && !appName && s.name.includes(" — ")) {
 						const parts = s.name.split(" — ");
 						appName = parts[0]?.trim();
-						displayName = parts.slice(1).join(" — ").trim() || s.name;
+						displayName =
+							parts.slice(1).join(" — ").trim() || s.name;
 					} else if (isWindow && s.windowTitle) {
 						displayName = s.windowTitle;
 					}
@@ -565,7 +948,9 @@ export function LaunchWindow() {
 		}
 	}, []);
 
-	const toggleDropdown = (which: "sources" | "more" | "mic" | "countdown" | "webcam") => {
+	const toggleDropdown = (
+		which: "sources" | "more" | "mic" | "countdown" | "webcam",
+	) => {
 		setProjectBrowserOpen(false);
 		setActiveDropdown(activeDropdown === which ? "none" : which);
 		if (activeDropdown !== which && which === "sources") fetchSources();
@@ -578,7 +963,9 @@ export function LaunchWindow() {
 		setActiveDropdown("none");
 		window.electronAPI.showSourceHighlight?.({
 			...source,
-			name: source.appName ? `${source.appName} — ${source.name}` : source.name,
+			name: source.appName
+				? `${source.appName} — ${source.name}`
+				: source.name,
 			appName: source.appName,
 		});
 	};
@@ -617,7 +1004,8 @@ export function LaunchWindow() {
 
 	const openProjectFromLibrary = useCallback(async (projectPath: string) => {
 		try {
-			const result = await window.electronAPI.openProjectFileAtPath(projectPath);
+			const result =
+				await window.electronAPI.openProjectFileAtPath(projectPath);
 			if (result.canceled || !result.success) {
 				return;
 			}
@@ -645,7 +1033,10 @@ export function LaunchWindow() {
 		const nextValue = !hideHudFromCapture;
 		setHideHudFromCapture(nextValue);
 		try {
-			const result = await window.electronAPI.setHudOverlayCaptureProtection(nextValue);
+			const result =
+				await window.electronAPI.setHudOverlayCaptureProtection(
+					nextValue,
+				);
 			if (!result.success) {
 				setHideHudFromCapture(!nextValue);
 				return;
@@ -659,7 +1050,10 @@ export function LaunchWindow() {
 
 	const screenSources = sources.filter((s) => s.sourceType === "screen");
 	const windowSources = sources.filter((s) => s.sourceType === "window");
-	const hudStateTransition = { duration: 0.24, ease: [0.22, 1, 0.36, 1] as const };
+	const hudStateTransition = {
+		duration: 0.24,
+		ease: [0.22, 1, 0.36, 1] as const,
+	};
 
 	const toggleWebcam = () => {
 		if (recording) return;
@@ -673,18 +1067,29 @@ export function LaunchWindow() {
 	const updateButtonTitle = (() => {
 		switch (updateStatus.status) {
 			case "up-to-date":
-				return t("recording.update.upToDateTitle", "Recordly {{version}} is up to date.", {
-					version: updateStatus.currentVersion,
-				});
+				return t(
+					"recording.update.upToDateTitle",
+					"Recordly {{version}} is up to date.",
+					{
+						version: updateStatus.currentVersion,
+					},
+				);
 			case "available":
 			case "ready":
 				return updateStatus.availableVersion
-					? t("recording.update.availableTitle", "Recordly {{version}} is available.", {
-						version: updateStatus.availableVersion,
-					})
+					? t(
+							"recording.update.availableTitle",
+							"Recordly {{version}} is available.",
+							{
+								version: updateStatus.availableVersion,
+							},
+						)
 					: t("recording.update.availableGenericTitle");
 			case "downloading":
-				return updateStatus.detail ?? t("recording.update.downloadingTitle");
+				return (
+					updateStatus.detail ??
+					t("recording.update.downloadingTitle")
+				);
 			case "checking":
 				return t("recording.update.checkingTitle");
 			case "error":
@@ -700,7 +1105,9 @@ export function LaunchWindow() {
 				return <CheckCircle2 size={14} />;
 			case "checking":
 			case "downloading":
-				return <RefreshCw size={14} className={styles.updateBadgeSpin} />;
+				return (
+					<RefreshCw size={14} className={styles.updateBadgeSpin} />
+				);
 			default:
 				return <ArrowUpCircle size={14} />;
 		}
@@ -757,7 +1164,9 @@ export function LaunchWindow() {
 
 			<IconButton
 				title={
-					microphoneEnabled ? t("recording.disableMicrophone") : t("recording.enableMicrophone")
+					microphoneEnabled
+						? t("recording.disableMicrophone")
+						: t("recording.enableMicrophone")
 				}
 				className={microphoneEnabled ? styles.ibActive : ""}
 			>
@@ -771,10 +1180,18 @@ export function LaunchWindow() {
 				title={paused ? t("recording.resume") : t("recording.pause")}
 				className={paused ? styles.ibGreen : ""}
 			>
-				{paused ? <Play size={18} fill="currentColor" strokeWidth={0} /> : <Pause size={18} />}
+				{paused ? (
+					<Play size={18} fill="currentColor" strokeWidth={0} />
+				) : (
+					<Pause size={18} />
+				)}
 			</IconButton>
 
-			<IconButton onClick={toggleRecording} title={t("recording.stop")} className={styles.ibRed}>
+			<IconButton
+				onClick={toggleRecording}
+				title={t("recording.stop")}
+				className={styles.ibRed}
+			>
 				<Square size={16} fill="currentColor" strokeWidth={0} />
 			</IconButton>
 
@@ -800,7 +1217,10 @@ export function LaunchWindow() {
 				title={selectedSource}
 			>
 				<Monitor size={16} />
-				<ContentClamp className={styles.sourceLabel} truncateLength={36}>
+				<ContentClamp
+					className={styles.sourceLabel}
+					truncateLength={36}
+				>
 					{selectedSource}
 				</ContentClamp>
 				<ChevronUp
@@ -814,7 +1234,9 @@ export function LaunchWindow() {
 			<IconButton
 				onClick={toggleMicrophone}
 				title={
-					microphoneEnabled ? t("recording.disableMicrophone") : t("recording.enableMicrophone")
+					microphoneEnabled
+						? t("recording.disableMicrophone")
+						: t("recording.enableMicrophone")
 				}
 				className={microphoneEnabled ? styles.ibActive : ""}
 			>
@@ -823,7 +1245,11 @@ export function LaunchWindow() {
 
 			<IconButton
 				onClick={toggleWebcam}
-				title={webcamEnabled ? t("recording.disableWebcam") : t("recording.enableWebcam")}
+				title={
+					webcamEnabled
+						? t("recording.disableWebcam")
+						: t("recording.enableWebcam")
+				}
 				className={webcamEnabled ? styles.ibActive : ""}
 			>
 				{webcamEnabled ? <Video size={18} /> : <VideoOff size={18} />}
@@ -842,7 +1268,11 @@ export function LaunchWindow() {
 			<button
 				type="button"
 				className={`${styles.recBtn} ${styles.electronNoDrag}`}
-				onClick={hasSelectedSource ? toggleRecording : () => toggleDropdown("sources")}
+				onClick={
+					hasSelectedSource
+						? toggleRecording
+						: () => toggleDropdown("sources")
+				}
 				disabled={countdownActive}
 				title={t("recording.record")}
 			>
@@ -879,20 +1309,31 @@ export function LaunchWindow() {
 		<div
 			className="w-full flex items-end justify-center bg-transparent overflow-visible pb-5"
 			style={{ height: "100vh" }}
-			ref={dropdownRef}
 		>
 			<div
 				ref={hudContentRef}
 				className="flex flex-col items-center overflow-visible"
-				onMouseEnter={() => window.electronAPI?.hudOverlaySetIgnoreMouse?.(false)}
+				onMouseEnter={() =>
+					window.electronAPI?.hudOverlaySetIgnoreMouse?.(false)
+				}
 				onMouseLeave={() => {
-					if (!isDraggingRef.current) {
+					if (
+						!isHudDraggingRef.current &&
+						!isWebcamPreviewDraggingRef.current &&
+						!webcamPreviewDragStartRef.current
+					) {
 						window.electronAPI?.hudOverlaySetIgnoreMouse?.(true);
 					}
 				}}
 			>
 				{/* Only the visible HUD content should become interactive. */}
-				<div className={styles.menuArea}>
+				<div
+					className={styles.menuArea}
+					ref={dropdownRef}
+					style={{
+						transform: `translate(${recordingHudOffset.x}px, ${recordingHudOffset.y}px)`,
+					}}
+				>
 					{projectBrowserOpen ? (
 						<div className={styles.electronNoDrag}>
 							<ProjectBrowserDialog
@@ -907,7 +1348,9 @@ export function LaunchWindow() {
 						</div>
 					) : null}
 					{activeDropdown !== "none" && (
-						<div className={`${styles.menuCard} ${styles.electronNoDrag}`}>
+						<div
+							className={`${styles.menuCard} ${styles.electronNoDrag}`}
+						>
 							{activeDropdown === "sources" && (
 								<>
 									{sourcesLoading ? (
@@ -918,46 +1361,96 @@ export function LaunchWindow() {
 										<>
 											{screenSources.length > 0 && (
 												<>
-													<div className={styles.ddLabel}>{t("recording.screens")}</div>
-													{screenSources.map((source) => (
-														<DropdownItem
-															key={source.id}
-															icon={<Monitor size={16} />}
-															selected={selectedSource === source.name}
-															onClick={() => handleSourceSelect(source)}
-														>
-															{source.name}
-														</DropdownItem>
-													))}
+													<div
+														className={
+															styles.ddLabel
+														}
+													>
+														{t("recording.screens")}
+													</div>
+													{screenSources.map(
+														(source) => (
+															<DropdownItem
+																key={source.id}
+																icon={
+																	<Monitor
+																		size={
+																			16
+																		}
+																	/>
+																}
+																selected={
+																	selectedSource ===
+																	source.name
+																}
+																onClick={() =>
+																	handleSourceSelect(
+																		source,
+																	)
+																}
+															>
+																{source.name}
+															</DropdownItem>
+														),
+													)}
 												</>
 											)}
 											{windowSources.length > 0 && (
 												<>
 													<div
-														className={styles.ddLabel}
-														style={screenSources.length > 0 ? { marginTop: 4 } : undefined}
+														className={
+															styles.ddLabel
+														}
+														style={
+															screenSources.length >
+															0
+																? {
+																		marginTop: 4,
+																	}
+																: undefined
+														}
 													>
 														{t("recording.windows")}
 													</div>
-													{windowSources.map((source) => (
-														<DropdownItem
-															key={source.id}
-															icon={<AppWindow size={16} />}
-															selected={selectedSource === source.name}
-															onClick={() => handleSourceSelect(source)}
-														>
-															{source.appName && source.appName !== source.name
-																? `${source.appName} — ${source.name}`
-																: source.name}
-														</DropdownItem>
-													))}
+													{windowSources.map(
+														(source) => (
+															<DropdownItem
+																key={source.id}
+																icon={
+																	<AppWindow
+																		size={
+																			16
+																		}
+																	/>
+																}
+																selected={
+																	selectedSource ===
+																	source.name
+																}
+																onClick={() =>
+																	handleSourceSelect(
+																		source,
+																	)
+																}
+															>
+																{source.appName &&
+																source.appName !==
+																	source.name
+																	? `${source.appName} — ${source.name}`
+																	: source.name}
+															</DropdownItem>
+														),
+													)}
 												</>
 											)}
-											{screenSources.length === 0 && windowSources.length === 0 && (
-												<div className="text-center text-xs text-[#6b6b78] py-4">
-													{t("recording.noSourcesFound")}
-												</div>
-											)}
+											{screenSources.length === 0 &&
+												windowSources.length === 0 && (
+													<div className="text-center text-xs text-[#6b6b78] py-4">
+														{t(
+															"recording.noSourcesFound",
+														)}
+													</div>
+												)}
 										</>
 									)}
 								</>
@@ -965,12 +1458,22 @@ export function LaunchWindow() {
 
 							{activeDropdown === "mic" && (
 								<>
-									<div className={styles.ddLabel}>{t("recording.microphone")}</div>
+									<div className={styles.ddLabel}>
+										{t("recording.microphone")}
+									</div>
 									<DropdownItem
-										icon={systemAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+										icon={
+											systemAudioEnabled ? (
+												<Volume2 size={16} />
+											) : (
+												<VolumeX size={16} />
+											)
+										}
 										selected={systemAudioEnabled}
 										onClick={() => {
-											setSystemAudioEnabled(!systemAudioEnabled);
+											setSystemAudioEnabled(
+												!systemAudioEnabled,
+											);
 										}}
 									>
 										{systemAudioEnabled
@@ -999,14 +1502,21 @@ export function LaunchWindow() {
 											device={device}
 											selected={
 												microphoneEnabled &&
-												(microphoneDeviceId === device.deviceId ||
-													selectedDeviceId === device.deviceId)
+												(microphoneDeviceId ===
+													device.deviceId ||
+													selectedDeviceId ===
+														device.deviceId)
 											}
 											onSelect={() => {
 												setMicrophoneEnabled(true);
-												setSelectedDeviceId(device.deviceId);
+												setSelectedDeviceId(
+													device.deviceId,
+												);
 												setMicrophoneDeviceId(
-													device.deviceId === "default" ? undefined : device.deviceId,
+													device.deviceId ===
+														"default"
+														? undefined
+														: device.deviceId,
 												);
 											}}
 										/>
@@ -1021,32 +1531,65 @@ export function LaunchWindow() {
 
 							{activeDropdown === "webcam" && (
 								<>
-									<div className={styles.ddLabel}>{t("recording.webcam")}</div>
+									<div className={styles.ddLabel}>
+										{t("recording.webcam")}
+									</div>
 									{webcamEnabled && (
-										<DropdownItem
-											icon={<VideoOff size={16} />}
-											onClick={() => {
-												setWebcamEnabled(false);
-												setActiveDropdown("none");
-											}}
-										>
-											{t("recording.turnOffWebcam")}
-										</DropdownItem>
+										<>
+											<DropdownItem
+												icon={<VideoOff size={16} />}
+												onClick={() => {
+													setWebcamEnabled(false);
+													setActiveDropdown("none");
+												}}
+											>
+												{t("recording.turnOffWebcam")}
+											</DropdownItem>
+											<DropdownItem
+												icon={
+													showFloatingWebcamPreview ? (
+														<EyeOff size={16} />
+													) : (
+														<Eye size={16} />
+													)
+												}
+												selected={
+													showFloatingWebcamPreview
+												}
+												onClick={() => {
+													setShowFloatingWebcamPreview(
+														(current) => !current,
+													);
+												}}
+											>
+												{showFloatingWebcamPreview
+													? t(
+															"recording.hideFloatingWebcamPreview",
+														)
+													: t(
+															"recording.showFloatingWebcamPreview",
+														)}
+											</DropdownItem>
+										</>
 									)}
 									{!webcamEnabled && (
 										<div className="px-3 py-2 text-xs text-[#6b6b78]">
-											{t("recording.selectWebcamToEnable")}
+											{t(
+												"recording.selectWebcamToEnable",
+											)}
 										</div>
 									)}
 									{showWebcamControls && (
 										<div className="flex justify-center px-3 py-2">
 											<div className="h-24 w-24 overflow-hidden rounded-2xl bg-white/5 ring-1 ring-white/10">
 												<video
-													ref={webcamPreviewRef}
+													ref={setWebcamPreviewNode}
 													className="h-full w-full object-cover"
 													muted
 													playsInline
-													style={{ transform: "scaleX(-1)" }}
+													style={{
+														transform: "scaleX(-1)",
+													}}
 												/>
 											</div>
 										</div>
@@ -1056,8 +1599,10 @@ export function LaunchWindow() {
 											key={device.deviceId}
 											icon={
 												webcamEnabled &&
-												(webcamDeviceId === device.deviceId ||
-													selectedVideoDeviceId === device.deviceId) ? (
+												(webcamDeviceId ===
+													device.deviceId ||
+													selectedVideoDeviceId ===
+														device.deviceId) ? (
 													<Video size={16} />
 												) : (
 													<VideoOff size={16} />
@@ -1065,13 +1610,19 @@ export function LaunchWindow() {
 											}
 											selected={
 												webcamEnabled &&
-												(webcamDeviceId === device.deviceId ||
-													selectedVideoDeviceId === device.deviceId)
+												(webcamDeviceId ===
+													device.deviceId ||
+													selectedVideoDeviceId ===
+														device.deviceId)
 											}
 											onClick={() => {
 												setWebcamEnabled(true);
-												setSelectedVideoDeviceId(device.deviceId);
-												setWebcamDeviceId(device.deviceId);
+												setSelectedVideoDeviceId(
+													device.deviceId,
+												);
+												setWebcamDeviceId(
+													device.deviceId,
+												);
 											}}
 										>
 											{device.label}
@@ -1087,7 +1638,9 @@ export function LaunchWindow() {
 
 							{activeDropdown === "countdown" && (
 								<>
-									<div className={styles.ddLabel}>{t("recording.countdownDelay")}</div>
+									<div className={styles.ddLabel}>
+										{t("recording.countdownDelay")}
+									</div>
 									{COUNTDOWN_OPTIONS.map((delay) => (
 										<DropdownItem
 											key={delay}
@@ -1098,7 +1651,9 @@ export function LaunchWindow() {
 												setActiveDropdown("none");
 											}}
 										>
-											{delay === 0 ? t("recording.noDelay") : `${delay}s`}
+											{delay === 0
+												? t("recording.noDelay")
+												: `${delay}s`}
 										</DropdownItem>
 									))}
 								</>
@@ -1108,30 +1663,49 @@ export function LaunchWindow() {
 								<>
 									{supportsHudCaptureProtection && (
 										<DropdownItem
-											icon={hideHudFromCapture ? <EyeOff size={16} /> : <Eye size={16} />}
+											icon={
+												hideHudFromCapture ? (
+													<EyeOff size={16} />
+												) : (
+													<Eye size={16} />
+												)
+											}
 											selected={hideHudFromCapture}
 											onClick={() => {
 												void toggleHudCaptureProtection();
 											}}
 										>
 											{hideHudFromCapture
-												? t("recording.hideHudFromVideo")
+												? t(
+														"recording.hideHudFromVideo",
+													)
 												: t("recording.showHudInVideo")}
 										</DropdownItem>
 									)}
-									<DropdownItem icon={<FolderOpen size={16} />} onClick={chooseRecordingsDirectory}>
+									<DropdownItem
+										icon={<FolderOpen size={16} />}
+										onClick={chooseRecordingsDirectory}
+									>
 										{t("recording.recordingsFolder")}
 									</DropdownItem>
-									<DropdownItem icon={<VideoIcon size={16} />} onClick={openVideoFile}>
+									<DropdownItem
+										icon={<VideoIcon size={16} />}
+										onClick={openVideoFile}
+									>
 										{t("recording.openVideoFile")}
 									</DropdownItem>
 									<DropdownItem
 										icon={<FolderOpen size={16} />}
-										onClick={() => void openProjectBrowser()}
+										onClick={() =>
+											void openProjectBrowser()
+										}
 									>
 										{t("recording.openProject")}
 									</DropdownItem>
-									<div className={styles.ddLabel} style={{ marginTop: 4 }}>
+									<div
+										className={styles.ddLabel}
+										style={{ marginTop: 4 }}
+									>
 										{t("recording.language")}
 									</div>
 									{SUPPORTED_LOCALES.map((code) => (
@@ -1168,70 +1742,99 @@ export function LaunchWindow() {
 				</div>
 
 				<div className="flex flex-col items-center pointer-events-auto">
-					<motion.div
-						ref={hudBarRef}
-						layout
-						transition={hudStateTransition}
-						className={`${styles.bar} mb-2`}
+					<div
+						style={{
+							transform: `translate(${recordingHudOffset.x}px, ${recordingHudOffset.y}px)`,
+						}}
 					>
+						<motion.div
+							ref={hudBarRef}
+							layout={!showRecordingWebcamPreview}
+							transition={hudStateTransition}
+							className={`${styles.bar} mb-2`}
+						>
+							<div
+								className="flex items-center px-0.5 cursor-grab active:cursor-grabbing"
+								onPointerDown={handleHudBarPointerDown}
+								onPointerMove={handleHudBarPointerMove}
+								onPointerUp={handleHudBarPointerUp}
+								onPointerCancel={handleHudBarPointerUp}
+							>
+								<RxDragHandleDots2
+									size={14}
+									className="text-[#6b6b78]"
+								/>
+							</div>
+
+							<button
+								type="button"
+								onClick={() => {
+									void handleUpdateButtonClick();
+								}}
+								className={updateButtonClassName}
+								title={updateButtonTitle}
+								disabled={updateActionPending}
+							>
+								{updateButtonIcon}
+								<span>{updateButtonLabel}</span>
+							</button>
+
+							<div className={styles.barStateViewport}>
+								<AnimatePresence initial={false} mode="wait">
+									<motion.div
+										key={recording ? "recording" : "idle"}
+										layout={!showRecordingWebcamPreview}
+										className={styles.barState}
+										initial={{
+											opacity: 0,
+											y: 10,
+											scale: 0.985,
+											filter: "blur(8px)",
+										}}
+										animate={{
+											opacity: 1,
+											y: 0,
+											scale: 1,
+											filter: "blur(0px)",
+										}}
+										exit={{
+											opacity: 0,
+											y: -10,
+											scale: 0.985,
+											filter: "blur(6px)",
+										}}
+										transition={hudStateTransition}
+									>
+										{recording
+											? recordingControls
+											: idleControls}
+									</motion.div>
+								</AnimatePresence>
+							</div>
+						</motion.div>
+					</div>
+					{showRecordingWebcamPreview && (
 						<div
-							className="flex items-center px-0.5 cursor-grab active:cursor-grabbing"
-							onMouseDown={(e) => {
-								e.preventDefault();
-								isDraggingRef.current = true;
-								window.electronAPI?.hudOverlayDrag?.("start", e.screenX, e.screenY);
-								let lastScreenX = e.screenX;
-								let lastScreenY = e.screenY;
-								const handleMove = (ev: MouseEvent) => {
-									if (ev.screenX === lastScreenX && ev.screenY === lastScreenY) {
-										return;
-									}
-									lastScreenX = ev.screenX;
-									lastScreenY = ev.screenY;
-									window.electronAPI?.hudOverlayDrag?.("move", ev.screenX, ev.screenY);
-								};
-								const handleUp = () => {
-									isDraggingRef.current = false;
-									window.electronAPI?.hudOverlayDrag?.("end", 0, 0);
-									document.removeEventListener("mousemove", handleMove);
-									document.removeEventListener("mouseup", handleUp);
-								};
-								document.addEventListener("mousemove", handleMove);
-								document.addEventListener("mouseup", handleUp);
+							ref={recordingWebcamPreviewContainerRef}
+							className={`${styles.recordingWebcamPreview} ${styles.electronNoDrag}`}
+							title={t("recording.webcam")}
+							style={{
+								transform: `translate(${webcamPreviewOffset.x}px, ${webcamPreviewOffset.y}px)`,
 							}}
+							onPointerDown={handleWebcamPreviewPointerDown}
+							onPointerMove={handleWebcamPreviewPointerMove}
+							onPointerUp={handleWebcamPreviewPointerUp}
+							onPointerCancel={handleWebcamPreviewPointerUp}
 						>
-							<RxDragHandleDots2 size={14} className="text-[#6b6b78]" />
+							<video
+								ref={setRecordingWebcamPreviewNode}
+								className={styles.recordingWebcamPreviewVideo}
+								muted
+								playsInline
+								style={{ transform: "scaleX(-1)" }}
+							/>
 						</div>
-
-						<button
-							type="button"
-							onClick={() => {
-								void handleUpdateButtonClick();
-							}}
-							className={updateButtonClassName}
-							title={updateButtonTitle}
-							disabled={updateActionPending}
-						>
-							{updateButtonIcon}
-							<span>{updateButtonLabel}</span>
-						</button>
-
-						<div className={styles.barStateViewport}>
-							<AnimatePresence initial={false} mode="wait">
-								<motion.div
-									key={recording ? "recording" : "idle"}
-									layout
-									className={styles.barState}
-									initial={{ opacity: 0, y: 10, scale: 0.985, filter: "blur(8px)" }}
-									animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
-									exit={{ opacity: 0, y: -10, scale: 0.985, filter: "blur(6px)" }}
-									transition={hudStateTransition}
-								>
-									{recording ? recordingControls : idleControls}
-								</motion.div>
-							</AnimatePresence>
-						</div>
-					</motion.div>
+					)}
 				</div>
 			</div>
 		</div>

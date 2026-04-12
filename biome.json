@@ -8,7 +8,8 @@
 		"formatWithErrors": true,
 		"lineEnding": "lf",
 		"lineWidth": 100,
-		"attributePosition": "auto"
+		"attributePosition": "auto",
+		"indentWidth": 4
 	},
 	"linter": {
 		"enabled": true,
@@ -92,7 +93,14 @@
 				"useGetterReturn": "error"
 			}
 		},
-		"includes": ["**", "**/dist", "**/.eslintrc.cjs", "**", "**/dist", "**/.eslintrc.cjs"]
+		"includes": [
+			"**",
+			"**/dist",
+			"**/.eslintrc.cjs",
+			"**",
+			"**/dist",
+			"**/.eslintrc.cjs"
+		]
 	},
 	"javascript": { "formatter": { "quoteStyle": "double" } },
 	"overrides": [
@@ -162,4 +170,3 @@
 		"actions": { "source": { "organizeImports": "on" } }
 	}
 }
-
