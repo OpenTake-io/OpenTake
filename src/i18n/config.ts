@@ -10,6 +10,7 @@ export const I18N_NAMESPACES = [
   'settings',
   'dialogs',
   'shortcuts',
+  'extensions',
 ] as const
 
 export type AppLocale = (typeof SUPPORTED_LOCALES)[number]

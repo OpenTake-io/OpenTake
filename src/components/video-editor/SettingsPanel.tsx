@@ -20,12 +20,7 @@ import type { BuiltInWallpaper } from "@/lib/wallpapers";
 import { BUILT_IN_WALLPAPERS, getAvailableWallpapers, isVideoWallpaperSource } from "@/lib/wallpapers";
 import { type AspectRatio } from "@/utils/aspectRatioUtils";
 import minimalCursorUrl from "../../../Minimal Cursor.svg";
-import amongusCursorUrl from "../../assets/cursors/amongus/default.png";
 import tahoeCursorUrl from "../../assets/cursors/Cursor=Default.svg";
-import chooperCursorUrl from "../../assets/cursors/chooper/default.png";
-import lavenderCursorUrl from "../../assets/cursors/lavender/default.png";
-import parchedCursorUrl from "../../assets/cursors/parched/default.png";
-import turtleCursorUrl from "../../assets/cursors/turtle/default.png";
 import { useI18n, useScopedT } from "../../contexts/I18nContext";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
@@ -415,11 +410,6 @@ const BUILTIN_CURSOR_STYLE_OPTIONS: CursorStyleOption[] = [
 	{ value: "dot", label: "Dot" },
 	{ value: "figma", label: "Minimal" },
 	{ value: "mono", label: "Inverted" },
-	{ value: "lavender", label: "Lavender" },
-	{ value: "parched", label: "Parched" },
-	{ value: "chooper", label: "Chooper" },
-	{ value: "amongus", label: "Among Us" },
-	{ value: "turtle", label: "Turtle" },
 ];
 
 const CAPTION_LANGUAGE_OPTIONS = [
@@ -586,17 +576,7 @@ function CursorStylePreview({
 				? previewUrls.figma ?? minimalCursorUrl
 				: style === "mono"
 					? previewUrls.mono ?? tahoeCursorUrl
-					: style === "lavender"
-						? lavenderCursorUrl
-						: style === "parched"
-							? parchedCursorUrl
-							: style === "chooper"
-								? chooperCursorUrl
-								: style === "amongus"
-									? amongusCursorUrl
-									: style === "turtle"
-										? turtleCursorUrl
-										: previewUrls[style];
+					: previewUrls[style];
 
 	if (style === "tahoe") {
 		return (

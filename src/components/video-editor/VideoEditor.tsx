@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Panel, PanelGroup } from "react-resizable-panels";
 import { toast } from "sonner";
 import { ExtensionIcon } from "./ExtensionIcon";
 import { Button } from "@/components/ui/button";
@@ -4305,12 +4304,11 @@ export default function VideoEditor() {
 				</div>
 			</div>
 
-			<div className="relative flex min-h-0 flex-1 gap-3 p-4">
-				{/* Left Column - Video & Timeline */}
-				<div className="order-2 flex h-full min-w-0 flex-[7] flex-col gap-3">
-					<PanelGroup direction="vertical" className="gap-3">
-						{/* Top section: video preview and controls */}
-						<Panel defaultSize={67} minSize={40}>
+			<div className="relative flex min-h-0 flex-1 flex-col gap-3 p-4">
+				{/* Top section: Video Preview + Settings */}
+				<div className="flex min-h-0 flex-1 gap-3">
+				{/* Left Column - Video Preview */}
+				<div className="order-2 flex h-full min-w-0 flex-[7] flex-col">
 							<div className="relative flex h-full flex-col overflow-hidden">
 								{/* Video preview */}
 								<div
@@ -4465,63 +4463,6 @@ export default function VideoEditor() {
 									</div>
 								</div>
 							</div>
-						</Panel>
-
-						{/* Timeline section */}
-						<Panel defaultSize={33} minSize={20}>
-							<div className="h-full min-h-0 bg-[#17171a] rounded-2xl border border-white/10 shadow-lg overflow-auto flex flex-col">
-								<TimelineEditor
-									videoDuration={duration}
-									currentTime={currentTime}
-									onSeek={handleSeek}
-									videoPath={videoPath}
-									cursorTelemetry={normalizedCursorTelemetry}
-									autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
-									onAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
-									zoomRegions={effectiveZoomRegions}
-									onZoomAdded={handleZoomAdded}
-									onZoomSuggested={handleZoomSuggested}
-									onZoomSpanChange={handleZoomSpanChange}
-									onZoomDelete={handleZoomDelete}
-									selectedZoomId={selectedZoomId}
-									onSelectZoom={handleSelectZoom}
-									trimRegions={trimRegions}
-									onTrimAdded={handleTrimAdded}
-									onTrimSpanChange={handleTrimSpanChange}
-									onTrimDelete={handleTrimDelete}
-									selectedTrimId={selectedTrimId}
-									onSelectTrim={handleSelectTrim}
-									clipRegions={clipRegions}
-									onClipSplit={handleClipSplit}
-									onClipSpanChange={handleClipSpanChange}
-									selectedClipId={selectedClipId}
-									onSelectClip={handleSelectClip}
-									speedRegions={speedRegions}
-									onSpeedAdded={handleSpeedAdded}
-									onSpeedSpanChange={handleSpeedSpanChange}
-									onSpeedDelete={handleSpeedDelete}
-									selectedSpeedId={selectedSpeedId}
-									onSelectSpeed={handleSelectSpeed}
-									audioRegions={audioRegions}
-									onAudioAdded={handleAudioAdded}
-									onAudioSpanChange={handleAudioSpanChange}
-									onAudioDelete={handleAudioDelete}
-									selectedAudioId={selectedAudioId}
-									onSelectAudio={handleSelectAudio}
-									annotationRegions={annotationRegions}
-									onAnnotationAdded={handleAnnotationAdded}
-									onAnnotationSpanChange={handleAnnotationSpanChange}
-									onAnnotationDelete={handleAnnotationDelete}
-									selectedAnnotationId={selectedAnnotationId}
-									onSelectAnnotation={handleSelectAnnotation}
-									aspectRatio={aspectRatio}
-									onAspectRatioChange={setAspectRatio}
-									onOpenCropEditor={handleOpenCropEditor}
-									isCropped={isCropped}
-								/>
-							</div>
-						</Panel>
-					</PanelGroup>
 				</div>
 
 				{/* Left section: settings panel */}
@@ -4645,6 +4586,60 @@ export default function VideoEditor() {
 						onSpeedDelete={handleSpeedDelete}
 					/>
 					)}
+				</div>
+				</div>
+
+				{/* Timeline section - full width */}
+				<div className="min-h-[200px] flex-shrink-0 bg-[#17171a] rounded-2xl border border-white/10 shadow-lg overflow-auto flex flex-col" style={{ height: "33%" }}>
+					<TimelineEditor
+						videoDuration={duration}
+						currentTime={currentTime}
+						onSeek={handleSeek}
+						videoPath={videoPath}
+						cursorTelemetry={normalizedCursorTelemetry}
+						autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
+						onAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
+						zoomRegions={effectiveZoomRegions}
+						onZoomAdded={handleZoomAdded}
+						onZoomSuggested={handleZoomSuggested}
+						onZoomSpanChange={handleZoomSpanChange}
+						onZoomDelete={handleZoomDelete}
+						selectedZoomId={selectedZoomId}
+						onSelectZoom={handleSelectZoom}
+						trimRegions={trimRegions}
+						onTrimAdded={handleTrimAdded}
+						onTrimSpanChange={handleTrimSpanChange}
+						onTrimDelete={handleTrimDelete}
+						selectedTrimId={selectedTrimId}
+						onSelectTrim={handleSelectTrim}
+						clipRegions={clipRegions}
+						onClipSplit={handleClipSplit}
+						onClipSpanChange={handleClipSpanChange}
+						selectedClipId={selectedClipId}
+						onSelectClip={handleSelectClip}
+						speedRegions={speedRegions}
+						onSpeedAdded={handleSpeedAdded}
+						onSpeedSpanChange={handleSpeedSpanChange}
+						onSpeedDelete={handleSpeedDelete}
+						selectedSpeedId={selectedSpeedId}
+						onSelectSpeed={handleSelectSpeed}
+						audioRegions={audioRegions}
+						onAudioAdded={handleAudioAdded}
+						onAudioSpanChange={handleAudioSpanChange}
+						onAudioDelete={handleAudioDelete}
+						selectedAudioId={selectedAudioId}
+						onSelectAudio={handleSelectAudio}
+						annotationRegions={annotationRegions}
+						onAnnotationAdded={handleAnnotationAdded}
+						onAnnotationSpanChange={handleAnnotationSpanChange}
+						onAnnotationDelete={handleAnnotationDelete}
+						selectedAnnotationId={selectedAnnotationId}
+						onSelectAnnotation={handleSelectAnnotation}
+						aspectRatio={aspectRatio}
+						onAspectRatioChange={setAspectRatio}
+						onOpenCropEditor={handleOpenCropEditor}
+						isCropped={isCropped}
+					/>
 				</div>
 			</div>
 

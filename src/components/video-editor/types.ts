@@ -48,11 +48,6 @@ export type CursorStyle =
 	| "dot"
 	| "figma"
 	| "mono"
-	| "lavender"
-	| "parched"
-	| "chooper"
-	| "amongus"
-	| "turtle"
 	| (string & {});  // extension-contributed cursor styles
 export const DEFAULT_CURSOR_STYLE: CursorStyle = "tahoe";
 

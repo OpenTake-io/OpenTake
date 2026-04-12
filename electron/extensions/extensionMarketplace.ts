@@ -268,6 +268,12 @@ export async function downloadAndInstallExtension(
       throw new Error('Extension validation failed after download');
     }
 
+    // Track download count (fire-and-forget — CDN may cache the GET, so POST separately)
+    fetch(`${MARKETPLACE_API_BASE}/extensions/${encodeURIComponent(extensionId)}/download`, {
+      method: 'POST',
+      headers: { 'X-Recordly-Version': app.getVersion() },
+    }).catch(() => {});
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message ?? String(err) };

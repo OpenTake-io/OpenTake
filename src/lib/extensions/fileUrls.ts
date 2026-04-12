@@ -43,5 +43,7 @@ export function resolveExtensionRelativeFileUrl(
 }
 
 export function createExtensionModuleUrl(extensionPath: string, entryPoint: string): string {
-	return resolveExtensionRelativeFileUrl(extensionPath, entryPoint);
+	const base = resolveExtensionRelativeFileUrl(extensionPath, entryPoint);
+	// Cache-bust so re-installs / updates load the fresh module
+	return `${base}?v=${Date.now()}`;
 }

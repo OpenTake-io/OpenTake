@@ -35,16 +35,18 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useExtensions } from "@/hooks/useExtensions";
 import { ExtensionIcon } from "./ExtensionIcon";
+import { useScopedT } from "@/contexts/I18nContext";
 import type { ExtensionInfo, MarketplaceExtension } from "@/lib/extensions";
 
 type ExtensionTab = "installed" | "browse";
 
-const TAB_OPTIONS: { value: ExtensionTab; label: string }[] = [
-  { value: "browse", label: "Browse" },
-  { value: "installed", label: "Installed" },
+const TAB_OPTIONS: { value: ExtensionTab; labelKey: string }[] = [
+  { value: "browse", labelKey: "tabs.browse" },
+  { value: "installed", labelKey: "tabs.installed" },
 ];
 
 const EXTENSIONS_DOCS_URL = "https://marketplace.recordly.dev/extensions";
+const EXTENSIONS_SUBMIT_URL = "https://marketplace.recordly.dev/extensions/submit";
 
 // ---------------------------------------------------------------------------
 // Installed Extension Card
@@ -63,6 +65,7 @@ function InstalledExtensionCard({
   onUninstall?: () => void;
   onClick?: () => void;
 }) {
+  const t = useScopedT("extensions");
   const isError = extension.status === "error";
   const isBuiltin = extension.builtin;
 
@@ -99,20 +102,20 @@ function InstalledExtensionCard({
                 className="hover:text-slate-300 transition-colors"
                 onClick={(e) => e.stopPropagation()}
               >
-                By {extension.manifest.author}
+                {t("detail.by", undefined, { author: extension.manifest.author })}
               </a>
             ) : (
-              <>By {extension.manifest.author}</>
+              <>{t("detail.by", undefined, { author: extension.manifest.author })}</>
             )}
           </p>
         )}
 
         <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-3">
-          {extension.manifest.description || "No description"}
+          {extension.manifest.description || t("detail.noDescription")}
         </p>
 
         {isError && extension.error && (
-          <p className="text-[10px] text-red-400 mt-1">Error: {extension.error}</p>
+          <p className="text-[10px] text-red-400 mt-1">{t("detail.error", undefined, { message: extension.error })}</p>
         )}
 
         {extension.manifest.permissions.length > 0 && (
@@ -136,7 +139,7 @@ function InstalledExtensionCard({
             size="icon"
             className="h-6 w-6 text-slate-600 hover:text-red-400 hover:bg-red-500/10"
             onClick={(e) => { e.stopPropagation(); onUninstall(); }}
-            title="Uninstall"
+            title={t("actions.uninstall")}
           >
             <Trash2 className="w-3 h-3" />
           </Button>
@@ -164,6 +167,7 @@ function MarketplaceCard({
   onInstall: () => void;
   onClick?: () => void;
 }) {
+  const t = useScopedT("extensions");
   return (
     <div className="flex items-start gap-3 p-3 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors cursor-pointer" onClick={onClick}>
       <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
@@ -190,10 +194,10 @@ function MarketplaceCard({
               className="hover:text-slate-300 transition-colors"
               onClick={(e) => e.stopPropagation()}
             >
-              By {extension.author}
+              {t("detail.by", undefined, { author: extension.author })}
             </a>
           ) : (
-            <>By {extension.author}</>
+            <>{t("detail.by", undefined, { author: extension.author })}</>
           )}
         </p>
 
@@ -226,7 +230,7 @@ function MarketplaceCard({
         {extension.installed ? (
           <span className="flex items-center gap-1 text-[10px] text-emerald-500 font-medium">
             <Check className="w-3 h-3" />
-            Installed
+            {t("status.installed")}
           </span>
         ) : (
           <Button
@@ -241,7 +245,7 @@ function MarketplaceCard({
             ) : (
               <Download className="w-3 h-3" />
             )}
-            {isInstalling ? "Installing" : "Install"}
+            {isInstalling ? t("actions.installing") : t("actions.install")}
           </Button>
         )}
       </div>
@@ -254,6 +258,7 @@ function MarketplaceCard({
 // ---------------------------------------------------------------------------
 
 function ScreenshotGallery({ screenshots }: { screenshots: string[] }) {
+  const t = useScopedT("extensions");
   const [index, setIndex] = useState(0);
   const count = screenshots.length;
   if (count === 0) return null;
@@ -261,12 +266,12 @@ function ScreenshotGallery({ screenshots }: { screenshots: string[] }) {
   return (
     <div>
       <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
-        Preview
+        {t("detail.preview")}
       </p>
       <div className="relative group rounded-lg overflow-hidden bg-black/20 border border-white/[0.06]">
         <img
           src={screenshots[index]}
-          alt={`Screenshot ${index + 1}`}
+          alt={t("detail.screenshotAlt", undefined, { number: String(index + 1) })}
           className="w-full aspect-video object-cover"
         />
         {count > 1 && (
@@ -326,11 +331,12 @@ function ExtensionDetailModal({
   onInstall?: () => void;
   isInstalling?: boolean;
 }) {
+  const t = useScopedT("extensions");
   const isInstalled = detail.source === 'installed';
   const name = isInstalled ? detail.ext.manifest.name : detail.ext.name;
   const description = isInstalled
-    ? detail.ext.manifest.description || 'No description'
-    : detail.ext.description || 'No description';
+    ? detail.ext.manifest.description || t("detail.noDescription")
+    : detail.ext.description || t("detail.noDescription");
   const author = isInstalled ? detail.ext.manifest.author : detail.ext.author;
   const permissions = isInstalled ? detail.ext.manifest.permissions : detail.ext.permissions;
   const homepage = isInstalled ? detail.ext.manifest.homepage : detail.ext.homepage;
@@ -367,13 +373,13 @@ function ExtensionDetailModal({
                       rel="noopener noreferrer"
                       className="hover:text-slate-300 transition-colors inline-flex items-center gap-1"
                     >
-                      By {author}
+                      {t("detail.by", undefined, { author })}
                       <ExternalLink className="w-2.5 h-2.5" />
                     </a>
                   ) : (
-                    <>By {author}</>
+                    <>{t("detail.by", undefined, { author })}</>
                   )
-                ) : 'Unknown author'}
+                ) : t("detail.unknownAuthor")}
               </p>
             </div>
           </div>
@@ -383,7 +389,7 @@ function ExtensionDetailModal({
             <div className="flex items-center gap-3 mt-3">
               <span className="flex items-center gap-1 text-[11px] text-slate-500">
                 <Download className="w-3 h-3" />
-                {detail.ext.downloads.toLocaleString()} downloads
+                {t("detail.downloads", undefined, { count: detail.ext.downloads.toLocaleString() })}
               </span>
             </div>
           )}
@@ -397,7 +403,7 @@ function ExtensionDetailModal({
           {/* Description */}
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
-              Description
+              {t("detail.description")}
             </p>
             <p className="text-[12px] text-slate-400 leading-relaxed whitespace-pre-wrap">
               {description}
@@ -408,7 +414,7 @@ function ExtensionDetailModal({
           {detail.source === 'marketplace' && detail.ext.tags.length > 0 && (
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
-                Tags
+                {t("detail.tags")}
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {detail.ext.tags.map((tag) => (
@@ -428,7 +434,7 @@ function ExtensionDetailModal({
           {permissions.length > 0 && (
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
-                Permissions
+                {t("detail.permissions")}
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {permissions.map((perm) => (
@@ -447,7 +453,7 @@ function ExtensionDetailModal({
           {isInstalled && (
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
-                Location
+                {t("detail.location")}
               </p>
               <p className="text-[10px] text-slate-500 font-mono break-all">
                 {detail.ext.path}
@@ -473,7 +479,7 @@ function ExtensionDetailModal({
                 disabled={isError}
               />
               <span className="text-[11px] text-slate-400">
-                {detail.isActive ? 'Enabled' : 'Disabled'}
+                {detail.isActive ? t("status.enabled") : t("status.disabled")}
               </span>
             </div>
           )}
@@ -489,13 +495,13 @@ function ExtensionDetailModal({
               ) : (
                 <Download className="w-3.5 h-3.5" />
               )}
-              {isInstalling ? 'Installing...' : 'Install'}
+              {isInstalling ? t("actions.installing") : t("actions.install")}
             </Button>
           )}
           {detail.source === 'marketplace' && detail.ext.installed && (
             <span className="flex items-center gap-1 text-[11px] text-emerald-500 font-medium">
               <Check className="w-3.5 h-3.5" />
-              Installed
+              {t("status.installed")}
             </span>
           )}
           <div className="flex-1" />
@@ -505,7 +511,7 @@ function ExtensionDetailModal({
             className="h-8 px-3 text-[12px] text-slate-400 hover:text-slate-200 hover:bg-white/10"
             onClick={onClose}
           >
-            Close
+            {t("actions.close")}
           </Button>
         </div>
       </DialogContent>
@@ -526,6 +532,7 @@ function TabSwitcher({
   onTabChange: (tab: ExtensionTab) => void;
   extensionCount: number;
 }) {
+  const t = useScopedT("extensions");
   return (
     <LayoutGroup id="extension-tab-switcher">
       <div className="grid h-8 w-full grid-cols-2 rounded-xl border border-white/10 bg-white/[0.04] p-1">
@@ -552,7 +559,7 @@ function TabSwitcher({
                   isActive ? "text-white" : "text-slate-400 hover:text-slate-200",
                 )}
               >
-                {option.label}
+                {t(option.labelKey)}
                 {count !== undefined && count > 0 && (
                   <span
                     className={cn(
@@ -577,6 +584,7 @@ function TabSwitcher({
 // ---------------------------------------------------------------------------
 
 export default function ExtensionManager() {
+  const t = useScopedT("extensions");
   const {
     extensions,
     activeIds,
@@ -606,7 +614,7 @@ export default function ExtensionManager() {
   const handleInstallFromFolder = useCallback(async () => {
     const success = await installFromFolder();
     if (success) {
-      toast.success("Extension installed and enabled");
+      toast.success(t("toast.installedAndEnabled"));
     }
   }, [installFromFolder]);
 
@@ -614,9 +622,13 @@ export default function ExtensionManager() {
     async (id: string, name: string) => {
       const success = await uninstall(id);
       if (success) {
-        toast.success(`Uninstalled ${name}`);
+        toast.success(t("toast.uninstalled", undefined, { name }));
+        // Clear installed flag in cached marketplace results
+        setMarketplaceResults((prev) =>
+          prev.map((e) => (e.id === id ? { ...e, installed: false } : e)),
+        );
       } else {
-        toast.error(`Failed to uninstall ${name}`);
+        toast.error(t("toast.uninstallFailed", undefined, { name }));
       }
     },
     [uninstall],
@@ -634,7 +646,7 @@ export default function ExtensionManager() {
       });
       setMarketplaceResults(result.extensions);
     } catch (err: any) {
-      setMarketplaceError(err.message ?? "Failed to search marketplace");
+      setMarketplaceError(err.message ?? t("toast.searchFailed"));
       setMarketplaceResults([]);
     } finally {
       setMarketplaceLoading(false);
@@ -650,9 +662,9 @@ export default function ExtensionManager() {
         await handleSearch();
       }
 
-      toast.success("Extensions refreshed");
+      toast.success(t("toast.refreshed"));
     } catch {
-      toast.error("Failed to refresh extensions");
+      toast.error(t("toast.refreshFailed"));
     } finally {
       setIsRefreshing(false);
     }
@@ -672,13 +684,13 @@ export default function ExtensionManager() {
       try {
         const result = await marketplaceInstall(ext.id, ext.downloadUrl);
         if (result.success) {
-          toast.success(`Installed and enabled ${ext.name}`);
+          toast.success(t("toast.marketplaceInstalled", undefined, { name: ext.name }));
           // Update the marketplace results to show installed state
           setMarketplaceResults((prev) =>
             prev.map((e) => (e.id === ext.id ? { ...e, installed: true } : e)),
           );
         } else {
-          toast.error(`Failed to install ${ext.name}`, {
+          toast.error(t("toast.marketplaceInstallFailed", undefined, { name: ext.name }), {
             description: result.error,
           });
         }
@@ -700,15 +712,24 @@ export default function ExtensionManager() {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Puzzle className="w-4 h-4 text-[#2563EB]" />
-            <h3 className="text-[13px] font-semibold text-slate-200">Extensions</h3>
+            <h3 className="text-[13px] font-semibold text-slate-200">{t("title")}</h3>
           </div>
           <div className="flex items-center gap-0.5">
             <Button
               variant="ghost"
               size="icon"
               className="h-6 w-6 text-slate-500 hover:text-slate-300 hover:bg-white/10"
+              onClick={() => (window as any).electronAPI?.openExternalUrl(EXTENSIONS_SUBMIT_URL)}
+              title={t("actions.submit")}
+            >
+              <Plus className="w-3 h-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-slate-500 hover:text-slate-300 hover:bg-white/10"
               onClick={() => (window as any).electronAPI?.openExternalUrl(EXTENSIONS_DOCS_URL)}
-              title="Extension docs"
+              title={t("actions.docs")}
             >
               <BookOpen className="w-3 h-3" />
             </Button>
@@ -718,7 +739,7 @@ export default function ExtensionManager() {
               className="h-6 w-6 text-slate-500 hover:text-slate-300 hover:bg-white/10"
               onClick={handleRefresh}
               disabled={isRefreshing}
-              title="Refresh"
+              title={t("actions.refresh")}
             >
               <RefreshCw className={cn("w-3 h-3", isRefreshing && "animate-spin")} />
             </Button>
@@ -727,7 +748,7 @@ export default function ExtensionManager() {
               size="icon"
               className="h-6 w-6 text-slate-500 hover:text-slate-300 hover:bg-white/10"
               onClick={openDirectory}
-              title="Open extensions folder"
+              title={t("actions.openFolder")}
             >
               <FolderOpen className="w-3 h-3" />
             </Button>
@@ -842,6 +863,7 @@ function InstalledTab({
   onOpenDirectory: () => void;
   onViewDetail: (ext: ExtensionInfo) => void;
 }) {
+  const t = useScopedT("extensions");
   if (extensions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-10">
@@ -849,9 +871,9 @@ function InstalledTab({
           <Puzzle className="w-5 h-5 text-slate-600" />
         </div>
         <div className="text-center">
-          <p className="text-[13px] font-medium text-slate-400">No Extensions</p>
+          <p className="text-[13px] font-medium text-slate-400">{t("empty.title")}</p>
           <p className="text-[11px] text-slate-600 mt-1 leading-relaxed max-w-[200px]">
-            Install extensions to add frames, cursor effects, and editor tools.
+            {t("empty.description")}
           </p>
         </div>
         <div className="flex gap-2 mt-2">
@@ -862,7 +884,7 @@ function InstalledTab({
             onClick={onInstallFromFolder}
           >
             <Plus className="w-3 h-3" />
-            Install
+            {t("actions.install")}
           </Button>
           <Button
             variant="ghost"
@@ -871,7 +893,7 @@ function InstalledTab({
             onClick={onOpenDirectory}
           >
             <FolderOpen className="w-3 h-3" />
-            Folder
+            {t("actions.folder")}
           </Button>
         </div>
       </div>
@@ -882,7 +904,7 @@ function InstalledTab({
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between mb-1">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-          Installed
+          {t("tabs.installed")}
         </p>
         <Button
           variant="ghost"
@@ -891,7 +913,7 @@ function InstalledTab({
           onClick={onInstallFromFolder}
         >
           <Plus className="w-2.5 h-2.5" />
-          Add
+          {t("actions.add")}
         </Button>
       </div>
       {extensions.map((ext) => (
@@ -937,6 +959,7 @@ function BrowseTab({
   onInstall: (ext: MarketplaceExtension) => void;
   onViewDetail: (ext: MarketplaceExtension) => void;
 }) {
+  const t = useScopedT("extensions");
   return (
     <div className="flex flex-col gap-3">
       {/* Search */}
@@ -944,7 +967,7 @@ function BrowseTab({
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
         <input
           type="text"
-          placeholder="Search extensions..."
+          placeholder={t("search.placeholder")}
           value={searchQuery}
           onChange={(e) => onSearchQueryChange(e.target.value)}
           onKeyDown={(e) => {
@@ -972,7 +995,7 @@ function BrowseTab({
             className="h-7 px-2.5 text-[11px] text-slate-400 hover:text-slate-200 hover:bg-white/10"
             onClick={onSearch}
           >
-            Retry
+            {t("actions.retry")}
           </Button>
         </div>
       )}
@@ -981,7 +1004,7 @@ function BrowseTab({
         <div className="flex flex-col items-center gap-2 py-10">
           <Search className="w-5 h-5 text-slate-600" />
           <p className="text-[11px] text-slate-600 text-center">
-            {searchQuery ? "No extensions found" : "No marketplace extensions available yet"}
+            {searchQuery ? t("search.noResults") : t("search.noMarketplace")}
           </p>
         </div>
       )}
@@ -989,7 +1012,9 @@ function BrowseTab({
       {!loading && !error && results.length > 0 && (
         <div className="flex flex-col gap-2">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-            {results.length} extension{results.length !== 1 ? "s" : ""}
+            {results.length !== 1
+              ? t("search.countPlural", undefined, { count: results.length })
+              : t("search.count", undefined, { count: results.length })}
           </p>
           {results.map((ext) => (
             <MarketplaceCard
