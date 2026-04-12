@@ -22,7 +22,7 @@ https://github.com/user-attachments/assets/1446cd12-c053-4b9c-b49f-d9c93db77fc4
 
 ## What is Recordly?
 
-Recordly is a desktop app for recording and editing screen captures with motion-driven presentation tools built in. Instead of sending raw footage into a separate editor just to add zooms, cursor polish, or a styled background, Recordly handles that workflow in one place.
+Recordly is a desktop app for recording and editing screen captures with motion-driven presentation tools built in. Instead of sending raw footage to a motion designer just to add zooms, cursor polish, or a styled background, Recordly handles that workflow in one place for free.
 
 Recordly runs on:
 
