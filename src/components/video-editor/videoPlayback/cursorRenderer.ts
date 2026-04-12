@@ -3,16 +3,6 @@ import { MotionBlurFilter } from "pixi-filters/motion-blur";
 import { getRenderableAssetUrl } from "@/lib/assetPath";
 import { extensionHost } from "@/lib/extensions";
 import minimalCursorUrl from "../../../../Minimal Cursor.svg";
-import amongusDefaultCursorUrl from "../../../assets/cursors/amongus/default.png";
-import amongusPointerCursorUrl from "../../../assets/cursors/amongus/pointer.png";
-import chooperDefaultCursorUrl from "../../../assets/cursors/chooper/default.png";
-import chooperPointerCursorUrl from "../../../assets/cursors/chooper/pointer.png";
-import lavenderDefaultCursorUrl from "../../../assets/cursors/lavender/default.png";
-import lavenderPointerCursorUrl from "../../../assets/cursors/lavender/pointer.png";
-import parchedDefaultCursorUrl from "../../../assets/cursors/parched/default.png";
-import parchedPointerCursorUrl from "../../../assets/cursors/parched/pointer.png";
-import turtleDefaultCursorUrl from "../../../assets/cursors/turtle/default.png";
-import turtlePointerCursorUrl from "../../../assets/cursors/turtle/pointer.png";
 import {
 	type CursorStyle,
 	type CursorTelemetryPoint,
@@ -130,38 +120,7 @@ const DEFAULT_CURSOR_PACK_ANCHOR = { x: 0.08, y: 0.08 } as const;
 const POINTER_CURSOR_PACK_ANCHOR = { x: 0.48, y: 0.1 } as const;
 const CENTERED_CURSOR_PACK_ANCHOR = { x: 0.5, y: 0.5 } as const;
 const CURSOR_PACK_POINTER_TYPES = new Set<CursorAssetKey>(["pointer", "open-hand", "closed-hand"]);
-const BUILTIN_CURSOR_PACK_SOURCES: Record<string, CursorPackSource> = {
-	lavender: {
-		defaultUrl: lavenderDefaultCursorUrl,
-		pointerUrl: lavenderPointerCursorUrl,
-		defaultAnchor: DEFAULT_CURSOR_PACK_ANCHOR,
-		pointerAnchor: POINTER_CURSOR_PACK_ANCHOR,
-	},
-	parched: {
-		defaultUrl: parchedDefaultCursorUrl,
-		pointerUrl: parchedPointerCursorUrl,
-		defaultAnchor: DEFAULT_CURSOR_PACK_ANCHOR,
-		pointerAnchor: POINTER_CURSOR_PACK_ANCHOR,
-	},
-	chooper: {
-		defaultUrl: chooperDefaultCursorUrl,
-		pointerUrl: chooperPointerCursorUrl,
-		defaultAnchor: DEFAULT_CURSOR_PACK_ANCHOR,
-		pointerAnchor: POINTER_CURSOR_PACK_ANCHOR,
-	},
-	amongus: {
-		defaultUrl: amongusDefaultCursorUrl,
-		pointerUrl: amongusPointerCursorUrl,
-		defaultAnchor: CENTERED_CURSOR_PACK_ANCHOR,
-		pointerAnchor: CENTERED_CURSOR_PACK_ANCHOR,
-	},
-	turtle: {
-		defaultUrl: turtleDefaultCursorUrl,
-		pointerUrl: turtlePointerCursorUrl,
-		defaultAnchor: CENTERED_CURSOR_PACK_ANCHOR,
-		pointerAnchor: CENTERED_CURSOR_PACK_ANCHOR,
-	},
-};
+const BUILTIN_CURSOR_PACK_SOURCES: Record<string, CursorPackSource> = {};
 
 function getCursorPackSources(): Record<string, CursorPackSource> {
 	const sources: Record<string, CursorPackSource> = { ...BUILTIN_CURSOR_PACK_SOURCES };

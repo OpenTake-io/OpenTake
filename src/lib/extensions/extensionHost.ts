@@ -180,9 +180,8 @@ export class ExtensionHost {
 	 */
 	async activateExtension(info: ExtensionInfo, moduleUrl: string): Promise<void> {
 		if (this.activeExtensions.has(info.manifest.id)) {
-			console.warn(`[extensions] Extension ${info.manifest.id} is already active`);
-			this.notifyListeners();
-			return;
+			// Deactivate stale instance first so reinstall/reload works
+			await this.deactivateExtension(info.manifest.id);
 		}
 
 		const disposables: (() => void)[] = [];

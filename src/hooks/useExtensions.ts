@@ -102,7 +102,7 @@ export function useExtensions(): UseExtensionsResult {
         );
       } else {
         const ext = extensions.find(e => e.manifest.id === id);
-        if (!ext || ext.status === 'error') return;
+        if (!ext) return;
 
         try {
           await electronAPI?.extensionsEnable(id);
@@ -142,10 +142,8 @@ export function useExtensions(): UseExtensionsResult {
   }, [discoverAndSync]);
 
   const uninstall = useCallback(async (id: string): Promise<boolean> => {
-    // Deactivate first if active
-    if (activeIds.has(id)) {
-      await extensionHost.deactivateExtension(id);
-    }
+    // Always deactivate — avoids stale closure over activeIds
+    await extensionHost.deactivateExtension(id);
     if (!electronAPI?.extensionsUninstall) return false;
     const result = await electronAPI.extensionsUninstall(id);
     if (result?.success) {
@@ -153,7 +151,7 @@ export function useExtensions(): UseExtensionsResult {
       return true;
     }
     return false;
-  }, [activeIds, discoverAndSync]);
+  }, [discoverAndSync]);
 
   const openDirectory = useCallback(async () => {
     await electronAPI?.extensionsOpenDirectory();
