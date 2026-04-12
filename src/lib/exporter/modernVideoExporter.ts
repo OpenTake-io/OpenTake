@@ -292,6 +292,8 @@ export class ModernVideoExporter {
 			const videoInfo = await this.streamingDecoder.loadMetadata(this.config.videoUrl);
 			this.metadataLoadTimeMs = this.getNowMs() - stageStartedAt;
 			const nativeAudioPlan = this.buildNativeAudioPlan(videoInfo);
+			const shouldUseFfmpegAudioFallback =
+				!useNativeEncoder && nativeAudioPlan.audioMode !== "none";
 			const effectiveDuration = this.streamingDecoder.getEffectiveDuration(
 				this.config.trimRegions,
 				this.config.speedRegions,
@@ -352,7 +354,7 @@ export class ModernVideoExporter {
 
 			if (!useNativeEncoder) {
 				const hasAudio = nativeAudioPlan.audioMode !== "none";
-				this.muxer = new VideoMuxer(this.config, hasAudio);
+				this.muxer = new VideoMuxer(this.config, hasAudio && !shouldUseFfmpegAudioFallback);
 				await this.muxer.initialize();
 			}
 
@@ -451,7 +453,7 @@ export class ModernVideoExporter {
 			this.reportFinalizingProgress(totalFrames, 98);
 			await this.awaitWithFinalizationTimeout(this.pendingMuxing, "muxing queued video chunks");
 
-			if (nativeAudioPlan.audioMode !== "none" && !this.cancelled) {
+			if (nativeAudioPlan.audioMode !== "none" && !shouldUseFfmpegAudioFallback && !this.cancelled) {
 				const demuxer = this.streamingDecoder.getDemuxer();
 				if (
 					demuxer ||
@@ -482,6 +484,26 @@ export class ModernVideoExporter {
 			this.reportFinalizingProgress(totalFrames, 99);
 			const blob = await this.awaitWithFinalizationTimeout(this.muxer!.finalize(), "muxer finalization");
 			this.finalizationTimeMs = this.getNowMs() - stageStartedAt;
+
+			if (shouldUseFfmpegAudioFallback) {
+				console.warn(
+					`[VideoExporter] Browser AAC encoding is unavailable; falling back to FFmpeg audio muxing.`,
+				);
+				const muxedResult = await this.finalizeExportWithFfmpegAudio(blob, nativeAudioPlan);
+				if (!muxedResult.success || !muxedResult.blob) {
+					return {
+						success: false,
+						error: muxedResult.error || "Failed to mux audio with FFmpeg",
+						metrics: muxedResult.metrics ?? this.buildExportMetrics(),
+					};
+				}
+
+				return {
+					success: true,
+					blob: muxedResult.blob,
+					metrics: muxedResult.metrics ?? this.buildExportMetrics(),
+				};
+			}
 
 			return { success: true, blob, metrics: this.buildExportMetrics() };
 		} catch (error) {
@@ -922,6 +944,68 @@ export class ModernVideoExporter {
 
 		const videoBytes = result.data.slice();
 
+		return {
+			success: true,
+			blob: new Blob([videoBytes.buffer], { type: "video/mp4" }),
+		};
+	}
+
+	private async finalizeExportWithFfmpegAudio(
+		videoBlob: Blob,
+		audioPlan: NativeAudioPlan,
+	): Promise<ExportResult> {
+		if (typeof window === "undefined" || !window.electronAPI?.muxExportedVideoAudio) {
+			return {
+				success: false,
+				error: "FFmpeg audio fallback is unavailable in this environment.",
+			};
+		}
+
+		let editedAudioBuffer: ArrayBuffer | undefined;
+		let editedAudioMimeType: string | null = null;
+
+		if (audioPlan.audioMode === "edited-track") {
+			this.audioProcessor = new AudioProcessor();
+			this.audioProcessor.setOnProgress((progress) => {
+				this.reportFinalizingProgress(this.processedFrameCount, 99, progress);
+			});
+			const audioBlob = await this.awaitWithFinalizationTimeout(
+				this.audioProcessor.renderEditedAudioTrack(
+					this.config.videoUrl,
+					this.config.trimRegions,
+					this.config.speedRegions,
+					this.config.audioRegions,
+					this.config.sourceAudioFallbackPaths,
+				),
+				"FFmpeg edited audio rendering",
+			);
+			editedAudioBuffer = await audioBlob.arrayBuffer();
+			editedAudioMimeType = audioBlob.type || null;
+		}
+
+		const videoBuffer = await videoBlob.arrayBuffer();
+		const result = await this.awaitWithFinalizationTimeout(
+			window.electronAPI.muxExportedVideoAudio(videoBuffer, {
+				audioMode: audioPlan.audioMode,
+				audioSourcePath:
+					audioPlan.audioMode === "copy-source" || audioPlan.audioMode === "trim-source"
+						? audioPlan.audioSourcePath
+						: null,
+				trimSegments: audioPlan.audioMode === "trim-source" ? audioPlan.trimSegments : undefined,
+				editedAudioData: editedAudioBuffer,
+				editedAudioMimeType,
+			}),
+			"FFmpeg audio muxing",
+		);
+
+		if (!result.success || !result.data) {
+			return {
+				success: false,
+				error: result.error || "Failed to mux exported audio with FFmpeg",
+			};
+		}
+
+		const videoBytes = result.data.slice();
 		return {
 			success: true,
 			blob: new Blob([videoBytes.buffer], { type: "video/mp4" }),

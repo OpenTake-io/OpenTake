@@ -1152,6 +1152,25 @@ function loadFfmpegStatic() {
   return null
 }
 
+function resolveSystemFfmpegBinaryPath() {
+  const locator = process.platform === 'win32' ? 'where' : 'which'
+  const result = spawnSync(locator, ['ffmpeg'], {
+    encoding: 'utf-8',
+    windowsHide: true,
+  })
+
+  if (result.status !== 0) {
+    return null
+  }
+
+  const candidate = result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0)
+
+  return candidate || null
+}
+
 function loadUiohookModule() {
   const moduleExports = nodeRequire('uiohook-napi')
   return (
@@ -1167,15 +1186,22 @@ function loadUiohookModule() {
 
 function getFfmpegBinaryPath() {
   const ffmpegStatic = loadFfmpegStatic()
-  if (!ffmpegStatic || typeof ffmpegStatic !== 'string') {
-    throw new Error('FFmpeg binary is unavailable. Install ffmpeg-static for this platform.')
+  if (ffmpegStatic && typeof ffmpegStatic === 'string') {
+    const bundledPath = app.isPackaged
+      ? ffmpegStatic.replace(/\.asar([\/\\])/, '.asar.unpacked$1')
+      : ffmpegStatic
+
+    if (existsSync(bundledPath)) {
+      return bundledPath
+    }
   }
 
-  if (app.isPackaged) {
-    return ffmpegStatic.replace(/\.asar([\/\\])/, '.asar.unpacked$1')
+  const systemFfmpeg = resolveSystemFfmpegBinaryPath()
+  if (systemFfmpeg) {
+    return systemFfmpeg
   }
 
-  return ffmpegStatic
+  throw new Error('FFmpeg binary is unavailable. Install ffmpeg-static for this platform or make ffmpeg available on PATH.')
 }
 
 type NativeVideoExportSession = {
@@ -1583,6 +1609,34 @@ async function muxNativeVideoExportAudio(
     await Promise.allSettled(
       tempArtifacts.map((artifactPath) => removeTemporaryExportFile(artifactPath)),
     )
+  }
+}
+
+async function muxExportedVideoAudioBuffer(
+  videoData: ArrayBuffer,
+  options: NativeVideoExportFinishOptions,
+) {
+  const tempVideoPath = path.join(
+    app.getPath('temp'),
+    `recordly-export-video-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`,
+  )
+
+  try {
+    await fs.writeFile(tempVideoPath, Buffer.from(videoData))
+    const finalizedPath = await muxNativeVideoExportAudio(tempVideoPath, options)
+    const muxedData = await fs.readFile(finalizedPath)
+    return new Uint8Array(muxedData)
+  } finally {
+    await Promise.allSettled([
+      removeTemporaryExportFile(tempVideoPath),
+      removeTemporaryExportFile(`${tempVideoPath}.muxed.mp4`),
+      removeTemporaryExportFile(
+        path.join(
+          path.dirname(tempVideoPath),
+          `${path.basename(tempVideoPath, path.extname(tempVideoPath))}-final.mp4`,
+        ),
+      ),
+    ])
   }
 }
 
@@ -5523,6 +5577,24 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         await removeTemporaryExportFile(session.outputPath)
         const finalizedSuffix = session.outputPath.replace(/\.mp4$/, '-final.mp4')
         await removeTemporaryExportFile(finalizedSuffix)
+        return {
+          success: false,
+          error: String(error),
+        }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'mux-exported-video-audio',
+    async (_, videoData: ArrayBuffer, options?: NativeVideoExportFinishOptions) => {
+      try {
+        const data = await muxExportedVideoAudioBuffer(videoData, options ?? {})
+        return {
+          success: true,
+          data,
+        }
+      } catch (error) {
         return {
           success: false,
           error: String(error),
