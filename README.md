@@ -12,15 +12,11 @@ Language: EN | [简中](README.zh-CN.md)
 </p>
 
 ### Create polished, pro-grade screen recordings.
-[Recordly](https://www.recordly.dev) is an open-source screen recorder and editor for walkthroughs, demos, tutorials, product videos, and social clips. Record a screen or window, jump straight into the editor, and export a polished result with cursor effects, zooms, backgrounds, annotations, webcam overlays, and more.
+[Recordly](https://www.recordly.dev) is an **open-source screen recorder** and editor for **walkthroughs, demos, product videos**, and more. 
 
-<p align="center">
-  <img src="./demo.gif" width="750" alt="Recordly demo video">
-</p>
+**Contribution encouraged.** [Donate](https://ko-fi.com/webadderall/goal?g=0)
 
-> [!NOTE]
-> Thanks to many for supporting Recordly. These help keep Recordly open-source and free!
-[**Support the project**](https://ko-fi.com/webadderall/goal?g=0)
+https://github.com/user-attachments/assets/1446cd12-c053-4b9c-b49f-d9c93db77fc4
 
 ---
 
@@ -376,9 +372,6 @@ Pull requests are welcome.
 - Rajan RK
 - Erwan
 - Anonymous supporter
-
-Trading fees from this CA also go towards the development of Recordly:
-8MyLec2DdJj13bHLB8YvJRv54aAbiFGF5EEQAAbspump
 
 ---
 
