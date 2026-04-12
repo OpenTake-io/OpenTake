@@ -88,7 +88,7 @@ interface Window {
 				microphoneDeviceId?: string;
 				microphoneLabel?: string;
 			},
-		) => Promise<{ success: boolean; path?: string; message?: string; error?: string; userNotified?: boolean }>;
+		) => Promise<{ success: boolean; path?: string; message?: string; error?: string; userNotified?: boolean; microphoneFallbackRequired?: boolean }>;
 		stopNativeScreenRecording: () => Promise<{
 			success: boolean;
 			path?: string;
@@ -128,6 +128,10 @@ interface Window {
 			videoData: ArrayBuffer,
 			fileName: string,
 		) => Promise<{ success: boolean; path?: string; message?: string }>;
+		storeMicrophoneSidecar: (
+			audioData: ArrayBuffer,
+			videoPath: string,
+		) => Promise<{ success: boolean; path?: string; error?: string }>;
 		getRecordedVideoPath: () => Promise<{ success: boolean; path?: string; message?: string }>;
 		listAssetDirectory: (relativeDir: string) => Promise<{
 			success: boolean;

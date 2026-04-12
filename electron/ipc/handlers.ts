@@ -48,6 +48,7 @@ const WHISPER_SMALL_MODEL_PATH = path.join(WHISPER_MODEL_DIR, 'ggml-small.bin')
 const COMPANION_AUDIO_LAYOUTS = [
   { platform: 'mac' as const, systemSuffix: '.system.m4a', micSuffix: '.mic.m4a' },
   { platform: 'win' as const, systemSuffix: '.system.wav', micSuffix: '.mic.wav' },
+  { platform: 'mac' as const, systemSuffix: '.system.webm', micSuffix: '.mic.webm' },
 ]
 
 function getAssetRootPath() {
@@ -868,7 +869,7 @@ async function pruneAutoRecordings(exemptPaths: string[] = []) {
       await fs.rm(getTelemetryPathForVideo(entry.filePath), { force: true })
       // Clean up companion audio files left from recording (macOS .m4a, Windows .wav)
       const base = entry.filePath.replace(/\.(mp4|mov|webm)$/i, '')
-      for (const suffix of ['.system.m4a', '.mic.m4a', '.system.wav', '.mic.wav']) {
+      for (const suffix of ['.system.m4a', '.mic.m4a', '.system.wav', '.mic.wav', '.mic.webm', '.system.webm']) {
         await fs.rm(base + suffix, { force: true }).catch(() => {})
       }
     } catch (error) {
@@ -4388,6 +4389,15 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
       await waitForNativeCaptureStart(nativeCaptureProcess)
       nativeScreenRecordingActive = true
+
+      // If the native helper reported MICROPHONE_CAPTURE_UNAVAILABLE, it started
+      // capture without microphone.  Clear the mic path so the renderer can fall
+      // back to a browser-side sidecar recording for the microphone track.
+      const micUnavailableNatively = nativeCaptureOutputBuffer.includes('MICROPHONE_CAPTURE_UNAVAILABLE')
+      if (micUnavailableNatively) {
+        nativeCaptureMicrophonePath = null
+      }
+
       recordNativeCaptureDiagnostics({
         backend: 'mac-screencapturekit',
         phase: 'start',
@@ -4397,10 +4407,10 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         helperPath,
         outputPath,
         systemAudioPath: systemAudioOutputPath,
-        microphonePath: microphoneOutputPath,
+        microphonePath: nativeCaptureMicrophonePath,
         processOutput: nativeCaptureOutputBuffer.trim() || undefined,
       })
-      return { success: true }
+      return { success: true, microphoneFallbackRequired: micUnavailableNatively }
     } catch (error) {
       console.error('Failed to start native ScreenCaptureKit recording:', error)
       const errorStr = String(error)
@@ -4948,6 +4958,18 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
   })
 
 
+
+  ipcMain.handle('store-microphone-sidecar', async (_, audioData: ArrayBuffer, videoPath: string) => {
+    try {
+      const baseName = videoPath.replace(/\.[^.]+$/, '')
+      const sidecarPath = `${baseName}.mic.webm`
+      await fs.writeFile(sidecarPath, Buffer.from(audioData))
+      return { success: true, path: sidecarPath }
+    } catch (error) {
+      console.error('Failed to store microphone sidecar:', error)
+      return { success: false, error: String(error) }
+    }
+  })
 
   ipcMain.handle('store-recorded-video', async (_, videoData: ArrayBuffer, fileName: string) => {
     try {
