@@ -117,8 +117,6 @@ const SUPPORTED_CURSOR_KEYS: CursorAssetKey[] = [
 ];
 
 const DEFAULT_CURSOR_PACK_ANCHOR = { x: 0.08, y: 0.08 } as const;
-const POINTER_CURSOR_PACK_ANCHOR = { x: 0.48, y: 0.1 } as const;
-const CENTERED_CURSOR_PACK_ANCHOR = { x: 0.5, y: 0.5 } as const;
 const CURSOR_PACK_POINTER_TYPES = new Set<CursorAssetKey>(["pointer", "open-hand", "closed-hand"]);
 const BUILTIN_CURSOR_PACK_SOURCES: Record<string, CursorPackSource> = {};
 
