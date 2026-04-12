@@ -393,7 +393,7 @@ See [EXTENSIONS.md](./EXTENSIONS.md) for the full API reference and examples.
 
 ## Acknowledgements
 
-Recordly originally started as a fork of the excellent [OpenScreen](https://github.com/siddharthvaddem/openscreen) project and has since been significantly modified.
+Recordly originally started as a fork of [OpenScreen](https://github.com/siddharthvaddem/openscreen) and has since diverged.
 
 Created by  
 [@webadderall](https://x.com/webadderall)
