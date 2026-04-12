@@ -71,11 +71,9 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		capturesSystemAudio = config.capturesSystemAudio ?? false
 		capturesMicrophone = config.capturesMicrophone ?? false
 		if capturesMicrophone && !supportsNativeMicrophoneCapture(streamConfig: streamConfig) {
-			throw NSError(
-				domain: "RecordlyCapture",
-				code: 10,
-				userInfo: [NSLocalizedDescriptionKey: "Native microphone capture is unavailable on this macOS/Xcode runtime"]
-			)
+			fputs("MICROPHONE_CAPTURE_UNAVAILABLE\n", stderr)
+			fflush(stderr)
+			capturesMicrophone = false
 		}
 		writesSystemAudioToSeparateTrack = capturesSystemAudio
 		writesMicrophoneToSeparateTrack = capturesSystemAudio && capturesMicrophone
