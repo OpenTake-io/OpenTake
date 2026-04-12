@@ -370,6 +370,7 @@ Pull requests are welcome.
 - Anonymous Supporter
 - Roberto Marcelino
 - Rajan RK
+- Francesco
 - Erwan
 - Anonymous supporter
 
