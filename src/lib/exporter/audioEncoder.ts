@@ -14,6 +14,23 @@ const ENCODE_BACKPRESSURE_LIMIT = 20
 const MIN_SPEED_REGION_DELTA_MS = 0.0001
 const MP4_AUDIO_CODEC = 'mp4a.40.2'
 
+export async function isAacAudioEncodingSupported(
+  sampleRate = 48_000,
+  numberOfChannels = 2,
+): Promise<boolean> {
+  try {
+    const support = await AudioEncoder.isConfigSupported({
+      codec: MP4_AUDIO_CODEC,
+      sampleRate,
+      numberOfChannels,
+      bitrate: AUDIO_BITRATE,
+    })
+    return support.supported === true
+  } catch {
+    return false
+  }
+}
+
 type TrimLikeRegion = TrimRegion | ClipRegion
 
 export class AudioProcessor {

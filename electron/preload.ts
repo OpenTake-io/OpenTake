@@ -161,6 +161,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
 			});
 		});
 	},
+	muxExportedVideoAudio: (
+		videoData: ArrayBuffer,
+		options?: {
+			audioMode?: "none" | "copy-source" | "trim-source" | "edited-track";
+			audioSourcePath?: string | null;
+			trimSegments?: Array<{ startMs: number; endMs: number }>;
+			editedAudioData?: ArrayBuffer;
+			editedAudioMimeType?: string | null;
+		},
+	) => {
+		return ipcRenderer.invoke("mux-exported-video-audio", videoData, options);
+	},
 	getVideoAudioFallbackPaths: (videoPath: string) => {
 		return ipcRenderer.invoke("get-video-audio-fallback-paths", videoPath);
 	},
