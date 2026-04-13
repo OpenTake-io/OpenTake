@@ -178,6 +178,20 @@ interface Window {
 		nativeVideoExportCancel: (
 			sessionId: string,
 		) => Promise<{ success: boolean; error?: string }>;
+		muxExportedVideoAudio: (
+			videoData: ArrayBuffer,
+			options?: {
+				audioMode?: "none" | "copy-source" | "trim-source" | "edited-track";
+				audioSourcePath?: string | null;
+				trimSegments?: Array<{ startMs: number; endMs: number }>;
+				editedAudioData?: ArrayBuffer;
+				editedAudioMimeType?: string | null;
+			},
+		) => Promise<{
+			success: boolean;
+			data?: Uint8Array;
+			error?: string;
+		}>;
 		getVideoAudioFallbackPaths: (
 			videoPath: string,
 		) => Promise<{ success: boolean; paths: string[]; error?: string }>;
