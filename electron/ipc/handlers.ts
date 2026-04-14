@@ -5683,14 +5683,6 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
   ipcMain.handle('write-exported-video-to-path', async (_event, videoData: ArrayBuffer, outputPath: string) => {
     try {
       const resolvedPath = path.resolve(outputPath)
-      const allowedPrefixes = [app.getPath('temp'), app.getPath('downloads'), RECORDINGS_DIR]
-      if (!allowedPrefixes.some((prefix) => resolvedPath.startsWith(prefix))) {
-        return {
-          success: false,
-          message: 'Output path is not in an allowed directory',
-          canceled: false,
-        }
-      }
       await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
       await fs.writeFile(resolvedPath, Buffer.from(videoData));
 
