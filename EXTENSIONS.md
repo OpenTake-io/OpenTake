@@ -1,5 +1,7 @@
 # Recordly Extension API
 
+Go to https://www.marketplace.recordly.dev/extensions for full, regularly updated documentation
+
 Recordly extensions run in the editor renderer and use a permission-gated host API. They can draw into the render pipeline, react to playback and export events, register cursor effects, add settings panels, and contribute packaged assets such as frames, wallpapers, and cursor styles.
 
 ## Quick Start
