@@ -12,7 +12,7 @@ import type {
 	ZoomRegion,
 	ZoomTransitionEasing,
 } from "@/components/video-editor/types";
-import { AudioProcessor } from "./audioEncoder";
+import { AudioProcessor, isAacAudioEncodingSupported } from "./audioEncoder";
 import {
 	normalizeLightningRuntimePlatform,
 	shouldPreferNativeAutoBackend,
@@ -293,7 +293,9 @@ export class ModernVideoExporter {
 			this.metadataLoadTimeMs = this.getNowMs() - stageStartedAt;
 			const nativeAudioPlan = this.buildNativeAudioPlan(videoInfo);
 			const shouldUseFfmpegAudioFallback =
-				!useNativeEncoder && nativeAudioPlan.audioMode !== "none";
+				!useNativeEncoder
+				&& nativeAudioPlan.audioMode !== "none"
+				&& !(await isAacAudioEncodingSupported());
 			const effectiveDuration = this.streamingDecoder.getEffectiveDuration(
 				this.config.trimRegions,
 				this.config.speedRegions,
