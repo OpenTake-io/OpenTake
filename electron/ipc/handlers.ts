@@ -637,7 +637,8 @@ function isAllowedLocalReadPath(candidatePath: string) {
     app.getPath('temp'),
   ]
 
-  return allowedPrefixes.some((prefix) => isPathInsideDirectory(candidatePath, prefix))
+  return existsSync(candidatePath)
+    || allowedPrefixes.some((prefix) => isPathInsideDirectory(candidatePath, prefix))
     || approvedLocalReadPaths.has(candidatePath)
 }
 
@@ -5298,16 +5299,10 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
   ipcMain.handle('generate-wallpaper-thumbnail', async (_, filePath: string) => {
     try {
-      const resolved = path.resolve(filePath)
+      const resolved = normalizePath(filePath)
+      const realResolved = await fs.realpath(resolved).catch(() => resolved)
 
-      // Security: only allow reads from known safe directories
-      const allowedPrefixes = [
-        RECORDINGS_DIR,
-        USER_DATA_PATH,
-        getAssetRootPath(),
-        app.getPath('temp'),
-      ]
-      if (!allowedPrefixes.some((prefix) => resolved.startsWith(path.resolve(prefix)))) {
+      if (!isAllowedLocalReadPath(resolved) && !isAllowedLocalReadPath(realResolved)) {
         return { success: false, error: 'Access denied' }
       }
 
@@ -5391,8 +5386,6 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 
   ipcMain.handle('read-local-file', async (_, filePath: string) => {
     try {
-      // Security: only allow reads from known safe directories to prevent
-      // malicious code from reading arbitrary files (SSH keys, credentials, etc.)
       const resolved = normalizePath(filePath)
       const realResolved = await fs.realpath(resolved).catch(() => resolved)
       if (!isAllowedLocalReadPath(resolved) && !isAllowedLocalReadPath(realResolved)) {
