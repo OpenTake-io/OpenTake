@@ -157,6 +157,7 @@ let currentProjectPath: string | null = null
 let nativeScreenRecordingActive = false
 let currentVideoPath: string | null = null
 let currentRecordingSession: RecordingSessionData | null = null
+const approvedLocalReadPaths = new Set<string>()
 let nativeCaptureProcess: ChildProcessWithoutNullStreams | null = null
 let nativeCaptureOutputBuffer = ''
 let nativeCaptureTargetPath: string | null = null
@@ -621,6 +622,44 @@ function normalizeVideoSourcePath(videoPath?: string | null): string | null {
   }
 
   return trimmed
+}
+
+function isPathInsideDirectory(candidatePath: string, directoryPath: string) {
+  const normalizedDirectoryPath = normalizePath(directoryPath)
+  return candidatePath === normalizedDirectoryPath || candidatePath.startsWith(`${normalizedDirectoryPath}${path.sep}`)
+}
+
+function isAllowedLocalReadPath(candidatePath: string) {
+  const allowedPrefixes = [
+    RECORDINGS_DIR,
+    USER_DATA_PATH,
+    getAssetRootPath(),
+    app.getPath('temp'),
+  ]
+
+  return allowedPrefixes.some((prefix) => isPathInsideDirectory(candidatePath, prefix))
+    || approvedLocalReadPaths.has(candidatePath)
+}
+
+async function rememberApprovedLocalReadPath(filePath?: string | null) {
+  const normalizedPath = normalizeVideoSourcePath(filePath)
+  if (!normalizedPath) {
+    return
+  }
+
+  const resolvedPath = normalizePath(normalizedPath)
+  approvedLocalReadPaths.add(resolvedPath)
+
+  try {
+    approvedLocalReadPaths.add(await fs.realpath(resolvedPath))
+  } catch {
+    // Ignore missing files; the eventual read will surface the real error.
+  }
+}
+
+async function replaceApprovedSessionLocalReadPaths(filePaths: Array<string | null | undefined>) {
+  approvedLocalReadPaths.clear()
+  await Promise.all(filePaths.map((filePath) => rememberApprovedLocalReadPath(filePath)))
 }
 
 async function resolveProjectMediaSources(project: unknown): Promise<
@@ -4887,7 +4926,12 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     }
 
     try {
-      return { success: true, paths: await getCompanionAudioFallbackPaths(videoPath) }
+      const paths = await getCompanionAudioFallbackPaths(videoPath)
+      await Promise.all([
+        rememberApprovedLocalReadPath(videoPath),
+        ...paths.map((fallbackPath) => rememberApprovedLocalReadPath(fallbackPath)),
+      ])
+      return { success: true, paths }
     } catch (error) {
       console.error('Failed to resolve companion audio fallback paths:', error)
       return { success: false, paths: [], error: String(error) }
@@ -5349,14 +5393,9 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
     try {
       // Security: only allow reads from known safe directories to prevent
       // malicious code from reading arbitrary files (SSH keys, credentials, etc.)
-      const resolved = path.resolve(filePath)
-      const allowedPrefixes = [
-        RECORDINGS_DIR,
-        USER_DATA_PATH,
-        getAssetRootPath(),
-        app.getPath('temp'),
-      ]
-      if (!allowedPrefixes.some((prefix) => resolved.startsWith(path.resolve(prefix)))) {
+      const resolved = normalizePath(filePath)
+      const realResolved = await fs.realpath(resolved).catch(() => resolved)
+      if (!isAllowedLocalReadPath(resolved) && !isAllowedLocalReadPath(realResolved)) {
         console.warn(`[read-local-file] Blocked read outside allowed directories: ${resolved}`)
         return { success: false, error: 'Access denied: path outside allowed directories' }
       }
@@ -6151,6 +6190,10 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       }
 
     currentRecordingSession = resolvedSession
+    await replaceApprovedSessionLocalReadPaths([
+      resolvedSession.videoPath,
+      resolvedSession.webcamPath,
+    ])
 
     if (resolvedSession.webcamPath) {
       await persistRecordingSessionManifest(resolvedSession)
@@ -6168,6 +6211,10 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       webcamPath: normalizeVideoSourcePath(session.webcamPath ?? null),
       timeOffsetMs: normalizeRecordingTimeOffsetMs(session.timeOffsetMs),
     }
+    await replaceApprovedSessionLocalReadPaths([
+      currentRecordingSession.videoPath,
+      currentRecordingSession.webcamPath,
+    ])
     currentProjectPath = null
     await persistRecordingSessionManifest(currentRecordingSession)
     return { success: true }

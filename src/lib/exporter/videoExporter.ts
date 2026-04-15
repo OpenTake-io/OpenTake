@@ -12,7 +12,7 @@ import type {
 	ZoomTransitionEasing,
 	ZoomRegion,
 } from "@/components/video-editor/types";
-import { AudioProcessor } from "./audioEncoder";
+import { AudioProcessor, isAacAudioEncodingSupported } from "./audioEncoder";
 import { FrameRenderer } from "./frameRenderer";
 import type { SupportedMp4EncoderPath } from "./mp4Support";
 import { captureCanvasFrameForNativeExport } from "./nativeFrameCapture";
@@ -129,7 +129,10 @@ export class VideoExporter {
 			let useNativeEncoder = shouldUseExperimentalNativeExport
 				? await this.tryStartNativeVideoExport()
 				: false;
-			const shouldUseFfmpegAudioFallback = !useNativeEncoder && audioPlan.audioMode !== "none";
+			const shouldUseFfmpegAudioFallback =
+				!useNativeEncoder
+				&& audioPlan.audioMode !== "none"
+				&& !(await isAacAudioEncodingSupported());
 
 			if (!useNativeEncoder) {
 				await this.initializeEncoder();
