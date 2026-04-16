@@ -59,6 +59,38 @@ vi.mock("@/components/video-editor/videoPlayback/cursorRenderer", () => ({
 
 import { FrameRenderer } from "./frameRenderer";
 
+type MockFunction = ReturnType<typeof vi.fn>;
+type MockContext = {
+	beginPath: MockFunction;
+	moveTo: MockFunction;
+	lineTo: MockFunction;
+	closePath: MockFunction;
+	clip: MockFunction;
+	drawImage: MockFunction;
+	save: MockFunction;
+	restore: MockFunction;
+	translate: MockFunction;
+	scale: MockFunction;
+	clearRect: MockFunction;
+	filter: string;
+};
+type MockCanvas = ReturnType<typeof createMockCanvas>;
+type FrameRendererTestAccess = {
+	webcamVideoElement: FakeVideoElement | null;
+	webcamSeekPromise: Promise<void> | null;
+	webcamFrameCacheCanvas: MockCanvas | null;
+	webcamFrameCacheCtx: CanvasRenderingContext2D | null;
+	lastSyncedWebcamTime: number | null;
+	currentVideoTime: number;
+	animationState: { appliedScale: number };
+	syncWebcamFrame: (targetTimeSec: number) => Promise<void>;
+	drawWebcamOverlay: (
+		outputCtx: CanvasRenderingContext2D,
+		outputWidth: number,
+		outputHeight: number,
+	) => void;
+};
+
 type Listener = {
 	callback: () => void;
 	once: boolean;
@@ -169,7 +201,7 @@ function createMockContext() {
 		scale: vi.fn(),
 		clearRect: vi.fn(),
 		filter: "",
-	} as unknown as CanvasRenderingContext2D;
+	};
 }
 
 function createMockCanvas() {
@@ -178,7 +210,7 @@ function createMockCanvas() {
 		width: 0,
 		height: 0,
 		context,
-		getContext: vi.fn((_type?: string) => context),
+		getContext: vi.fn((_type?: string) => context as unknown as CanvasRenderingContext2D),
 	};
 }
 
@@ -235,7 +267,7 @@ describe("FrameRenderer webcam export path", () => {
 	});
 
 	it("clamps webcam sync seeks to the media duration", async () => {
-		const renderer = createRenderer() as any;
+		const renderer = createRenderer() as unknown as FrameRendererTestAccess;
 		const webcamVideo = new FakeVideoElement({ duration: 4.5, currentTime: 0.25 });
 		renderer.webcamVideoElement = webcamVideo;
 
@@ -247,7 +279,7 @@ describe("FrameRenderer webcam export path", () => {
 	});
 
 	it("falls back to animation frame when requestVideoFrameCallback does not fire", async () => {
-		const renderer = createRenderer() as any;
+		const renderer = createRenderer() as unknown as FrameRendererTestAccess;
 		const webcamVideo = new FakeVideoElement({
 			duration: 4.5,
 			currentTime: 0.25,
@@ -269,7 +301,7 @@ describe("FrameRenderer webcam export path", () => {
 	});
 
 	it("uses the cached webcam frame when the live video is out of sync", () => {
-		const renderer = createRenderer() as any;
+		const renderer = createRenderer() as unknown as FrameRendererTestAccess;
 		const outputContext = createMockContext();
 		const webcamVideo = new FakeVideoElement({
 			currentTime: 2,
@@ -288,16 +320,18 @@ describe("FrameRenderer webcam export path", () => {
 		renderer.currentVideoTime = 2;
 		renderer.animationState.appliedScale = 1;
 
-		renderer.drawWebcamOverlay(outputContext, 1280, 720);
+		renderer.drawWebcamOverlay(outputContext as unknown as CanvasRenderingContext2D, 1280, 720);
 
 		const bubbleCanvas = createdCanvases[0];
 		expect(bubbleCanvas).toBeDefined();
-		expect((bubbleCanvas.context.drawImage as any).mock.calls[0][0]).toBe(cachedFrameCanvas);
-		expect((outputContext.drawImage as any).mock.calls[0][0]).toBe(bubbleCanvas);
+		expect((bubbleCanvas.context as MockContext).drawImage.mock.calls[0][0]).toBe(
+			cachedFrameCanvas,
+		);
+		expect((outputContext as MockContext).drawImage.mock.calls[0][0]).toBe(bubbleCanvas);
 	});
 
 	it("keeps drawing the cached webcam frame when the live element temporarily has no current data", () => {
-		const renderer = createRenderer() as any;
+		const renderer = createRenderer() as unknown as FrameRendererTestAccess;
 		const outputContext = createMockContext();
 		const webcamVideo = new FakeVideoElement({
 			currentTime: 2,
@@ -316,16 +350,18 @@ describe("FrameRenderer webcam export path", () => {
 		renderer.currentVideoTime = 2;
 		renderer.animationState.appliedScale = 1;
 
-		renderer.drawWebcamOverlay(outputContext, 1280, 720);
+		renderer.drawWebcamOverlay(outputContext as unknown as CanvasRenderingContext2D, 1280, 720);
 
 		const bubbleCanvas = createdCanvases[0];
 		expect(bubbleCanvas).toBeDefined();
-		expect((bubbleCanvas.context.drawImage as any).mock.calls[0][0]).toBe(cachedFrameCanvas);
-		expect((outputContext.drawImage as any).mock.calls[0][0]).toBe(bubbleCanvas);
+		expect((bubbleCanvas.context as MockContext).drawImage.mock.calls[0][0]).toBe(
+			cachedFrameCanvas,
+		);
+		expect((outputContext as MockContext).drawImage.mock.calls[0][0]).toBe(bubbleCanvas);
 	});
 
 	it("uses the live webcam frame and refreshes the cache when the video is synchronized", () => {
-		const renderer = createRenderer() as any;
+		const renderer = createRenderer() as unknown as FrameRendererTestAccess;
 		const outputContext = createMockContext();
 		const webcamVideo = new FakeVideoElement({
 			currentTime: 2,
@@ -339,18 +375,18 @@ describe("FrameRenderer webcam export path", () => {
 		renderer.currentVideoTime = 2;
 		renderer.animationState.appliedScale = 1;
 
-		renderer.drawWebcamOverlay(outputContext, 1280, 720);
+		renderer.drawWebcamOverlay(outputContext as unknown as CanvasRenderingContext2D, 1280, 720);
 
 		const bubbleCanvas = createdCanvases[0];
 		const cacheCanvas = createdCanvases[1];
 		expect(cacheCanvas).toBeDefined();
-		expect((cacheCanvas.context.drawImage as any).mock.calls[0][0]).toBe(webcamVideo);
-		expect((bubbleCanvas.context.drawImage as any).mock.calls[0][0]).toBe(cacheCanvas);
-		expect((outputContext.drawImage as any).mock.calls[0][0]).toBe(bubbleCanvas);
+		expect((cacheCanvas.context as MockContext).drawImage.mock.calls[0][0]).toBe(webcamVideo);
+		expect((bubbleCanvas.context as MockContext).drawImage.mock.calls[0][0]).toBe(cacheCanvas);
+		expect((outputContext as MockContext).drawImage.mock.calls[0][0]).toBe(bubbleCanvas);
 	});
 
 	it("reuses the webcam bubble canvas across frames", () => {
-		const renderer = createRenderer() as any;
+		const renderer = createRenderer() as unknown as FrameRendererTestAccess;
 		const outputContext = createMockContext();
 		const webcamVideo = new FakeVideoElement({
 			currentTime: 2,
@@ -364,8 +400,8 @@ describe("FrameRenderer webcam export path", () => {
 		renderer.currentVideoTime = 2;
 		renderer.animationState.appliedScale = 1;
 
-		renderer.drawWebcamOverlay(outputContext, 1280, 720);
-		renderer.drawWebcamOverlay(outputContext, 1280, 720);
+		renderer.drawWebcamOverlay(outputContext as unknown as CanvasRenderingContext2D, 1280, 720);
+		renderer.drawWebcamOverlay(outputContext as unknown as CanvasRenderingContext2D, 1280, 720);
 
 		expect(createdCanvases).toHaveLength(2);
 	});

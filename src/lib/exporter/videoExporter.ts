@@ -103,6 +103,9 @@ export class VideoExporter {
 	private nativeExportSessionId: string | null = null;
 	private nativeH264Encoder: VideoEncoder | null = null;
 	private nativePendingWrite: Promise<void> = Promise.resolve();
+	private nativeWritePromises = new Set<Promise<void>>();
+	private nativeWriteError: Error | null = null;
+	private maxNativeWriteInFlight = 1;
 	private nativeEncoderError: Error | null = null;
 
 	constructor(config: VideoExporterConfig) {
@@ -116,6 +119,12 @@ export class VideoExporter {
 			this.encoderError = null;
 			this.nativeEncoderError = null;
 			this.nativePendingWrite = Promise.resolve();
+			this.nativeWritePromises = new Set();
+			this.nativeWriteError = null;
+			this.maxNativeWriteInFlight = Math.max(
+				1,
+				Math.floor(this.config.maxInFlightNativeWrites ?? 1),
+			);
 			this.exportStartTimeMs = this.getNowMs();
 			this.progressSampleStartTimeMs = this.exportStartTimeMs;
 			this.progressSampleStartFrame = 0;
@@ -260,7 +269,7 @@ export class VideoExporter {
 			if (useNativeEncoder && nativeAudioPlan) {
 				if (this.nativeH264Encoder) {
 					await this.nativeH264Encoder.flush();
-					await this.nativePendingWrite;
+					await this.awaitPendingNativeWrites();
 					if (this.nativeEncoderError) {
 						throw this.nativeEncoderError;
 					}
@@ -541,6 +550,12 @@ export class VideoExporter {
 
 		this.nativeExportSessionId = result.sessionId;
 		this.nativePendingWrite = Promise.resolve();
+		this.nativeWritePromises = new Set();
+		this.nativeWriteError = null;
+		this.maxNativeWriteInFlight = Math.max(
+			1,
+			Math.floor(this.config.maxInFlightNativeWrites ?? 1),
+		);
 
 		// Initialize the browser-side H.264 encoder (hardware-accelerated where available).
 		// Encoded Annex B chunks are sent over IPC and FFmpeg stream-copies them into MP4.
@@ -550,7 +565,7 @@ export class VideoExporter {
 				if (this.cancelled || !this.nativeExportSessionId) return;
 				const buffer = new ArrayBuffer(chunk.byteLength);
 				chunk.copyTo(buffer);
-				this.nativePendingWrite = this.nativePendingWrite
+				const writePromise = (this.nativePendingWrite = this.nativePendingWrite
 					.then(async () => {
 						const writeResult = await window.electronAPI.nativeVideoExportWriteFrame(
 							sessionId,
@@ -567,7 +582,12 @@ export class VideoExporter {
 							this.nativeEncoderError =
 								error instanceof Error ? error : new Error(String(error));
 						}
-					});
+						if (!this.cancelled && !this.nativeWriteError) {
+							this.nativeWriteError =
+								error instanceof Error ? error : new Error(String(error));
+						}
+					}));
+				this.trackNativeWritePromise(writePromise);
 			},
 			error: (e) => {
 				this.nativeEncoderError = e;
@@ -607,16 +627,37 @@ export class VideoExporter {
 		}
 
 		if (this.nativeEncoderError) throw this.nativeEncoderError;
+		if (this.nativeWriteError) throw this.nativeWriteError;
+
+		while (this.nativeWritePromises.size >= this.maxNativeWriteInFlight && !this.cancelled) {
+			await this.awaitOldestNativeWrite();
+			if (this.nativeEncoderError) throw this.nativeEncoderError;
+			if (this.nativeWriteError) throw this.nativeWriteError;
+		}
 
 		// Apply backpressure: don't queue too far ahead of FFmpeg's stdin pipe
-		while (this.nativeH264Encoder.encodeQueueSize >= 32) {
+		while (
+			this.nativeH264Encoder.encodeQueueSize >=
+				Math.max(1, Math.floor(this.config.maxEncodeQueue ?? DEFAULT_MAX_ENCODE_QUEUE))
+		) {
 			await new Promise<void>((r) => setTimeout(r, 2));
 			if (this.cancelled) return;
 			if (this.nativeEncoderError) throw this.nativeEncoderError;
+			if (this.nativeWriteError) throw this.nativeWriteError;
 		}
 
 		const canvas = this.renderer!.getCanvas();
-		const frame = new VideoFrame(canvas, { timestamp, duration: frameDuration });
+		// @ts-expect-error - colorSpace not in TypeScript definitions but works at runtime
+		const frame = new VideoFrame(canvas, {
+			timestamp,
+			duration: frameDuration,
+			colorSpace: {
+				primaries: "bt709",
+				transfer: "iec61966-2-1",
+				matrix: "rgb",
+				fullRange: true,
+			},
+		});
 		this.nativeH264Encoder.encode(frame, { keyFrame: frameIndex % 300 === 0 });
 		frame.close();
 	}
@@ -785,6 +826,37 @@ export class VideoExporter {
 		}
 
 		exportFrame.close();
+	}
+
+	private trackNativeWritePromise(writePromise: Promise<void>): void {
+		this.nativeWritePromises.add(writePromise);
+
+		void writePromise.finally(() => {
+			this.nativeWritePromises.delete(writePromise);
+		});
+	}
+
+	private async awaitOldestNativeWrite(): Promise<void> {
+		const oldestWritePromise = this.nativeWritePromises.values().next().value;
+		if (!oldestWritePromise) {
+			return;
+		}
+
+		await oldestWritePromise;
+
+		if (this.nativeWriteError) {
+			throw this.nativeWriteError;
+		}
+	}
+
+	private async awaitPendingNativeWrites(): Promise<void> {
+		while (this.nativeWritePromises.size > 0) {
+			await this.awaitOldestNativeWrite();
+		}
+
+		if (this.nativeWriteError) {
+			throw this.nativeWriteError;
+		}
 	}
 
 	private reportFinalizingProgress(

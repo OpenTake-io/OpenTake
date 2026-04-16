@@ -64,11 +64,12 @@ export class AudioProcessor {
 			return false;
 		}
 
-		const reader = audioStream.getReader();
+		let reader: ReadableStreamDefaultReader<EncodedAudioChunk> | null = null;
 		let wroteAudio = false;
 		let passthroughTimestampOffsetUs: number | null = null;
 
 		try {
+			reader = audioStream.getReader();
 			while (!this.cancelled) {
 				const { done, value: chunk } = await reader.read();
 				if (done || !chunk) break;
@@ -97,10 +98,12 @@ export class AudioProcessor {
 				wroteAudio = true;
 			}
 		} finally {
-			try {
-				await reader.cancel();
-			} catch {
-				// reader already closed
+			if (reader) {
+				try {
+					await reader.cancel();
+				} catch {
+					// reader already closed
+				}
 			}
 		}
 
@@ -424,9 +427,10 @@ export class AudioProcessor {
 		});
 		decoder.configure(audioConfig);
 
-		const reader = audioStream.getReader();
+		let reader: ReadableStreamDefaultReader<EncodedAudioChunk> | null = null;
 
 		try {
+			reader = audioStream.getReader();
 			while (!this.cancelled) {
 				failIfNeeded();
 
@@ -473,10 +477,12 @@ export class AudioProcessor {
 			await pendingMuxing;
 			failIfNeeded();
 		} finally {
-			try {
-				await reader.cancel();
-			} catch {
-				// reader already closed
+			if (reader) {
+				try {
+					await reader.cancel();
+				} catch {
+					// reader already closed
+				}
 			}
 
 			cleanupPendingFrames();

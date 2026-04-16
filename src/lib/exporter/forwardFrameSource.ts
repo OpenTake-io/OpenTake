@@ -46,6 +46,9 @@ export class ForwardFrameSource {
 		try {
 			const url = new URL(resourceUrl);
 			let filePath = decodeURIComponent(url.pathname);
+			if (url.host && url.host !== "localhost") {
+				return `//${url.host}${filePath}`;
+			}
 			if (/^\/[A-Za-z]:/.test(filePath)) {
 				filePath = filePath.slice(1);
 			}
@@ -345,6 +348,16 @@ export class ForwardFrameSource {
 
 	cancel(): void {
 		this.cancelled = true;
+		if (this.frameResolve) {
+			const resolve = this.frameResolve;
+			this.frameResolve = null;
+			resolve(null);
+		}
+		if (this.reader) {
+			void this.reader.cancel().catch(() => {
+				// Ignore cancellation errors during shutdown.
+			});
+		}
 	}
 
 	async destroy(): Promise<void> {
