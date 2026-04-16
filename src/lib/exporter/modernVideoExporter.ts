@@ -912,6 +912,11 @@ export class ModernVideoExporter {
 			throw new Error(`${NATIVE_EXPORT_ENGINE_NAME} export session is not active`);
 		}
 		if (this.nativeEncoderError) throw this.nativeEncoderError;
+		while (this.nativeWritePromises.size >= this.maxNativeWriteInFlight) {
+			await this.awaitOldestNativeWrite();
+			if (this.cancelled) return;
+			if (this.nativeEncoderError) throw this.nativeEncoderError;
+		}
 		while (
 			this.nativeH264Encoder.encodeQueueSize >=
 			ModernVideoExporter.NATIVE_ENCODER_QUEUE_LIMIT

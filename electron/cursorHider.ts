@@ -133,11 +133,12 @@ export function showCursor() {
 	try {
 		const didShow =
 			runPythonSnippet(PY_SHOW_WIN) || runPowerShellSnippet(getPowerShellCommand(true));
+		if (didShow) {
+			cursorHidden = false;
+		}
 		return didShow;
 	} catch (error) {
 		console.error("[cursorHider] Failed to show Windows cursor:", error);
 		return false;
-	} finally {
-		cursorHidden = false;
 	}
 }
