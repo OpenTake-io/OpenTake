@@ -294,15 +294,16 @@ export class ExtensionHost {
 	executeRenderHooks(phase: RenderHookPhase, context: RenderHookContext): void {
 		const hooks = this.renderHooks.filter((h) => h.phase === phase);
 		for (const hook of hooks) {
+			context.ctx.save();
 			try {
-				context.ctx.save();
 				hook.hook(context);
-				context.ctx.restore();
 			} catch (err) {
 				console.warn(
 					`[extensions] Render hook error (${hook.extensionId}, ${phase}):`,
 					err,
 				);
+			} finally {
+				context.ctx.restore();
 			}
 		}
 	}
@@ -313,13 +314,14 @@ export class ExtensionHost {
 	executeCursorEffects(context: CursorEffectContext): boolean {
 		let anyActive = false;
 		for (const effect of this.cursorEffects) {
+			context.ctx.save();
 			try {
-				context.ctx.save();
 				const stillActive = effect.effect(context);
-				context.ctx.restore();
 				if (stillActive) anyActive = true;
 			} catch (err) {
 				console.warn(`[extensions] Cursor effect error (${effect.extensionId}):`, err);
+			} finally {
+				context.ctx.restore();
 			}
 		}
 		return anyActive;

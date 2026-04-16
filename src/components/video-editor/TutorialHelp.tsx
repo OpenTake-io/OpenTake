@@ -22,6 +22,11 @@ const CONTACT_EMAIL = "youngchen3442@gmail.com";
 export const APP_HEADER_ACTION_BUTTON_CLASS = "h-7 px-2 text-xs text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all gap-1.5";
 export const APP_HEADER_ICON_BUTTON_CLASS = "h-7 w-7 p-0 text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all";
 
+interface KeyboardShortcutsDialogProps {
+	triggerLabel?: string;
+	triggerClassName?: string;
+}
+
 function DiscordIcon(props: React.SVGProps<SVGSVGElement>) {
 	return (
 		<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
@@ -137,7 +142,10 @@ export function FeedbackDialog() {
 	);
 }
 
-export function KeyboardShortcutsDialog() {
+export function KeyboardShortcutsDialog({
+	triggerLabel,
+	triggerClassName,
+}: KeyboardShortcutsDialogProps) {
 	const { shortcuts, isMac, openConfig } = useShortcuts();
 	const t = useScopedT("editor");
 	const [scrollLabels, setScrollLabels] = useState({
@@ -158,11 +166,12 @@ export function KeyboardShortcutsDialog() {
 				<Button
 					variant="ghost"
 					size="sm"
-					className={APP_HEADER_ICON_BUTTON_CLASS}
+					className={triggerClassName ?? APP_HEADER_ICON_BUTTON_CLASS}
 					title={t("keyboardShortcuts.trigger", "Shortcuts")}
 					aria-label={t("keyboardShortcuts.trigger", "Shortcuts")}
 				>
 					<Keyboard className="h-3.5 w-3.5" />
+					{triggerLabel ? <span className="font-medium">{triggerLabel}</span> : null}
 				</Button>
 			</DialogTrigger>
 			<DialogContent className="max-w-lg bg-[#09090b] border-white/10 [&>button]:text-slate-400 [&>button:hover]:text-white">

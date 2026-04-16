@@ -1767,10 +1767,14 @@ export default function VideoEditor() {
 		loadInitialData();
 	}, [
 		applyLoadedProject,
-		autoApplyFreshRecordingAutoZooms,
 		smokeExportConfig.enabled,
 		smokeExportConfig.inputPath,
 	]);
+
+	useEffect(() => {
+		pendingFreshRecordingAutoZoomPathRef.current =
+			autoApplyFreshRecordingAutoZooms && videoPath ? videoPath : null;
+	}, [autoApplyFreshRecordingAutoZooms, videoPath]);
 
 	useEffect(() => {
 		saveEditorPreferences({
@@ -1778,6 +1782,7 @@ export default function VideoEditor() {
 			shadowIntensity,
 			backgroundBlur,
 			zoomMotionBlur,
+			autoApplyFreshRecordingAutoZooms,
 			connectZooms,
 			zoomInDurationMs,
 			zoomInOverlapMs,
@@ -2657,12 +2662,14 @@ export default function VideoEditor() {
 				startMs: target.startMs,
 				endMs: Math.round(splitMs),
 				speed: target.speed,
+				muted: target.muted,
 			};
 			const right: ClipRegion = {
 				id: rightId,
 				startMs: Math.round(splitMs),
 				endMs: target.endMs,
 				speed: target.speed,
+				muted: target.muted,
 			};
 			return prev.flatMap((c) => (c.id === target.id ? [left, right] : [c]));
 		});
@@ -3579,7 +3586,7 @@ export default function VideoEditor() {
 							: smokeExportConfig.enabled
 								? (smokeExportConfig.backendPreference ??
 									(smokeExportConfig.useNativeExport ? "breeze" : "webcodecs"))
-								: "auto";
+								: (settings.backendPreference ?? exportBackendPreference);
 					const supportedSourceDimensions =
 						await ensureSupportedMp4SourceDimensions(selectedMp4FrameRate);
 					const { width: exportWidth, height: exportHeight } =
@@ -5122,7 +5129,7 @@ export default function VideoEditor() {
 						cursorTelemetry={normalizedCursorTelemetry}
 						autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
 						onAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
-						zoomRegions={effectiveZoomRegions}
+						zoomRegions={zoomRegions}
 						onZoomAdded={handleZoomAdded}
 						onZoomSuggested={handleZoomSuggested}
 						onZoomSpanChange={handleZoomSpanChange}

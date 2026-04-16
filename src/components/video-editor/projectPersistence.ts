@@ -151,7 +151,7 @@ export function normalizeExportPipelineModel(value: unknown): ExportPipelineMode
 		return value;
 	}
 
-	return "modern";
+	return "legacy";
 }
 
 export function normalizeExportMp4FrameRate(value: unknown): ExportMp4FrameRate {
@@ -381,6 +381,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						startMs,
 						endMs,
 						speed: isFiniteNumber(region.speed) ? region.speed : 1,
+						muted: typeof region.muted === "boolean" ? region.muted : false,
 					};
 				})
 		: [];

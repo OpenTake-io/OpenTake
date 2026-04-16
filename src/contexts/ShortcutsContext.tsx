@@ -38,14 +38,16 @@ export function ShortcutsProvider({ children }: { children: ReactNode }) {
 			.then(setIsMac)
 			.catch(() => undefined);
 
-		window.electronAPI
-			?.getShortcuts?.()
-			.then((saved) => {
+		void (async () => {
+			try {
+				const saved = await window.electronAPI?.getShortcuts?.();
 				if (saved) {
 					setShortcuts(mergeWithDefaults(saved as Partial<ShortcutsConfig>));
 				}
-			})
-			.catch(() => undefined);
+			} catch {
+				return undefined;
+			}
+		})();
 	}, []);
 
 	const persistShortcuts = useCallback(

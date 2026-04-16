@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent } from "react";
 import { useTimelineContext } from "dnd-timeline";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +37,7 @@ const TARGET_MARKER_COUNT = 12;
 interface TimelineEditorProps {
   videoDuration: number;
   currentTime: number;
+  playheadTime?: number;
   onSeek?: (time: number) => void;
   cursorTelemetry?: CursorTelemetryPoint[];
   autoSuggestZoomsTrigger?: number;
@@ -62,7 +63,7 @@ interface TimelineEditorProps {
   selectedClipId?: string | null;
   onSelectClip?: (id: string | null) => void;
   annotationRegions?: AnnotationRegion[];
-  onAnnotationAdded?: (span: Span) => void;
+  onAnnotationAdded?: (span: Span, trackIndex?: number) => void;
   onAnnotationSpanChange?: (id: string, span: Span) => void;
   onAnnotationDelete?: (id: string) => void;
   selectedAnnotationId?: string | null;
@@ -79,11 +80,26 @@ interface TimelineEditorProps {
   onAudioDelete?: (id: string) => void;
   selectedAudioId?: string | null;
   onSelectAudio?: (id: string | null) => void;
-  aspectRatio: AspectRatio;
-  onAspectRatioChange: (aspectRatio: AspectRatio) => void;
+  aspectRatio?: AspectRatio;
+  onAspectRatioChange?: (aspectRatio: AspectRatio) => void;
   onOpenCropEditor?: () => void;
   isCropped?: boolean;
   videoPath?: string | null;
+  isPlaying?: boolean;
+  onTogglePlayPause?: () => void;
+  volume?: number;
+  onVolumeChange?: (volume: number) => void;
+  hideToolbar?: boolean;
+}
+
+export interface TimelineEditorHandle {
+  addZoom: () => void;
+  suggestZooms: () => void;
+  splitClip: () => void;
+  addAnnotation: (trackIndex?: number) => void;
+  addAudio: () => Promise<void>;
+  toggleCollapsed: () => void;
+  keyframes: { id: string; time: number }[];
 }
 
 interface TimelineScaleConfig {
@@ -625,9 +641,10 @@ function Timeline({
   );
 }
 
-export default function TimelineEditor({
+const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(function TimelineEditor({
   videoDuration,
   currentTime,
+  playheadTime,
   onSeek,
   cursorTelemetry = [],
   autoSuggestZoomsTrigger = 0,
@@ -670,16 +687,16 @@ export default function TimelineEditor({
   onAudioDelete,
   selectedAudioId,
   onSelectAudio,
-  aspectRatio,
-  onAspectRatioChange,
+  aspectRatio = 'native',
+  onAspectRatioChange = () => {},
   onOpenCropEditor,
   isCropped = false,
   videoPath,
-}: TimelineEditorProps) {
+}, ref) {
   const t = useScopedT("settings");
   const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
   const totalMs = useMemo(() => Math.max(0, Math.round(videoDuration * 1000)), [videoDuration]);
-  const currentTimeMs = useMemo(() => Math.round(currentTime * 1000), [currentTime]);
+  const currentTimeMs = useMemo(() => Math.round((playheadTime ?? currentTime) * 1000), [currentTime, playheadTime]);
   const timelineScale = useMemo(() => calculateTimelineScale(videoDuration), [videoDuration]);
   const safeMinDurationMs = useMemo(
     () => (totalMs > 0 ? Math.min(timelineScale.minItemDurationMs, totalMs) : timelineScale.minItemDurationMs),
@@ -1239,7 +1256,7 @@ export default function TimelineEditor({
     onAudioAdded({ start: startPos, end: startPos + actualDuration }, result.path);
   }, [videoDuration, totalMs, currentTimeMs, audioRegions, onAudioAdded]);
 
-  const handleAddAnnotation = useCallback(() => {
+  const handleAddAnnotation = useCallback((trackIndex = 0) => {
     if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onAnnotationAdded) {
       return;
     }
@@ -1253,7 +1270,7 @@ export default function TimelineEditor({
     const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
     const endPos = Math.min(startPos + defaultDuration, totalMs);
 
-    onAnnotationAdded({ start: startPos, end: endPos });
+    onAnnotationAdded({ start: startPos, end: endPos }, trackIndex);
   }, [videoDuration, totalMs, currentTimeMs, onAnnotationAdded, defaultRegionDurationMs]);
 
   useEffect(() => {
@@ -1350,6 +1367,16 @@ export default function TimelineEditor({
       end: Math.min(range.end, totalMs),
     };
   }, [range, totalMs]);
+
+  useImperativeHandle(ref, () => ({
+    addZoom: handleAddZoom,
+    suggestZooms: handleSuggestZooms,
+    splitClip: handleSplitClip,
+    addAnnotation: handleAddAnnotation,
+    addAudio: handleAddAudio,
+    toggleCollapsed: () => {},
+    keyframes,
+  }), [handleAddAnnotation, handleAddAudio, handleAddZoom, handleSuggestZooms, handleSplitClip, keyframes]);
 
   const timelineItems = useMemo<TimelineRenderItem[]>(() => {
     const zooms: TimelineRenderItem[] = zoomRegions.map((region, index) => ({
@@ -1510,7 +1537,7 @@ export default function TimelineEditor({
             <WandSparkles className="w-4 h-4" />
           </Button>
           <Button
-            onClick={handleAddAnnotation}
+            onClick={() => handleAddAnnotation()}
             variant="ghost"
             size="icon"
             className="h-7 w-7 text-slate-400 hover:text-[#B4A046] hover:bg-[#B4A046]/10 transition-all"
@@ -1686,4 +1713,8 @@ export default function TimelineEditor({
       </div>
     </div>
   );
-}
+});
+
+TimelineEditor.displayName = "TimelineEditor";
+
+export default TimelineEditor;
