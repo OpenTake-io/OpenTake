@@ -157,7 +157,7 @@ function getActiveRegion(
 
 function getConnectedRegionHold(timeMs: number, connectedPairs: ConnectedRegionPair[]) {
 	for (const pair of connectedPairs) {
-		if (timeMs > pair.transitionEnd && timeMs < pair.nextRegion.startMs) {
+		if (timeMs >= pair.transitionEnd && timeMs < pair.nextRegion.startMs) {
 			const nextScale = ZOOM_DEPTH_SCALES[pair.nextRegion.depth];
 			return {
 				region: {

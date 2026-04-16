@@ -404,11 +404,11 @@ describe("findDominantRegion", () => {
 	it("holds the next region's focus between connected-transition end and next start", () => {
 		const regions: ZoomRegion[] = [
 			{ id: "a", startMs: 1000, endMs: 3000, depth: 2, focus: { cx: 0.2, cy: 0.2 } },
-			{ id: "b", startMs: 4200, endMs: 7000, depth: 3, focus: { cx: 0.7, cy: 0.7 } },
+			{ id: "b", startMs: 4300, endMs: 7000, depth: 3, focus: { cx: 0.7, cy: 0.7 } },
 		];
 
-		// After transition end (3000+200+1000=4200) but before b starts (4200)
-		const result = findDominantRegion(regions, 4100, { connectZooms: true });
+		// After transition end (3000+200+1000=4200) but before b starts (4300)
+		const result = findDominantRegion(regions, 4250, { connectZooms: true });
 		expect(result.strength).toBe(1);
 		expect(result.region).not.toBeNull();
 		expect(result.region!.id).toBe("b");
