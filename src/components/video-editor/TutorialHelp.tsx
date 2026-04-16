@@ -1,5 +1,15 @@
-import { ArrowRight, ExternalLink, HelpCircle, Keyboard, MessageSquareMore, Scissors, Settings2, Twitter } from "lucide-react";
+import {
+	ArrowRight,
+	ArrowSquareOut as ExternalLink,
+	ChatCircleDots as MessageSquareMore,
+	Gear as Settings2,
+	Keyboard,
+	Question as HelpCircle,
+	Scissors,
+	TwitterLogo as Twitter,
+} from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -13,14 +23,21 @@ import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { formatBinding, SHORTCUT_ACTIONS, SHORTCUT_LABELS } from "@/lib/shortcuts";
 import { formatShortcut } from "@/utils/platformUtils";
-import { toast } from "sonner";
 
 export const RECORDLY_ISSUES_URL = "https://github.com/webadderall/Recordly/issues";
 const RECORDLY_DISCORD_URL = "https://discord.gg/FcfNN4S9m";
 const RECORDLY_X_URL = "https://x.com/webadderall";
 const CONTACT_EMAIL = "youngchen3442@gmail.com";
-export const APP_HEADER_ACTION_BUTTON_CLASS = "h-7 px-2 text-xs text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all gap-1.5";
-export const APP_HEADER_ICON_BUTTON_CLASS = "h-7 w-7 p-0 text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all";
+export const APP_HEADER_ACTION_BUTTON_CLASS =
+	"h-7 px-2 text-xs text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all gap-1.5";
+export const APP_HEADER_ICON_BUTTON_CLASS =
+	"h-7 w-7 p-0 text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all";
+
+type KeyboardShortcutsDialogProps = {
+	triggerLabel?: string;
+	triggerClassName?: string;
+	iconOnly?: boolean;
+};
 
 function DiscordIcon(props: React.SVGProps<SVGSVGElement>) {
 	return (
@@ -49,7 +66,12 @@ export function DiscordLinkButton() {
 			type="button"
 			variant="ghost"
 			size="sm"
-			onClick={() => void openExternalLink(RECORDLY_DISCORD_URL, t("feedback.openFailed", "Failed to open link."))}
+			onClick={() =>
+				void openExternalLink(
+					RECORDLY_DISCORD_URL,
+					t("feedback.openFailed", "Failed to open link."),
+				)
+			}
 			className={APP_HEADER_ICON_BUTTON_CLASS}
 			title={t("common.app.discord", "Join Discord")}
 			aria-label={t("common.app.discord", "Join Discord")}
@@ -78,10 +100,14 @@ export function FeedbackDialog() {
 			<DialogContent className="max-w-lg bg-[#09090b] border-white/10 [&>button]:text-slate-400 [&>button:hover]:text-white">
 				<DialogHeader>
 					<DialogTitle className="text-xl font-semibold text-slate-200 flex items-center gap-2">
-						<MessageSquareMore className="h-5 w-5 text-[#2563EB]" /> {t("feedback.title", "Feedback & contact")}
+						<MessageSquareMore className="h-5 w-5 text-[#2563EB]" />{" "}
+						{t("feedback.title", "Feedback & contact")}
 					</DialogTitle>
 					<DialogDescription className="text-slate-400">
-						{t("feedback.description", "Reach out directly or open an issue if something is broken or missing.")}
+						{t(
+							"feedback.description",
+							"Reach out directly or open an issue if something is broken or missing.",
+						)}
 					</DialogDescription>
 				</DialogHeader>
 				<div className="mt-4 space-y-4">
@@ -91,12 +117,19 @@ export function FeedbackDialog() {
 								<p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
 									{t("feedback.emailLabel", "Email")}
 								</p>
-								<p className="mt-1 text-sm font-medium text-slate-100">{CONTACT_EMAIL}</p>
+								<p className="mt-1 text-sm font-medium text-slate-100">
+									{CONTACT_EMAIL}
+								</p>
 							</div>
 							<Button
 								type="button"
 								variant="outline"
-								onClick={() => void openExternalLink(`mailto:${CONTACT_EMAIL}`, t("feedback.openFailed", "Failed to open link."))}
+								onClick={() =>
+									void openExternalLink(
+										`mailto:${CONTACT_EMAIL}`,
+										t("feedback.openFailed", "Failed to open link."),
+									)
+								}
 								className="border-white/10 bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white"
 							>
 								<ExternalLink className="h-3.5 w-3.5" />
@@ -107,12 +140,19 @@ export function FeedbackDialog() {
 								<p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
 									{t("feedback.xLabel", "X")}
 								</p>
-								<p className="mt-1 text-sm font-medium text-slate-100">@webadderall</p>
+								<p className="mt-1 text-sm font-medium text-slate-100">
+									@webadderall
+								</p>
 							</div>
 							<Button
 								type="button"
 								variant="outline"
-								onClick={() => void openExternalLink(RECORDLY_X_URL, t("feedback.openFailed", "Failed to open link."))}
+								onClick={() =>
+									void openExternalLink(
+										RECORDLY_X_URL,
+										t("feedback.openFailed", "Failed to open link."),
+									)
+								}
 								className="border-white/10 bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white"
 							>
 								<Twitter className="h-3.5 w-3.5" />
@@ -122,7 +162,12 @@ export function FeedbackDialog() {
 					<Button
 						type="button"
 						variant="outline"
-						onClick={() => void openExternalLink(RECORDLY_ISSUES_URL, t("feedback.openFailed", "Failed to open link."))}
+						onClick={() =>
+							void openExternalLink(
+								RECORDLY_ISSUES_URL,
+								t("feedback.openFailed", "Failed to open link."),
+							)
+						}
 						className="h-10 w-full justify-between border-white/10 bg-white/5 px-4 text-slate-200 hover:bg-white/10 hover:text-white"
 					>
 						<span className="flex items-center gap-2 text-sm font-medium">
@@ -137,7 +182,11 @@ export function FeedbackDialog() {
 	);
 }
 
-export function KeyboardShortcutsDialog() {
+export function KeyboardShortcutsDialog({
+	triggerLabel,
+	triggerClassName,
+	iconOnly = false,
+}: KeyboardShortcutsDialogProps = {}) {
 	const { shortcuts, isMac, openConfig } = useShortcuts();
 	const t = useScopedT("editor");
 	const [scrollLabels, setScrollLabels] = useState({
@@ -158,26 +207,36 @@ export function KeyboardShortcutsDialog() {
 				<Button
 					variant="ghost"
 					size="sm"
-					className={APP_HEADER_ICON_BUTTON_CLASS}
+					className={triggerClassName ?? APP_HEADER_ICON_BUTTON_CLASS}
 					title={t("keyboardShortcuts.trigger", "Shortcuts")}
 					aria-label={t("keyboardShortcuts.trigger", "Shortcuts")}
 				>
 					<Keyboard className="h-3.5 w-3.5" />
+					{!iconOnly && triggerLabel ? (
+						<span className="text-sm font-medium">{triggerLabel}</span>
+					) : null}
 				</Button>
 			</DialogTrigger>
 			<DialogContent className="max-w-lg bg-[#09090b] border-white/10 [&>button]:text-slate-400 [&>button:hover]:text-white">
 				<DialogHeader>
 					<DialogTitle className="text-xl font-semibold text-slate-200 flex items-center gap-2">
-						<Keyboard className="h-5 w-5 text-[#2563EB]" /> {t("keyboardShortcuts.title")}
+						<Keyboard className="h-5 w-5 text-[#2563EB]" />{" "}
+						{t("keyboardShortcuts.title")}
 					</DialogTitle>
 					<DialogDescription className="text-slate-400">
-						{t("keyboardShortcuts.description", "Quick reference for the timeline and editor controls.")}
+						{t(
+							"keyboardShortcuts.description",
+							"Quick reference for the timeline and editor controls.",
+						)}
 					</DialogDescription>
 				</DialogHeader>
 				<div className="mt-4 space-y-4">
 					<div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-2 text-xs">
 						{SHORTCUT_ACTIONS.map((action) => (
-							<div key={action} className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/5 px-3 py-2.5">
+							<div
+								key={action}
+								className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/5 px-3 py-2.5"
+							>
 								<span className="text-slate-300">{SHORTCUT_LABELS[action]}</span>
 								<kbd className="rounded border border-white/10 bg-black/20 px-2 py-1 font-mono text-[#2563EB]">
 									{formatBinding(shortcuts[action], isMac)}
@@ -186,19 +245,25 @@ export function KeyboardShortcutsDialog() {
 						))}
 						<div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-3">
 							<div className="rounded-lg border border-white/5 bg-white/5 px-3 py-2.5">
-								<p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{t("keyboardShortcuts.panTimeline")}</p>
+								<p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+									{t("keyboardShortcuts.panTimeline")}
+								</p>
 								<kbd className="mt-2 inline-flex rounded border border-white/10 bg-black/20 px-2 py-1 font-mono text-[#2563EB]">
 									{scrollLabels.pan}
 								</kbd>
 							</div>
 							<div className="rounded-lg border border-white/5 bg-white/5 px-3 py-2.5">
-								<p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{t("keyboardShortcuts.zoomTimeline")}</p>
+								<p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+									{t("keyboardShortcuts.zoomTimeline")}
+								</p>
 								<kbd className="mt-2 inline-flex rounded border border-white/10 bg-black/20 px-2 py-1 font-mono text-[#2563EB]">
 									{scrollLabels.zoom}
 								</kbd>
 							</div>
 							<div className="rounded-lg border border-white/5 bg-white/5 px-3 py-2.5">
-								<p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{t("keyboardShortcuts.cycleAnnotations")}</p>
+								<p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+									{t("keyboardShortcuts.cycleAnnotations")}
+								</p>
 								<kbd className="mt-2 inline-flex rounded border border-white/10 bg-black/20 px-2 py-1 font-mono text-[#2563EB]">
 									{t("keyboardShortcuts.tab")}
 								</kbd>
@@ -228,11 +293,7 @@ export function TutorialHelp() {
 	return (
 		<Dialog>
 			<DialogTrigger asChild>
-				<Button
-					variant="ghost"
-					size="sm"
-					className={APP_HEADER_ACTION_BUTTON_CLASS}
-				>
+				<Button variant="ghost" size="sm" className={APP_HEADER_ACTION_BUTTON_CLASS}>
 					<HelpCircle className="w-3.5 h-3.5" />
 					<span className="font-medium">{t("tutorial.howTrimmingWorks")}</span>
 				</Button>
@@ -251,8 +312,11 @@ export function TutorialHelp() {
 					<div className="bg-white/5 rounded-lg p-4 border border-white/5">
 						<p className="text-slate-300 leading-relaxed">
 							{t("tutorial.descriptionP1")}
-							<span className="text-[#ef4444] font-bold"> {t("tutorial.descriptionRemove")}</span>.{" "}
-							{t("tutorial.descriptionP3")}
+							<span className="text-[#ef4444] font-bold">
+								{" "}
+								{t("tutorial.descriptionRemove")}
+							</span>
+							. {t("tutorial.descriptionP3")}
 						</p>
 					</div>
 					{/* Visual Illustration */}
@@ -331,11 +395,15 @@ export function TutorialHelp() {
 					{/* Steps */}
 					<div className="grid grid-cols-2 gap-4">
 						<div className="p-3 rounded bg-white/5 border border-white/5">
-							<div className="text-[#ef4444] font-bold mb-1">{t("tutorial.addTrimStep")}</div>
+							<div className="text-[#ef4444] font-bold mb-1">
+								{t("tutorial.addTrimStep")}
+							</div>
 							<p className="text-xs text-slate-400">{t("tutorial.addTrimDesc")}</p>
 						</div>
 						<div className="p-3 rounded bg-white/5 border border-white/5">
-							<div className="text-[#ef4444] font-bold mb-1">{t("tutorial.adjustStep")}</div>
+							<div className="text-[#ef4444] font-bold mb-1">
+								{t("tutorial.adjustStep")}
+							</div>
 							<p className="text-xs text-slate-400">{t("tutorial.adjustDesc")}</p>
 						</div>
 					</div>
