@@ -25,6 +25,10 @@ import {
 } from "./extensionMarketplace";
 import type { ExtensionInfo, MarketplaceReviewStatus } from "./extensionTypes";
 
+function getErrorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
 /**
  * Serialize extension info for IPC transfer (strip non-serializable fields).
  */
@@ -129,13 +133,13 @@ export function registerExtensionIpcHandlers(): void {
 		) => {
 			try {
 				return await searchMarketplace(params);
-			} catch (err: unknown) {
+			} catch (error: unknown) {
 				return {
 					extensions: [],
 					total: 0,
 					page: 1,
 					pageSize: 20,
-					error: err instanceof Error ? err.message : String(err),
+					error: getErrorMessage(error),
 				};
 			}
 		},
@@ -174,12 +178,8 @@ export function registerExtensionIpcHandlers(): void {
 		) => {
 			try {
 				return await fetchPendingReviews(params);
-			} catch (err: unknown) {
-				return {
-					reviews: [],
-					total: 0,
-					error: err instanceof Error ? err.message : String(err),
-				};
+			} catch (error: unknown) {
+				return { reviews: [], total: 0, error: getErrorMessage(error) };
 			}
 		},
 	);
