@@ -1,19 +1,19 @@
-import Block from "@uiw/react-color-block";
 import {
 	AlignCenterHorizontal as AlignCenter,
 	AlignLeft,
 	AlignRight,
-	BoundingBox as SquareDashed,
-	CaretDown as ChevronDown,
-	Info,
-	ImageSquare as ImageIcon,
 	TextB as Bold,
+	CaretDown as ChevronDown,
+	ImageSquare as ImageIcon,
+	Info,
 	TextItalic as Italic,
+	BoundingBox as SquareDashed,
+	Trash as Trash2,
 	TextT as Type,
 	TextUnderline as Underline,
-	Trash as Trash2,
 	UploadSimple as Upload,
 } from "@phosphor-icons/react";
+import Block from "@uiw/react-color-block";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -556,6 +556,11 @@ export function AnnotationSettingsPanel({
 												};
 												onFigureDataChange?.(newFigureData);
 											}}
+											aria-label={t(
+												"annotations.arrowDirectionOption",
+												"Arrow direction: {{direction}}",
+												{ direction: direction.replace(/-/g, " ") },
+											)}
 											className={cn(
 												"h-16 rounded-lg border flex items-center justify-center transition-all p-2",
 												annotation.figureData?.arrowDirection === direction

@@ -11,6 +11,13 @@ const STORAGE_KEY = "recordly_custom_fonts";
 const LEGACY_STORAGE_KEY = "openscreen_custom_fonts";
 const loadedFonts = new Set<string>();
 
+export class DuplicateFontError extends Error {
+	constructor(fontName: string) {
+		super(`Font \"${fontName}\" has already been added`);
+		this.name = "DuplicateFontError";
+	}
+}
+
 // Load custom fonts from localStorage
 export function getCustomFonts(): CustomFont[] {
 	try {
@@ -36,10 +43,15 @@ export function saveCustomFonts(fonts: CustomFont[]): void {
 // Add a new custom font (throws error if font fails to load)
 export async function addCustomFont(font: CustomFont): Promise<CustomFont[]> {
 	const fonts = getCustomFonts();
-	const exists = fonts.some((f) => f.id === font.id || f.fontFamily === font.fontFamily);
+	const normalizedFontFamily = font.fontFamily.trim().toLowerCase();
+	const exists = fonts.some(
+		(existingFont) =>
+			existingFont.id === font.id ||
+			existingFont.fontFamily.trim().toLowerCase() === normalizedFontFamily,
+	);
 
 	if (exists) {
-		return fonts;
+		throw new DuplicateFontError(font.name);
 	}
 
 	// Try to load the font first - this will throw if it fails
@@ -98,7 +110,10 @@ export function loadFont(font: CustomFont): Promise<void> {
 					loadedFonts.add(font.id);
 					resolve();
 				})
-				.catch(reject);
+				.catch((error) => {
+					style.remove();
+					reject(error);
+				});
 		} catch (error) {
 			console.error("Failed to load font:", font, error);
 			reject(error);
@@ -179,7 +194,12 @@ export function parseFontFamilyFromImport(importUrl: string): string | null {
 export function isValidGoogleFontsUrl(url: string): boolean {
 	try {
 		const urlObj = new URL(url);
-		return urlObj.hostname === "fonts.googleapis.com" && urlObj.searchParams.has("family");
+		return (
+			urlObj.protocol === "https:" &&
+			urlObj.hostname === "fonts.googleapis.com" &&
+			/^\/css2?$/.test(urlObj.pathname) &&
+			urlObj.searchParams.has("family")
+		);
 	} catch {
 		return false;
 	}

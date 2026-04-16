@@ -14,12 +14,12 @@ import {
 	DownloadSimple as Download,
 	ArrowSquareOut as ExternalLink,
 	FolderOpen,
-	MagnifyingGlass as Search,
+	Spinner as Loader2,
 	Plus,
 	PuzzlePiece as Puzzle,
 	ArrowClockwise as RefreshCw,
+	MagnifyingGlass as Search,
 	ShieldWarning as ShieldAlert,
-	Spinner as Loader2,
 	Tag,
 	Trash as Trash2,
 } from "@phosphor-icons/react";
@@ -650,14 +650,14 @@ export default function ExtensionManager() {
 		if (success) {
 			toast.success(t("toast.installedAndEnabled"));
 		}
-	}, [installFromFolder]);
+	}, [installFromFolder, t]);
 
 	const handleToggleExtension = useCallback(
 		async (id: string) => {
 			try {
 				await toggleExtension(id);
 			} catch {
-				toast.error(t("toast.enableFailed"));
+				toast.error(t("toast.enableFailed", "Failed to update extension state"));
 			}
 		},
 		[toggleExtension, t],
@@ -676,7 +676,7 @@ export default function ExtensionManager() {
 				toast.error(t("toast.uninstallFailed", undefined, { name }));
 			}
 		},
-		[uninstall],
+		[uninstall, t],
 	);
 
 	// Marketplace search
@@ -713,14 +713,14 @@ export default function ExtensionManager() {
 		} finally {
 			setIsRefreshing(false);
 		}
-	}, [activeTab, handleSearch, refresh]);
+	}, [activeTab, handleSearch, refresh, t]);
 
 	// Auto-search when switching to browse tab
 	useEffect(() => {
 		if (activeTab === "browse" && marketplaceResults.length === 0 && !marketplaceLoading) {
 			handleSearch();
 		}
-	}, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+	}, [activeTab, handleSearch, marketplaceLoading, marketplaceResults.length]);
 
 	// Marketplace install
 	const handleMarketplaceInstall = useCallback(
@@ -750,7 +750,7 @@ export default function ExtensionManager() {
 				});
 			}
 		},
-		[marketplaceInstall],
+		[marketplaceInstall, t],
 	);
 
 	return (

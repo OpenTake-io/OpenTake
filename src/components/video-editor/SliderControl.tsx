@@ -59,6 +59,8 @@ export function SliderControl({
 				step={step}
 				value={value}
 				onChange={(e) => onChange(Number(e.target.value))}
+				aria-label={label}
+				aria-valuetext={formatValue(value)}
 				className="absolute inset-0 h-full w-full cursor-ew-resize opacity-0"
 			/>
 		</div>

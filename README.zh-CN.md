@@ -389,12 +389,6 @@ Recordly 基于 **AGPL 3.0** 发布。
 
 ---
 
-## 扩展系统
-
-Recordly 提供扩展系统，可用于添加设备边框、点击特效、渲染钩子、声音和设置面板。内置扩展位于 `public/builtin-extensions/`。
-
-完整 API 参考和示例请见 [EXTENSIONS.md](./EXTENSIONS.md)。
-
 ---
 
 # 致谢

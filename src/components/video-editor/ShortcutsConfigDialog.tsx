@@ -1,4 +1,4 @@
-import { ArrowCounterClockwise as RotateCcw, Keyboard } from "@phosphor-icons/react";
+import { Keyboard, ArrowCounterClockwise as RotateCcw } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -86,7 +86,7 @@ export function ShortcutsConfigDialog() {
 
 		window.addEventListener("keydown", handleCapture, { capture: true });
 		return () => window.removeEventListener("keydown", handleCapture, { capture: true });
-	}, [captureFor, t]);
+	}, [captureFor, draft, t]);
 
 	const handleSwap = useCallback(() => {
 		if (!conflict || conflict.conflictWith.type !== "configurable") return;

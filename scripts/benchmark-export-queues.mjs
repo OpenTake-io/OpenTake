@@ -463,7 +463,7 @@ function calculateDelta(referenceValue, nextValue) {
 	return {
 		deltaMs: nextValue - referenceValue,
 		deltaPercent:
-			referenceValue > 0 ? ((nextValue - referenceValue) / referenceValue) * 100 : 0,
+			referenceValue > 0 ? ((nextValue - referenceValue) / referenceValue) * 100 : null,
 	};
 }
 
@@ -951,18 +951,20 @@ async function main() {
 
 			const baseline = result.summaries[0];
 			const tuned = result.summaries[1];
-			const deltaMs = tuned.averageElapsedMs - baseline.averageElapsedMs;
-			const percent =
-				baseline.averageElapsedMs > 0 ? (deltaMs / baseline.averageElapsedMs) * 100 : 0;
-			const medianDeltaMs = tuned.medianElapsedMs - baseline.medianElapsedMs;
-			const medianPercent =
-				baseline.medianElapsedMs > 0 ? (medianDeltaMs / baseline.medianElapsedMs) * 100 : 0;
+			const { deltaMs, deltaPercent: percent } = calculateDelta(
+				baseline.averageElapsedMs,
+				tuned.averageElapsedMs,
+			);
+			const { deltaMs: medianDeltaMs, deltaPercent: medianPercent } = calculateDelta(
+				baseline.medianElapsedMs,
+				tuned.medianElapsedMs,
+			);
 			const backendLabel = result.request.backend ?? "default";
 			console.log(
-				`[benchmark-export-queues] ${backendLabel} tuned vs baseline: ${deltaMs}ms (${percent.toFixed(1)}%)`,
+				`[benchmark-export-queues] ${backendLabel} tuned vs baseline: ${deltaMs}ms (${typeof percent === "number" ? percent.toFixed(1) : "-"}%)`,
 			);
 			console.log(
-				`[benchmark-export-queues] ${backendLabel} tuned vs baseline (median): ${medianDeltaMs}ms (${medianPercent.toFixed(1)}%)`,
+				`[benchmark-export-queues] ${backendLabel} tuned vs baseline (median): ${medianDeltaMs}ms (${typeof medianPercent === "number" ? medianPercent.toFixed(1) : "-"}%)`,
 			);
 		}
 	} finally {

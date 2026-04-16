@@ -1,8 +1,8 @@
 import {
-	DownloadSimple as Download,
-	Rocket,
-	Spinner as LoaderCircle,
 	WarningCircle as AlertCircle,
+	DownloadSimple as Download,
+	Spinner as LoaderCircle,
+	Rocket,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
@@ -56,6 +56,9 @@ function getPrimaryActionLabel(payload: UpdateToastPayload) {
 export function UpdateToastWindow() {
 	const [payload, setPayload] = useState<UpdateToastPayload | null>(null);
 	const [dragOffsetX, setDragOffsetX] = useState(0);
+	const dragResetKey = payload
+		? `${payload.phase}:${payload.version}:${payload.progressPercent ?? ""}:${payload.detail}:${payload.delayMs}:${payload.isPreview ? "1" : "0"}:${payload.primaryAction ?? ""}`
+		: "empty";
 	const dragState = useRef<{
 		pointerId: number | null;
 		startX: number;
@@ -100,10 +103,8 @@ export function UpdateToastWindow() {
 	}, []);
 
 	useEffect(() => {
-		if (payload) {
-			void payload.phase;
-			void payload.version;
-			void payload.progressPercent;
+		if (!dragResetKey) {
+			return;
 		}
 
 		setDragOffsetX(0);
@@ -112,7 +113,7 @@ export function UpdateToastWindow() {
 			startX: 0,
 			active: false,
 		};
-	}, [payload]);
+	}, [dragResetKey]);
 
 	const cardStyle = {
 		background: "#0d1117",

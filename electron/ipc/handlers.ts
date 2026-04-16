@@ -12,6 +12,7 @@ import type { SaveDialogOptions, WebContents } from 'electron'
 import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, shell, systemPreferences } from 'electron'
 import { RECORDINGS_DIR, USER_DATA_PATH } from '../appPaths'
 import { hideCursor, showCursor } from '../cursorHider'
+import { closeCountdownWindow, createCountdownWindow, getCountdownWindow } from '../windows'
 import {
   buildNativeVideoExportArgs,
   buildTrimmedSourceAudioFilter,
@@ -22,7 +23,6 @@ import {
   type NativeExportEncodingMode,
   type NativeVideoExportFinishOptions,
 } from './nativeVideoExport'
-import { closeCountdownWindow, createCountdownWindow, getCountdownWindow } from '../windows'
 import { resolveWindowsCaptureDisplay } from './windowsCaptureSelection'
 
 const execFileAsync = promisify(execFile)
@@ -910,7 +910,7 @@ async function pruneAutoRecordings(exemptPaths: string[] = []) {
       // Clean up companion audio files left from recording (macOS .m4a, Windows .wav)
       const base = entry.filePath.replace(/\.(mp4|mov|webm)$/i, '')
       for (const suffix of ['.system.m4a', '.mic.m4a', '.system.wav', '.mic.wav', '.mic.webm', '.system.webm']) {
-        await fs.rm(base + suffix, { force: true }).catch(() => {})
+        await fs.rm(base + suffix, { force: true }).catch(() => undefined)
       }
     } catch (error) {
       console.warn('Failed to prune old auto recording:', entry.filePath, error)
@@ -987,7 +987,7 @@ function getBundledWhisperExecutableCandidates() {
 }
 
 function getNativeCaptureHelperBinaryPath() {
-  return path.join(app.getPath('userData'), 'native-tools', 'openscreen-screencapturekit-helper')
+  return path.join(app.getPath('userData'), 'native-tools', 'recordly-screencapturekit-helper')
 }
 
 function getSystemCursorHelperSourcePath() {
@@ -995,7 +995,7 @@ function getSystemCursorHelperSourcePath() {
 }
 
 function getSystemCursorHelperBinaryPath() {
-  return path.join(app.getPath('userData'), 'native-tools', 'openscreen-system-cursors')
+  return path.join(app.getPath('userData'), 'native-tools', 'recordly-system-cursors')
 }
 
 function getNativeCursorMonitorSourcePath() {
@@ -1003,7 +1003,7 @@ function getNativeCursorMonitorSourcePath() {
 }
 
 function getNativeCursorMonitorBinaryPath() {
-  return path.join(app.getPath('userData'), 'native-tools', 'openscreen-native-cursor-monitor')
+  return path.join(app.getPath('userData'), 'native-tools', 'recordly-native-cursor-monitor')
 }
 
 function getNativeWindowListSourcePath() {
@@ -1011,7 +1011,7 @@ function getNativeWindowListSourcePath() {
 }
 
 function getNativeWindowListBinaryPath() {
-  return path.join(app.getPath('userData'), 'native-tools', 'openscreen-window-list')
+  return path.join(app.getPath('userData'), 'native-tools', 'recordly-window-list')
 }
 
 type NativeMacWindowSource = {
@@ -1088,7 +1088,7 @@ async function ensureNativeCaptureHelperBinary() {
     getNativeCaptureHelperSourcePath(),
     getNativeCaptureHelperBinaryPath(),
     'native ScreenCaptureKit helper',
-    'openscreen-screencapturekit-helper'
+    'recordly-screencapturekit-helper'
   )
 }
 
@@ -1097,7 +1097,7 @@ async function ensureNativeWindowListBinary() {
     getNativeWindowListSourcePath(),
     getNativeWindowListBinaryPath(),
     'native ScreenCaptureKit window list helper',
-    'openscreen-window-list'
+    'recordly-window-list'
   )
 }
 
@@ -1154,7 +1154,7 @@ async function getSystemCursorAssets() {
     sourcePath,
     getSystemCursorHelperBinaryPath(),
     'system cursor helper',
-    'openscreen-system-cursors'
+    'recordly-system-cursors'
   )
 
   const { stdout } = await execFileAsync(binaryPath, [], { timeout: 15000, maxBuffer: 20 * 1024 * 1024 })
@@ -1211,15 +1211,48 @@ function resolveSystemFfmpegBinaryPath() {
   return candidate || null
 }
 
+type HookCursorEvent = {
+  button?: number
+  mouseButton?: number
+  x?: number
+  y?: number
+  screenX?: number
+  screenY?: number
+  data?: {
+    button?: number
+    mouseButton?: number
+    x?: number
+    y?: number
+    screenX?: number
+    screenY?: number
+  }
+}
+
+type HookEventName = 'mousedown' | 'mouseup' | 'mousemove'
+
+type HookCursorHandler = (event: HookCursorEvent) => void
+
+type UiohookLike = {
+  on?: (eventName: HookEventName, listener: HookCursorHandler) => void
+  off?: (eventName: HookEventName, listener: HookCursorHandler) => void
+  removeListener?: (eventName: HookEventName, listener: HookCursorHandler) => void
+  start?: () => void
+  stop?: () => void
+  uIOhook?: UiohookLike
+  uiohook?: UiohookLike
+  Uiohook?: UiohookLike
+  default?: UiohookLike
+}
+
 function loadUiohookModule() {
-  const moduleExports = nodeRequire('uiohook-napi')
+  const moduleExports = nodeRequire('uiohook-napi') as UiohookLike
   return (
-    (moduleExports as any)?.uIOhook
-    ?? (moduleExports as any)?.uiohook
-    ?? (moduleExports as any)?.Uiohook
-    ?? (moduleExports as any)?.default?.uIOhook
-    ?? (moduleExports as any)?.default?.uiohook
-    ?? (moduleExports as any)?.default
+    moduleExports.uIOhook
+    ?? moduleExports.uiohook
+    ?? moduleExports.Uiohook
+    ?? moduleExports.default?.uIOhook
+    ?? moduleExports.default?.uiohook
+    ?? moduleExports.default
     ?? moduleExports
   )
 }
@@ -1228,7 +1261,7 @@ function getFfmpegBinaryPath() {
   const ffmpegStatic = loadFfmpegStatic()
   if (ffmpegStatic && typeof ffmpegStatic === 'string') {
     const bundledPath = app.isPackaged
-      ? ffmpegStatic.replace(/\.asar([\/\\])/, '.asar.unpacked$1')
+      ? ffmpegStatic.replace(/\.asar([/\\])/, '.asar.unpacked$1')
       : ffmpegStatic
 
     if (existsSync(bundledPath)) {
@@ -2698,7 +2731,7 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
       const stat = await fs.stat(audioPath)
       if (stat.size <= 0) {
         console.warn(`[mux-win] Skipping ${label} audio: file is empty (${audioPath})`)
-        await fs.rm(audioPath, { force: true }).catch(() => {})
+        await fs.rm(audioPath, { force: true }).catch(() => undefined)
         continue
       }
       inputs.push('-i', audioPath)
@@ -2831,7 +2864,7 @@ async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath
   // Clean up audio files
   for (const audioPath of [systemAudioPath, micAudioPath]) {
     if (audioPath) {
-      await fs.rm(audioPath, { force: true }).catch(() => {})
+      await fs.rm(audioPath, { force: true }).catch(() => undefined)
     }
   }
 }
@@ -3020,7 +3053,7 @@ async function muxNativeMacRecordingWithAudio(
       const stat = await fs.stat(audioPath)
       if (stat.size <= 0) {
         console.warn(`[mux] Skipping ${label} audio: file is empty (${audioPath})`)
-        await fs.rm(audioPath, { force: true }).catch(() => {})
+        await fs.rm(audioPath, { force: true }).catch(() => undefined)
         continue
       }
       inputs.push('-i', audioPath)
@@ -3148,7 +3181,7 @@ async function muxNativeMacRecordingWithAudio(
 
   for (const audioPath of [systemAudioPath, microphonePath]) {
     if (audioPath) {
-      await fs.rm(audioPath, { force: true }).catch(() => {})
+      await fs.rm(audioPath, { force: true }).catch(() => undefined)
     }
   }
 }
@@ -3223,7 +3256,7 @@ async function ensureNativeCursorMonitorBinary() {
     getNativeCursorMonitorSourcePath(),
     getNativeCursorMonitorBinaryPath(),
     'native cursor monitor helper',
-    'openscreen-native-cursor-monitor'
+    'recordly-native-cursor-monitor'
   )
 }
 
@@ -3406,7 +3439,7 @@ function normalizeHookMouseButton(rawButton: unknown): 1 | 2 | 3 {
   return 1
 }
 
-function getHookMouseButton(event: any): 1 | 2 | 3 {
+function getHookMouseButton(event: HookCursorEvent | null | undefined): 1 | 2 | 3 {
   return normalizeHookMouseButton(
     event?.button
     ?? event?.mouseButton
@@ -3563,7 +3596,7 @@ function getNormalizedCursorPoint() {
   return { cx, cy }
 }
 
-function getHookCursorScreenPoint(event: any): { x: number; y: number } | null {
+function getHookCursorScreenPoint(event: HookCursorEvent | null | undefined): { x: number; y: number } | null {
   const rawX = event?.x ?? event?.data?.x ?? event?.screenX ?? event?.data?.screenX
   const rawY = event?.y ?? event?.data?.y ?? event?.screenY ?? event?.data?.screenY
 
@@ -3759,7 +3792,7 @@ async function startInteractionCapture() {
       return
     }
 
-    const onMouseDown = (event: any) => {
+    const onMouseDown = (event: HookCursorEvent) => {
       if (!isCursorCaptureActive) {
         return
       }
@@ -3793,7 +3826,7 @@ async function startInteractionCapture() {
       pushCursorSample(point.cx, point.cy, timeMs, interactionType)
     }
 
-    const onMouseUp = (_event: any) => {
+    const onMouseUp = (_event: HookCursorEvent) => {
       if (!isCursorCaptureActive) {
         return
       }
@@ -3807,7 +3840,7 @@ async function startInteractionCapture() {
       pushCursorSample(point.cx, point.cy, timeMs, 'mouseup')
     }
 
-    const onMouseMove = (event: any) => {
+    const onMouseMove = (event: HookCursorEvent) => {
       if (process.platform !== 'linux' || !isCursorCaptureActive) {
         return
       }
@@ -5339,7 +5372,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         await fs.writeFile(thumbPath, jpegData)
       })
       // Keep the queue moving even if one fails
-      thumbGenerationQueue = generation.catch(() => {})
+      thumbGenerationQueue = generation.catch(() => undefined)
       await generation
 
       return { success: true, data: jpegData! }
@@ -6242,7 +6275,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
       await fs.unlink(filePath);
       // Also delete the cursor telemetry sidecar if it exists
       const telemetryPath = getTelemetryPathForVideo(filePath);
-      await fs.unlink(telemetryPath).catch(() => {});
+      await fs.unlink(telemetryPath).catch(() => undefined);
       if (currentVideoPath === filePath) {
         currentVideoPath = null;
         currentRecordingSession = null;

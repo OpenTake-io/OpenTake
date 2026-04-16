@@ -4,10 +4,13 @@ import path from "node:path";
 const root = process.cwd();
 const localesDir = path.join(root, "src", "i18n", "locales");
 
-const locales = fs.readdirSync(localesDir).filter((entry) => {
-	const fullPath = path.join(localesDir, entry);
-	return fs.statSync(fullPath).isDirectory();
-});
+const locales = fs
+	.readdirSync(localesDir)
+	.filter((entry) => {
+		const fullPath = path.join(localesDir, entry);
+		return fs.statSync(fullPath).isDirectory();
+	})
+	.sort((left, right) => left.localeCompare(right));
 
 if (!locales.includes("en")) {
 	console.error('i18n-check: expected base locale directory "en"');
@@ -15,7 +18,12 @@ if (!locales.includes("en")) {
 }
 
 function loadJson(filePath) {
-	return JSON.parse(fs.readFileSync(filePath, "utf8"));
+	try {
+		return JSON.parse(fs.readFileSync(filePath, "utf8"));
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		throw new Error(`i18n-check: failed to load ${path.relative(root, filePath)}: ${message}`);
+	}
 }
 
 function collectKeyPaths(obj, prefix = "") {
@@ -42,7 +50,10 @@ function collectKeyPaths(obj, prefix = "") {
 }
 
 const baseLocaleDir = path.join(localesDir, "en");
-const namespaceFiles = fs.readdirSync(baseLocaleDir).filter((file) => file.endsWith(".json"));
+const namespaceFiles = fs
+	.readdirSync(baseLocaleDir)
+	.filter((file) => file.endsWith(".json"))
+	.sort((left, right) => left.localeCompare(right));
 
 let hasErrors = false;
 

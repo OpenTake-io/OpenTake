@@ -88,7 +88,14 @@ interface Window {
 				microphoneDeviceId?: string;
 				microphoneLabel?: string;
 			},
-		) => Promise<{ success: boolean; path?: string; message?: string; error?: string; userNotified?: boolean; microphoneFallbackRequired?: boolean }>;
+		) => Promise<{
+			success: boolean;
+			path?: string;
+			message?: string;
+			error?: string;
+			userNotified?: boolean;
+			microphoneFallbackRequired?: boolean;
+		}>;
 		stopNativeScreenRecording: () => Promise<{
 			success: boolean;
 			path?: string;
@@ -138,6 +145,7 @@ interface Window {
 			files?: string[];
 			error?: string;
 		}>;
+		getAssetBasePath: () => Promise<string | null>;
 		readLocalFile: (
 			filePath: string,
 		) => Promise<{ success: boolean; data?: Uint8Array; error?: string }>;
@@ -244,7 +252,13 @@ interface Window {
 		writeExportedVideoToPath: (
 			videoData: ArrayBuffer,
 			outputPath: string,
-		) => Promise<{ success: boolean; path?: string; message?: string; error?: string; canceled?: boolean }>;
+		) => Promise<{
+			success: boolean;
+			path?: string;
+			message?: string;
+			error?: string;
+			canceled?: boolean;
+		}>;
 		openVideoFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
 		openAudioFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
 		openWhisperExecutablePicker: () => Promise<{
@@ -303,9 +317,7 @@ interface Window {
 		}>;
 		getCurrentVideoPath: () => Promise<{ success: boolean; path?: string }>;
 		clearCurrentVideoPath: () => Promise<{ success: boolean }>;
-		deleteRecordingFile: (
-			filePath: string,
-		) => Promise<{ success: boolean; error?: string }>;
+		deleteRecordingFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
 		saveProjectFile: (
 			projectData: unknown,
 			suggestedName?: string,
@@ -378,13 +390,17 @@ interface Window {
 		getUpdateStatusSummary: () => Promise<UpdateStatusSummary>;
 		previewUpdateToast: () => Promise<{ success: boolean }>;
 		checkForAppUpdates: () => Promise<{ success: boolean; logPath: string }>;
-		onUpdateToastStateChanged: (callback: (payload: UpdateToastState | null) => void) => () => void;
-		onUpdateReadyToast: (callback: (payload: {
-			version: string;
-			detail: string;
-			delayMs: number;
-			isPreview?: boolean;
-		}) => void) => () => void;
+		onUpdateToastStateChanged: (
+			callback: (payload: UpdateToastState | null) => void,
+		) => () => void;
+		onUpdateReadyToast: (
+			callback: (payload: {
+				version: string;
+				detail: string;
+				delayMs: number;
+				isPreview?: boolean;
+			}) => void,
+		) => () => void;
 		onMenuLoadProject: (callback: () => void) => () => void;
 		onMenuSaveProject: (callback: () => void) => () => void;
 		onMenuSaveProjectAs: (callback: () => void) => () => void;
@@ -412,7 +428,9 @@ interface Window {
 		setHasUnsavedChanges: (hasChanges: boolean) => void;
 		onRequestSaveBeforeClose: (callback: () => Promise<boolean>) => () => void;
 		isNativeWindowsCaptureAvailable: () => Promise<{ available: boolean }>;
-		muxNativeWindowsRecording: (pauseSegments?: Array<{ startMs: number; endMs: number }>) => Promise<{
+		muxNativeWindowsRecording: (
+			pauseSegments?: Array<{ startMs: number; endMs: number }>,
+		) => Promise<{
 			success: boolean;
 			path?: string;
 			message?: string;
@@ -423,8 +441,17 @@ interface Window {
 		/** Hide the OS cursor before browser capture starts. */
 		hideOsCursor: () => Promise<{ success: boolean }>;
 		/** Recording preferences (mic, system audio) */
-		getRecordingPreferences: () => Promise<{ success: boolean; microphoneEnabled: boolean; microphoneDeviceId?: string; systemAudioEnabled: boolean }>;
-		setRecordingPreferences: (prefs: { microphoneEnabled?: boolean; microphoneDeviceId?: string; systemAudioEnabled?: boolean }) => Promise<{ success: boolean; error?: string }>;
+		getRecordingPreferences: () => Promise<{
+			success: boolean;
+			microphoneEnabled: boolean;
+			microphoneDeviceId?: string;
+			systemAudioEnabled: boolean;
+		}>;
+		setRecordingPreferences: (prefs: {
+			microphoneEnabled?: boolean;
+			microphoneDeviceId?: string;
+			systemAudioEnabled?: boolean;
+		}) => Promise<{ success: boolean; error?: string }>;
 		/** Countdown timer before recording */
 		getCountdownDelay: () => Promise<{ success: boolean; delay: number }>;
 		setCountdownDelay: (delay: number) => Promise<{ success: boolean; error?: string }>;
@@ -491,7 +518,13 @@ interface CursorTelemetryPoint {
 	timeMs: number;
 	cx: number;
 	cy: number;
-	interactionType?: "move" | "click" | "double-click" | "right-click" | "middle-click" | "mouseup";
+	interactionType?:
+		| "move"
+		| "click"
+		| "double-click"
+		| "right-click"
+		| "middle-click"
+		| "mouseup";
 	cursorType?:
 		| "arrow"
 		| "text"

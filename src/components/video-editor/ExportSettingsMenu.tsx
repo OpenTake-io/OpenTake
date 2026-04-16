@@ -91,6 +91,7 @@ export function ExportSettingsMenu({
 								key={option.value}
 								type="button"
 								onClick={() => onExportFormatChange?.(option.value)}
+								aria-pressed={isActive}
 								className={cn(
 									"relative flex-1 overflow-hidden rounded-xl border py-2 text-xs font-medium transition-colors",
 									isActive
@@ -132,6 +133,7 @@ export function ExportSettingsMenu({
 									key={option.value}
 									type="button"
 									onClick={() => onExportQualityChange?.(option.value)}
+									aria-pressed={isActive}
 									className="relative rounded-lg px-1 py-1 text-[11px] font-medium transition-colors"
 								>
 									{isActive ? (
@@ -196,6 +198,7 @@ export function ExportSettingsMenu({
 									key={option.value}
 									type="button"
 									onClick={() => onExportEncodingModeChange?.(option.value)}
+									aria-pressed={isActive}
 									className="relative rounded-lg px-1 py-1 text-[11px] font-medium transition-colors"
 								>
 									{isActive ? (
@@ -236,6 +239,7 @@ export function ExportSettingsMenu({
 									key={rate}
 									type="button"
 									onClick={() => onMp4FrameRateChange?.(rate)}
+									aria-pressed={isActive}
 									className="relative rounded-lg px-1 py-1 text-[11px] font-medium transition-colors"
 								>
 									{isActive ? (
@@ -287,6 +291,7 @@ export function ExportSettingsMenu({
 									key={option.value}
 									type="button"
 									onClick={() => onExportPipelineModelChange?.(option.value)}
+									aria-pressed={isActive}
 									className="relative rounded-lg px-1 py-1 text-[11px] font-medium transition-colors"
 								>
 									{isActive ? (
@@ -338,6 +343,7 @@ export function ExportSettingsMenu({
 											key={rate.value}
 											type="button"
 											onClick={() => onGifFrameRateChange?.(rate.value)}
+											aria-pressed={isActive}
 											className="relative rounded-lg text-[11px] font-medium transition-colors"
 										>
 											{isActive ? (
@@ -377,6 +383,7 @@ export function ExportSettingsMenu({
 											onClick={() =>
 												onGifSizePresetChange?.(key as GifSizePreset)
 											}
+											aria-pressed={isActive}
 											className="relative rounded-lg text-[11px] font-medium transition-colors"
 										>
 											{isActive ? (
