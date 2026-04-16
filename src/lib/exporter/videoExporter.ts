@@ -565,7 +565,7 @@ export class VideoExporter {
 				if (this.cancelled || !this.nativeExportSessionId) return;
 				const buffer = new ArrayBuffer(chunk.byteLength);
 				chunk.copyTo(buffer);
-				const writePromise = (this.nativePendingWrite = this.nativePendingWrite
+				const writePromise = this.nativePendingWrite
 					.then(async () => {
 						const writeResult = await window.electronAPI.nativeVideoExportWriteFrame(
 							sessionId,
@@ -586,7 +586,8 @@ export class VideoExporter {
 							this.nativeWriteError =
 								error instanceof Error ? error : new Error(String(error));
 						}
-					}));
+					});
+				this.nativePendingWrite = writePromise;
 				this.trackNativeWritePromise(writePromise);
 			},
 			error: (e) => {
@@ -842,7 +843,7 @@ export class VideoExporter {
 			return;
 		}
 
-		await oldestWritePromise;
+		await this.awaitWithFinalizationTimeout(oldestWritePromise, "native frame write");
 
 		if (this.nativeWriteError) {
 			throw this.nativeWriteError;
