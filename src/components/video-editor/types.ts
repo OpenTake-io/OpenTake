@@ -20,7 +20,14 @@ export interface CursorTelemetryPoint {
 	timeMs: number;
 	cx: number;
 	cy: number;
-	interactionType?: "move" | "click" | "double-click" | "right-click" | "middle-click" | "mouseup";
+	pressure?: number;
+	interactionType?:
+		| "move"
+		| "click"
+		| "double-click"
+		| "right-click"
+		| "middle-click"
+		| "mouseup";
 	cursorType?:
 		| "arrow"
 		| "text"
@@ -43,12 +50,7 @@ export interface CursorVisualSettings {
 	style: CursorStyle;
 }
 
-export type CursorStyle =
-	| "tahoe"
-	| "dot"
-	| "figma"
-	| "mono"
-	| (string & {});  // extension-contributed cursor styles
+export type CursorStyle = "tahoe" | "dot" | "figma" | "mono" | (string & {}); // extension-contributed cursor styles
 export const DEFAULT_CURSOR_STYLE: CursorStyle = "tahoe";
 
 export type ZoomTransitionEasing = "recordly" | "glide" | "smooth" | "snappy" | "linear";
@@ -131,6 +133,13 @@ export interface ClipRegion {
 	startMs: number;
 	endMs: number;
 	speed: number;
+	muted?: boolean;
+}
+
+export function getClipSourceEndMs(clip: ClipRegion): number {
+	const displayDurationMs = Math.max(0, clip.endMs - clip.startMs);
+	const speed = Number.isFinite(clip.speed) && clip.speed > 0 ? clip.speed : 1;
+	return Math.round(clip.startMs + displayDurationMs * speed);
 }
 
 /** Convert clip regions (kept segments) to trim regions (gaps to remove). */
@@ -144,7 +153,7 @@ export function clipsToTrims(clips: ClipRegion[], totalDurationMs: number): Trim
 		if (clip.startMs > cursor) {
 			trims.push({ id: `trim-gap-${trimId++}`, startMs: cursor, endMs: clip.startMs });
 		}
-		cursor = clip.endMs;
+		cursor = getClipSourceEndMs(clip);
 	}
 	if (cursor < totalDurationMs) {
 		trims.push({ id: `trim-gap-${trimId++}`, startMs: cursor, endMs: totalDurationMs });
@@ -175,7 +184,6 @@ export type AnnotationType = "text" | "image" | "figure" | "blur";
 export const BLUR_ANNOTATION_STRENGTH = 20;
 export const BASE_PREVIEW_WIDTH = 1920;
 export const BASE_PREVIEW_HEIGHT = 1080;
-
 
 export type ArrowDirection =
 	| "up"
@@ -246,6 +254,7 @@ export interface AnnotationRegion {
 	figureData?: FigureData;
 	blurIntensity?: number;
 	blurColor?: string;
+	trackIndex?: number;
 }
 
 export const DEFAULT_ANNOTATION_POSITION: AnnotationPosition = {
@@ -296,6 +305,7 @@ export interface AudioRegion {
 	endMs: number;
 	audioPath: string;
 	volume: number;
+	trackIndex?: number;
 }
 
 export interface CaptionCue {

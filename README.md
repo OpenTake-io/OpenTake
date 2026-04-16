@@ -26,7 +26,7 @@ Recordly is a desktop app for recording and editing screen captures with motion-
 
 Recordly runs on:
 
-- **macOS** 13.0+
+- **macOS** 14.0+
 - **Windows** 10 Build 19041+
 - **Linux** on modern distros
 
@@ -60,6 +60,12 @@ Use drag-and-drop timeline tools for zooms, trims, speed regions, annotations, e
 <p>
   <img src="./feature3.png" width="450" alt="Recordly timeline editor screenshot">
 </p>
+
+## Extensions & Marketplace
+
+Recordly has a community-driven extension system. Anyone can build and publish extensions that add new capabilities to Recordly — cursor click sounds, device frames, browser mockups, wallpapers, render hooks, settings panels, and more.
+
+Browse and install community extensions from the [Recordly Marketplace](https://marketplace.recordly.dev/extensions).
 
 ---
 
@@ -233,7 +239,7 @@ xattr -rd com.apple.quarantine /Applications/Recordly.app
 
 | Platform | Minimum version | Notes |
 |---|---|---|
-| **macOS** | macOS 13.0 (Ventura) | Required for ScreenCaptureKit audio capture. |
+| **macOS** | macOS 14.0 (Sonoma) | Required for ScreenCaptureKit audio and microphone capture. |
 | **Windows** | Windows 10 20H1 (Build 19041, May 2020) | Required for the native Windows Graphics Capture (WGC) helper and best cursor-hiding behavior. |
 | **Linux** | Any modern distro | Recording works through Electron capture. System audio generally requires PipeWire. |
 
@@ -304,7 +310,7 @@ System audio support varies by platform.
 - Usually requires PipeWire
 
 **macOS**
-- Requires macOS 13.0+ and the ScreenCaptureKit-based workflow
+- Requires macOS 14.0+ and the ScreenCaptureKit-based workflow
 
 ---
 
@@ -379,14 +385,6 @@ Pull requests are welcome.
 # License
 
 Recordly is licensed under the **AGPL 3.0**.
-
----
-
-## Extensions
-
-Recordly has an extension system for adding device frames, click effects, render hooks, sounds, and settings panels. Built-in extensions ship under `public/builtin-extensions/`.
-
-See [EXTENSIONS.md](./EXTENSIONS.md) for the full API reference and examples.
 
 ---
 
