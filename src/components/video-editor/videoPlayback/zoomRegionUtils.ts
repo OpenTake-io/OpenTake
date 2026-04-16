@@ -42,9 +42,16 @@ function easeConnectedPan(value: number) {
 
 export function computeRegionStrength(region: ZoomRegion, timeMs: number) {
 	const adjustedTimeMs = timeMs - ZOOM_ANIMATION_LEAD_MS;
-	const zoomInEnd = region.startMs + ZOOM_IN_OVERLAP_MS;
+	let zoomOutStart = region.endMs - ZOOM_OUT_EARLY_START_MS;
+	let zoomInEnd = region.startMs + ZOOM_IN_OVERLAP_MS;
+
+	if (zoomInEnd > zoomOutStart) {
+		const midpoint = (zoomInEnd + zoomOutStart) / 2;
+		zoomInEnd = midpoint;
+		zoomOutStart = midpoint;
+	}
+
 	const leadInStart = zoomInEnd - ZOOM_IN_TRANSITION_WINDOW_MS;
-	const zoomOutStart = region.endMs - ZOOM_OUT_EARLY_START_MS;
 	const leadOutEnd = zoomOutStart + TRANSITION_WINDOW_MS;
 
 	if (adjustedTimeMs < leadInStart || adjustedTimeMs > leadOutEnd) {
