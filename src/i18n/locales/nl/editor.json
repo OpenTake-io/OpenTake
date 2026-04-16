@@ -1,7 +1,10 @@
 {
 	"playback": {
 		"play": "Afspelen",
-		"pause": "Pauzeren"
+		"pause": "Pauzeren",
+		"skipBack": "Terug springen",
+		"skipForward": "Vooruit springen",
+		"muteUnmute": "Dempen/dempen opheffen"
 	},
 	"annotations": {
 		"settings": "Annotatie-instellingen",
@@ -119,6 +122,14 @@
 		"issue": "Exportprobleem",
 		"complete": "Export voltooid",
 		"savedSuccessfully": "Je bestand is succesvol opgeslagen."
+	},
+	"toolbar": {
+		"addLayer": "Laag toevoegen",
+		"splitClip": "Clip splitsen (C)"
+	},
+	"timeline": {
+		"expand": "Tijdlijn uitvouwen",
+		"collapse": "Tijdlijn samenvouwen"
 	},
 	"openRecordingsFolder": "Opnamemap openen"
 }

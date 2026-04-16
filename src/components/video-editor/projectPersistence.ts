@@ -336,6 +336,10 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 								1,
 							),
 						},
+						mode:
+							region.mode === "auto" || region.mode === "manual"
+								? region.mode
+								: undefined,
 					};
 				})
 		: [];

@@ -2227,12 +2227,9 @@ export function SettingsPanel({
 				</section>
 
 				<section className="flex flex-col gap-2">
-					<SectionLabel>{tSettings("keyboardShortcuts.title", "Keybinds")}</SectionLabel>
+					<SectionLabel>{t("editor.keyboardShortcuts.title")}</SectionLabel>
 					<KeyboardShortcutsDialog
-						triggerLabel={tSettings(
-							"keyboardShortcuts.customize",
-							"Customise Keybinds",
-						)}
+						triggerLabel={t("editor.keyboardShortcuts.customize")}
 						triggerClassName="h-10 w-full justify-start rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
 					/>
 				</section>
