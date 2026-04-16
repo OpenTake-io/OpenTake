@@ -1,32 +1,32 @@
 import {
-	ArrowClockwise as Redo2,
-	ArrowCounterClockwise as Undo2,
+	Check,
 	CaretDown as ChevronDown,
 	CaretUp as ChevronUp,
-	Check,
 	ClosedCaptioning,
 	Crop,
 	Cursor,
 	DownloadSimple as Download,
-	FloppyDisk as Save,
 	FolderOpen,
 	Gear,
-	MagicWand as WandSparkles,
-	MagnifyingGlassPlus as ZoomIn,
 	Pause,
+	Camera as PhCameraRegular,
 	Play,
 	Plus,
-	Camera as PhCameraRegular,
 	PuzzlePiece,
+	ArrowClockwise as Redo2,
+	FloppyDisk as Save,
 	Scissors,
 	SkipBack,
 	SkipForward,
-	SpeakerHigh as Volume2,
-	SpeakerLow as Volume1,
-	SpeakerX as VolumeX,
 	Sparkle,
+	ArrowCounterClockwise as Undo2,
 	UserCircle as User,
+	SpeakerLow as Volume1,
+	SpeakerHigh as Volume2,
+	SpeakerX as VolumeX,
+	MagicWand as WandSparkles,
 	X,
+	MagnifyingGlassPlus as ZoomIn,
 } from "@phosphor-icons/react";
 import type { Span } from "dnd-timeline";
 import { motion } from "motion/react";
@@ -113,7 +113,7 @@ import {
 	toFileUrl,
 	validateProjectData,
 } from "./projectPersistence";
-import { type EditorEffectSection, SettingsPanel } from "./SettingsPanel";
+import { SettingsPanel } from "./SettingsPanel";
 import {
 	APP_HEADER_ICON_BUTTON_CLASS,
 	DiscordLinkButton,
@@ -153,6 +153,7 @@ import {
 	DEFAULT_ZOOM_IN_OVERLAP_MS,
 	DEFAULT_ZOOM_OUT_DURATION_MS,
 	DEFAULT_ZOOM_OUT_EASING,
+	type EditorEffectSection,
 	type FigureData,
 	getClipSourceEndMs,
 	type PlaybackSpeed,
@@ -676,7 +677,7 @@ export default function VideoEditor() {
 			window.clearTimeout(pendingFreshRecordingAutoSuggestTimeoutRef.current);
 			pendingFreshRecordingAutoSuggestTimeoutRef.current = null;
 		}
-	}, [videoPath]);
+	}, []);
 
 	// Auto-activate builtin extensions at editor startup (idempotent)
 	useEffect(() => {
@@ -783,7 +784,27 @@ export default function VideoEditor() {
 					annotationRegions,
 					autoCaptions,
 					autoCaptionSettings,
-					speedRegions: effectiveSpeedRegions,
+					speedRegions: (() => {
+						const clipDerived: SpeedRegion[] = clipRegions
+							.filter((clip) => clip.speed !== 1)
+							.map((clip) => ({
+								id: `clip-speed-${clip.id}`,
+								startMs: clip.startMs,
+								endMs: getClipSourceEndMs(clip),
+								speed: clip.speed as SpeedRegion["speed"],
+							}));
+						if (clipDerived.length === 0) return speedRegions;
+						const result = [...speedRegions];
+						for (const cs of clipDerived) {
+							const overlaps = speedRegions.some(
+								(sr) => sr.endMs > cs.startMs && sr.startMs < cs.endMs,
+							);
+							if (!overlaps) {
+								result.push(cs);
+							}
+						}
+						return result;
+					})(),
 					previewWidth,
 					previewHeight,
 					cursorTelemetry,
@@ -870,11 +891,11 @@ export default function VideoEditor() {
 		cursorStyle,
 		cursorSway,
 		cursorTelemetry,
+		clipRegions,
 		padding,
 		shadowIntensity,
 		showCursor,
 		speedRegions,
-		clipRegions,
 		wallpaper,
 		webcam,
 		zoomInDurationMs,
@@ -884,6 +905,7 @@ export default function VideoEditor() {
 		zoomOutDurationMs,
 		zoomOutEasing,
 		zoomRegions,
+		zoomClassicMode,
 	]);
 
 	const markExportAsSaving = useCallback(() => {
@@ -1271,7 +1293,6 @@ export default function VideoEditor() {
 			shadowIntensity,
 			backgroundBlur,
 			zoomMotionBlur,
-			autoApplyFreshRecordingAutoZooms,
 			connectZooms,
 			zoomInDurationMs,
 			zoomInOverlapMs,
@@ -1313,6 +1334,7 @@ export default function VideoEditor() {
 			gifFrameRate,
 			gifLoop,
 			gifSizePreset,
+			frame,
 		],
 	);
 
@@ -1729,8 +1751,9 @@ export default function VideoEditor() {
 					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
 					setLastSavedSnapshot(null);
-					pendingFreshRecordingAutoZoomPathRef.current =
-						autoApplyFreshRecordingAutoZooms ? sourceVideoUrl : null;
+					pendingFreshRecordingAutoZoomPathRef.current = autoApplyFreshRecordingAutoZooms
+						? sourceVideoUrl
+						: null;
 					setWebcam((prev) => ({
 						...prev,
 						enabled: Boolean(sessionResult.session?.webcamPath),
@@ -1747,8 +1770,9 @@ export default function VideoEditor() {
 					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
 					setLastSavedSnapshot(null);
-					pendingFreshRecordingAutoZoomPathRef.current =
-						autoApplyFreshRecordingAutoZooms ? sourceVideoUrl : null;
+					pendingFreshRecordingAutoZoomPathRef.current = autoApplyFreshRecordingAutoZooms
+						? sourceVideoUrl
+						: null;
 					setWebcam((prev) => ({
 						...prev,
 						enabled: false,
@@ -1767,8 +1791,13 @@ export default function VideoEditor() {
 		loadInitialData();
 	}, [
 		applyLoadedProject,
+		autoApplyFreshRecordingAutoZooms,
+		initialEditorPreferences,
 		smokeExportConfig.enabled,
 		smokeExportConfig.inputPath,
+		smokeExportConfig.webcamInputPath,
+		smokeExportConfig.webcamShadow,
+		smokeExportConfig.webcamSize,
 	]);
 
 	useEffect(() => {
@@ -1839,8 +1868,6 @@ export default function VideoEditor() {
 		cursorStyle,
 		cursorSize,
 		cursorSmoothing,
-		zoomSmoothness,
-		zoomClassicMode,
 		cursorMotionBlur,
 		cursorClickBounce,
 		cursorClickBounceDuration,
@@ -2362,7 +2389,6 @@ export default function VideoEditor() {
 				speed: clip.speed as SpeedRegion["speed"],
 			}));
 		if (clipDerived.length === 0) return speedRegions;
-		// Timeline speed regions take precedence; only fill in clip speed where no overlap exists
 		const result = [...speedRegions];
 		for (const cs of clipDerived) {
 			const overlaps = speedRegions.some(
@@ -3852,8 +3878,6 @@ export default function VideoEditor() {
 			videoPath,
 			wallpaper,
 			trimRegions,
-			speedRegions,
-			clipRegions,
 			shadowIntensity,
 			backgroundBlur,
 			zoomMotionBlur,
@@ -3894,14 +3918,21 @@ export default function VideoEditor() {
 			effectiveZoomRegions,
 			ensureSupportedMp4SourceDimensions,
 			markExportAsSaving,
+			mp4FrameRate,
 			remountPreview,
 			showExportSuccessToast,
+			smokeExportConfig.backendPreference,
 			smokeExportConfig.enabled,
 			smokeExportConfig.useNativeExport,
 			smokeExportConfig.maxDecodeQueue,
 			smokeExportConfig.maxEncodeQueue,
 			smokeExportConfig.maxPendingFrames,
 			smokeExportConfig.outputPath,
+			smokeExportConfig.pipelineModel,
+			smokeExportConfig.shadowIntensity,
+			effectiveSpeedRegions,
+			frame,
+			smokeExportConfig.encodingMode,
 		],
 	);
 
@@ -4593,9 +4624,7 @@ export default function VideoEditor() {
 									whileHover={{ opacity: 1 }}
 									initial={{ opacity: 0.55 }}
 								>
-									<motion.span
-										className="absolute inset-0 rounded-lg bg-white/[0.04] opacity-0 transition group-hover:opacity-100"
-									/>
+									<motion.span className="absolute inset-0 rounded-lg bg-white/[0.04] opacity-0 transition group-hover:opacity-100" />
 									<User className="relative z-10 h-[22px] w-[22px]" />
 								</motion.button>
 							</div>
@@ -4921,7 +4950,9 @@ export default function VideoEditor() {
 											className="h-7 gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 text-[11px] text-white/65 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-all hover:bg-white/[0.08] hover:text-white"
 										>
 											<Plus className="w-3.5 h-3.5" />
-											<span className="font-medium">{t("editor.toolbar.addLayer")}</span>
+											<span className="font-medium">
+												{t("editor.toolbar.addLayer")}
+											</span>
 											<ChevronDown className="w-3 h-3" />
 										</Button>
 									</DropdownMenuTrigger>
