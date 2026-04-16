@@ -137,9 +137,7 @@ export interface ClipRegion {
 }
 
 export function getClipSourceEndMs(clip: ClipRegion): number {
-	const displayDurationMs = Math.max(0, clip.endMs - clip.startMs);
-	const speed = Number.isFinite(clip.speed) && clip.speed > 0 ? clip.speed : 1;
-	return Math.round(clip.startMs + displayDurationMs * speed);
+	return Math.round(Math.max(clip.startMs, clip.endMs));
 }
 
 /** Convert clip regions (kept segments) to trim regions (gaps to remove). */

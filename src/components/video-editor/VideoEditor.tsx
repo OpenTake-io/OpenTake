@@ -689,6 +689,29 @@ export default function VideoEditor() {
 		}
 	}, []);
 
+	const effectiveSpeedRegions = useMemo<SpeedRegion[]>(() => {
+		const clipDerived: SpeedRegion[] = clipRegions
+			.filter((clip) => clip.speed !== 1)
+			.map((clip) => ({
+				id: `clip-speed-${clip.id}`,
+				startMs: clip.startMs,
+				endMs: clip.endMs,
+				speed: clip.speed as SpeedRegion["speed"],
+			}));
+		if (clipDerived.length === 0) return speedRegions;
+		// Timeline speed regions take precedence; only fill in clip speed where no overlap exists
+		const result = [...speedRegions];
+		for (const cs of clipDerived) {
+			const overlaps = speedRegions.some(
+				(sr) => sr.endMs > cs.startMs && sr.startMs < cs.endMs,
+			);
+			if (!overlaps) {
+				result.push(cs);
+			}
+		}
+		return result;
+	}, [clipRegions, speedRegions]);
+
 	const captureProjectThumbnail = useCallback(async () => {
 		const previewHandle = videoPlaybackRef.current;
 		const previewVideo = previewHandle?.video ?? null;
@@ -1452,7 +1475,8 @@ export default function VideoEditor() {
 			setZoomRegions(normalizedEditor.zoomRegions);
 			setTrimRegions(normalizedEditor.trimRegions);
 			setClipRegions(normalizedEditor.clipRegions);
-			clipInitializedRef.current = normalizedEditor.clipRegions.length > 0;
+			clipInitializedRef.current =
+				normalizedEditor.clipRegions.length > 0 || normalizedEditor.trimRegions.length > 0;
 			setSpeedRegions(normalizedEditor.speedRegions);
 			setAnnotationRegions(normalizedEditor.annotationRegions);
 			setAudioRegions(normalizedEditor.audioRegions);
@@ -2268,30 +2292,6 @@ export default function VideoEditor() {
 
 	const effectiveZoomRegions = zoomRegions;
 
-	// Merge clip speeds into speed regions so playback + export respect per-clip speed
-	const effectiveSpeedRegions = useMemo<SpeedRegion[]>(() => {
-		const clipDerived: SpeedRegion[] = clipRegions
-			.filter((clip) => clip.speed !== 1)
-			.map((clip) => ({
-				id: `clip-speed-${clip.id}`,
-				startMs: clip.startMs,
-				endMs: clip.endMs,
-				speed: clip.speed as SpeedRegion["speed"],
-			}));
-		if (clipDerived.length === 0) return speedRegions;
-		// Timeline speed regions take precedence; only fill in clip speed where no overlap exists
-		const result = [...speedRegions];
-		for (const cs of clipDerived) {
-			const overlaps = speedRegions.some(
-				(sr) => sr.endMs > cs.startMs && sr.startMs < cs.endMs,
-			);
-			if (!overlaps) {
-				result.push(cs);
-			}
-		}
-		return result;
-	}, [clipRegions, speedRegions]);
-
 	function togglePlayPause() {
 		const playback = videoPlaybackRef.current;
 		const video = playback?.video;
@@ -2571,6 +2571,7 @@ export default function VideoEditor() {
 			if (!target) return prev;
 			const leftId = `clip-${nextClipIdRef.current++}`;
 			const rightId = `clip-${nextClipIdRef.current++}`;
+			setSelectedClipId(leftId);
 			const left: ClipRegion = {
 				id: leftId,
 				startMs: target.startMs,
@@ -3466,7 +3467,7 @@ export default function VideoEditor() {
 							: smokeExportConfig.enabled
 								? (smokeExportConfig.backendPreference ??
 									(smokeExportConfig.useNativeExport ? "breeze" : "webcodecs"))
-								: "auto";
+								: (settings.backendPreference ?? exportBackendPreference);
 					const supportedSourceDimensions =
 						await ensureSupportedMp4SourceDimensions(selectedMp4FrameRate);
 					const { width: exportWidth, height: exportHeight } =
@@ -3773,6 +3774,7 @@ export default function VideoEditor() {
 			remountPreview,
 			showExportSuccessToast,
 			smokeExportConfig,
+			exportBackendPreference,
 		],
 	);
 

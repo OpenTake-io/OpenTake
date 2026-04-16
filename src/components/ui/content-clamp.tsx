@@ -17,18 +17,29 @@ function ContentClamp({ children, className, truncateLength = 50, ...props }: Co
 	const [open, setOpen] = React.useState(false);
 	const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-	const openPopover = () => {
+	const clearScheduledClose = () => {
 		if (timeoutRef.current) {
 			clearTimeout(timeoutRef.current);
 			timeoutRef.current = null;
 		}
+	};
+
+	const openPopover = () => {
+		clearScheduledClose();
 		setOpen(true);
 	};
 
 	const scheduleClose = () => {
+		clearScheduledClose();
 		timeoutRef.current = setTimeout(() => {
 			setOpen(false);
+			timeoutRef.current = null;
 		}, 100);
+	};
+
+	const togglePopover = () => {
+		clearScheduledClose();
+		setOpen((currentOpen) => !currentOpen);
 	};
 
 	const handleKeyDown = (event: React.KeyboardEvent<HTMLSpanElement>) => {
@@ -37,13 +48,14 @@ function ContentClamp({ children, className, truncateLength = 50, ...props }: Co
 		}
 
 		event.preventDefault();
-		setOpen((currentOpen) => !currentOpen);
+		togglePopover();
 	};
 
 	React.useEffect(() => {
 		return () => {
 			if (timeoutRef.current) {
 				clearTimeout(timeoutRef.current);
+				timeoutRef.current = null;
 			}
 		};
 	}, []);
@@ -69,7 +81,7 @@ function ContentClamp({ children, className, truncateLength = 50, ...props }: Co
 					onBlur={scheduleClose}
 					onClick={(event) => {
 						event.preventDefault();
-						setOpen((currentOpen) => !currentOpen);
+						togglePopover();
 					}}
 					onKeyDown={handleKeyDown}
 					role="button"
