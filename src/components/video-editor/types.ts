@@ -136,10 +136,6 @@ export interface ClipRegion {
 	muted?: boolean;
 }
 
-export function getClipSourceEndMs(clip: ClipRegion): number {
-	return Math.round(Math.max(clip.startMs, clip.endMs));
-}
-
 /** Convert clip regions (kept segments) to trim regions (gaps to remove). */
 export function clipsToTrims(clips: ClipRegion[], totalDurationMs: number): TrimRegion[] {
 	if (clips.length === 0) return [];
@@ -151,7 +147,7 @@ export function clipsToTrims(clips: ClipRegion[], totalDurationMs: number): Trim
 		if (clip.startMs > cursor) {
 			trims.push({ id: `trim-gap-${trimId++}`, startMs: cursor, endMs: clip.startMs });
 		}
-		cursor = getClipSourceEndMs(clip);
+		cursor = clip.endMs;
 	}
 	if (cursor < totalDurationMs) {
 		trims.push({ id: `trim-gap-${trimId++}`, startMs: cursor, endMs: totalDurationMs });
