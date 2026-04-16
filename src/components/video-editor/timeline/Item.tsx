@@ -1,11 +1,11 @@
 import {
-	ChatCircle as MessageSquare,
 	FilmSlate as Film,
 	Gauge,
-	MagnifyingGlassPlus as ZoomIn,
-	MouseLeftClickIcon as PhMouseLeftClick,
+	ChatCircle as MessageSquare,
 	MusicNotes as Music,
+	MouseLeftClickIcon as PhMouseLeftClick,
 	Scissors,
+	MagnifyingGlassPlus as ZoomIn,
 } from "@phosphor-icons/react";
 import type { Span } from "dnd-timeline";
 import { useItem } from "dnd-timeline";
@@ -88,7 +88,12 @@ export default function Item({
 	);
 
 	const MIN_ITEM_PX = 6;
-	const safeItemStyle = { ...itemStyle, minWidth: MIN_ITEM_PX, height: "100%" };
+	const safeItemStyle = {
+		...itemStyle,
+		minWidth: MIN_ITEM_PX,
+		height: "100%",
+		overflow: "hidden",
+	};
 
 	return (
 		<div
@@ -99,7 +104,16 @@ export default function Item({
 			onPointerDownCapture={() => onSelect?.()}
 			className="group h-full"
 		>
-			<div className="h-full" style={{ ...itemContentStyle, minWidth: 24, height: "100%", display: "flex", alignItems: "center" }}>
+			<div
+				className="h-full"
+				style={{
+					...itemContentStyle,
+					minWidth: MIN_ITEM_PX,
+					height: "100%",
+					display: "flex",
+					alignItems: "center",
+				}}
+			>
 				<div
 					className={cn(
 						glassClass,
@@ -110,7 +124,7 @@ export default function Item({
 						height: "85%",
 						minHeight: 22,
 						color: "#fff",
-						minWidth: 24,
+						minWidth: MIN_ITEM_PX,
 						backgroundImage:
 							"linear-gradient(180deg, transparent 20%, rgba(255,255,255,0.08) 100%)",
 					}}

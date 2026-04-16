@@ -366,6 +366,30 @@ describe("findDominantRegion", () => {
 		}
 	});
 
+	it("keeps the outgoing region active until the connected transition begins", () => {
+		const regions: ZoomRegion[] = [
+			{ id: "a", startMs: 1000, endMs: 3000, depth: 2, focus: { cx: 0.2, cy: 0.2 } },
+			{ id: "b", startMs: 3500, endMs: 6000, depth: 3, focus: { cx: 0.8, cy: 0.8 } },
+		];
+
+		const result = findDominantRegion(regions, 3100, { connectZooms: true });
+		expect(result.transition).toBeNull();
+		expect(result.region?.id).toBe("a");
+		expect(result.strength).toBeGreaterThan(0);
+	});
+
+	it("keeps the incoming region at full strength after a connected handoff", () => {
+		const regions: ZoomRegion[] = [
+			{ id: "a", startMs: 1000, endMs: 3000, depth: 2, focus: { cx: 0.2, cy: 0.2 } },
+			{ id: "b", startMs: 3500, endMs: 6000, depth: 3, focus: { cx: 0.8, cy: 0.8 } },
+		];
+
+		const result = findDominantRegion(regions, 4300, { connectZooms: true });
+		expect(result.transition).toBeNull();
+		expect(result.region?.id).toBe("b");
+		expect(result.strength).toBe(1);
+	});
+
 	it("does NOT connect zooms with a large gap", () => {
 		const regions: ZoomRegion[] = [
 			{ id: "a", startMs: 1000, endMs: 3000, depth: 2, focus: { cx: 0.2, cy: 0.2 } },

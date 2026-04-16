@@ -261,7 +261,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		return false;
 	}, []);
 
-	const selectMimeType = () => {
+	const selectMimeType = useCallback(() => {
 		const preferred = [
 			"video/webm;codecs=av1",
 			"video/webm;codecs=h264",
@@ -271,7 +271,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		];
 
 		return preferred.find((type) => MediaRecorder.isTypeSupported(type)) ?? "video/webm";
-	};
+	}, []);
 
 	const computeBitrate = (width: number, height: number) => {
 		const pixels = width * height;
@@ -537,7 +537,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				webcamStream.current = null;
 			}
 		}
-	}, [getRecordingDurationMs, webcamDeviceId, webcamEnabled]);
+	}, [getRecordingDurationMs, selectMimeType, webcamDeviceId, webcamEnabled]);
 
 	/** Start the prepared webcam MediaRecorder. Call after main recording begins. */
 	const beginWebcamCapture = useCallback(() => {
@@ -622,8 +622,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		const recorderState = recorder?.state;
 		if (recorder && (recorderState === "recording" || recorderState === "paused")) {
 			if (recorderState === "paused") {
-				markRecordingResumed(Date.now());
-				recorder.resume();
+				try {
+					recorder.resume();
+					markRecordingResumed(Date.now());
+				} catch (error) {
+					console.warn("Failed to resume recorder before stopping:", error);
+				}
 			}
 			pendingWebcamPathPromise.current = stopWebcamRecorder();
 			cleanupCapturedMedia();

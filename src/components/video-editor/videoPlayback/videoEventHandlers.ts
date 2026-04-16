@@ -54,6 +54,18 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
 		);
 	};
 
+	const skipPastTrimRegion = (trimRegion: TrimRegion) => {
+		const skipToTime = trimRegion.endMs / 1000;
+		const clampedSkipToTime = Math.min(skipToTime, video.duration);
+
+		video.currentTime = clampedSkipToTime;
+		emitTime(clampedSkipToTime);
+
+		if (clampedSkipToTime >= video.duration) {
+			video.pause();
+		}
+	};
+
 	function updateTime() {
 		if (!video) return;
 
@@ -62,15 +74,7 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
 
 		// If we're in a trim region during playback, skip to the end of it
 		if (activeTrimRegion && !video.paused && !video.ended) {
-			const skipToTime = activeTrimRegion.endMs / 1000;
-
-			// If the skip would take us past the video duration, pause instead
-			if (skipToTime >= video.duration) {
-				video.pause();
-			} else {
-				video.currentTime = skipToTime;
-				emitTime(skipToTime);
-			}
+			skipPastTrimRegion(activeTrimRegion);
 		} else {
 			// Apply playback speed from active speed region
 			const activeSpeedRegion = findActiveSpeedRegion(currentTimeMs);
@@ -115,14 +119,7 @@ export function createVideoEventHandlers(params: VideoEventHandlersParams) {
 
 		// If we seeked into a trim region while playing, skip to the end
 		if (activeTrimRegion && isPlayingRef.current && !video.paused) {
-			const skipToTime = activeTrimRegion.endMs / 1000;
-
-			if (skipToTime >= video.duration) {
-				video.pause();
-			} else {
-				video.currentTime = skipToTime;
-				emitTime(skipToTime);
-			}
+			skipPastTrimRegion(activeTrimRegion);
 		} else {
 			emitTime(video.currentTime);
 		}

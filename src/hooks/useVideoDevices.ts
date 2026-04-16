@@ -20,13 +20,17 @@ export function useVideoDevices(enabled: boolean = true) {
 		}
 
 		let mounted = true;
+		let activeLoadId = 0;
 
 		const loadDevices = async () => {
+			const loadId = ++activeLoadId;
 			let permissionStream: MediaStream | null = null;
 
 			try {
-				setIsLoading(true);
-				setError(null);
+				if (mounted && loadId === activeLoadId) {
+					setIsLoading(true);
+					setError(null);
+				}
 
 				let allDevices = await navigator.mediaDevices.enumerateDevices();
 				let videoInputs = allDevices
@@ -41,7 +45,6 @@ export function useVideoDevices(enabled: boolean = true) {
 					videoInputs.length > 0 && videoInputs.every((device) => !device.label.trim());
 
 				if (needsLabelPermission && !hasRequestedVideoLabels) {
-					hasRequestedVideoLabels = true;
 					permissionStream = await navigator.mediaDevices.getUserMedia({
 						video: true,
 						audio: false,
@@ -54,9 +57,10 @@ export function useVideoDevices(enabled: boolean = true) {
 							label: device.label || `Camera ${index + 1}`,
 							groupId: device.groupId,
 						}));
+					hasRequestedVideoLabels = true;
 				}
 
-				if (mounted) {
+				if (mounted && loadId === activeLoadId) {
 					setDevices(videoInputs);
 					setSelectedDeviceId((currentDeviceId) => {
 						if (currentDeviceId === "default" && videoInputs.length > 0) {
@@ -72,20 +76,21 @@ export function useVideoDevices(enabled: boolean = true) {
 
 						return videoInputs[0]?.deviceId ?? "default";
 					});
-					setIsLoading(false);
 				}
 			} catch (error) {
-				if (mounted) {
+				if (mounted && loadId === activeLoadId) {
 					const message =
 						error instanceof Error
 							? error.message
 							: "Failed to enumerate video devices";
 					setError(message);
-					setIsLoading(false);
 					console.error("Error loading video devices:", error);
 				}
 			} finally {
 				permissionStream?.getTracks().forEach((track) => track.stop());
+				if (mounted && loadId === activeLoadId) {
+					setIsLoading(false);
+				}
 			}
 		};
 
