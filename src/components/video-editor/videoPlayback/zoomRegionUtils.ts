@@ -108,13 +108,23 @@ function getActiveRegion(
 	const activeRegions = regions
 		.map((region) => {
 			const outgoingPair = connectedPairs.find((pair) => pair.currentRegion.id === region.id);
-			if (outgoingPair && timeMs > outgoingPair.currentRegion.endMs) {
+			if (outgoingPair && timeMs >= outgoingPair.transitionStart) {
 				return { region, strength: 0 };
 			}
 
 			const incomingPair = connectedPairs.find((pair) => pair.nextRegion.id === region.id);
-			if (incomingPair && timeMs < incomingPair.transitionEnd) {
-				return { region, strength: 0 };
+			if (incomingPair) {
+				if (timeMs < incomingPair.transitionStart) {
+					return { region, strength: 0 };
+				}
+
+				const nextRegionZoomOutStart =
+					incomingPair.nextRegion.endMs -
+					ZOOM_OUT_EARLY_START_MS +
+					ZOOM_ANIMATION_LEAD_MS;
+				if (timeMs < nextRegionZoomOutStart) {
+					return { region, strength: 1 };
+				}
 			}
 
 			return { region, strength: computeRegionStrength(region, timeMs) };

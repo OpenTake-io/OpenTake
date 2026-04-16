@@ -84,6 +84,9 @@ const KeyframeMarkers: React.FC<KeyframeMarkersProps> = ({
 						onMouseDown={(e) => {
 							e.stopPropagation();
 							setSelectedKeyframeId(kf.id);
+							if (e.button !== 0) {
+								return;
+							}
 							setDraggingKeyframeId(kf.id);
 						}}
 						onContextMenu={(e) => {

@@ -65,6 +65,26 @@ interface ZoomTransformGeometry {
 	focusY: number;
 }
 
+function resetMotionEffects(
+	blurFilter: BlurFilter | null,
+	motionBlurFilter?: MotionBlurFilter | null,
+	motionBlurState?: MotionBlurState,
+) {
+	if (motionBlurFilter) {
+		motionBlurFilter.velocity = { x: 0, y: 0 };
+		motionBlurFilter.kernelSize = 5;
+		motionBlurFilter.offset = 0;
+	}
+
+	if (blurFilter) {
+		blurFilter.blur = 0;
+	}
+
+	if (motionBlurState) {
+		motionBlurState.initialized = false;
+	}
+}
+
 export function computeZoomTransform({
 	stageSize,
 	baseMask,
@@ -150,6 +170,9 @@ export function applyZoomTransform({
 		baseMask.width <= 0 ||
 		baseMask.height <= 0
 	) {
+		cameraContainer.scale.set(1);
+		cameraContainer.position.set(0, 0);
+		resetMotionEffects(blurFilter, motionBlurFilter, motionBlurState);
 		return { scale: 1, x: 0, y: 0 };
 	}
 
@@ -225,17 +248,7 @@ export function applyZoomTransform({
 			}
 		}
 	} else {
-		if (motionBlurFilter) {
-			motionBlurFilter.velocity = { x: 0, y: 0 };
-			motionBlurFilter.kernelSize = 5;
-			motionBlurFilter.offset = 0;
-		}
-		if (blurFilter) {
-			blurFilter.blur = 0;
-		}
-		if (motionBlurState) {
-			motionBlurState.initialized = false;
-		}
+		resetMotionEffects(blurFilter, motionBlurFilter, motionBlurState);
 	}
 
 	return {
