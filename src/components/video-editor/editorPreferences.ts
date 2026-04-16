@@ -52,6 +52,7 @@ export interface EditorPreferences extends PersistedEditorControls {
 	customAspectWidth: string;
 	customAspectHeight: string;
 	customWallpapers: string[];
+	autoApplyFreshRecordingAutoZooms: boolean;
 	whisperExecutablePath: string | null;
 	whisperModelPath: string | null;
 }
@@ -100,9 +101,14 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
 	customAspectWidth: "16",
 	customAspectHeight: "9",
 	customWallpapers: [],
+	autoApplyFreshRecordingAutoZooms: true,
 	whisperExecutablePath: null,
 	whisperModelPath: null,
 };
+
+function normalizeBoolean(value: unknown, fallback: boolean): boolean {
+	return typeof value === "boolean" ? value : fallback;
+}
 
 function normalizePositiveIntegerString(value: unknown, fallback: string): string {
 	if (typeof value !== "string" || value.trim().length === 0) {
@@ -123,7 +129,9 @@ function normalizeCustomWallpapers(value: unknown, fallback: string[]): string[]
 	}
 
 	return Array.from(
-		new Set(value.filter((item): item is string => typeof item === "string" && item.length > 0)),
+		new Set(
+			value.filter((item): item is string => typeof item === "string" && item.length > 0),
+		),
 	);
 }
 
@@ -150,12 +158,10 @@ function normalizeEditorControls(
 		zoomInOverlapMs: raw.zoomInOverlapMs ?? fallback.zoomInOverlapMs,
 		zoomOutDurationMs: raw.zoomOutDurationMs ?? fallback.zoomOutDurationMs,
 		connectedZoomGapMs: raw.connectedZoomGapMs ?? fallback.connectedZoomGapMs,
-		connectedZoomDurationMs:
-			raw.connectedZoomDurationMs ?? fallback.connectedZoomDurationMs,
+		connectedZoomDurationMs: raw.connectedZoomDurationMs ?? fallback.connectedZoomDurationMs,
 		zoomInEasing: raw.zoomInEasing ?? fallback.zoomInEasing,
 		zoomOutEasing: raw.zoomOutEasing ?? fallback.zoomOutEasing,
-		connectedZoomEasing:
-			raw.connectedZoomEasing ?? fallback.connectedZoomEasing,
+		connectedZoomEasing: raw.connectedZoomEasing ?? fallback.connectedZoomEasing,
 		showCursor: raw.showCursor ?? fallback.showCursor,
 		loopCursor: raw.loopCursor ?? fallback.loopCursor,
 		cursorStyle: raw.cursorStyle ?? fallback.cursorStyle,
@@ -250,11 +256,17 @@ export function normalizeEditorPreferences(
 			raw.customAspectHeight,
 			fallback.customAspectHeight,
 		),
-		customWallpapers: normalizeCustomWallpapers(raw.customWallpapers, fallback.customWallpapers),
+		customWallpapers: normalizeCustomWallpapers(
+			raw.customWallpapers,
+			fallback.customWallpapers,
+		),
+		autoApplyFreshRecordingAutoZooms: normalizeBoolean(
+			raw.autoApplyFreshRecordingAutoZooms,
+			fallback.autoApplyFreshRecordingAutoZooms,
+		),
 		whisperExecutablePath:
 			normalizeNullablePath(raw.whisperExecutablePath) ?? fallback.whisperExecutablePath,
-		whisperModelPath:
-			normalizeNullablePath(raw.whisperModelPath) ?? fallback.whisperModelPath,
+		whisperModelPath: normalizeNullablePath(raw.whisperModelPath) ?? fallback.whisperModelPath,
 	};
 }
 
