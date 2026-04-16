@@ -74,10 +74,7 @@ export function mapSmoothedCursorToCanvasNormalized(
 		return null;
 	}
 
-	const mappedCursor = mapCursorToCanvasNormalized(
-		{ cx: cursor.cx, cy: cursor.cy },
-		params,
-	);
+	const mappedCursor = mapCursorToCanvasNormalized({ cx: cursor.cx, cy: cursor.cy }, params);
 	if (!mappedCursor) {
 		return null;
 	}
