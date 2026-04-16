@@ -15,9 +15,9 @@ function ContentClamp({ children, className, truncateLength = 50, ...props }: Co
 	const isTruncated = text.length > truncateLength;
 
 	const [open, setOpen] = React.useState(false);
-	const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+	const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-	const handleMouseEnter = () => {
+	const openPopover = () => {
 		if (timeoutRef.current) {
 			clearTimeout(timeoutRef.current);
 			timeoutRef.current = null;
@@ -25,10 +25,19 @@ function ContentClamp({ children, className, truncateLength = 50, ...props }: Co
 		setOpen(true);
 	};
 
-	const handleMouseLeave = () => {
+	const scheduleClose = () => {
 		timeoutRef.current = setTimeout(() => {
 			setOpen(false);
 		}, 100);
+	};
+
+	const handleKeyDown = (event: React.KeyboardEvent<HTMLSpanElement>) => {
+		if (event.key !== "Enter" && event.key !== " ") {
+			return;
+		}
+
+		event.preventDefault();
+		setOpen((currentOpen) => !currentOpen);
 	};
 
 	React.useEffect(() => {
@@ -53,10 +62,20 @@ function ContentClamp({ children, className, truncateLength = 50, ...props }: Co
 		<Popover open={open} onOpenChange={setOpen}>
 			<PopoverTrigger asChild>
 				<span
-					className={className}
-					onMouseEnter={handleMouseEnter}
-					onMouseLeave={handleMouseLeave}
-					onClick={(e) => e.preventDefault()}
+					className={cn("cursor-help", className)}
+					onMouseEnter={openPopover}
+					onMouseLeave={scheduleClose}
+					onFocus={openPopover}
+					onBlur={scheduleClose}
+					onClick={(event) => {
+						event.preventDefault();
+						setOpen((currentOpen) => !currentOpen);
+					}}
+					onKeyDown={handleKeyDown}
+					role="button"
+					tabIndex={0}
+					aria-haspopup="dialog"
+					aria-expanded={open}
 					{...props}
 				>
 					{truncatedText}
@@ -66,8 +85,8 @@ function ContentClamp({ children, className, truncateLength = 50, ...props }: Co
 				className="w-auto max-w-sm rounded-lg border border-white bg-popover p-3 text-sm text-popover-foreground"
 				sideOffset={8}
 				animated={false}
-				onMouseEnter={handleMouseEnter}
-				onMouseLeave={handleMouseLeave}
+				onMouseEnter={openPopover}
+				onMouseLeave={scheduleClose}
 				onPointerDownOutside={(e) => e.preventDefault()}
 				onClick={(e) => e.stopPropagation()}
 			>

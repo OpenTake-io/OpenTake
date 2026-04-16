@@ -1,5 +1,26 @@
 let cachedPlatform: string | null = null;
 
+function getNavigatorFallbackPlatform(): string {
+	if (typeof navigator === "undefined") {
+		return "win32";
+	}
+
+	const navigatorWithUAData = navigator as Navigator & {
+		userAgentData?: { platform?: string };
+	};
+	const platformSource = navigatorWithUAData.userAgentData?.platform ?? navigator.userAgent ?? "";
+
+	if (/mac|iphone|ipad|ipod/i.test(platformSource)) {
+		return "darwin";
+	}
+
+	if (/linux/i.test(platformSource)) {
+		return "linux";
+	}
+
+	return "win32";
+}
+
 /**
  * Gets the current platform from Electron
  */
@@ -12,11 +33,7 @@ const getPlatform = async (): Promise<string> => {
 		return platform;
 	} catch (error) {
 		console.warn("Failed to get platform from Electron, falling back to navigator:", error);
-		// Fallback for development/testing
-		let fallbackPlatform = "win32";
-		if (typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform)) {
-			fallbackPlatform = "darwin";
-		}
+		const fallbackPlatform = getNavigatorFallbackPlatform();
 		cachedPlatform = fallbackPlatform;
 		return fallbackPlatform;
 	}

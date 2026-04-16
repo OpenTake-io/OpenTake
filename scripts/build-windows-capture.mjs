@@ -20,6 +20,7 @@ const bundledDir = path.join(
 );
 const bundledExePath = path.join(bundledDir, "wgc-capture.exe");
 const helperId = "wgc-capture";
+const generatorArch = process.arch === "arm64" ? "ARM64" : "x64";
 
 if (process.platform !== "win32") {
 	console.log(
@@ -120,7 +121,7 @@ function clearCmakeCache() {
 console.log("[build-windows-capture] Configuring CMake...");
 try {
 	clearCmakeCache();
-	execSync(`${cmake} .. -G "Visual Studio 17 2022" -A x64`, {
+	execSync(`${cmake} .. -G "Visual Studio 17 2022" -A ${generatorArch}`, {
 		cwd: buildDir,
 		stdio: "inherit",
 		timeout: 120000,
@@ -129,7 +130,7 @@ try {
 	console.log("[build-windows-capture] VS 2022 generator not found, trying VS 2019...");
 	try {
 		clearCmakeCache();
-		execSync(`${cmake} .. -G "Visual Studio 16 2019" -A x64`, {
+		execSync(`${cmake} .. -G "Visual Studio 16 2019" -A ${generatorArch}`, {
 			cwd: buildDir,
 			stdio: "inherit",
 			timeout: 120000,

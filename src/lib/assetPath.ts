@@ -13,27 +13,28 @@ function ensureTrailingSlash(value: string): string {
 
 export async function getAssetPath(relativePath: string): Promise<string> {
 	const encodedRelativePath = encodeRelativeAssetPath(relativePath);
+	const isWebContext =
+		typeof window !== "undefined" && Boolean(window.location?.protocol?.startsWith("http"));
+
+	if (isWebContext) {
+		return `/${encodedRelativePath}`;
+	}
 
 	try {
 		if (typeof window !== "undefined") {
-			// If running in a dev server (http/https), prefer the web-served path
-			if (
-				window.location &&
-				window.location.protocol &&
-				window.location.protocol.startsWith("http")
-			) {
-				return `/${encodedRelativePath}`;
-			}
-
 			if (typeof window.electronAPI?.getAssetBasePath === "function") {
 				const base = await window.electronAPI.getAssetBasePath();
-				if (base) {
-					return new URL(encodedRelativePath, ensureTrailingSlash(base)).toString();
+				if (!base) {
+					throw new Error(`Failed to resolve asset base path for ${relativePath}`);
 				}
+
+				return new URL(encodedRelativePath, ensureTrailingSlash(base)).toString();
 			}
 		}
-	} catch {
-		// ignore and use fallback
+	} catch (error) {
+		if (!isWebContext) {
+			throw error;
+		}
 	}
 
 	// Fallback for web/dev server: public/wallpapers are served at '/wallpapers/...'

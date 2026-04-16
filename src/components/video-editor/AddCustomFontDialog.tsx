@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import {
 	addCustomFont,
 	type CustomFont,
+	DuplicateFontError,
 	generateFontId,
 	isValidGoogleFontsUrl,
 	parseFontFamilyFromImport,
@@ -32,6 +33,19 @@ export function AddCustomFontDialog({ onFontAdded }: AddCustomFontDialogProps) {
 	const [fontName, setFontName] = useState("");
 	const [loading, setLoading] = useState(false);
 
+	const resetForm = () => {
+		setImportUrl("");
+		setFontName("");
+		setLoading(false);
+	};
+
+	const handleOpenChange = (nextOpen: boolean) => {
+		setOpen(nextOpen);
+		if (!nextOpen) {
+			resetForm();
+		}
+	};
+
 	const handleImportUrlChange = (url: string) => {
 		setImportUrl(url);
 
@@ -45,18 +59,21 @@ export function AddCustomFontDialog({ onFontAdded }: AddCustomFontDialogProps) {
 	};
 
 	const handleAdd = async () => {
+		const normalizedImportUrl = importUrl.trim();
+		const normalizedFontName = fontName.trim();
+
 		// Validate inputs
-		if (!importUrl.trim()) {
+		if (!normalizedImportUrl) {
 			toast.error(t("addFont.enterUrl"));
 			return;
 		}
 
-		if (!isValidGoogleFontsUrl(importUrl)) {
+		if (!isValidGoogleFontsUrl(normalizedImportUrl)) {
 			toast.error(t("addFont.invalidUrl"));
 			return;
 		}
 
-		if (!fontName.trim()) {
+		if (!normalizedFontName) {
 			toast.error(t("addFont.enterName"));
 			return;
 		}
@@ -65,19 +82,18 @@ export function AddCustomFontDialog({ onFontAdded }: AddCustomFontDialogProps) {
 
 		try {
 			// Extract font family from URL
-			const fontFamily = parseFontFamilyFromImport(importUrl);
+			const fontFamily = parseFontFamilyFromImport(normalizedImportUrl);
 			if (!fontFamily) {
 				toast.error(t("addFont.extractFailed"));
-				setLoading(false);
 				return;
 			}
 
 			// Create custom font object
 			const newFont: CustomFont = {
-				id: generateFontId(fontName),
-				name: fontName.trim(),
+				id: generateFontId(normalizedFontName),
+				name: normalizedFontName,
 				fontFamily: fontFamily,
-				importUrl: importUrl.trim(),
+				importUrl: normalizedImportUrl,
 			};
 
 			// Add font (this will load and verify it) - throws if it fails
@@ -88,14 +104,19 @@ export function AddCustomFontDialog({ onFontAdded }: AddCustomFontDialogProps) {
 				onFontAdded(newFont);
 			}
 
-			toast.success(t("addFont.addSuccess", undefined, { name: fontName }));
+			toast.success(t("addFont.addSuccess", undefined, { name: normalizedFontName }));
 
 			// Reset and close
-			setImportUrl("");
-			setFontName("");
-			setOpen(false);
+			handleOpenChange(false);
 		} catch (error) {
 			console.error("Failed to add custom font:", error);
+			if (error instanceof DuplicateFontError) {
+				toast.error(t("addFont.addFailed"), {
+					description: t("addFont.alreadyAdded", "This font has already been added."),
+				});
+				return;
+			}
+
 			const errorMessage = error instanceof Error ? error.message : "Failed to load font";
 			toast.error(t("addFont.addFailed"), {
 				description: errorMessage.includes("timeout")
@@ -108,7 +129,7 @@ export function AddCustomFontDialog({ onFontAdded }: AddCustomFontDialogProps) {
 	};
 
 	return (
-		<Dialog open={open} onOpenChange={setOpen}>
+		<Dialog open={open} onOpenChange={handleOpenChange}>
 			<DialogTrigger asChild>
 				<Button
 					variant="outline"
@@ -159,7 +180,7 @@ export function AddCustomFontDialog({ onFontAdded }: AddCustomFontDialogProps) {
 					<div className="flex justify-end gap-2 mt-6">
 						<Button
 							variant="outline"
-							onClick={() => setOpen(false)}
+							onClick={() => handleOpenChange(false)}
 							className="bg-white/5 border-white/10 text-slate-200 hover:bg-white/10"
 						>
 							{t("addFont.cancel")}

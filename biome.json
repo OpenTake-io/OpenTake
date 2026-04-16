@@ -44,7 +44,7 @@
 				"noUnsafeOptionalChaining": "error",
 				"noUnusedLabels": "error",
 				"noUnusedVariables": "error",
-				"useExhaustiveDependencies": "off",
+				"useExhaustiveDependencies": "warn",
 				"useHookAtTopLevel": "error",
 				"useIsNan": "error",
 				"useValidForDirection": "error",
@@ -159,11 +159,14 @@
 			}
 		},
 		{
-			"includes": ["src/components/ui/**/*.tsx"],
+			"includes": ["electron/electron-env.d.ts"],
 			"linter": {
 				"rules": {
 					"style": {
-						"useComponentExportOnlyModules": "off"
+						"noNamespace": "off"
+					},
+					"suspicious": {
+						"noExplicitAny": "off"
 					}
 				}
 			}
@@ -173,11 +176,27 @@
 			"linter": {
 				"rules": {
 					"correctness": {
-						"noEmptyPattern": "off",
+						"noEmptyPattern": "off"
+					},
+					"suspicious": {
+						"noEmptyBlockStatements": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": [
+				"src/components/video-editor/audio.test.ts",
+				"src/lib/exporter/frameRenderer.test.ts",
+				"src/lib/exporter/localMediaSource.test.ts",
+				"src/lib/exporter/modernFrameRenderer.test.ts"
+			],
+			"linter": {
+				"rules": {
+					"correctness": {
 						"noUnusedVariables": "off"
 					},
 					"suspicious": {
-						"noEmptyBlockStatements": "off",
 						"noExplicitAny": "off"
 					}
 				}

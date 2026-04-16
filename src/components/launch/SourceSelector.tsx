@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from "react";
 import { MdCheck } from "react-icons/md";
 import { useScopedT } from "../../contexts/I18nContext";
 import { Button } from "../ui/button";
@@ -111,6 +111,18 @@ export function SourceSelector() {
 	}, [loading, screenSources.length, windowSources.length]);
 
 	const handleSourceSelect = (source: DesktopSource) => setSelectedSource(source);
+	const handleSourceKeyDown = (
+		event: ReactKeyboardEvent<HTMLDivElement>,
+		source: DesktopSource,
+	) => {
+		if (event.key !== "Enter" && event.key !== " ") {
+			return;
+		}
+
+		event.preventDefault();
+		handleSourceSelect(source);
+	};
+
 	const handleShare = async () => {
 		if (selectedSource) await window.electronAPI.selectSource(selectedSource);
 	};
@@ -159,37 +171,47 @@ export function SourceSelector() {
 							>
 								{screenSources.length === 0 && (
 									<div className="col-span-2 text-center text-xs text-zinc-500 py-8">
-										No screens available
+										{t("sourceSelector.noScreensAvailable")}
 									</div>
 								)}
-								{screenSources.map((source) => (
-									<Card
-										key={source.id}
-										className={`${styles.sourceCard} ${selectedSource?.id === source.id ? styles.selected : ""} cursor-pointer h-fit p-2 scale-95`}
-										style={{ margin: 8, width: "90%", maxWidth: 220 }}
-										onClick={() => handleSourceSelect(source)}
-									>
-										<div className="p-1">
-											<div className="relative mb-1">
-												<img
-													src={source.thumbnail || ""}
-													alt={source.name}
-													className="w-full aspect-video object-cover rounded border border-zinc-800"
-												/>
-												{selectedSource?.id === source.id && (
-													<div className="absolute -top-1 -right-1">
-														<div className="w-4 h-4 bg-[#2563EB] rounded-full flex items-center justify-center shadow-md">
-															<MdCheck className={styles.icon} />
+								{screenSources.map((source) => {
+									const isSelected = selectedSource?.id === source.id;
+
+									return (
+										<Card
+											key={source.id}
+											className={`${styles.sourceCard} ${isSelected ? styles.selected : ""} cursor-pointer h-fit p-2 scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent`}
+											style={{ margin: 8, width: "90%", maxWidth: 220 }}
+											onClick={() => handleSourceSelect(source)}
+											onKeyDown={(event) =>
+												handleSourceKeyDown(event, source)
+											}
+											role="button"
+											tabIndex={0}
+											aria-pressed={isSelected}
+										>
+											<div className="p-1">
+												<div className="relative mb-1">
+													<img
+														src={source.thumbnail || ""}
+														alt={source.name}
+														className="w-full aspect-video object-cover rounded border border-zinc-800"
+													/>
+													{isSelected && (
+														<div className="absolute -top-1 -right-1">
+															<div className="w-4 h-4 bg-[#2563EB] rounded-full flex items-center justify-center shadow-md">
+																<MdCheck className={styles.icon} />
+															</div>
 														</div>
-													</div>
-												)}
+													)}
+												</div>
+												<div className={styles.name + " truncate"}>
+													{source.name}
+												</div>
 											</div>
-											<div className={styles.name + " truncate"}>
-												{source.name}
-											</div>
-										</div>
-									</Card>
-								))}
+										</Card>
+									);
+								})}
 							</div>
 						</TabsContent>
 						<TabsContent value="windows" className="h-full">
@@ -201,63 +223,77 @@ export function SourceSelector() {
 							>
 								{windowSources.length === 0 && (
 									<div className="col-span-2 text-center text-xs text-zinc-500 py-8">
-										No windows available
+										{t("sourceSelector.noWindowsAvailable")}
 									</div>
 								)}
-								{windowSources.map((source) => (
-									<Card
-										key={source.id}
-										className={`${styles.sourceCard} ${selectedSource?.id === source.id ? styles.selected : ""} cursor-pointer h-fit p-2 scale-95`}
-										style={{ margin: 8, width: "90%", maxWidth: 220 }}
-										onClick={() => handleSourceSelect(source)}
-									>
-										<div className="p-1">
-											<div className="relative mb-1">
-												{source.thumbnail ? (
-													<img
-														src={source.thumbnail}
-														alt={source.name}
-														className="w-full aspect-video object-cover rounded border border-gray-700"
-													/>
-												) : (
-													<div className="w-full aspect-video rounded border border-gray-700 bg-zinc-900/80 flex flex-col items-center justify-center text-zinc-400 gap-2">
-														{source.appIcon ? (
-															<img
-																src={source.appIcon}
-																alt="App icon"
-																className="w-8 h-8 rounded-md"
-															/>
-														) : (
-															<div className="w-8 h-8 rounded-md bg-zinc-800 border border-zinc-700" />
-														)}
-														<div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
-															{t("sourceSelector.windowPlaceholder")}
+								{windowSources.map((source) => {
+									const isSelected = selectedSource?.id === source.id;
+
+									return (
+										<Card
+											key={source.id}
+											className={`${styles.sourceCard} ${isSelected ? styles.selected : ""} cursor-pointer h-fit p-2 scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent`}
+											style={{ margin: 8, width: "90%", maxWidth: 220 }}
+											onClick={() => handleSourceSelect(source)}
+											onKeyDown={(event) =>
+												handleSourceKeyDown(event, source)
+											}
+											role="button"
+											tabIndex={0}
+											aria-pressed={isSelected}
+										>
+											<div className="p-1">
+												<div className="relative mb-1">
+													{source.thumbnail ? (
+														<img
+															src={source.thumbnail}
+															alt={source.name}
+															className="w-full aspect-video object-cover rounded border border-gray-700"
+														/>
+													) : (
+														<div className="w-full aspect-video rounded border border-gray-700 bg-zinc-900/80 flex flex-col items-center justify-center text-zinc-400 gap-2">
+															{source.appIcon ? (
+																<img
+																	src={source.appIcon}
+																	alt="App icon"
+																	className="w-8 h-8 rounded-md"
+																/>
+															) : (
+																<div className="w-8 h-8 rounded-md bg-zinc-800 border border-zinc-700" />
+															)}
+															<div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+																{t(
+																	"sourceSelector.windowPlaceholder",
+																)}
+															</div>
 														</div>
-													</div>
-												)}
-												{selectedSource?.id === source.id && (
-													<div className="absolute -top-1 -right-1">
-														<div className="w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center shadow-md">
-															<MdCheck className={styles.icon} />
+													)}
+													{isSelected && (
+														<div className="absolute -top-1 -right-1">
+															<div className="w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center shadow-md">
+																<MdCheck className={styles.icon} />
+															</div>
 														</div>
+													)}
+												</div>
+												<div className="flex items-center gap-1">
+													{source.appIcon && (
+														<img
+															src={source.appIcon}
+															alt="App icon"
+															className={
+																styles.icon + " flex-shrink-0"
+															}
+														/>
+													)}
+													<div className={styles.name + " truncate"}>
+														{source.name}
 													</div>
-												)}
-											</div>
-											<div className="flex items-center gap-1">
-												{source.appIcon && (
-													<img
-														src={source.appIcon}
-														alt="App icon"
-														className={styles.icon + " flex-shrink-0"}
-													/>
-												)}
-												<div className={styles.name + " truncate"}>
-													{source.name}
 												</div>
 											</div>
-										</div>
-									</Card>
-								))}
+										</Card>
+									);
+								})}
 							</div>
 						</TabsContent>
 					</div>

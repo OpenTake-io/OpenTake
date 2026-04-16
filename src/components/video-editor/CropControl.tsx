@@ -35,16 +35,26 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
 		canvas.width = videoElement.videoWidth || 1920;
 		canvas.height = videoElement.videoHeight || 1080;
 
+		let animationFrameId = 0;
+		let isCancelled = false;
+
 		const draw = () => {
+			if (isCancelled) {
+				return;
+			}
+
 			if (videoElement.readyState >= 2) {
 				ctx.clearRect(0, 0, canvas.width, canvas.height);
 				ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
 			}
-			requestAnimationFrame(draw);
+			animationFrameId = requestAnimationFrame(draw);
 		};
 
-		const rafId = requestAnimationFrame(draw);
-		return () => cancelAnimationFrame(rafId);
+		animationFrameId = requestAnimationFrame(draw);
+		return () => {
+			isCancelled = true;
+			cancelAnimationFrame(animationFrameId);
+		};
 	}, [videoElement]);
 
 	const getContainerRect = () => {
@@ -61,8 +71,12 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
 	const handlePointerDown = (e: React.PointerEvent, handle: DragHandle) => {
 		e.stopPropagation();
 		e.preventDefault();
-		setIsDragging(handle);
 		const rect = getContainerRect();
+		if (rect.width <= 0 || rect.height <= 0) {
+			return;
+		}
+
+		setIsDragging(handle);
 		setDragStart({
 			x: (e.clientX - rect.left) / rect.width,
 			y: (e.clientY - rect.top) / rect.height,
@@ -76,6 +90,10 @@ export function CropControl({ videoElement, cropRegion, onCropChange }: CropCont
 		if (!isDragging) return;
 
 		const rect = getContainerRect();
+		if (rect.width <= 0 || rect.height <= 0) {
+			return;
+		}
+
 		const currentX = (e.clientX - rect.left) / rect.width;
 		const currentY = (e.clientY - rect.top) / rect.height;
 		const deltaX = currentX - dragStart.x;

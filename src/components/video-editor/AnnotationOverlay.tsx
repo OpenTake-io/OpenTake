@@ -175,7 +175,7 @@ export function AnnotationOverlay({
 			)}
 			style={{
 				zIndex: isSelectedBoost ? zIndex + 1000 : zIndex, // Boost selected annotation to ensure it's on top
-				pointerEvents: isSelected ? "auto" : "none",
+				pointerEvents: "auto",
 				border: isSelected ? "2px solid rgba(37, 99, 235, 0.8)" : "none",
 				backgroundColor: isSelected ? "rgba(37, 99, 235, 0.1)" : "transparent",
 				boxShadow: isSelected ? "0 0 0 1px rgba(37, 99, 235, 0.35)" : "none",

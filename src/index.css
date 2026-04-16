@@ -4,8 +4,13 @@
 
 @layer base {
 	/* Disable Electron/Chromium focus highlight (yellow/orange ring) */
-	*:focus {
+	*:focus:not(:focus-visible) {
 		outline: none !important;
+	}
+
+	*:focus-visible {
+		outline: 2px solid rgb(var(--brand-accent-rgb));
+		outline-offset: 2px;
 		-webkit-tap-highlight-color: transparent;
 	}
 
@@ -80,6 +85,7 @@
 	}
 	body {
 		@apply bg-background text-foreground;
+
 		-webkit-user-select: none;
 		user-select: none;
 		font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
