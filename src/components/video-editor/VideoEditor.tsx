@@ -1772,9 +1772,10 @@ export default function VideoEditor() {
 	]);
 
 	useEffect(() => {
-		pendingFreshRecordingAutoZoomPathRef.current =
-			autoApplyFreshRecordingAutoZooms && videoPath ? videoPath : null;
-	}, [autoApplyFreshRecordingAutoZooms, videoPath]);
+		if (!autoApplyFreshRecordingAutoZooms) {
+			pendingFreshRecordingAutoZoomPathRef.current = null;
+		}
+	}, [autoApplyFreshRecordingAutoZooms]);
 
 	useEffect(() => {
 		saveEditorPreferences({
@@ -2717,9 +2718,12 @@ export default function VideoEditor() {
 	const handleClipSpeedChange = useCallback(
 		(speed: number) => {
 			if (!selectedClipId) return;
+			if (!Number.isFinite(speed) || speed <= 0) {
+				return;
+			}
 			const clip = clipRegions.find((c) => c.id === selectedClipId);
 			if (!clip) return;
-			const oldSpeed = clip.speed ?? 1;
+			const oldSpeed = Number.isFinite(clip.speed) && clip.speed > 0 ? clip.speed : 1;
 			const sourceDurationMs = (clip.endMs - clip.startMs) * oldSpeed;
 			const newEndMs = Math.round(clip.startMs + sourceDurationMs / speed);
 			const scaleFactor = oldSpeed / speed;
@@ -4917,7 +4921,7 @@ export default function VideoEditor() {
 											className="h-7 gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 text-[11px] text-white/65 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-all hover:bg-white/[0.08] hover:text-white"
 										>
 											<Plus className="w-3.5 h-3.5" />
-											<span className="font-medium">Add Layer</span>
+											<span className="font-medium">{t("editor.toolbar.addLayer")}</span>
 											<ChevronDown className="w-3 h-3" />
 										</Button>
 									</DropdownMenuTrigger>
@@ -4939,13 +4943,13 @@ export default function VideoEditor() {
 											}}
 											className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
 										>
-											Annotation
+											{t("timeline.annotation.label")}
 										</DropdownMenuItem>
 										<DropdownMenuItem
 											onClick={() => timelineRef.current?.addAudio()}
 											className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
 										>
-											Audio
+											{t("timeline.audio.label")}
 										</DropdownMenuItem>
 									</DropdownMenuContent>
 								</DropdownMenu>
@@ -4955,7 +4959,7 @@ export default function VideoEditor() {
 									variant="ghost"
 									size="icon"
 									className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-[#2563EB]/10 hover:text-[#2563EB]"
-									title="Add Zoom (Z)"
+									title={t("timeline.zoom.addZoom")}
 								>
 									<ZoomIn className="w-4 h-4" />
 								</Button>
@@ -4964,7 +4968,7 @@ export default function VideoEditor() {
 									variant="ghost"
 									size="icon"
 									className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-[#2563EB]/10 hover:text-[#2563EB]"
-									title="Suggest Zooms from Cursor"
+									title={t("timeline.zoom.suggestZooms")}
 								>
 									<WandSparkles className="w-4 h-4" />
 								</Button>
@@ -4973,7 +4977,7 @@ export default function VideoEditor() {
 									variant="ghost"
 									size="icon"
 									className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
-									title="Split Clip (C)"
+									title={t("editor.toolbar.splitClip")}
 								>
 									<Scissors className="w-4 h-4" />
 								</Button>
@@ -4988,7 +4992,7 @@ export default function VideoEditor() {
 										variant="ghost"
 										size="icon"
 										className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
-										title="Skip Back"
+										title={t("editor.playback.skipBack")}
 										onClick={() => {
 											const currentMs = timelinePlayheadTime * 1000;
 											const kfs = timelineRef.current?.keyframes ?? [];
@@ -5021,7 +5025,7 @@ export default function VideoEditor() {
 										variant="ghost"
 										size="icon"
 										className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
-										title="Skip Forward"
+										title={t("editor.playback.skipForward")}
 										onClick={() => {
 											const currentMs = timelinePlayheadTime * 1000;
 											const kfs = timelineRef.current?.keyframes ?? [];
@@ -5046,11 +5050,12 @@ export default function VideoEditor() {
 									variant="ghost"
 									size="icon"
 									title={
-										timelineCollapsed ? "Expand Timeline" : "Collapse Timeline"
+										timelineCollapsed
+											? t("editor.timeline.expand")
+											: t("editor.timeline.collapse")
 									}
 									className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
 									onClick={() => {
-										timelineRef.current?.toggleCollapsed();
 										setTimelineCollapsed((p) => !p);
 									}}
 								>
@@ -5064,7 +5069,7 @@ export default function VideoEditor() {
 									<button
 										type="button"
 										className="text-slate-400 hover:text-white transition-colors"
-										title="Mute/Unmute"
+										title={t("editor.playback.muteUnmute")}
 										onClick={() =>
 											setPreviewVolume(previewVolume <= 0.001 ? 1 : 0)
 										}

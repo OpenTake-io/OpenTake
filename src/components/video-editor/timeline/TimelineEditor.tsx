@@ -98,7 +98,6 @@ export interface TimelineEditorHandle {
   splitClip: () => void;
   addAnnotation: (trackIndex?: number) => void;
   addAudio: () => Promise<void>;
-  toggleCollapsed: () => void;
   keyframes: { id: string; time: number }[];
 }
 
@@ -688,7 +687,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(fun
   selectedAudioId,
   onSelectAudio,
   aspectRatio = 'native',
-  onAspectRatioChange = () => {},
+  onAspectRatioChange,
   onOpenCropEditor,
   isCropped = false,
   videoPath,
@@ -747,7 +746,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(fun
       toast.error('Custom aspect ratio must be positive numbers.');
       return;
     }
-    onAspectRatioChange(`${width}:${height}` as AspectRatio);
+    onAspectRatioChange?.(`${width}:${height}` as AspectRatio);
   }, [customAspectHeight, customAspectWidth, onAspectRatioChange]);
 
   const handleCustomAspectRatioKeyDown = useCallback((event: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -1374,7 +1373,6 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(fun
     splitClip: handleSplitClip,
     addAnnotation: handleAddAnnotation,
     addAudio: handleAddAudio,
-    toggleCollapsed: () => {},
     keyframes,
   }), [handleAddAnnotation, handleAddAudio, handleAddZoom, handleSuggestZooms, handleSplitClip, keyframes]);
 
@@ -1580,7 +1578,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(fun
               {ASPECT_RATIOS.map((ratio) => (
                 <DropdownMenuItem
                   key={ratio}
-                  onClick={() => onAspectRatioChange(ratio)}
+                  onClick={() => onAspectRatioChange?.(ratio)}
                   className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer flex items-center justify-between gap-3"
                 >
                   <span>{getAspectRatioLabel(ratio)}</span>
