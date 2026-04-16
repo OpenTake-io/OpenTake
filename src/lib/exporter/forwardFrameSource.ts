@@ -47,13 +47,17 @@ export class ForwardFrameSource {
 			const url = new URL(resourceUrl);
 			let filePath = decodeURIComponent(url.pathname);
 			if (url.host && url.host !== "localhost") {
-				return `//${url.host}${filePath}`;
+				return `\\\\${url.host}${filePath.replace(/\//g, "\\")}`;
 			}
 			if (/^\/[A-Za-z]:/.test(filePath)) {
 				filePath = filePath.slice(1);
 			}
 			return filePath;
 		} catch {
+			const uncMatch = resourceUrl.match(/^file:\/\/([^/]+)(\/.*)$/i);
+			if (uncMatch && uncMatch[1].toLowerCase() !== "localhost") {
+				return `\\\\${uncMatch[1]}${decodeURIComponent(uncMatch[2]).replace(/\//g, "\\")}`;
+			}
 			return resourceUrl.replace(/^file:\/\//, "");
 		}
 	}
