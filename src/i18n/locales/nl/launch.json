@@ -27,6 +27,8 @@
 		"noMicrophonesFound": "Geen microfoons gevonden",
 		"webcam": "Webcam",
 		"turnOffWebcam": "Webcam uitschakelen",
+		"hideFloatingWebcamPreview": "Zwevende voorbeeldweergave verbergen",
+		"showFloatingWebcamPreview": "Zwevende voorbeeldweergave tonen",
 		"selectWebcamToEnable": "Selecteer een webcam om in te schakelen",
 		"noWebcamsFound": "Geen webcams gevonden",
 		"recordingsFolder": "Opnamepad",

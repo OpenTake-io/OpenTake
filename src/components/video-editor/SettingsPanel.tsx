@@ -40,6 +40,7 @@ import type {
 	CaptionCue,
 	CropRegion,
 	CursorStyle,
+	EditorEffectSection,
 	FigureData,
 	PlaybackSpeed,
 	WebcamOverlaySettings,
@@ -111,19 +112,6 @@ const CAPTION_ANIMATION_OPTIONS: Array<{ value: AutoCaptionAnimation; label: str
 ];
 
 type BackgroundTab = "image" | "video" | "color" | "gradient";
-export type EditorEffectSection =
-	| "scene"
-	| "cursor"
-	| "captions"
-	| "webcam"
-	| "settings"
-	| "zoom"
-	| "frame"
-	| "crop"
-	| "extensions"
-	| "clip"
-	| `ext:${string}`;
-
 function isHexWallpaper(value: string): boolean {
 	return /^#(?:[0-9a-f]{3}){1,2}$/i.test(value);
 }
@@ -438,8 +426,6 @@ interface SettingsPanelProps {
 	onSpeedChange?: (speed: PlaybackSpeed) => void;
 	onSpeedDelete?: (id: string) => void;
 }
-
-export default SettingsPanel;
 
 const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
 	{ depth: 1, label: "1.25×" },
@@ -2291,13 +2277,13 @@ export function SettingsPanel({
 							<p className="mt-1.5 text-[10px] text-slate-500">
 								{selectedZoomMode === "manual"
 									? tSettings(
-										"zoom.modeManualDescription",
-										"Set a fixed focus point for this zoom",
-									)
+											"zoom.modeManualDescription",
+											"Set a fixed focus point for this zoom",
+										)
 									: tSettings(
-										"zoom.modeAutoDescription",
-										"Camera follows cursor automatically",
-									)}
+											"zoom.modeAutoDescription",
+											"Camera follows cursor automatically",
+										)}
 							</p>
 						</div>
 						<div className="grid grid-cols-6 gap-1.5">

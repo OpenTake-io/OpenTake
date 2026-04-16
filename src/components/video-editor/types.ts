@@ -20,7 +20,13 @@ export interface CursorTelemetryPoint {
 	timeMs: number;
 	cx: number;
 	cy: number;
-	interactionType?: "move" | "click" | "double-click" | "right-click" | "middle-click" | "mouseup";
+	interactionType?:
+		| "move"
+		| "click"
+		| "double-click"
+		| "right-click"
+		| "middle-click"
+		| "mouseup";
 	cursorType?:
 		| "arrow"
 		| "text"
@@ -43,13 +49,21 @@ export interface CursorVisualSettings {
 	style: CursorStyle;
 }
 
-export type CursorStyle =
-	| "tahoe"
-	| "dot"
-	| "figma"
-	| "mono"
-	| (string & {});  // extension-contributed cursor styles
+export type CursorStyle = "tahoe" | "dot" | "figma" | "mono" | (string & {}); // extension-contributed cursor styles
 export const DEFAULT_CURSOR_STYLE: CursorStyle = "tahoe";
+
+export type EditorEffectSection =
+	| "scene"
+	| "cursor"
+	| "captions"
+	| "webcam"
+	| "settings"
+	| "zoom"
+	| "frame"
+	| "crop"
+	| "extensions"
+	| "clip"
+	| `ext:${string}`;
 
 export type ZoomTransitionEasing = "recordly" | "glide" | "smooth" | "snappy" | "linear";
 
@@ -182,7 +196,6 @@ export type AnnotationType = "text" | "image" | "figure" | "blur";
 export const BLUR_ANNOTATION_STRENGTH = 20;
 export const BASE_PREVIEW_WIDTH = 1920;
 export const BASE_PREVIEW_HEIGHT = 1080;
-
 
 export type ArrowDirection =
 	| "up"
