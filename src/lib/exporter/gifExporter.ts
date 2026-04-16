@@ -112,6 +112,10 @@ export function calculateOutputDimensions(
 	};
 }
 
+export function getGifRepeat(loop: boolean): 0 | 1 {
+	return loop ? 0 : 1;
+}
+
 export class GifExporter {
 	private config: GifExporterConfig;
 	private streamingDecoder: StreamingVideoDecoder | null = null;
@@ -192,7 +196,7 @@ export class GifExporter {
 
 			// Initialize GIF encoder
 			// Loop: 0 = infinite loop, 1 = play once (no loop)
-			const repeat = this.config.loop ? 0 : 1;
+			const repeat = getGifRepeat(this.config.loop);
 			const cores = navigator.hardwareConcurrency || 4;
 			const WORKER_COUNT = Math.max(1, Math.min(8, cores - 1));
 

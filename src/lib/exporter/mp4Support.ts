@@ -167,16 +167,20 @@ export async function probeSupportedMp4Dimensions(
 	const codec = options.codec ?? DEFAULT_MP4_CODEC;
 	const normalizedWidth = normalizeEvenDimension(options.width);
 	const normalizedHeight = normalizeEvenDimension(options.height);
-	const dimensionCacheKey = [codec, normalizedWidth, normalizedHeight, options.frameRate].join(
-		":",
-	);
+	const requestedBitrate = options.getBitrate(normalizedWidth, normalizedHeight);
+	const dimensionCacheKey = [
+		codec,
+		normalizedWidth,
+		normalizedHeight,
+		options.frameRate,
+		requestedBitrate,
+	].join(":");
 	const cachedResult = supportedDimensionCache.get(dimensionCacheKey);
 
 	if (cachedResult) {
 		return cachedResult;
 	}
 
-	const requestedBitrate = options.getBitrate(normalizedWidth, normalizedHeight);
 	const directPath = await resolveSupportedMp4EncoderPath({
 		width: normalizedWidth,
 		height: normalizedHeight,

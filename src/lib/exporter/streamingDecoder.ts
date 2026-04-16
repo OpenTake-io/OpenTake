@@ -156,6 +156,26 @@ export class StreamingVideoDecoder {
 	}
 
 	async loadMetadata(videoUrl: string): Promise<DecodedVideoInfo> {
+		if (this.decoder) {
+			try {
+				if (this.decoder.state === "configured") {
+					this.decoder.close();
+				}
+			} catch {
+				// Ignore cleanup errors while reloading metadata.
+			}
+			this.decoder = null;
+		}
+
+		if (this.demuxer) {
+			try {
+				this.demuxer.destroy();
+			} catch {
+				// Ignore cleanup errors while reloading metadata.
+			}
+			this.demuxer = null;
+		}
+
 		const resourceUrl = this.resolveVideoResourceUrl(videoUrl);
 
 		// Relative URL so it resolves correctly in both dev (http) and packaged (file://) builds
@@ -576,7 +596,7 @@ export class StreamingVideoDecoder {
 			if (cursor < trimStart) {
 				segments.push({ startSec: cursor, endSec: trimStart });
 			}
-			cursor = trimEnd;
+			cursor = Math.max(cursor, trimEnd);
 		}
 
 		if (cursor < totalDuration) {
@@ -624,9 +644,14 @@ export class StreamingVideoDecoder {
 			for (const sr of overlapping) {
 				const srStart = Math.max(sr.startMs / 1000, segment.startSec);
 				const srEnd = Math.min(sr.endMs / 1000, segment.endSec);
-				if (cursor < srStart) result.push({ startSec: cursor, endSec: srStart, speed: 1 });
-				result.push({ startSec: srStart, endSec: srEnd, speed: sr.speed });
-				cursor = srEnd;
+				if (cursor < srStart) {
+					result.push({ startSec: cursor, endSec: srStart, speed: 1 });
+				}
+				const effectiveStart = Math.max(cursor, srStart);
+				if (srEnd > effectiveStart) {
+					result.push({ startSec: effectiveStart, endSec: srEnd, speed: sr.speed });
+				}
+				cursor = Math.max(cursor, srEnd);
 			}
 			if (cursor < segment.endSec)
 				result.push({ startSec: cursor, endSec: segment.endSec, speed: 1 });

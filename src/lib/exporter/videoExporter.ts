@@ -102,6 +102,7 @@ export class VideoExporter {
 	private encoderError: Error | null = null;
 	private nativeExportSessionId: string | null = null;
 	private nativeH264Encoder: VideoEncoder | null = null;
+	private nativePendingWrite: Promise<void> = Promise.resolve();
 	private nativeEncoderError: Error | null = null;
 
 	constructor(config: VideoExporterConfig) {
@@ -114,6 +115,7 @@ export class VideoExporter {
 			this.cancelled = false;
 			this.encoderError = null;
 			this.nativeEncoderError = null;
+			this.nativePendingWrite = Promise.resolve();
 			this.exportStartTimeMs = this.getNowMs();
 			this.progressSampleStartTimeMs = this.exportStartTimeMs;
 			this.progressSampleStartFrame = 0;
@@ -258,6 +260,10 @@ export class VideoExporter {
 			if (useNativeEncoder && nativeAudioPlan) {
 				if (this.nativeH264Encoder) {
 					await this.nativeH264Encoder.flush();
+					await this.nativePendingWrite;
+					if (this.nativeEncoderError) {
+						throw this.nativeEncoderError;
+					}
 					this.nativeH264Encoder.close();
 					this.nativeH264Encoder = null;
 				}
@@ -335,8 +341,15 @@ export class VideoExporter {
 	}
 
 	private shouldUseExperimentalNativeExport(): boolean {
-		return typeof window !== "undefined" &&
-			typeof window.electronAPI?.nativeVideoExportStart === "function";
+		return (
+			typeof window !== "undefined" &&
+			typeof VideoEncoder !== "undefined" &&
+			typeof VideoEncoder.isConfigSupported === "function" &&
+			typeof window.electronAPI?.nativeVideoExportStart === "function" &&
+			typeof window.electronAPI?.nativeVideoExportWriteFrame === "function" &&
+			typeof window.electronAPI?.nativeVideoExportFinish === "function" &&
+			typeof window.electronAPI?.nativeVideoExportCancel === "function"
+		);
 	}
 
 	private async awaitWithFinalizationTimeout<T>(promise: Promise<T>, stage: string): Promise<T> {
@@ -478,7 +491,7 @@ export class VideoExporter {
 	}
 
 	private async tryStartNativeVideoExport(): Promise<boolean> {
-		if (typeof window === "undefined" || !window.electronAPI?.nativeVideoExportStart) {
+		if (!this.shouldUseExperimentalNativeExport()) {
 			return false;
 		}
 
@@ -486,6 +499,29 @@ export class VideoExporter {
 			console.warn(
 				`[VideoExporter] Native export requires even output dimensions, falling back to WebCodecs (${this.config.width}x${this.config.height})`,
 			);
+			return false;
+		}
+
+		const encoderConfig: VideoEncoderConfig = {
+			codec: "avc1.640034",
+			width: this.config.width,
+			height: this.config.height,
+			bitrate: this.config.bitrate,
+			framerate: this.config.frameRate,
+			hardwareAcceleration: "prefer-hardware",
+			avc: { format: "annexb" },
+		};
+
+		try {
+			const support = await VideoEncoder.isConfigSupported(encoderConfig);
+			if (!support.supported) {
+				console.warn(
+					`[VideoExporter] Native H.264 Annex B encoding is unsupported at ${this.config.width}x${this.config.height}`,
+				);
+				return false;
+			}
+		} catch (error) {
+			console.warn("[VideoExporter] Native encoder support check failed:", error);
 			return false;
 		}
 
@@ -504,38 +540,58 @@ export class VideoExporter {
 		}
 
 		this.nativeExportSessionId = result.sessionId;
+		this.nativePendingWrite = Promise.resolve();
 
 		// Initialize the browser-side H.264 encoder (hardware-accelerated where available).
 		// Encoded Annex B chunks are sent over IPC and FFmpeg stream-copies them into MP4.
 		const sessionId = result.sessionId;
 		const encoder = new VideoEncoder({
-			output: async (chunk) => {
+			output: (chunk) => {
 				if (this.cancelled || !this.nativeExportSessionId) return;
 				const buffer = new ArrayBuffer(chunk.byteLength);
 				chunk.copyTo(buffer);
-				const writeResult = await window.electronAPI.nativeVideoExportWriteFrame(
-					sessionId,
-					new Uint8Array(buffer),
-				);
-				if (!writeResult.success && !this.cancelled) {
-					this.nativeEncoderError = new Error(
-						writeResult.error || "Failed to write H.264 chunk to native encoder",
-					);
-				}
+				this.nativePendingWrite = this.nativePendingWrite
+					.then(async () => {
+						const writeResult = await window.electronAPI.nativeVideoExportWriteFrame(
+							sessionId,
+							new Uint8Array(buffer),
+						);
+						if (!writeResult.success && !this.cancelled) {
+							throw new Error(
+								writeResult.error || "Failed to write H.264 chunk to native encoder",
+							);
+						}
+					})
+					.catch((error) => {
+						if (!this.cancelled && !this.nativeEncoderError) {
+							this.nativeEncoderError =
+								error instanceof Error ? error : new Error(String(error));
+						}
+					});
 			},
 			error: (e) => {
 				this.nativeEncoderError = e;
 			},
 		});
-		encoder.configure({
-			codec: "avc1.640034",
-			width: this.config.width,
-			height: this.config.height,
-			bitrate: this.config.bitrate,
-			framerate: this.config.frameRate,
-			hardwareAcceleration: "prefer-hardware",
-			avc: { format: "annexb" },
-		});
+
+		try {
+			encoder.configure(encoderConfig);
+		} catch (error) {
+			this.nativeEncoderError =
+				error instanceof Error ? error : new Error(String(error));
+			try {
+				encoder.close();
+			} catch (closeError) {
+				console.debug(
+					"[VideoExporter] Ignoring error closing native encoder after startup failure:",
+					closeError,
+				);
+			}
+			this.nativeExportSessionId = null;
+			await window.electronAPI.nativeVideoExportCancel(sessionId);
+			return false;
+		}
+
 		this.nativeH264Encoder = encoder;
 		return true;
 	}
@@ -986,6 +1042,7 @@ export class VideoExporter {
 		this.audioProcessor = null;
 		this.encodeQueue = 0;
 		this.pendingMuxing = Promise.resolve();
+		this.nativePendingWrite = Promise.resolve();
 		this.chunkCount = 0;
 		this.encoderError = null;
 		this.videoDescription = undefined;

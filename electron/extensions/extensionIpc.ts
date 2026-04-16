@@ -23,11 +23,8 @@ import {
 	submitExtensionForReview,
 	updateReviewStatus,
 } from "./extensionMarketplace";
+import { getErrorMessage } from "./errorUtils";
 import type { ExtensionInfo, MarketplaceReviewStatus } from "./extensionTypes";
-
-function getErrorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
 
 /**
  * Serialize extension info for IPC transfer (strip non-serializable fields).

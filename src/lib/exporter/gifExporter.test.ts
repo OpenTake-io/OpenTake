@@ -1,6 +1,6 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { calculateOutputDimensions } from "./gifExporter";
+import { calculateOutputDimensions, getGifRepeat } from "./gifExporter";
 import { GIF_SIZE_PRESETS, GifSizePreset } from "./types";
 
 /**
@@ -23,8 +23,7 @@ describe("GIF Exporter", () => {
 		it("should map loop=true to repeat=0 (infinite) and loop=false to repeat=1 (once)", () => {
 			fc.assert(
 				fc.property(fc.boolean(), (loopEnabled: boolean) => {
-					// This is the logic used in GifExporter constructor
-					const repeat = loopEnabled ? 0 : 1;
+					const repeat = getGifRepeat(loopEnabled);
 
 					if (loopEnabled) {
 						// When loop is enabled, repeat should be 0 (infinite loop)
@@ -41,7 +40,7 @@ describe("GIF Exporter", () => {
 		it("should always produce valid repeat values (0 or 1)", () => {
 			fc.assert(
 				fc.property(fc.boolean(), (loopEnabled: boolean) => {
-					const repeat = loopEnabled ? 0 : 1;
+					const repeat = getGifRepeat(loopEnabled);
 					expect([0, 1]).toContain(repeat);
 				}),
 				{ numRuns: 100 },
@@ -83,7 +82,7 @@ describe("GIF Exporter", () => {
 						// Aspect ratio should be preserved within 0.01 tolerance
 						// (small deviation allowed due to rounding to even numbers)
 						expect(Math.abs(originalAspectRatio - outputAspectRatio)).toBeLessThan(
-							0.02,
+							0.01,
 						);
 					},
 				),

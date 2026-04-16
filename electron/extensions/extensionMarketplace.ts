@@ -12,6 +12,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { app } from "electron";
+import { getErrorMessage } from "./errorUtils";
 import { getRegisteredExtensions, installExtensionFromPath } from "./extensionLoader";
 import type {
 	ExtensionReview,
@@ -19,10 +20,6 @@ import type {
 	MarketplaceReviewStatus,
 	MarketplaceSearchResult,
 } from "./extensionTypes";
-
-function getErrorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
-}
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -286,7 +283,7 @@ export async function downloadAndInstallExtension(
 		}
 
 		// Track download count (fire-and-forget — CDN may cache the GET, so POST separately)
-		fetch(`${MARKETPLACE_API_BASE}/extensions/${encodeURIComponent(extensionId)}/download`, {
+		fetch(`${getMarketplaceUrl()}/extensions/${encodeURIComponent(extensionId)}/download`, {
 			method: "POST",
 			headers: { "X-Recordly-Version": app.getVersion() },
 		}).catch(() => undefined);
