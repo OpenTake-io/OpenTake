@@ -111,6 +111,11 @@ export class ForwardFrameSource {
 			return videoUrl;
 		}
 
+		if (/^[A-Za-z]:[\\/]/.test(videoUrl)) {
+			const normalized = videoUrl.replace(/\\/g, "/");
+			return `file:///${encodeURI(normalized)}`;
+		}
+
 		if (videoUrl.startsWith("/")) {
 			return `file://${encodeURI(videoUrl)}`;
 		}
@@ -259,6 +264,10 @@ export class ForwardFrameSource {
 
 		if (this.decodeDone) {
 			return Promise.resolve(null);
+		}
+
+		if (this.frameResolve) {
+			throw new Error("Concurrent getFrameAtTime() calls are not supported");
 		}
 
 		return new Promise((resolve) => {

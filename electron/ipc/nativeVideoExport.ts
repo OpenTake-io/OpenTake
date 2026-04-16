@@ -10,6 +10,7 @@ export interface NativeVideoExportStartOptions {
 	frameRate: number;
 	bitrate: number;
 	encodingMode: NativeExportEncodingMode;
+	inputMode?: "rawvideo" | "h264-stream";
 }
 
 export interface NativeVideoExportAudioSegment {

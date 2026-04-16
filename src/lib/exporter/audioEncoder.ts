@@ -519,19 +519,9 @@ export class AudioProcessor {
 		pitchMedia.mozPreservesPitch = true;
 		pitchMedia.webkitPreservesPitch = true;
 
-		await this.waitForLoadedMetadata(timelineMedia);
-		if (this.cancelled) {
-			throw new Error("Export cancelled");
-		}
-
-		const audioContext = new AudioContext();
-		const destinationNode = audioContext.createMediaStreamDestination();
-
+		let audioContext: AudioContext | null = null;
+		let destinationNode: MediaStreamAudioDestinationNode | null = null;
 		let timelineAudioSourceNode: MediaElementAudioSourceNode | null = null;
-		if (sourceAudioFallbackPaths.length === 0) {
-			timelineAudioSourceNode = audioContext.createMediaElementSource(timelineMedia);
-			timelineAudioSourceNode.connect(destinationNode);
-		}
 
 		const sourceAudioElements: {
 			media: HTMLAudioElement;
@@ -539,37 +529,6 @@ export class AudioProcessor {
 			startDelaySeconds: number;
 			cleanup: () => void;
 		}[] = [];
-
-		for (const sourceAudioPath of sourceAudioFallbackPaths) {
-			const sourceFileSource = await resolveMediaElementSource(sourceAudioPath);
-			const audioEl = document.createElement("audio");
-			audioEl.src = sourceFileSource.src;
-			audioEl.preload = "auto";
-			try {
-				await this.waitForLoadedMetadata(audioEl);
-			} catch {
-				sourceFileSource.revoke();
-				console.warn(
-					"[AudioProcessor] Failed to load source audio fallback:",
-					sourceAudioPath,
-				);
-				continue;
-			}
-			if (this.cancelled) throw new Error("Export cancelled");
-
-			const sourceNode = audioContext.createMediaElementSource(audioEl);
-			sourceNode.connect(destinationNode);
-
-			sourceAudioElements.push({
-				media: audioEl,
-				sourceNode,
-				startDelaySeconds: estimateCompanionAudioStartDelaySeconds(
-					timelineMedia.duration,
-					audioEl.duration,
-				),
-				cleanup: sourceFileSource.revoke,
-			});
-		}
 
 		// Prepare external audio region elements
 		const audioRegionElements: {
@@ -580,39 +539,89 @@ export class AudioProcessor {
 			cleanup: () => void;
 		}[] = [];
 
-		for (const region of audioRegions) {
-			const regionFileSource = await resolveMediaElementSource(region.audioPath);
-			const audioEl = document.createElement("audio");
-			audioEl.src = regionFileSource.src;
-			audioEl.preload = "auto";
-			try {
-				await this.waitForLoadedMetadata(audioEl);
-			} catch {
-				regionFileSource.revoke();
-				console.warn("[AudioProcessor] Failed to load audio region:", region.audioPath);
-				continue;
-			}
-			if (this.cancelled) throw new Error("Export cancelled");
-
-			const regionSourceNode = audioContext.createMediaElementSource(audioEl);
-			const gainNode = audioContext.createGain();
-			gainNode.gain.value = Math.max(0, Math.min(1, region.volume));
-			regionSourceNode.connect(gainNode);
-			gainNode.connect(destinationNode);
-
-			audioRegionElements.push({
-				media: audioEl,
-				sourceNode: regionSourceNode,
-				gainNode,
-				region,
-				cleanup: regionFileSource.revoke,
-			});
-		}
-
-		const { recorder, recordedBlobPromise } = this.startAudioRecording(destinationNode.stream);
+		let recorder: MediaRecorder | null = null;
+		let recordedBlobPromise: Promise<Blob> | null = null;
 		let tickTimerId: ReturnType<typeof setTimeout> | null = null;
 
 		try {
+			await this.waitForLoadedMetadata(timelineMedia);
+			if (this.cancelled) {
+				throw new Error("Export cancelled");
+			}
+
+			audioContext = new AudioContext();
+			const currentDestinationNode = audioContext.createMediaStreamDestination();
+			destinationNode = currentDestinationNode;
+
+			if (sourceAudioFallbackPaths.length === 0) {
+				timelineAudioSourceNode = audioContext.createMediaElementSource(timelineMedia);
+				timelineAudioSourceNode.connect(currentDestinationNode);
+			}
+
+			for (const sourceAudioPath of sourceAudioFallbackPaths) {
+				const sourceFileSource = await resolveMediaElementSource(sourceAudioPath);
+				const audioEl = document.createElement("audio");
+				audioEl.src = sourceFileSource.src;
+				audioEl.preload = "auto";
+				try {
+					await this.waitForLoadedMetadata(audioEl);
+				} catch {
+					sourceFileSource.revoke();
+					console.warn(
+						"[AudioProcessor] Failed to load source audio fallback:",
+						sourceAudioPath,
+					);
+					continue;
+				}
+				if (this.cancelled) throw new Error("Export cancelled");
+
+				const sourceNode = audioContext.createMediaElementSource(audioEl);
+				sourceNode.connect(currentDestinationNode);
+
+				sourceAudioElements.push({
+					media: audioEl,
+					sourceNode,
+					startDelaySeconds: estimateCompanionAudioStartDelaySeconds(
+						timelineMedia.duration,
+						audioEl.duration,
+					),
+					cleanup: sourceFileSource.revoke,
+				});
+			}
+
+			for (const region of audioRegions) {
+				const regionFileSource = await resolveMediaElementSource(region.audioPath);
+				const audioEl = document.createElement("audio");
+				audioEl.src = regionFileSource.src;
+				audioEl.preload = "auto";
+				try {
+					await this.waitForLoadedMetadata(audioEl);
+				} catch {
+					regionFileSource.revoke();
+					console.warn("[AudioProcessor] Failed to load audio region:", region.audioPath);
+					continue;
+				}
+				if (this.cancelled) throw new Error("Export cancelled");
+
+				const regionSourceNode = audioContext.createMediaElementSource(audioEl);
+				const gainNode = audioContext.createGain();
+				gainNode.gain.value = Math.max(0, Math.min(1, region.volume));
+				regionSourceNode.connect(gainNode);
+				gainNode.connect(currentDestinationNode);
+
+				audioRegionElements.push({
+					media: audioEl,
+					sourceNode: regionSourceNode,
+					gainNode,
+					region,
+					cleanup: regionFileSource.revoke,
+				});
+			}
+
+			const recording = this.startAudioRecording(currentDestinationNode.stream);
+			recorder = recording.recorder;
+			recordedBlobPromise = recording.recordedBlobPromise;
+
 			if (audioContext.state === "suspended") {
 				await audioContext.resume();
 			}
@@ -793,16 +802,22 @@ export class AudioProcessor {
 				entry.media.load();
 				entry.cleanup();
 			}
-			if (recorder.state !== "inactive") {
+			if (recorder && recorder.state !== "inactive") {
 				recorder.stop();
 			}
-			destinationNode.stream.getTracks().forEach((track) => track.stop());
-			timelineAudioSourceNode?.disconnect();
-			destinationNode.disconnect();
-			await audioContext.close();
-			timelineMedia.src = "";
-			timelineMedia.load();
-			timelineMediaSource.revoke();
+			destinationNode?.stream.getTracks().forEach((track) => track.stop());
+			destinationNode?.disconnect();
+			if (audioContext && audioContext.state !== "closed") {
+				try {
+					await audioContext.close();
+				} catch {
+					// Ignore teardown failures during export cleanup.
+				}
+			}
+		}
+
+		if (!recordedBlobPromise) {
+			throw new Error("Failed to record mixed timeline audio");
 		}
 
 		const recordedBlob = await recordedBlobPromise;

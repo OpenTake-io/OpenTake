@@ -26,16 +26,17 @@ export function resolveWindowsCaptureDisplay(
 ): ResolvedWindowsCaptureDisplay {
 	const requestedDisplayId = Number(source?.display_id);
 	const primaryDisplayId = Number(primaryDisplay.id);
-	const displayId =
+	const requestedOrPrimaryDisplayId =
 		Number.isFinite(requestedDisplayId) && requestedDisplayId > 0
 			? requestedDisplayId
 			: primaryDisplayId;
 
 	const matchedDisplay =
-		allDisplays.find((display) => String(display.id) === String(displayId)) ?? primaryDisplay;
+		allDisplays.find((display) => String(display.id) === String(requestedOrPrimaryDisplayId)) ??
+		primaryDisplay;
 
 	return {
-		displayId,
+		displayId: Number(matchedDisplay.id),
 		bounds: matchedDisplay.bounds,
 	};
 }

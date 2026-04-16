@@ -11,8 +11,8 @@ export interface AnnotationRenderAssets {
 const annotationImagePromiseCache = new Map<string, Promise<HTMLImageElement | null>>();
 
 let blurBufferCanvas: HTMLCanvasElement | null = null;
-function getBlurBufferCanvas(): HTMLCanvasElement {
-	if (typeof document === "undefined") return {} as HTMLCanvasElement;
+function getBlurBufferCanvas(): HTMLCanvasElement | null {
+	if (typeof document === "undefined") return null;
 	if (!blurBufferCanvas) {
 		blurBufferCanvas = document.createElement("canvas");
 	}
@@ -391,19 +391,21 @@ export async function renderAnnotations(
 
 				if (sw > 0 && sh > 0) {
 					const buffer = getBlurBufferCanvas();
-					buffer.width = sw;
-					buffer.height = sh;
-					const bCtx = buffer.getContext("2d");
-					if (bCtx) {
-						bCtx.drawImage(ctx.canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+					if (buffer) {
+						buffer.width = sw;
+						buffer.height = sh;
+						const bCtx = buffer.getContext("2d");
+						if (bCtx) {
+							bCtx.drawImage(ctx.canvas, sx, sy, sw, sh, 0, 0, sw, sh);
 
-						ctx.filter = `blur(${blurStrength}px)`;
-						ctx.drawImage(buffer, sx, sy);
+							ctx.filter = `blur(${blurStrength}px)`;
+							ctx.drawImage(buffer, sx, sy);
 
-						if (annotation.blurColor && annotation.blurColor !== "transparent") {
-							ctx.filter = "none";
-							ctx.fillStyle = annotation.blurColor;
-							ctx.fillRect(x, y, width, height);
+							if (annotation.blurColor && annotation.blurColor !== "transparent") {
+								ctx.filter = "none";
+								ctx.fillStyle = annotation.blurColor;
+								ctx.fillRect(x, y, width, height);
+							}
 						}
 					}
 				}

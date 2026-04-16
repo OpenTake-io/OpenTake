@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_WEBCAM_OVERLAY } from "@/components/video-editor/types";
+import { DEFAULT_WEBCAM_OVERLAY } from "../../components/video-editor/types";
 
 vi.mock("pixi.js", () => ({
 	Application: vi.fn(),
@@ -132,9 +132,13 @@ class FakeVideoElement {
 		);
 	}
 
-	load() {}
+	load() {
+		// Intentional no-op for the mock video element.
+	}
 
-	pause() {}
+	pause() {
+		// Intentional no-op for the mock video element.
+	}
 
 	private dispatch(name: string) {
 		const listeners = [...(this.listeners.get(name) ?? [])];
@@ -174,7 +178,7 @@ function createMockCanvas() {
 		width: 0,
 		height: 0,
 		context,
-		getContext: vi.fn(() => context),
+		getContext: vi.fn((_type?: string) => context),
 	};
 }
 
