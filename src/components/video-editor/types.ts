@@ -131,6 +131,13 @@ export interface ClipRegion {
 	startMs: number;
 	endMs: number;
 	speed: number;
+	muted?: boolean;
+}
+
+export function getClipSourceEndMs(clip: ClipRegion): number {
+	const displayDurationMs = Math.max(0, clip.endMs - clip.startMs);
+	const speed = Number.isFinite(clip.speed) && clip.speed > 0 ? clip.speed : 1;
+	return Math.round(clip.startMs + displayDurationMs * speed);
 }
 
 /** Convert clip regions (kept segments) to trim regions (gaps to remove). */
@@ -144,7 +151,7 @@ export function clipsToTrims(clips: ClipRegion[], totalDurationMs: number): Trim
 		if (clip.startMs > cursor) {
 			trims.push({ id: `trim-gap-${trimId++}`, startMs: cursor, endMs: clip.startMs });
 		}
-		cursor = clip.endMs;
+		cursor = getClipSourceEndMs(clip);
 	}
 	if (cursor < totalDurationMs) {
 		trims.push({ id: `trim-gap-${trimId++}`, startMs: cursor, endMs: totalDurationMs });
@@ -243,6 +250,7 @@ export interface AnnotationRegion {
 	size: AnnotationSize;
 	style: AnnotationTextStyle;
 	zIndex: number;
+	trackIndex?: number;
 	figureData?: FigureData;
 	blurIntensity?: number;
 	blurColor?: string;
@@ -296,6 +304,7 @@ export interface AudioRegion {
 	endMs: number;
 	audioPath: string;
 	volume: number;
+	trackIndex?: number;
 }
 
 export interface CaptionCue {

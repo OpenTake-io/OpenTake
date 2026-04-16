@@ -2,7 +2,11 @@
 	"zoom": {
 		"level": "Zoomniveau",
 		"selectRegion": "Selecteer een zoomgebied om aan te passen",
-		"deleteZoom": "Zoom verwijderen"
+		"deleteZoom": "Zoom verwijderen",
+		"modeAuto": "Auto",
+		"modeManual": "Handmatig",
+		"modeManualDescription": "Stel een vast focuspunt in voor deze zoom",
+		"modeAutoDescription": "De camera volgt de cursor automatisch"
 	},
 	"trim": {
 		"deleteRegion": "Trimgebied verwijderen"
@@ -10,7 +14,13 @@
 	"speed": {
 		"playbackSpeed": "Afspeelsnelheid",
 		"selectRegion": "Selecteer een snelheidsgebied om aan te passen",
-		"deleteRegion": "Snelheidsgebied verwijderen"
+		"deleteRegion": "Snelheidsgebied verwijderen",
+		"label": "Snelheid"
+	},
+	"clip": {
+		"title": "Clip",
+		"muteAudio": "Audio dempen",
+		"delete": "Clip verwijderen"
 	},
 	"effects": {
 		"title": "Video-effecten",
@@ -32,6 +42,9 @@
 		"backgroundBlur": "Achtergrondvervaging",
 		"zoomMotionBlur": "Zoom-bewegingsonscherpte",
 		"connectZooms": "Zooms verbinden",
+		"connectZoomsDescription": "Maak opeenvolgende zoomgebieden vloeiend tot een doorlopende camerabeweging.",
+		"autoApplyFreshRecordingZooms": "Zooms voor nieuwe opnames automatisch toepassen",
+		"autoApplyFreshRecordingZoomsDescription": "Stel automatisch cursor-volgende zooms voor wanneer je een nieuwe opname opent.",
 		"zoomGeneralTitle": "Algemeen",
 		"zoomGeneralDescription": "Globale bewegingsinstellingen voor elke zoomovergang.",
 		"zoomInTitle": "Inzoomen",

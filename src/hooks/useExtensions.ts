@@ -71,14 +71,25 @@ export function useExtensions(): UseExtensionsResult {
 	const activatingRef = useRef(new Set<string>());
 
 	const discoverAndSync = useCallback(async (): Promise<ExtensionInfo[]> => {
-		if (!electronAPI?.extensionsDiscover) return [];
+		let discovered: ExtensionInfo[] = [];
 
-		const discovered: ExtensionInfo[] = await electronAPI.extensionsDiscover();
-		setExtensions(discovered);
-		setReady(true);
-		await extensionHost.syncConfiguredExtensions(discovered);
+		try {
+			if (!electronAPI?.extensionsDiscover) {
+				setExtensions([]);
+				return [];
+			}
 
-		return discovered;
+			discovered = await electronAPI.extensionsDiscover();
+			setExtensions(discovered);
+			await extensionHost.syncConfiguredExtensions(discovered);
+
+			return discovered;
+		} catch (error) {
+			console.error("[extensions] Failed to discover extensions:", error);
+			return discovered;
+		} finally {
+			setReady(true);
+		}
 	}, []);
 
 	const refresh = useCallback(async () => {
@@ -144,7 +155,8 @@ export function useExtensions(): UseExtensionsResult {
 					}
 				}
 			} catch (err) {
-				console.error(`[extensions] Failed to toggle ${id}:`, err);			throw err;			} finally {
+				console.error(`[extensions] Failed to toggle ${id}:`, err);
+			} finally {
 				activatingRef.current.delete(id);
 			}
 		},

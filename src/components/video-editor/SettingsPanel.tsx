@@ -2188,10 +2188,16 @@ export function SettingsPanel({
 					<div className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.03] px-2.5 py-2">
 						<div>
 							<div className="text-[11px] font-medium text-slate-200">
-								Auto-apply fresh recording zooms
+								{tSettings(
+									"effects.autoApplyFreshRecordingZooms",
+									"Auto-apply fresh recording zooms",
+								)}
 							</div>
 							<div className="mt-0.5 text-[10px] text-slate-500">
-								Suggest cursor-follow zooms automatically when you open a new recording.
+								{tSettings(
+									"effects.autoApplyFreshRecordingZoomsDescription",
+									"Suggest cursor-follow zooms automatically when you open a new recording.",
+								)}
 							</div>
 						</div>
 						<Switch
@@ -2203,10 +2209,13 @@ export function SettingsPanel({
 					<div className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.03] px-2.5 py-2">
 						<div>
 							<div className="text-[11px] font-medium text-slate-200">
-								Connect neighboring zooms
+								{tSettings("effects.connectZooms", "Connect neighboring zooms")}
 							</div>
 							<div className="mt-0.5 text-[10px] text-slate-500">
-								Smooth consecutive zoom regions into a continuous camera move.
+								{tSettings(
+									"effects.connectZoomsDescription",
+									"Smooth consecutive zoom regions into a continuous camera move.",
+								)}
 							</div>
 						</div>
 						<Switch
@@ -2267,7 +2276,7 @@ export function SettingsPanel({
 											: "text-slate-400 hover:text-slate-200",
 									)}
 								>
-									Auto
+									{tSettings("zoom.modeAuto", "Auto")}
 								</button>
 								<button
 									type="button"
@@ -2279,13 +2288,19 @@ export function SettingsPanel({
 											: "text-slate-400 hover:text-slate-200",
 									)}
 								>
-									Manual
+									{tSettings("zoom.modeManual", "Manual")}
 								</button>
 							</div>
 							<p className="mt-1.5 text-[10px] text-slate-500">
 								{selectedZoomMode === "manual"
-									? "Set a fixed focus point for this zoom"
-									: "Camera follows cursor automatically"}
+									? tSettings(
+										"zoom.modeManualDescription",
+										"Set a fixed focus point for this zoom",
+									)
+									: tSettings(
+										"zoom.modeAutoDescription",
+										"Camera follows cursor automatically",
+									)}
 							</p>
 						</div>
 						<div className="grid grid-cols-6 gap-1.5">
@@ -2376,7 +2391,7 @@ export function SettingsPanel({
 		const clipSectionContent = (
 			<section className="flex flex-col gap-2">
 				<div className="flex items-center justify-between gap-3">
-					<SectionLabel>Clip</SectionLabel>
+					<SectionLabel>{tSettings("clip.title", "Clip")}</SectionLabel>
 					{selectedClipSpeed != null && selectedClipSpeed !== 1 && (
 						<span className="rounded-full bg-[#06b6d4]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#06b6d4]">
 							{selectedClipSpeed}×
@@ -2384,7 +2399,9 @@ export function SettingsPanel({
 					)}
 				</div>
 				<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-					<span className="text-[10px] text-slate-400">Mute Audio</span>
+					<span className="text-[10px] text-slate-400">
+						{tSettings("clip.muteAudio", "Mute Audio")}
+					</span>
 					<Switch
 						checked={selectedClipMuted ?? false}
 						onCheckedChange={(v) => onClipMutedChange?.(v)}
@@ -2392,7 +2409,7 @@ export function SettingsPanel({
 					/>
 				</div>
 				<div className="flex items-center gap-3">
-					<SectionLabel>Speed</SectionLabel>
+					<SectionLabel>{tSettings("speed.label", "Speed")}</SectionLabel>
 				</div>
 				<div className="grid grid-cols-4 gap-1.5">
 					{[
@@ -2441,7 +2458,7 @@ export function SettingsPanel({
 						className="mt-1 h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
 					>
 						<Trash2 className="h-3 w-3" />
-						Delete Clip
+						{tSettings("clip.delete", "Delete Clip")}
 					</Button>
 				)}
 			</section>
