@@ -398,38 +398,101 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		[clearRecordingFinalizationToast],
 	);
 
+	const stopMicFallbackRecorder = useCallback((): Promise<Blob | null> => {
+		return new Promise((resolve) => {
+			const recorder = micFallbackRecorder.current;
+			if (!recorder || recorder.state === "inactive") {
+				micFallbackRecorder.current = null;
+				resolve(null);
+				return;
+			}
+			recorder.ondataavailable = (event) => {
+				if (event.data.size > 0) {
+					micFallbackChunks.current.push(event.data);
+				}
+			};
+			recorder.onstop = () => {
+				const blob =
+					micFallbackChunks.current.length > 0
+						? new Blob(micFallbackChunks.current, { type: recorder.mimeType })
+						: null;
+				micFallbackChunks.current = [];
+				recorder.stream.getTracks().forEach((track) => track.stop());
+				micFallbackRecorder.current = null;
+				resolve(blob);
+			};
+			recorder.stop();
+		});
+	}, []);
+
+	const storeMicrophoneSidecar = useCallback(
+		async (micFallbackBlobPromise: Promise<Blob | null> | null | undefined, finalPath: string) => {
+			const micFallbackBlob = await micFallbackBlobPromise;
+			if (!micFallbackBlob) {
+				return;
+			}
+
+			try {
+				const arrayBuffer = await micFallbackBlob.arrayBuffer();
+				await window.electronAPI.storeMicrophoneSidecar(arrayBuffer, finalPath);
+			} catch (error) {
+				console.warn("Failed to store microphone sidecar:", error);
+			}
+		},
+		[],
+	);
+
 	const stopWebcamRecorder = useCallback(async () => {
 		const recorder = webcamRecorder.current;
 		const pending = webcamStopPromise.current;
 
 		if (!recorder) {
-			return null;
+			const result = pending ? await pending : resolvedWebcamPath.current;
+			webcamStopPromise.current = null;
+			pendingWebcamPathPromise.current = null;
+			resolvedWebcamPath.current = result ?? null;
+			return result ?? null;
 		}
 
 		if (recorder.state !== "inactive") {
 			recorder.stop();
+		} else if (pending && webcamStopResolver.current) {
+			webcamStopResolver.current(resolvedWebcamPath.current);
+			webcamStopResolver.current = null;
 		}
 
-		const result = pending ? await pending : null;
-		resolvedWebcamPath.current = result;
+		const result = pending ? await pending : resolvedWebcamPath.current;
+		webcamStopPromise.current = null;
 		pendingWebcamPathPromise.current = null;
-		return result;
+		resolvedWebcamPath.current = result ?? null;
+		return result ?? null;
 	}, []);
 
-	const recoverNativeRecordingSession = useCallback(async () => {
-		if (typeof window.electronAPI?.recoverNativeScreenRecording !== "function") {
-			return null;
-		}
+	const recoverNativeRecordingSession = useCallback(
+		async (micFallbackBlobPromise?: Promise<Blob | null> | null) => {
+			if (typeof window.electronAPI?.recoverNativeScreenRecording !== "function") {
+				return null;
+			}
 
-		const result = await window.electronAPI.recoverNativeScreenRecording();
-		if (!result.success || !result.path) {
-			return null;
-		}
+			const result = await window.electronAPI.recoverNativeScreenRecording();
+			if (!result.success || !result.path) {
+				return null;
+			}
 
-		const webcamPath = await stopWebcamRecorder();
-		await finalizeRecordingSession(result.path, webcamPath);
-		return result.path;
-	}, [finalizeRecordingSession, stopWebcamRecorder]);
+			const resolvedMicFallbackBlobPromise =
+				micFallbackBlobPromise ?? stopMicFallbackRecorder();
+			const webcamPath = await stopWebcamRecorder();
+			await storeMicrophoneSidecar(resolvedMicFallbackBlobPromise, result.path);
+			await finalizeRecordingSession(result.path, webcamPath);
+			return result.path;
+		},
+		[
+			finalizeRecordingSession,
+			stopMicFallbackRecorder,
+			stopWebcamRecorder,
+			storeMicrophoneSidecar,
+		],
+	);
 
 	/**
 	 * Acquire the webcam stream and prepare the MediaRecorder, but do NOT start
@@ -573,7 +636,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					);
 					void logNativeCaptureDiagnostics("stop-native-screen-recording");
 					try {
-						const recoveredPath = await recoverNativeRecordingSession();
+						const recoveredPath = await recoverNativeRecordingSession(
+							micFallbackBlobPromise,
+						);
 						if (recoveredPath) {
 							return;
 						}
@@ -602,16 +667,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					finalPath = muxResult?.path ?? result.path;
 				}
 
-				// Save the browser-captured microphone sidecar if one was recorded.
-				const micFallbackBlob = await micFallbackBlobPromise;
-				if (micFallbackBlob && finalPath) {
-					try {
-						const arrayBuffer = await micFallbackBlob.arrayBuffer();
-						await window.electronAPI.storeMicrophoneSidecar(arrayBuffer, finalPath);
-					} catch (e) {
-						console.warn("Failed to store microphone sidecar:", e);
-					}
-				}
+				await storeMicrophoneSidecar(micFallbackBlobPromise, finalPath);
 
 				await finalizeRecordingSession(finalPath, webcamPath);
 			})();
@@ -751,39 +807,15 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				void window.electronAPI.stopNativeScreenRecording();
 			}
 
-			if (mediaRecorder.current?.state === "recording") {
-				mediaRecorder.current.stop();
+			const recorder = mediaRecorder.current;
+			const recorderState = recorder?.state;
+			if (recorder && (recorderState === "recording" || recorderState === "paused")) {
+				recorder.stop();
 			}
 
 			cleanupCapturedMedia();
 		};
 	}, [cleanupCapturedMedia, recoverNativeRecordingSession]);
-
-	const stopMicFallbackRecorder = useCallback((): Promise<Blob | null> => {
-		return new Promise((resolve) => {
-			const recorder = micFallbackRecorder.current;
-			if (!recorder || recorder.state === "inactive") {
-				micFallbackRecorder.current = null;
-				resolve(null);
-				return;
-			}
-			recorder.ondataavailable = (event) => {
-				if (event.data.size > 0) {
-					micFallbackChunks.current.push(event.data);
-				}
-			};
-			recorder.onstop = () => {
-				const blob =
-					micFallbackChunks.current.length > 0
-						? new Blob(micFallbackChunks.current, { type: recorder.mimeType })
-						: null;
-				micFallbackChunks.current = [];
-				micFallbackRecorder.current = null;
-				resolve(blob);
-			};
-			recorder.stop();
-		});
-	}, []);
 
 	const startRecording = async () => {
 		if (startInFlight.current) {
