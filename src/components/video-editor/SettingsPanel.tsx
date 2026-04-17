@@ -1,4 +1,4 @@
-import { Palette, Trash2, Upload, X } from "lucide-react";
+import { Palette, Trash as Trash2, UploadSimple as Upload, X } from "@phosphor-icons/react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -13,11 +13,15 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getAssetPath, getRenderableAssetUrl, getWallpaperThumbnailUrl } from "@/lib/assetPath";
-import { cn } from "@/lib/utils";
-import { extensionHost, type FrameInstance } from "@/lib/extensions";
 import type { ExtensionSettingField } from "@/lib/extensions";
+import { extensionHost, type FrameInstance } from "@/lib/extensions";
+import { cn } from "@/lib/utils";
 import type { BuiltInWallpaper } from "@/lib/wallpapers";
-import { BUILT_IN_WALLPAPERS, getAvailableWallpapers, isVideoWallpaperSource } from "@/lib/wallpapers";
+import {
+	BUILT_IN_WALLPAPERS,
+	getAvailableWallpapers,
+	isVideoWallpaperSource,
+} from "@/lib/wallpapers";
 import { type AspectRatio } from "@/utils/aspectRatioUtils";
 import minimalCursorUrl from "../../../Minimal Cursor.svg";
 import tahoeCursorUrl from "../../assets/cursors/Cursor=Default.svg";
@@ -137,14 +141,20 @@ function getBackgroundTabForWallpaper(value: string): BackgroundTab {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
 	return (
-		<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{children}</p>
+		<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+			{children}
+		</p>
 	);
 }
 
 /**
  * Renders extension-contributed settings fields (toggle, slider, select, color, text).
  */
-function ExtensionSettingsSection({ extensionId, label, fields }: {
+function ExtensionSettingsSection({
+	extensionId,
+	label,
+	fields,
+}: {
 	extensionId: string;
 	label: string;
 	fields: ExtensionSettingField[];
@@ -153,19 +163,29 @@ function ExtensionSettingsSection({ extensionId, label, fields }: {
 
 	return (
 		<div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-white/[0.06]">
-			<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">{label}</p>
+			<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+				{label}
+			</p>
 			{fields.map((field) => {
-				const value = extensionHost.getExtensionSetting(extensionId, field.id) ?? field.defaultValue;
+				const value =
+					extensionHost.getExtensionSetting(extensionId, field.id) ?? field.defaultValue;
 
-				if (field.type === 'toggle') {
+				if (field.type === "toggle") {
 					return (
-						<div key={field.id} className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
+						<div
+							key={field.id}
+							className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5"
+						>
 							<span className="text-[11px] text-slate-300">{field.label}</span>
 							<Switch
 								checked={Boolean(value)}
 								onCheckedChange={(checked) => {
-									extensionHost.setExtensionSetting(extensionId, field.id, checked);
-									forceUpdate(n => n + 1);
+									extensionHost.setExtensionSetting(
+										extensionId,
+										field.id,
+										checked,
+									);
+									forceUpdate((n) => n + 1);
 								}}
 								className="data-[state=checked]:bg-[#2563EB] scale-75"
 							/>
@@ -173,48 +193,70 @@ function ExtensionSettingsSection({ extensionId, label, fields }: {
 					);
 				}
 
-				if (field.type === 'slider') {
+				if (field.type === "slider") {
 					return (
-						<div key={field.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-							<span className="text-[11px] text-slate-300 flex-shrink-0">{field.label}</span>
+						<div
+							key={field.id}
+							className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5"
+						>
+							<span className="text-[11px] text-slate-300 flex-shrink-0">
+								{field.label}
+							</span>
 							<div className="flex items-center gap-1.5">
 								<input
 									type="range"
 									min={field.min ?? 0}
 									max={field.max ?? 1}
 									step={field.step ?? 0.01}
-									value={typeof value === 'number' ? value : field.defaultValue as number}
+									value={
+										typeof value === "number"
+											? value
+											: (field.defaultValue as number)
+									}
 									onChange={(e) => {
-										extensionHost.setExtensionSetting(extensionId, field.id, parseFloat(e.target.value));
-										forceUpdate(n => n + 1);
+										extensionHost.setExtensionSetting(
+											extensionId,
+											field.id,
+											parseFloat(e.target.value),
+										);
+										forceUpdate((n) => n + 1);
 									}}
 									className="w-20 h-1 accent-[#2563EB]"
 								/>
 								<span className="text-[10px] text-slate-500 w-8 text-right font-mono">
-									{(typeof value === 'number' ? value : 0).toFixed(1)}
+									{(typeof value === "number" ? value : 0).toFixed(1)}
 								</span>
 							</div>
 						</div>
 					);
 				}
 
-				if (field.type === 'select' && field.options) {
+				if (field.type === "select" && field.options) {
 					return (
-						<div key={field.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-							<span className="text-[11px] text-slate-300 flex-shrink-0">{field.label}</span>
+						<div
+							key={field.id}
+							className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5"
+						>
+							<span className="text-[11px] text-slate-300 flex-shrink-0">
+								{field.label}
+							</span>
 							<Select
 								value={String(value)}
 								onValueChange={(v) => {
 									extensionHost.setExtensionSetting(extensionId, field.id, v);
-									forceUpdate(n => n + 1);
+									forceUpdate((n) => n + 1);
 								}}
 							>
 								<SelectTrigger className="h-6 w-24 text-[10px] border-white/10 bg-white/[0.03]">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									{field.options.map(opt => (
-										<SelectItem key={opt.value} value={opt.value} className="text-[10px]">
+									{field.options.map((opt) => (
+										<SelectItem
+											key={opt.value}
+											value={opt.value}
+											className="text-[10px]"
+										>
 											{opt.label}
 										</SelectItem>
 									))}
@@ -224,16 +266,25 @@ function ExtensionSettingsSection({ extensionId, label, fields }: {
 					);
 				}
 
-				if (field.type === 'color') {
+				if (field.type === "color") {
 					return (
-						<div key={field.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-							<span className="text-[11px] text-slate-300 flex-shrink-0">{field.label}</span>
+						<div
+							key={field.id}
+							className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5"
+						>
+							<span className="text-[11px] text-slate-300 flex-shrink-0">
+								{field.label}
+							</span>
 							<input
 								type="color"
 								value={String(value)}
 								onChange={(e) => {
-									extensionHost.setExtensionSetting(extensionId, field.id, e.target.value);
-									forceUpdate(n => n + 1);
+									extensionHost.setExtensionSetting(
+										extensionId,
+										field.id,
+										e.target.value,
+									);
+									forceUpdate((n) => n + 1);
 								}}
 								className="w-7 h-5 rounded border border-white/10 cursor-pointer bg-transparent"
 							/>
@@ -241,16 +292,25 @@ function ExtensionSettingsSection({ extensionId, label, fields }: {
 					);
 				}
 
-				if (field.type === 'text') {
+				if (field.type === "text") {
 					return (
-						<div key={field.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-							<span className="text-[11px] text-slate-300 flex-shrink-0">{field.label}</span>
+						<div
+							key={field.id}
+							className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5"
+						>
+							<span className="text-[11px] text-slate-300 flex-shrink-0">
+								{field.label}
+							</span>
 							<input
 								type="text"
 								value={String(value)}
 								onChange={(e) => {
-									extensionHost.setExtensionSetting(extensionId, field.id, e.target.value);
-									forceUpdate(n => n + 1);
+									extensionHost.setExtensionSetting(
+										extensionId,
+										field.id,
+										e.target.value,
+									);
+									forceUpdate((n) => n + 1);
 								}}
 								className="w-24 h-6 rounded bg-white/[0.06] border border-white/10 px-1.5 text-[10px] text-slate-200"
 							/>
@@ -571,11 +631,11 @@ function CursorStylePreview({
 }) {
 	const previewSrc =
 		style === "tahoe"
-			? previewUrls.tahoe ?? tahoeCursorUrl
+			? (previewUrls.tahoe ?? tahoeCursorUrl)
 			: style === "figma"
-				? previewUrls.figma ?? minimalCursorUrl
+				? (previewUrls.figma ?? minimalCursorUrl)
 				: style === "mono"
-					? previewUrls.mono ?? tahoeCursorUrl
+					? (previewUrls.mono ?? tahoeCursorUrl)
 					: previewUrls[style];
 
 	if (style === "tahoe") {
@@ -590,14 +650,7 @@ function CursorStylePreview({
 	}
 
 	if (style === "figma") {
-		return (
-			<img
-				src={previewSrc}
-				alt=""
-				className="h-7 w-7 object-contain"
-				draggable={false}
-			/>
-		);
+		return <img src={previewSrc} alt="" className="h-7 w-7 object-contain" draggable={false} />;
 	}
 
 	if (style === "dot") {
@@ -707,8 +760,9 @@ export function SettingsPanel({
 	const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
 	const [builtInWallpapers, setBuiltInWallpapers] =
 		useState<BuiltInWallpaper[]>(BUILT_IN_WALLPAPERS);
-	const [extensionWallpapers, setExtensionWallpapers] =
-		useState<ReturnType<typeof extensionHost.getContributedWallpapers>>([]);
+	const [extensionWallpapers, setExtensionWallpapers] = useState<
+		ReturnType<typeof extensionHost.getContributedWallpapers>
+	>([]);
 	const [wallpaperPreviewPaths, setWallpaperPreviewPaths] = useState<string[]>([]);
 	const [extensionWallpaperPreviewUrls, setExtensionWallpaperPreviewUrls] = useState<
 		Record<string, string>
@@ -759,7 +813,9 @@ export function SettingsPanel({
 			} catch {
 				if (mounted) {
 					setBuiltInWallpapers(BUILT_IN_WALLPAPERS);
-					setWallpaperPreviewPaths(BUILT_IN_WALLPAPERS.map((wallpaper) => wallpaper.publicPath));
+					setWallpaperPreviewPaths(
+						BUILT_IN_WALLPAPERS.map((wallpaper) => wallpaper.publicPath),
+					);
 				}
 			}
 		})();
@@ -776,18 +832,26 @@ export function SettingsPanel({
 			const cursorStyles = extensionHost.getContributedCursorStyles();
 			const [wallpaperPreviewEntries, cursorPreviewEntries] = await Promise.all([
 				Promise.all(
-					wallpapers.map(async (wallpaper) => [
-						wallpaper.id,
-						isVideoWallpaperSource(wallpaper.resolvedThumbnailUrl)
-							? wallpaper.resolvedThumbnailUrl
-							: await getWallpaperThumbnailUrl(wallpaper.resolvedThumbnailUrl),
-					] as const),
+					wallpapers.map(
+						async (wallpaper) =>
+							[
+								wallpaper.id,
+								isVideoWallpaperSource(wallpaper.resolvedThumbnailUrl)
+									? wallpaper.resolvedThumbnailUrl
+									: await getWallpaperThumbnailUrl(
+											wallpaper.resolvedThumbnailUrl,
+										),
+							] as const,
+					),
 				),
 				Promise.all(
-					cursorStyles.map(async (cursorStyle) => [
-						cursorStyle.id,
-						await getRenderableAssetUrl(cursorStyle.resolvedDefaultUrl),
-					] as const),
+					cursorStyles.map(
+						async (cursorStyle) =>
+							[
+								cursorStyle.id,
+								await getRenderableAssetUrl(cursorStyle.resolvedDefaultUrl),
+							] as const,
+					),
 				),
 			]);
 
@@ -847,7 +911,9 @@ export function SettingsPanel({
 	}, []);
 
 	// Extension-contributed settings panels
-	const [extensionPanels, setExtensionPanels] = useState<ReturnType<typeof extensionHost.getSettingsPanels>>([]);
+	const [extensionPanels, setExtensionPanels] = useState<
+		ReturnType<typeof extensionHost.getSettingsPanels>
+	>([]);
 	useEffect(() => {
 		const update = () => setExtensionPanels(extensionHost.getSettingsPanels());
 		update();
@@ -876,8 +942,9 @@ export function SettingsPanel({
 	const defaultWebcam = initialEditorPreferences.webcam;
 	const [internalActiveEffectSection] = useState<EditorEffectSection>("scene");
 	const activeEffectSection = activeEffectSectionProp ?? internalActiveEffectSection;
-	const [extensionCursorStyles, setExtensionCursorStyles] =
-		useState<ReturnType<typeof extensionHost.getContributedCursorStyles>>([]);
+	const [extensionCursorStyles, setExtensionCursorStyles] = useState<
+		ReturnType<typeof extensionHost.getContributedCursorStyles>
+	>([]);
 	const [builtInCursorPreviewUrls, setBuiltInCursorPreviewUrls] = useState<
 		Partial<Record<string, string>>
 	>({});
@@ -977,9 +1044,8 @@ export function SettingsPanel({
 		const imageWallpapers = builtInWallpapers.filter(
 			(wallpaper) => !isVideoWallpaperSource(wallpaper.publicPath),
 		);
-		const builtInTiles = (wallpaperPreviewPaths.length > 0
-			? wallpaperPreviewPaths
-			: builtInWallpaperPaths
+		const builtInTiles = (
+			wallpaperPreviewPaths.length > 0 ? wallpaperPreviewPaths : builtInWallpaperPaths
 		)
 			.filter((path) => !isVideoWallpaperSource(path))
 			.map((previewPath, index) => {
@@ -1113,8 +1179,13 @@ export function SettingsPanel({
 						preload="metadata"
 						className="h-full w-full select-none object-cover [transform:translateZ(0)]"
 						draggable={false}
-						onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
-						onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+						onMouseEnter={(e) => {
+							void e.currentTarget.play().catch(() => undefined);
+						}}
+						onMouseLeave={(e) => {
+							e.currentTarget.pause();
+							e.currentTarget.currentTime = 0;
+						}}
 					/>
 				) : (
 					<img
@@ -1132,7 +1203,6 @@ export function SettingsPanel({
 			{props?.children}
 		</div>
 	);
-
 
 	const handleDeleteClick = () => {
 		if (selectedZoomId && onZoomDelete) {
@@ -1295,11 +1365,13 @@ export function SettingsPanel({
 
 	const handleVideoUpload = async () => {
 		try {
-			const result = await (window as any).electronAPI.openVideoFilePicker();
+			const result = await window.electronAPI.openVideoFilePicker();
 			if (!result?.success || !result.path) return;
-			const filePath = result.path as string;
+			const filePath = result.path;
 			if (!isVideoWallpaperSource(filePath)) {
-				toast.error("Unsupported format", { description: "Please select a video file (mp4, webm, mov, etc.)" });
+				toast.error("Unsupported format", {
+					description: "Please select a video file (mp4, webm, mov, etc.)",
+				});
 				return;
 			}
 			setCustomImages((prev) => [filePath, ...prev]);
@@ -1317,9 +1389,9 @@ export function SettingsPanel({
 		if (selected === imageUrl) {
 			onWallpaperChange(
 				builtInWallpaperPaths[0] ??
-				extensionWallpaperPaths[0] ??
-				BUILT_IN_WALLPAPERS[0]?.publicPath ??
-				"",
+					extensionWallpaperPaths[0] ??
+					BUILT_IN_WALLPAPERS[0]?.publicPath ??
+					"",
 			);
 		}
 	};
@@ -1378,13 +1450,19 @@ export function SettingsPanel({
 										<motion.span
 											layoutId="background-picker-pill"
 											className="absolute inset-0 rounded-lg bg-[#2563EB]"
-											transition={{ type: "spring", stiffness: 420, damping: 34 }}
+											transition={{
+												type: "spring",
+												stiffness: 420,
+												damping: 34,
+											}}
 										/>
 									) : null}
 									<span
 										className={cn(
 											"relative z-10",
-											isActive ? "text-white" : "text-slate-400 hover:text-slate-200",
+											isActive
+												? "text-white"
+												: "text-slate-400 hover:text-slate-200",
 										)}
 									>
 										{option.label}
@@ -1428,7 +1506,11 @@ export function SettingsPanel({
 											return renderWallpaperImageTile(imageUrl, isSelected, {
 												key: `custom-${idx}`,
 												ariaLabel: isVideoWallpaperSource(imageUrl)
-													? imageUrl.split(/[\\/]/).pop() ?? tSettings("background.video", "Video background")
+													? (imageUrl.split(/[\\/]/).pop() ??
+														tSettings(
+															"background.video",
+															"Video background",
+														))
 													: undefined,
 												title: isVideoWallpaperSource(imageUrl)
 													? imageUrl.split(/[\\/]/).pop()
@@ -1436,7 +1518,9 @@ export function SettingsPanel({
 												onClick: () => onWallpaperChange(imageUrl),
 												children: (
 													<button
-														onClick={(e) => handleRemoveCustomImage(imageUrl, e)}
+														onClick={(e) =>
+															handleRemoveCustomImage(imageUrl, e)
+														}
 														className="absolute top-0.5 right-0.5 w-3 h-3 bg-red-500/90 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
 													>
 														<X className="w-2 h-2 text-white" />
@@ -1446,13 +1530,20 @@ export function SettingsPanel({
 										})}
 
 										{imageWallpaperTiles.map((tile) => {
-											const isSelected = getWallpaperTileState(tile.value, tile.previewUrl);
-											return renderWallpaperImageTile(tile.previewUrl, isSelected, {
-												key: tile.key,
-												ariaLabel: tile.label,
-												title: tile.label,
-												onClick: () => onWallpaperChange(tile.value),
-											});
+											const isSelected = getWallpaperTileState(
+												tile.value,
+												tile.previewUrl,
+											);
+											return renderWallpaperImageTile(
+												tile.previewUrl,
+												isSelected,
+												{
+													key: tile.key,
+													ariaLabel: tile.label,
+													title: tile.label,
+													onClick: () => onWallpaperChange(tile.value),
+												},
+											);
 										})}
 									</div>
 								</div>
@@ -1468,35 +1559,53 @@ export function SettingsPanel({
 									</Button>
 
 									<div className="grid grid-cols-8 gap-1.5">
-										{customImages.filter(isVideoWallpaperSource).map((videoUrl, idx) => {
-											const isSelected = getWallpaperTileState(videoUrl);
-											return renderWallpaperImageTile(videoUrl, isSelected, {
-												key: `custom-video-${idx}`,
-												ariaLabel: videoUrl.split(/[\\/]/).pop() ?? "Video background",
-												title: videoUrl.split(/[\\/]/).pop(),
-												onClick: () => onWallpaperChange(videoUrl),
-												children: (
-													<button
-														onClick={(e) => handleRemoveCustomImage(videoUrl, e)}
-														className="absolute top-0.5 right-0.5 w-3 h-3 bg-red-500/90 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
-													>
-														<X className="w-2 h-2 text-white" />
-													</button>
-												),
-											});
-										})}
+										{customImages
+											.filter(isVideoWallpaperSource)
+											.map((videoUrl, idx) => {
+												const isSelected = getWallpaperTileState(videoUrl);
+												return renderWallpaperImageTile(
+													videoUrl,
+													isSelected,
+													{
+														key: `custom-video-${idx}`,
+														ariaLabel:
+															videoUrl.split(/[\\/]/).pop() ??
+															"Video background",
+														title: videoUrl.split(/[\\/]/).pop(),
+														onClick: () => onWallpaperChange(videoUrl),
+														children: (
+															<button
+																onClick={(e) =>
+																	handleRemoveCustomImage(
+																		videoUrl,
+																		e,
+																	)
+																}
+																className="absolute top-0.5 right-0.5 w-3 h-3 bg-red-500/90 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+															>
+																<X className="w-2 h-2 text-white" />
+															</button>
+														),
+													},
+												);
+											})}
 
 										{videoWallpaperTiles.map((wallpaper) => {
 											const isSelected = getWallpaperTileState(
 												wallpaper.value,
 												wallpaper.previewUrl,
 											);
-											return renderWallpaperImageTile(wallpaper.previewUrl, isSelected, {
-												key: wallpaper.key,
-												ariaLabel: wallpaper.label,
-												title: wallpaper.label,
-												onClick: () => onWallpaperChange(wallpaper.value),
-											});
+											return renderWallpaperImageTile(
+												wallpaper.previewUrl,
+												isSelected,
+												{
+													key: wallpaper.key,
+													ariaLabel: wallpaper.label,
+													title: wallpaper.label,
+													onClick: () =>
+														onWallpaperChange(wallpaper.value),
+												},
+											);
 										})}
 									</div>
 								</div>
@@ -1514,7 +1623,8 @@ export function SettingsPanel({
 									/>
 									<div className="grid grid-cols-8 gap-1.5">
 										{visibleColorPalette.map((color) => {
-											const isSelected = selected.toLowerCase() === color.toLowerCase();
+											const isSelected =
+												selected.toLowerCase() === color.toLowerCase();
 											return (
 												<button
 													key={color}
@@ -1535,7 +1645,9 @@ export function SettingsPanel({
 											className={wallpaperTileClass(
 												isHexWallpaper(selected) &&
 													!visibleColorPalette.some(
-														(color) => color.toLowerCase() === selected.toLowerCase(),
+														(color) =>
+															color.toLowerCase() ===
+															selected.toLowerCase(),
 													),
 											)}
 											style={{
@@ -1585,17 +1697,21 @@ export function SettingsPanel({
 		return (
 			<AnnotationSettingsPanel
 				annotation={selectedAnnotation}
-				onContentChange={(content) => onAnnotationContentChange(selectedAnnotation.id, content)}
+				onContentChange={(content) =>
+					onAnnotationContentChange(selectedAnnotation.id, content)
+				}
 				onTypeChange={(type) => onAnnotationTypeChange(selectedAnnotation.id, type)}
 				onStyleChange={(style) => onAnnotationStyleChange(selectedAnnotation.id, style)}
 				onFigureDataChange={
 					onAnnotationFigureDataChange
-						? (figureData) => onAnnotationFigureDataChange(selectedAnnotation.id, figureData)
+						? (figureData) =>
+								onAnnotationFigureDataChange(selectedAnnotation.id, figureData)
 						: undefined
 				}
 				onBlurIntensityChange={
 					onAnnotationBlurIntensityChange
-						? (intensity) => onAnnotationBlurIntensityChange(selectedAnnotation.id, intensity)
+						? (intensity) =>
+								onAnnotationBlurIntensityChange(selectedAnnotation.id, intensity)
 						: undefined
 				}
 				onBlurColorChange={
@@ -1982,7 +2098,9 @@ export function SettingsPanel({
 					<Select
 						value={autoCaptionSettings.animationStyle}
 						onValueChange={(value) =>
-							updateAutoCaptionSettings({ animationStyle: value as AutoCaptionAnimation })
+							updateAutoCaptionSettings({
+								animationStyle: value as AutoCaptionAnimation,
+							})
 						}
 					>
 						<SelectTrigger className="h-9 w-[160px] rounded-xl border-white/10 bg-white/5 text-sm text-slate-200 hover:bg-white/10">
@@ -2004,7 +2122,9 @@ export function SettingsPanel({
 					<input
 						type="color"
 						value={autoCaptionSettings.textColor}
-						onChange={(event) => updateAutoCaptionSettings({ textColor: event.target.value })}
+						onChange={(event) =>
+							updateAutoCaptionSettings({ textColor: event.target.value })
+						}
 						className="h-7 w-10 rounded border border-white/10 bg-transparent"
 					/>
 				</label>
@@ -2111,7 +2231,9 @@ export function SettingsPanel({
 					<section className="flex flex-col gap-2">
 						<div className="flex items-center justify-between gap-3">
 							<div className="flex items-center gap-3">
-								<SectionLabel>{tSettings("sections.cursor", "Cursor")}</SectionLabel>
+								<SectionLabel>
+									{tSettings("sections.cursor", "Cursor")}
+								</SectionLabel>
 								<button
 									type="button"
 									onClick={resetCursorSection}
@@ -2194,7 +2316,9 @@ export function SettingsPanel({
 								max={2}
 								step={0.01}
 								onChange={(v) => onCursorSmoothingChange?.(v)}
-								formatValue={(v) => (v <= 0 ? tSettings("effects.off") : v.toFixed(2))}
+								formatValue={(v) =>
+									v <= 0 ? tSettings("effects.off") : v.toFixed(2)
+								}
 								parseInput={(text) => parseFloat(text)}
 							/>
 							<SliderControl
@@ -2220,7 +2344,10 @@ export function SettingsPanel({
 								parseInput={(text) => parseFloat(text.replace(/×$/, ""))}
 							/>
 							<SliderControl
-								label={tSettings("effects.cursorClickBounceDuration", "Bounce Speed")}
+								label={tSettings(
+									"effects.cursorClickBounceDuration",
+									"Bounce Speed",
+								)}
 								value={cursorClickBounceDuration}
 								defaultValue={DEFAULT_CURSOR_CLICK_BOUNCE_DURATION}
 								min={60}
@@ -2238,7 +2365,9 @@ export function SettingsPanel({
 								max={toCursorSwaySliderValue(2)}
 								step={toCursorSwaySliderValue(0.05)}
 								onChange={(v) => onCursorSwayChange?.(fromCursorSwaySliderValue(v))}
-								formatValue={(v) => (v <= 0 ? tSettings("effects.off") : `${v.toFixed(2)}×`)}
+								formatValue={(v) =>
+									v <= 0 ? tSettings("effects.off") : `${v.toFixed(2)}×`
+								}
 								parseInput={(text) => {
 									const normalized = text.trim().toLowerCase();
 									if (normalized === "off") return 0;
@@ -2305,7 +2434,9 @@ export function SettingsPanel({
 											<Button
 												key={option.preset}
 												type="button"
-												onClick={() => applyWebcamPositionPreset(option.preset)}
+												onClick={() =>
+													applyWebcamPositionPreset(option.preset)
+												}
 												className={cn(
 													"h-8 rounded-lg border px-0 text-sm font-semibold transition-all",
 													isActive
@@ -2320,12 +2451,17 @@ export function SettingsPanel({
 								</div>
 								<div className="mt-2 flex items-center justify-between rounded-lg bg-black/10 px-2.5 py-1.5">
 									<span className="text-[10px] text-slate-400">
-										{tSettings("effects.webcamCustomPosition", "Custom position")}
+										{tSettings(
+											"effects.webcamCustomPosition",
+											"Custom position",
+										)}
 									</span>
 									<Switch
 										checked={webcamPositionPreset === "custom"}
 										onCheckedChange={(checked) =>
-											applyWebcamPositionPreset(checked ? "custom" : DEFAULT_WEBCAM_POSITION_PRESET)
+											applyWebcamPositionPreset(
+												checked ? "custom" : DEFAULT_WEBCAM_POSITION_PRESET,
+											)
 										}
 										className="data-[state=checked]:bg-[#2563EB] scale-75"
 									/>
@@ -2340,7 +2476,12 @@ export function SettingsPanel({
 										min={0}
 										max={100}
 										step={1}
-										onChange={(v) => updateWebcam({ positionPreset: "custom", positionX: v / 100 })}
+										onChange={(v) =>
+											updateWebcam({
+												positionPreset: "custom",
+												positionX: v / 100,
+											})
+										}
 										formatValue={(v) => `${Math.round(v)}%`}
 										parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
 									/>
@@ -2351,7 +2492,12 @@ export function SettingsPanel({
 										min={0}
 										max={100}
 										step={1}
-										onChange={(v) => updateWebcam({ positionPreset: "custom", positionY: v / 100 })}
+										onChange={(v) =>
+											updateWebcam({
+												positionPreset: "custom",
+												positionY: v / 100,
+											})
+										}
 										formatValue={(v) => `${Math.round(v)}%`}
 										parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
 									/>
@@ -2397,7 +2543,8 @@ export function SettingsPanel({
 											{tSettings("effects.webcamFootage")}
 										</div>
 										<div className="mt-0.5 text-[10px] text-slate-500">
-											{webcamFileName ?? tSettings("effects.webcamFootageDescription")}
+											{webcamFileName ??
+												tSettings("effects.webcamFootageDescription")}
 										</div>
 									</div>
 									<div className="flex items-center gap-1.5">
@@ -2432,9 +2579,11 @@ export function SettingsPanel({
 				);
 			default: {
 				// Handle extension-contributed standalone section pages (ext:extensionId/panelId)
-				if (activeEffectSection?.startsWith('ext:')) {
+				if (activeEffectSection?.startsWith("ext:")) {
 					const panels = extensionPanels.filter(
-						p => !p.panel.parentSection && `ext:${p.extensionId}/${p.panel.id}` === activeEffectSection,
+						(p) =>
+							!p.panel.parentSection &&
+							`ext:${p.extensionId}/${p.panel.id}` === activeEffectSection,
 					);
 					if (panels.length > 0) {
 						const p = panels[0];
@@ -2457,7 +2606,10 @@ export function SettingsPanel({
 
 	return (
 		<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-[#161619] border border-white/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
-			<div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pb-0" style={{ scrollbarGutter: 'stable' }}>
+			<div
+				className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pb-0"
+				style={{ scrollbarGutter: "stable" }}
+			>
 				<AnimatePresence mode="wait" initial={false}>
 					<motion.div
 						key={activeEffectSection}
@@ -2471,18 +2623,30 @@ export function SettingsPanel({
 				</AnimatePresence>
 			</div>
 
-			<div className={cn(
-				"flex-shrink-0 border-t border-white/10 bg-[#151518] p-4 pt-3",
-				!selectedZoomId && !selectedTrimId && !selectedSpeedId && !selectedClipId && "hidden"
-			)}>
+			<div
+				className={cn(
+					"flex-shrink-0 border-t border-white/10 bg-[#151518] p-4 pt-3",
+					!selectedZoomId &&
+						!selectedTrimId &&
+						!selectedSpeedId &&
+						!selectedClipId &&
+						"hidden",
+				)}
+			>
 				{selectedZoomId && (
 					<div className="mb-4">
 						<div className="mb-3 flex items-center justify-between">
-							<span className="text-sm font-medium text-slate-200">{tSettings("zoom.level")}</span>
+							<span className="text-sm font-medium text-slate-200">
+								{tSettings("zoom.level")}
+							</span>
 							<div className="flex items-center gap-2">
 								{selectedZoomDepth && (
 									<span className="rounded-full bg-[#2563EB]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#2563EB]">
-										{ZOOM_DEPTH_OPTIONS.find((o) => o.depth === selectedZoomDepth)?.label}
+										{
+											ZOOM_DEPTH_OPTIONS.find(
+												(o) => o.depth === selectedZoomDepth,
+											)?.label
+										}
 									</span>
 								)}
 							</div>
@@ -2491,10 +2655,10 @@ export function SettingsPanel({
 							<div className="flex rounded-lg border border-white/10 bg-white/5 p-0.5">
 								<button
 									type="button"
-									onClick={() => onZoomModeChange?.('auto')}
+									onClick={() => onZoomModeChange?.("auto")}
 									className={cn(
 										"flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
-										selectedZoomMode === 'auto'
+										selectedZoomMode === "auto"
 											? "bg-[#2563EB] text-white shadow-sm"
 											: "text-slate-400 hover:text-slate-200",
 									)}
@@ -2503,10 +2667,10 @@ export function SettingsPanel({
 								</button>
 								<button
 									type="button"
-									onClick={() => onZoomModeChange?.('manual')}
+									onClick={() => onZoomModeChange?.("manual")}
 									className={cn(
 										"flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
-										selectedZoomMode === 'manual'
+										selectedZoomMode === "manual"
 											? "bg-[#2563EB] text-white shadow-sm"
 											: "text-slate-400 hover:text-slate-200",
 									)}
@@ -2515,7 +2679,7 @@ export function SettingsPanel({
 								</button>
 							</div>
 							<p className="mt-1.5 text-[10px] text-slate-500">
-								{selectedZoomMode === 'manual'
+								{selectedZoomMode === "manual"
 									? "Set a fixed focus point for this zoom"
 									: "Camera follows cursor automatically"}
 							</p>
@@ -2535,7 +2699,9 @@ export function SettingsPanel({
 												: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
 										)}
 									>
-										<span className="text-xs font-semibold">{option.label}</span>
+										<span className="text-xs font-semibold">
+											{option.label}
+										</span>
 									</Button>
 								);
 							})}
@@ -2574,8 +2740,8 @@ export function SettingsPanel({
 							</span>
 							{selectedSpeedValue && (
 								<span className="rounded-full bg-[#d97706]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#d97706]">
-									{SPEED_OPTIONS.find((o) => o.speed === selectedSpeedValue)?.label ??
-										`${selectedSpeedValue}×`}
+									{SPEED_OPTIONS.find((o) => o.speed === selectedSpeedValue)
+										?.label ?? `${selectedSpeedValue}×`}
 								</span>
 							)}
 						</div>
@@ -2594,7 +2760,9 @@ export function SettingsPanel({
 												: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
 										)}
 									>
-										<span className="text-xs font-semibold">{option.label}</span>
+										<span className="text-xs font-semibold">
+											{option.label}
+										</span>
 									</Button>
 								);
 							})}
@@ -2645,7 +2813,9 @@ export function SettingsPanel({
 												: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
 										)}
 									>
-										<span className="text-[10px] font-semibold">{option.label}</span>
+										<span className="text-[10px] font-semibold">
+											{option.label}
+										</span>
 									</Button>
 								);
 							})}
@@ -2663,6 +2833,5 @@ export function SettingsPanel({
 				)}
 			</div>
 		</div>
-
 	);
 }

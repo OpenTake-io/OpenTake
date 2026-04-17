@@ -167,10 +167,17 @@ let currentProjectPath: string | null = null;
 let nativeScreenRecordingActive = false;
 let currentVideoPath: string | null = null;
 let currentRecordingSession: RecordingSessionData | null = null;
-const userApprovedPaths = new Set<string>();
+const approvedLocalReadPaths = new Set<string>();
 function approveUserPath(filePath: string | null | undefined) {
-  if (!filePath) return
-  try { userApprovedPaths.add(path.resolve(filePath)) } catch {}
+	if (!filePath) {
+		return;
+	}
+
+	try {
+		approvedLocalReadPaths.add(path.resolve(filePath));
+	} catch {
+		// Ignore invalid paths; later reads will surface the underlying error.
+	}
 }
 let nativeCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 let nativeCaptureOutputBuffer = "";
@@ -636,23 +643,26 @@ async function loadProjectFromPath(projectPath: string) {
 
 	currentProjectPath = normalizedPath;
 	currentVideoPath = mediaSources.videoPath;
+	const projectObj = project as Record<string, unknown>;
+	const editorObj = projectObj?.editor as Record<string, unknown> | undefined;
+	const audioTracks = editorObj?.audioTracks as { sourcePath?: unknown }[] | undefined;
+	const approvedProjectPaths: Array<string | null | undefined> = [
+		mediaSources.videoPath,
+		mediaSources.webcamPath,
+	];
+	if (Array.isArray(audioTracks)) {
+		for (const track of audioTracks) {
+			if (typeof track?.sourcePath === "string") {
+				approvedProjectPaths.push(track.sourcePath);
+			}
+		}
+	}
+	await replaceApprovedSessionLocalReadPaths(approvedProjectPaths);
 	currentRecordingSession = {
 		videoPath: mediaSources.videoPath,
 		webcamPath: mediaSources.webcamPath,
 		timeOffsetMs: 0,
 	};
-	approveUserPath(mediaSources.videoPath);
-	approveUserPath(mediaSources.webcamPath);
-
-	// Approve any audio/media tracks referenced in the project
-	const projectObj = project as Record<string, unknown>;
-	const editorObj = projectObj?.editor as Record<string, unknown> | undefined;
-	const audioTracks = editorObj?.audioTracks as { sourcePath?: unknown }[] | undefined;
-	if (Array.isArray(audioTracks)) {
-		for (const track of audioTracks) {
-			if (typeof track?.sourcePath === "string") approveUserPath(track.sourcePath);
-		}
-	}
 	await rememberRecentProject(normalizedPath);
 
 	return {
@@ -684,41 +694,42 @@ function normalizeVideoSourcePath(videoPath?: string | null): string | null {
 }
 
 function isPathInsideDirectory(candidatePath: string, directoryPath: string) {
-  const normalizedDirectoryPath = normalizePath(directoryPath)
-  return candidatePath === normalizedDirectoryPath || candidatePath.startsWith(`${normalizedDirectoryPath}${path.sep}`)
+	const normalizedDirectoryPath = normalizePath(directoryPath);
+	return (
+		candidatePath === normalizedDirectoryPath ||
+		candidatePath.startsWith(`${normalizedDirectoryPath}${path.sep}`)
+	);
 }
 
 function isAllowedLocalReadPath(candidatePath: string) {
-  const allowedPrefixes = [
-    RECORDINGS_DIR,
-    USER_DATA_PATH,
-    getAssetRootPath(),
-    app.getPath('temp'),
-  ]
+	const allowedPrefixes = [RECORDINGS_DIR, USER_DATA_PATH, getAssetRootPath(), app.getPath("temp")];
 
-  return existsSync(candidatePath)
-    || allowedPrefixes.some((prefix) => isPathInsideDirectory(candidatePath, prefix))
-    || userApprovedPaths.has(candidatePath)
+	return (
+		existsSync(candidatePath) ||
+		allowedPrefixes.some((prefix) => isPathInsideDirectory(candidatePath, prefix)) ||
+		approvedLocalReadPaths.has(candidatePath)
+	);
 }
 
 async function rememberApprovedLocalReadPath(filePath?: string | null) {
-  const normalizedPath = normalizeVideoSourcePath(filePath)
-  if (!normalizedPath) {
-    return
-  }
+	const normalizedPath = normalizeVideoSourcePath(filePath);
+	if (!normalizedPath) {
+		return;
+	}
 
-  const resolvedPath = normalizePath(normalizedPath)
-  userApprovedPaths.add(resolvedPath)
+	const resolvedPath = normalizePath(normalizedPath);
+	approvedLocalReadPaths.add(resolvedPath);
 
-  try {
-    userApprovedPaths.add(await fs.realpath(resolvedPath))
-  } catch {
-    // Ignore missing files; the eventual read will surface the real error.
-  }
+	try {
+		approvedLocalReadPaths.add(await fs.realpath(resolvedPath));
+	} catch {
+		// Ignore missing files; the eventual read will surface the real error.
+	}
 }
 
 async function replaceApprovedSessionLocalReadPaths(filePaths: Array<string | null | undefined>) {
-  await Promise.all(filePaths.map((filePath) => rememberApprovedLocalReadPath(filePath)))
+	approvedLocalReadPaths.clear();
+	await Promise.all(filePaths.map((filePath) => rememberApprovedLocalReadPath(filePath)));
 }
 
 async function resolveProjectMediaSources(project: unknown): Promise<
@@ -1089,6 +1100,57 @@ function getNativeWindowListBinaryPath() {
 	return path.join(app.getPath("userData"), "native-tools", "recordly-window-list");
 }
 
+let nativeHelperMigrationPromise: Promise<void> | null = null;
+
+async function migrateLegacyNativeHelperBinaries() {
+	const legacyToCurrentPaths: Array<[string, string]> = [
+		[
+			path.join(app.getPath("userData"), "native-tools", "openscreen-screencapturekit-helper"),
+			getNativeCaptureHelperBinaryPath(),
+		],
+		[
+			path.join(app.getPath("userData"), "native-tools", "openscreen-window-list"),
+			getNativeWindowListBinaryPath(),
+		],
+		[
+			path.join(app.getPath("userData"), "native-tools", "openscreen-system-cursors"),
+			getSystemCursorHelperBinaryPath(),
+		],
+		[
+			path.join(app.getPath("userData"), "native-tools", "openscreen-native-cursor-monitor"),
+			getNativeCursorMonitorBinaryPath(),
+		],
+	];
+
+	for (const [legacyPath, currentPath] of legacyToCurrentPaths) {
+		if (legacyPath === currentPath || existsSync(currentPath) || !existsSync(legacyPath)) {
+			continue;
+		}
+
+		try {
+			await fs.mkdir(path.dirname(currentPath), { recursive: true });
+			await fs.rename(legacyPath, currentPath);
+		} catch (error) {
+			console.warn("[native-tools] Failed to migrate helper binary", {
+				legacyPath,
+				currentPath,
+				error,
+			});
+		}
+	}
+}
+
+async function ensureNativeHelperMigration() {
+	if (!nativeHelperMigrationPromise) {
+		nativeHelperMigrationPromise = migrateLegacyNativeHelperBinaries().catch((error) => {
+			nativeHelperMigrationPromise = null;
+			throw error;
+		});
+	}
+
+	return nativeHelperMigrationPromise;
+}
+
 type NativeMacWindowSource = {
 	id: string;
 	name: string;
@@ -1159,6 +1221,7 @@ async function ensureSwiftHelperBinary(
 }
 
 async function ensureNativeCaptureHelperBinary() {
+	await ensureNativeHelperMigration();
 	return ensureSwiftHelperBinary(
 		getNativeCaptureHelperSourcePath(),
 		getNativeCaptureHelperBinaryPath(),
@@ -1168,6 +1231,7 @@ async function ensureNativeCaptureHelperBinary() {
 }
 
 async function ensureNativeWindowListBinary() {
+	await ensureNativeHelperMigration();
 	return ensureSwiftHelperBinary(
 		getNativeWindowListSourcePath(),
 		getNativeWindowListBinaryPath(),
@@ -1218,6 +1282,8 @@ async function getSystemCursorAssets() {
 		cachedSystemCursorAssetsSourceMtimeMs = null;
 		return cachedSystemCursorAssets;
 	}
+
+	await ensureNativeHelperMigration();
 
 	const sourcePath = getSystemCursorHelperSourcePath();
 	const sourceStat = await fs.stat(sourcePath);
@@ -3606,6 +3672,7 @@ function attachNativeCaptureLifecycle(process: ChildProcessWithoutNullStreams) {
 }
 
 async function ensureNativeCursorMonitorBinary() {
+	await ensureNativeHelperMigration();
 	return ensureSwiftHelperBinary(
 		getNativeCursorMonitorSourcePath(),
 		getNativeCursorMonitorBinaryPath(),
@@ -3799,7 +3866,7 @@ function normalizeHookMouseButton(rawButton: unknown): 1 | 2 | 3 {
 	return 1;
 }
 
-function getHookMouseButton(event: HookMouseEvent): 1 | 2 | 3 {
+function getHookMouseButton(event: HookMouseEvent | null | undefined): 1 | 2 | 3 {
 	return normalizeHookMouseButton(
 		event?.button ?? event?.mouseButton ?? event?.data?.button ?? event?.data?.mouseButton,
 	);
@@ -3963,7 +4030,9 @@ function getNormalizedCursorPoint() {
 	return { cx, cy };
 }
 
-function getHookCursorScreenPoint(event: HookMouseEvent): { x: number; y: number } | null {
+function getHookCursorScreenPoint(
+	event: HookMouseEvent | null | undefined,
+): { x: number; y: number } | null {
 	const rawX = event?.x ?? event?.data?.x ?? event?.screenX ?? event?.data?.screenX;
 	const rawY = event?.y ?? event?.data?.y ?? event?.screenY ?? event?.data?.screenY;
 

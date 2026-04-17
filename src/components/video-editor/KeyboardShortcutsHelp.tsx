@@ -1,4 +1,4 @@
-import { HelpCircle, Settings2 } from "lucide-react";
+import { Gear as Settings2, Question as HelpCircle } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
@@ -53,19 +53,25 @@ export function KeyboardShortcutsHelp() {
 
 					<div className="pt-1 border-t border-white/5 mt-1">
 						<div className="flex items-center justify-between">
-							<span className="text-slate-400">{t("keyboardShortcuts.panTimeline")}</span>
+							<span className="text-slate-400">
+								{t("keyboardShortcuts.panTimeline")}
+							</span>
 							<kbd className="px-1 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-mono">
 								{scrollLabels.pan}
 							</kbd>
 						</div>
 						<div className="flex items-center justify-between mt-1.5">
-							<span className="text-slate-400">{t("keyboardShortcuts.zoomTimeline")}</span>
+							<span className="text-slate-400">
+								{t("keyboardShortcuts.zoomTimeline")}
+							</span>
 							<kbd className="px-1 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-mono">
 								{scrollLabels.zoom}
 							</kbd>
 						</div>
 						<div className="flex items-center justify-between mt-1.5">
-							<span className="text-slate-400">{t("keyboardShortcuts.cycleAnnotations")}</span>
+							<span className="text-slate-400">
+								{t("keyboardShortcuts.cycleAnnotations")}
+							</span>
 							<kbd className="px-1 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-mono">
 								{t("keyboardShortcuts.tab")}
 							</kbd>

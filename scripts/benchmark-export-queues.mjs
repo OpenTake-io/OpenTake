@@ -17,8 +17,14 @@ const rendererEntry = path.join(repoRoot, "dist", "index.html");
 const width = parseEvenInteger(process.env.RECORDLY_BENCH_EXPORT_WIDTH ?? "1280", "Width");
 const height = parseEvenInteger(process.env.RECORDLY_BENCH_EXPORT_HEIGHT ?? "720", "Height");
 const frameRate = parsePositiveInteger(process.env.RECORDLY_BENCH_EXPORT_FPS ?? "60", "Frame rate");
-const durationSeconds = parsePositiveInteger(process.env.RECORDLY_BENCH_EXPORT_DURATION ?? "15", "Duration");
-const timeoutMs = parsePositiveInteger(process.env.RECORDLY_BENCH_EXPORT_TIMEOUT_MS ?? "180000", "Timeout");
+const durationSeconds = parsePositiveInteger(
+	process.env.RECORDLY_BENCH_EXPORT_DURATION ?? "15",
+	"Duration",
+);
+const timeoutMs = parsePositiveInteger(
+	process.env.RECORDLY_BENCH_EXPORT_TIMEOUT_MS ?? "180000",
+	"Timeout",
+);
 const runsPerVariant = parsePositiveInteger(process.env.RECORDLY_BENCH_EXPORT_RUNS ?? "2", "Runs");
 const useNativeExport = process.env.RECORDLY_BENCH_EXPORT_USE_NATIVE === "1";
 const useWebcamOverlay = process.env.RECORDLY_BENCH_EXPORT_ENABLE_WEBCAM === "1";
@@ -39,9 +45,7 @@ const webcamHeight = parseEvenInteger(
 const webcamShadowIntensity = parseExportShadowIntensity(
 	process.env.RECORDLY_BENCH_EXPORT_WEBCAM_SHADOW ?? null,
 );
-const webcamSize = parseExportWebcamSize(
-	process.env.RECORDLY_BENCH_EXPORT_WEBCAM_SIZE ?? null,
-);
+const webcamSize = parseExportWebcamSize(process.env.RECORDLY_BENCH_EXPORT_WEBCAM_SIZE ?? null);
 const MODERN_BACKEND_SWEEP = ["auto", "webcodecs", "breeze"];
 const exportPipeline = parseExportPipeline(process.env.RECORDLY_BENCH_EXPORT_PIPELINE ?? null);
 const exportBackend = parseExportBackend(process.env.RECORDLY_BENCH_EXPORT_BACKEND ?? null);
@@ -106,9 +110,7 @@ function parseExportBackend(rawValue) {
 		return rawValue;
 	}
 
-	throw new Error(
-		"RECORDLY_BENCH_EXPORT_BACKEND must be 'auto', 'webcodecs', or 'breeze'",
-	);
+	throw new Error("RECORDLY_BENCH_EXPORT_BACKEND must be 'auto', 'webcodecs', or 'breeze'");
 }
 
 function parseExportBackendList(rawValue) {
@@ -172,9 +174,7 @@ function parseExportEncodingMode(rawValue) {
 		return rawValue;
 	}
 
-	throw new Error(
-		"RECORDLY_BENCH_EXPORT_ENCODING_MODE must be 'fast', 'balanced', or 'quality'",
-	);
+	throw new Error("RECORDLY_BENCH_EXPORT_ENCODING_MODE must be 'fast', 'balanced', or 'quality'");
 }
 
 function parseExportShadowIntensity(rawValue) {
@@ -209,7 +209,10 @@ function summarizeSmokeProgress(progressSamples) {
 	}
 
 	const extractingSamples = progressSamples.filter(
-		(sample) => sample?.phase === "extracting" && typeof sample?.currentFrame === "number" && sample.currentFrame > 1,
+		(sample) =>
+			sample?.phase === "extracting" &&
+			typeof sample?.currentFrame === "number" &&
+			sample.currentFrame > 1,
 	);
 	const fpsSource = extractingSamples.length > 0 ? extractingSamples : progressSamples;
 	const renderFpsSamples = fpsSource
@@ -245,7 +248,6 @@ async function ensureBuildArtifacts() {
 	await fs.access(rendererEntry);
 }
 
-
 async function createFixtureVideo(
 	ffmpegPath,
 	targetPath,
@@ -256,16 +258,7 @@ async function createFixtureVideo(
 		videoFilter = `testsrc2=size=${fixtureWidth}x${fixtureHeight}:rate=${frameRate}`,
 	} = {},
 ) {
-	const args = [
-		"-y",
-		"-hide_banner",
-		"-loglevel",
-		"error",
-		"-f",
-		"lavfi",
-		"-i",
-		videoFilter,
-	];
+	const args = ["-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", videoFilter];
 
 	if (includeAudio) {
 		args.push(
@@ -421,9 +414,7 @@ function printTable(title, columns, rows) {
 	console.log(divider);
 	for (const row of formattedRows) {
 		console.log(
-			`| ${row
-				.map((value, columnIndex) => value.padEnd(widths[columnIndex]))
-				.join(" | ")} |`,
+			`| ${row.map((value, columnIndex) => value.padEnd(widths[columnIndex])).join(" | ")} |`,
 		);
 	}
 }
@@ -471,7 +462,8 @@ function calculateDelta(referenceValue, nextValue) {
 
 	return {
 		deltaMs: nextValue - referenceValue,
-		deltaPercent: referenceValue > 0 ? ((nextValue - referenceValue) / referenceValue) * 100 : 0,
+		deltaPercent:
+			referenceValue > 0 ? ((nextValue - referenceValue) / referenceValue) * 100 : null,
 	};
 }
 
@@ -545,7 +537,10 @@ function printTimingSummaryTable(benchmarkResults) {
 			{ header: "Avg export", getValue: (row) => formatMs(row.averageSmokeElapsedMs) },
 			{ header: "Min", getValue: (row) => formatMs(row.minElapsedMs) },
 			{ header: "Max", getValue: (row) => formatMs(row.maxElapsedMs) },
-			{ header: "Avg output", getValue: (row) => formatSeconds(row.averageOutputDurationSeconds) },
+			{
+				header: "Avg output",
+				getValue: (row) => formatSeconds(row.averageOutputDurationSeconds),
+			},
 			{ header: "Avg size", getValue: (row) => formatMegabytes(row.averageSizeBytes) },
 			{ header: "Webcam", getValue: (row) => formatBoolean(row.webcamEnabled) },
 		],
@@ -590,7 +585,9 @@ function printBackendDetailTable(benchmarkResults) {
 function buildDeltaTableRows(benchmarkResults) {
 	return benchmarkResults
 		.map((result) => {
-			const baseline = result.summaries.find((summary) => summary.variant.name === "baseline");
+			const baseline = result.summaries.find(
+				(summary) => summary.variant.name === "baseline",
+			);
 			const tuned = result.summaries.find((summary) => summary.variant.name === "tuned");
 			if (!baseline || !tuned) {
 				return null;
@@ -623,9 +620,21 @@ function printDeltaTable(benchmarkResults) {
 		[
 			{ header: "Pipeline", getValue: (row) => row.pipeline },
 			{ header: "Backend", getValue: (row) => row.backend },
-			{ header: "Avg delta", getValue: (row) => `${formatDeltaMs(row.averageDeltaMs)} (${formatPercent(row.averageDeltaPercent)})` },
-			{ header: "Median delta", getValue: (row) => `${formatDeltaMs(row.medianDeltaMs)} (${formatPercent(row.medianDeltaPercent)})` },
-			{ header: "Export delta", getValue: (row) => `${formatDeltaMs(row.exportDeltaMs)} (${formatPercent(row.exportDeltaPercent)})` },
+			{
+				header: "Avg delta",
+				getValue: (row) =>
+					`${formatDeltaMs(row.averageDeltaMs)} (${formatPercent(row.averageDeltaPercent)})`,
+			},
+			{
+				header: "Median delta",
+				getValue: (row) =>
+					`${formatDeltaMs(row.medianDeltaMs)} (${formatPercent(row.medianDeltaPercent)})`,
+			},
+			{
+				header: "Export delta",
+				getValue: (row) =>
+					`${formatDeltaMs(row.exportDeltaMs)} (${formatPercent(row.exportDeltaPercent)})`,
+			},
 		],
 		buildDeltaTableRows(benchmarkResults),
 	);
@@ -659,9 +668,7 @@ async function runVariant(
 			...(exportShadowIntensity !== null
 				? { RECORDLY_SMOKE_EXPORT_SHADOW_INTENSITY: String(exportShadowIntensity) }
 				: {}),
-			...(webcamInputPath
-				? { RECORDLY_SMOKE_EXPORT_WEBCAM_INPUT: webcamInputPath }
-				: {}),
+			...(webcamInputPath ? { RECORDLY_SMOKE_EXPORT_WEBCAM_INPUT: webcamInputPath } : {}),
 			...(webcamShadowIntensity !== null
 				? { RECORDLY_SMOKE_EXPORT_WEBCAM_SHADOW: String(webcamShadowIntensity) }
 				: {}),
@@ -744,9 +751,7 @@ async function runVariant(
 		outputDuration,
 		webcamEnabled: !!webcamInputPath,
 		smokeExportReport: smokeExportReport?.report ?? null,
-		smokeProgressSummary: summarizeSmokeProgress(
-			smokeExportReport?.report?.progressSamples,
-		),
+		smokeProgressSummary: summarizeSmokeProgress(smokeExportReport?.report?.progressSamples),
 	};
 }
 
@@ -877,7 +882,9 @@ async function main() {
 		console.log(`[benchmark-export-queues] Generating fixture video: ${inputPath}`);
 		await createFixtureVideo(ffmpegStatic, inputPath);
 		if (webcamInputPath) {
-			console.log(`[benchmark-export-queues] Generating webcam fixture video: ${webcamInputPath}`);
+			console.log(
+				`[benchmark-export-queues] Generating webcam fixture video: ${webcamInputPath}`,
+			);
 			await createFixtureVideo(ffmpegStatic, webcamInputPath, {
 				fixtureWidth: webcamWidth,
 				fixtureHeight: webcamHeight,
@@ -944,19 +951,20 @@ async function main() {
 
 			const baseline = result.summaries[0];
 			const tuned = result.summaries[1];
-			const deltaMs = tuned.averageElapsedMs - baseline.averageElapsedMs;
-			const percent = baseline.averageElapsedMs > 0 ? (deltaMs / baseline.averageElapsedMs) * 100 : 0;
-			const medianDeltaMs = tuned.medianElapsedMs - baseline.medianElapsedMs;
-			const medianPercent =
-				baseline.medianElapsedMs > 0
-					? (medianDeltaMs / baseline.medianElapsedMs) * 100
-					: 0;
+			const { deltaMs, deltaPercent: percent } = calculateDelta(
+				baseline.averageElapsedMs,
+				tuned.averageElapsedMs,
+			);
+			const { deltaMs: medianDeltaMs, deltaPercent: medianPercent } = calculateDelta(
+				baseline.medianElapsedMs,
+				tuned.medianElapsedMs,
+			);
 			const backendLabel = result.request.backend ?? "default";
 			console.log(
-				`[benchmark-export-queues] ${backendLabel} tuned vs baseline: ${deltaMs}ms (${percent.toFixed(1)}%)`,
+				`[benchmark-export-queues] ${backendLabel} tuned vs baseline: ${deltaMs}ms (${typeof percent === "number" ? percent.toFixed(1) : "-"}%)`,
 			);
 			console.log(
-				`[benchmark-export-queues] ${backendLabel} tuned vs baseline (median): ${medianDeltaMs}ms (${medianPercent.toFixed(1)}%)`,
+				`[benchmark-export-queues] ${backendLabel} tuned vs baseline (median): ${medianDeltaMs}ms (${typeof medianPercent === "number" ? medianPercent.toFixed(1) : "-"}%)`,
 			);
 		}
 	} finally {
