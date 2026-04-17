@@ -6,6 +6,7 @@ import { app } from "electron";
 import { RECORDINGS_DIR } from "../appPaths";
 import { RECORDINGS_SETTINGS_FILE, AUTO_RECORDING_PREFIX } from "./constants";
 import {
+	approvedLocalReadPaths,
 	customRecordingsDir,
 	setCustomRecordingsDir,
 	recordingsDirLoaded,
@@ -103,3 +104,21 @@ export async function getRecordingsDir() {
 	await fs.mkdir(targetDir, { recursive: true });
 	return targetDir;
 }
+
+export function getMacPrivacySettingsUrl(pane: "screen" | "accessibility" | "microphone"): string {
+	if (pane === "screen")
+		return "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";
+	if (pane === "microphone")
+		return "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
+	return "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
+}
+
+export function approveUserPath(filePath: string | null | undefined): void {
+	if (!filePath) return;
+	try {
+		approvedLocalReadPaths.add(path.resolve(filePath));
+	} catch {
+		// Ignore invalid paths; later reads will surface the underlying error.
+	}
+}
+
