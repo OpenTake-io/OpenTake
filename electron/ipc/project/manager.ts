@@ -51,11 +51,12 @@ export function isPathInsideDirectory(candidatePath: string, directoryPath: stri
 
 export function isAllowedLocalReadPath(candidatePath: string) {
 	const allowedPrefixes = [RECORDINGS_DIR, USER_DATA_PATH, getAssetRootPath(), app.getPath("temp")];
+	const normalizedCandidatePath = normalizePath(candidatePath);
 
 	return (
-		existsSync(candidatePath) ||
-		allowedPrefixes.some((prefix) => isPathInsideDirectory(candidatePath, prefix)) ||
-		approvedLocalReadPaths.has(candidatePath)
+		existsSync(normalizedCandidatePath) ||
+		allowedPrefixes.some((prefix) => isPathInsideDirectory(normalizedCandidatePath, prefix)) ||
+		approvedLocalReadPaths.has(normalizedCandidatePath)
 	);
 }
 
@@ -308,9 +309,6 @@ export async function loadProjectFromPath(projectPath: string) {
 			message: mediaSources.message,
 		};
 	}
-
-	setCurrentProjectPath(normalizedPath);
-	setCurrentVideoPath(mediaSources.videoPath);
 	const projectObj = project as Record<string, unknown>;
 	const editorObj = projectObj?.editor as Record<string, unknown> | undefined;
 	const audioTracks = editorObj?.audioTracks as { sourcePath?: unknown }[] | undefined;
@@ -326,12 +324,15 @@ export async function loadProjectFromPath(projectPath: string) {
 		}
 	}
 	await replaceApprovedSessionLocalReadPaths(approvedProjectPaths);
+	await rememberRecentProject(normalizedPath);
+
+	setCurrentProjectPath(normalizedPath);
+	setCurrentVideoPath(mediaSources.videoPath);
 	setCurrentRecordingSession({
 		videoPath: mediaSources.videoPath,
 		webcamPath: mediaSources.webcamPath,
 		timeOffsetMs: 0,
 	} as RecordingSessionData);
-	await rememberRecentProject(normalizedPath);
 
 	return {
 		success: true,

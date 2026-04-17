@@ -187,8 +187,6 @@ export async function startInteractionCapture() {
 			hook.on("mousemove", onMouseMove);
 		}
 
-		hook.start();
-
 		setInteractionCaptureCleanup(() => {
 			try {
 				if (typeof hook.off === "function") {
@@ -216,6 +214,8 @@ export async function startInteractionCapture() {
 				// ignore hook shutdown errors
 			}
 		});
+
+		hook.start();
 	} catch (error) {
 		if (!hasLoggedInteractionHookFailure) {
 			setHasLoggedInteractionHookFailure(true);

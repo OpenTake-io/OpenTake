@@ -16,7 +16,7 @@ import {
 	setCurrentRecordingSession,
 } from "../state";
 import { normalizeVideoSourcePath } from "../utils";
-import { replaceApprovedSessionLocalReadPaths } from "../project/manager";
+import { isPathInsideDirectory, replaceApprovedSessionLocalReadPaths } from "../project/manager";
 import {
 	getTelemetryPathForVideo,
 	isAutoRecordingPath,
@@ -351,14 +351,19 @@ export function registerProjectHandlers() {
 
   ipcMain.handle('delete-recording-file', async (_, filePath: string) => {
     try {
-      if (!filePath || !isAutoRecordingPath(filePath)) {
+      if (!filePath) {
         return { success: false, error: 'Only auto-generated recordings can be deleted' };
       }
-      await fs.unlink(filePath);
+      const resolvedPath = await fs.realpath(filePath).catch(() => path.resolve(filePath));
+      const recordingsDir = await getRecordingsDir();
+      if (!isPathInsideDirectory(resolvedPath, recordingsDir) || !isAutoRecordingPath(resolvedPath)) {
+        return { success: false, error: 'Only auto-generated recordings can be deleted' };
+      }
+      await fs.unlink(resolvedPath);
       // Also delete the cursor telemetry sidecar if it exists
-      const telemetryPath = getTelemetryPathForVideo(filePath);
+      const telemetryPath = getTelemetryPathForVideo(resolvedPath);
       await fs.unlink(telemetryPath).catch(() => {});
-      if (currentVideoPath === filePath) {
+      if (currentVideoPath === resolvedPath) {
         setCurrentVideoPath(null);
         setCurrentRecordingSession(null);
       }

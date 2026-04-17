@@ -117,10 +117,6 @@ export function pushCursorSample(
 
 export function sampleCursorPoint() {
 	const point = getNormalizedCursorPoint();
-	if (!point) {
-		return;
-	}
-
 	pushCursorSample(point.cx, point.cy, Date.now() - cursorCaptureStartTimeMs, "move");
 }
 

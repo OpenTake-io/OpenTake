@@ -53,9 +53,10 @@ export function waitForWindowsCaptureStart(proc: ChildProcessWithoutNullStreams)
 			reject(new Error("Timed out waiting for native Windows capture to start"));
 		}, 12000);
 
+		let stdoutBuffer = "";
 		const onStdout = (chunk: Buffer) => {
-			const text = chunk.toString();
-			if (text.includes("Recording started")) {
+			stdoutBuffer += chunk.toString();
+			if (stdoutBuffer.includes("Recording started")) {
 				cleanup();
 				resolve();
 			}

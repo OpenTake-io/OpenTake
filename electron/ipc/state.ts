@@ -90,7 +90,7 @@ export let cachedNativeMacWindowSources: import("./types").NativeMacWindowSource
 export let cachedNativeMacWindowSourcesAtMs = 0;
 
 // ── Native video export ───────────────────────────────────────────────────────
-export let cachedNativeVideoEncoder: { ffmpegPath: string; encoderName: string } | null = null;
+export let cachedNativeVideoEncoder: { ffmpegPath: string; encodingMode: string; encoderName: string } | null = null;
 
 // ── Native helper migration ───────────────────────────────────────────────────
 export let nativeHelperMigrationPromise: Promise<void> | null = null;
@@ -164,6 +164,6 @@ export function setWindowBoundsCaptureInterval(v: NodeJS.Timeout | null) { windo
 export function setCachedNativeMacWindowSources(v: import("./types").NativeMacWindowSource[] | null) { cachedNativeMacWindowSources = v; }
 export function setCachedNativeMacWindowSourcesAtMs(v: number) { cachedNativeMacWindowSourcesAtMs = v; }
 
-export function setCachedNativeVideoEncoder(v: { ffmpegPath: string; encoderName: string } | null) { cachedNativeVideoEncoder = v; }
+export function setCachedNativeVideoEncoder(v: { ffmpegPath: string; encodingMode: string; encoderName: string } | null) { cachedNativeVideoEncoder = v; }
 
 export function setNativeHelperMigrationPromise(v: Promise<void> | null) { nativeHelperMigrationPromise = v; }

@@ -4,7 +4,7 @@ import type { SelectedSource } from "../types";
 import {
 	ffmpegCaptureOutputBuffer,
 } from "../state";
-import { getScreen } from "../utils";
+import { getScreen, parseWindowId } from "../utils";
 import { resolveWindowsCaptureDisplay } from "../windowsCaptureSelection";
 import { resolveLinuxWindowBounds } from "../cursor/bounds";
 
@@ -32,12 +32,13 @@ export async function buildFfmpegCaptureArgs(source: SelectedSource, outputPath:
 
 	if (process.platform === "win32") {
 		if (source?.id?.startsWith("window:")) {
+			const windowId = parseWindowId(source.id);
 			const windowTitle =
 				typeof source.windowTitle === "string"
 					? source.windowTitle.trim()
 					: source.name.trim();
-			if (!windowTitle) {
-				throw new Error("Missing window title for FFmpeg window capture");
+			if (!windowId && !windowTitle) {
+				throw new Error("Missing window identifier for FFmpeg window capture");
 			}
 
 			return [
@@ -49,7 +50,7 @@ export async function buildFfmpegCaptureArgs(source: SelectedSource, outputPath:
 				"-draw_mouse",
 				"0",
 				"-i",
-				`title=${windowTitle}`,
+				windowId ? `hwnd=${windowId}` : `title=${windowTitle}`,
 				...commonOutputArgs,
 			];
 		}
