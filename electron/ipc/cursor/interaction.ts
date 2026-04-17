@@ -97,6 +97,8 @@ export async function startInteractionCapture() {
 		return;
 	}
 
+	stopInteractionCapture();
+
 	try {
 		const hook = loadUiohookModule();
 		console.log(

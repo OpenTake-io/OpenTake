@@ -432,7 +432,14 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
 <div class="border-wrap"></div>
 </body></html>`
 
-      await highlightWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+			try {
+				await highlightWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+			} catch (loadError) {
+				if (!highlightWin.isDestroyed()) {
+					highlightWin.close()
+				}
+				throw loadError
+			}
 
       setTimeout(() => {
         if (!highlightWin.isDestroyed()) highlightWin.close()
