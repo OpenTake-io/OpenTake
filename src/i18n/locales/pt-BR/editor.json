@@ -7,41 +7,41 @@
 		"muteUnmute": "Silenciar/ativar som"
 	},
 	"annotations": {
-		"settings": "Configuracoes de anotacao",
+		"settings": "Configurações de anotação",
 		"active": "Ativo",
 		"text": "Texto",
 		"image": "Imagem",
 		"arrow": "Seta",
 		"blur": "Blur",
-		"textContent": "Conteudo do texto",
+		"textContent": "Conteúdo do texto",
 		"textPlaceholder": "Digite seu texto...",
 		"fontStyle": "Estilo da fonte",
 		"selectStyle": "Selecionar estilo",
 		"size": "Tamanho",
 		"toggleBold": "Alternar negrito",
-		"toggleItalic": "Alternar italico",
+		"toggleItalic": "Alternar itálico",
 		"toggleUnderline": "Alternar sublinhado",
-		"alignLeft": "Alinhar a esquerda",
+		"alignLeft": "Alinhar à esquerda",
 		"alignCenter": "Alinhar ao centro",
-		"alignRight": "Alinhar a direita",
+		"alignRight": "Alinhar à direita",
 		"textColor": "Cor do texto",
 		"background": "Fundo",
 		"none": "Nenhum",
 		"clearBackground": "Limpar fundo",
 		"uploadImage": "Enviar imagem",
 		"supportedFormats": "Formatos suportados: JPG, PNG, GIF, WebP",
-		"arrowDirection": "Direcao da seta",
-		"strokeWidth": "Espessura do traco: {{width}}px",
+		"arrowDirection": "Direção da seta",
+		"strokeWidth": "Espessura do traço: {{width}}px",
 		"arrowColor": "Cor da seta",
-		"deleteAnnotation": "Excluir anotacao",
+		"deleteAnnotation": "Excluir anotação",
 		"shortcutsAndTips": "Atalhos e dicas",
-		"tipSelectAnnotation": "Mova o indicador para uma secao com anotacoes sobrepostas e selecione um item.",
+		"tipSelectAnnotation": "Mova o indicador para uma seção com anotações sobrepostas e selecione um item.",
 		"tipCycleForward": "Use Tab para alternar entre itens sobrepostos.",
 		"tipCycleBackward": "Use Shift+Tab para voltar.",
 		"imageUploadSuccess": "Imagem enviada com sucesso!",
 		"imageUploadError": "Envie um arquivo de imagem JPG, PNG, GIF ou WebP.",
 		"blurStrength": "Intensidade do blur: {{strength}}",
-		"solidColor": "Cor solida (censura)",
+		"solidColor": "Cor sólida (censura)",
 		"borderRadius": "Raio da borda"
 	},
 
@@ -63,28 +63,28 @@
 	},
 	"gifOptions": {
 		"frameRate": "Taxa de quadros",
-		"outputSize": "Tamanho de saida",
-		"outputDimensions": "Saida: {{width}} × {{height}}px",
-		"loopAnimation": "Animacao em loop",
-		"loopDescription": "O GIF sera reproduzido continuamente"
+		"outputSize": "Tamanho de saída",
+		"outputDimensions": "Saída: {{width}} × {{height}}px",
+		"loopAnimation": "Animação em loop",
+		"loopDescription": "O GIF será reproduzido continuamente"
 	},
 	"tutorial": {
 		"howTrimmingWorks": "Como o corte funciona",
 		"title": "Como o corte funciona",
-		"understanding": "Entenda como remover partes indesejadas do seu video.",
-		"descriptionP1": "A ferramenta de corte funciona definindo os trechos que voce quer",
+		"understanding": "Entenda como remover partes indesejadas do seu vídeo.",
+		"descriptionP1": "A ferramenta de corte funciona definindo os trechos que você quer",
 		"descriptionRemove": "remover",
-		"descriptionP2": "do seu video.",
-		"descriptionP3": "Qualquer parte da linha do tempo coberta por uma regiao de corte vermelha sera removida na exportacao.",
+		"descriptionP2": "do seu vídeo.",
+		"descriptionP3": "Qualquer parte da linha do tempo coberta por uma região de corte vermelha será removida na exportação.",
 		"visualExample": "Exemplo visual",
 		"removed": "REMOVIDO",
 		"kept": "Mantido",
-		"finalVideo": "Video final",
+		"finalVideo": "Vídeo final",
 		"part": "Parte {{number}}",
 		"addTrimStep": "1. Adicionar corte",
-		"addTrimDesc": "Pressione T ou clique no icone de tesoura para marcar um trecho para remocao.",
+		"addTrimDesc": "Pressione T ou clique no ícone de tesoura para marcar um trecho para remoção.",
 		"adjustStep": "2. Ajustar",
-		"adjustDesc": "Arraste as bordas da regiao vermelha para cobrir exatamente o que voce quer remover."
+		"adjustDesc": "Arraste as bordas da região vermelha para cobrir exatamente o que você quer remover."
 	},
 	"feedback": {
 		"trigger": "Feedback",
@@ -98,12 +98,12 @@
 	"keyboardShortcuts": {
 		"trigger": "Atalhos",
 		"title": "Atalhos de teclado",
-		"description": "Referencia rapida para os controles da linha do tempo e do editor.",
+		"description": "Referência rápida para os controles da linha do tempo e do editor.",
 		"customizeTooltip": "Personalizar atalhos",
 		"customize": "Personalizar",
 		"panTimeline": "Mover linha do tempo",
 		"zoomTimeline": "Zoom da linha do tempo",
-		"cycleAnnotations": "Alternar anotacoes",
+		"cycleAnnotations": "Alternar anotações",
 		"tab": "Tab"
 	},
 	"actions": {
@@ -111,15 +111,15 @@
 		"showInFolder": "Mostrar na pasta"
 	},
 	"project": {
-		"untitled": "Sem titulo"
+		"untitled": "Sem título"
 	},
 	"exportStatus": {
 		"exporting": "Exportando",
 		"renderingFile": "Renderizando seu arquivo.",
-		"preparing": "Preparando exportacao...",
-		"completePercent": "{{percent}}% concluido",
-		"issue": "Problema na exportacao",
-		"complete": "Exportacao concluida",
+		"preparing": "Preparando exportação...",
+		"completePercent": "{{percent}}% concluído",
+		"issue": "Problema na exportação",
+		"complete": "Exportação concluída",
 		"savedSuccessfully": "Seu arquivo foi salvo com sucesso."
 	},
 	"toolbar": {
@@ -130,5 +130,5 @@
 		"expand": "Expandir linha do tempo",
 		"collapse": "Recolher linha do tempo"
 	},
-	"openRecordingsFolder": "Abrir pasta de gravacoes"
+	"openRecordingsFolder": "Abrir pasta de gravações"
 }

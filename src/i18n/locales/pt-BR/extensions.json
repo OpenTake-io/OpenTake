@@ -5,10 +5,10 @@
 		"installed": "Instaladas"
 	},
 	"actions": {
-		"submit": "Enviar uma extensao",
-		"docs": "Documentacao de extensoes",
+		"submit": "Enviar uma extensão",
+		"docs": "Documentação de extensões",
 		"refresh": "Atualizar",
-		"openFolder": "Abrir pasta de extensoes",
+		"openFolder": "Abrir pasta de extensões",
 		"uninstall": "Desinstalar",
 		"install": "Instalar",
 		"installing": "Instalando",
@@ -25,36 +25,36 @@
 	"detail": {
 		"by": "Por {{author}}",
 		"unknownAuthor": "Autor desconhecido",
-		"noDescription": "Sem descricao",
+		"noDescription": "Sem descrição",
 		"downloads": "{{count}} downloads",
-		"preview": "Previa",
+		"preview": "Prévia",
 		"screenshotAlt": "Captura de tela {{number}}",
-		"description": "Descricao",
+		"description": "Descrição",
 		"tags": "Tags",
-		"permissions": "Permissoes",
-		"location": "Localizacao",
+		"permissions": "Permissões",
+		"location": "Localização",
 		"error": "Erro: {{message}}"
 	},
 	"empty": {
-		"title": "Sem extensoes",
-		"description": "Instale extensoes para adicionar molduras, efeitos de cursor e ferramentas de edicao."
+		"title": "Sem extensões",
+		"description": "Instale extensões para adicionar molduras, efeitos de cursor e ferramentas de edição."
 	},
 	"search": {
-		"placeholder": "Buscar extensoes...",
-		"noResults": "Nenhuma extensao encontrada",
-		"noMarketplace": "Ainda nao ha extensoes disponiveis no marketplace",
-		"count": "{{count}} extensao",
-		"countPlural": "{{count}} extensoes"
+		"placeholder": "Buscar extensões...",
+		"noResults": "Nenhuma extensão encontrada",
+		"noMarketplace": "Ainda não há extensões disponíveis no marketplace",
+		"count": "{{count}} extensão",
+		"countPlural": "{{count}} extensões"
 	},
 	"toast": {
-		"installedAndEnabled": "Extensao instalada e ativada",
+		"installedAndEnabled": "Extensão instalada e ativada",
 		"uninstalled": "{{name}} desinstalada",
 		"uninstallFailed": "Falha ao desinstalar {{name}}",
 		"searchFailed": "Falha ao buscar no marketplace",
-		"refreshed": "Extensoes atualizadas",
-		"refreshFailed": "Falha ao atualizar extensoes",
+		"refreshed": "Extensões atualizadas",
+		"refreshFailed": "Falha ao atualizar extensões",
 		"marketplaceInstalled": "{{name}} instalada e ativada",
 		"marketplaceInstallFailed": "Falha ao instalar {{name}}",
-		"enableFailed": "Falha ao ativar extensao"
+		"enableFailed": "Falha ao ativar extensão"
 	}
 }

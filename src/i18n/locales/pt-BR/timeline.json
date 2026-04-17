@@ -1,39 +1,39 @@
 {
 	"zoom": {
-		"cannotPlace": "Nao e possivel inserir zoom aqui",
-		"existsOrNoSpace": "Ja existe zoom nesse local ou nao ha espaco suficiente.",
-		"suggestHandlerUnavailable": "Manipulador de sugestao de zoom indisponivel",
-		"noTelemetry": "Nenhuma telemetria de cursor disponivel",
-		"recordFirst": "Grave uma captura de tela primeiro para gerar sugestoes baseadas no cursor.",
-		"noUsableTelemetry": "Nenhuma telemetria de cursor utilizavel",
-		"notEnoughMovement": "A gravacao nao inclui dados suficientes de movimento do cursor.",
-		"noInteractionMoments": "Nenhum momento claro de interacao encontrado",
-		"tryRecording": "Tente uma gravacao com pausas ou cliques em torno de acoes importantes.",
-		"noAutoZoomSlots": "Nenhum espaco de auto-zoom disponivel",
-		"dwellPointsOverlap": "Pontos de permanencia detectados se sobrepoem a regioes de zoom existentes.",
-		"addedSuggestions": "{{count}} sugestao(oes) de zoom por interacao adicionada(s)",
+		"cannotPlace": "Não é possível inserir zoom aqui",
+		"existsOrNoSpace": "Já existe zoom nesse local ou não há espaço suficiente.",
+		"suggestHandlerUnavailable": "Manipulador de sugestão de zoom indisponível",
+		"noTelemetry": "Nenhuma telemetria de cursor disponível",
+		"recordFirst": "Grave uma captura de tela primeiro para gerar sugestões baseadas no cursor.",
+		"noUsableTelemetry": "Nenhuma telemetria de cursor utilizável",
+		"notEnoughMovement": "A gravação não inclui dados suficientes de movimento do cursor.",
+		"noInteractionMoments": "Nenhum momento claro de interação encontrado",
+		"tryRecording": "Tente uma gravação com pausas ou cliques em torno de ações importantes.",
+		"noAutoZoomSlots": "Nenhum espaço de auto-zoom disponível",
+		"dwellPointsOverlap": "Pontos de permanência detectados se sobrepõem a regiões de zoom existentes.",
+		"addedSuggestions": "{{count}} sugestão(ões) de zoom por interação adicionada(s)",
 		"label": "Zoom {{index}}",
 		"addZoom": "Adicionar zoom (Z)",
 		"suggestZooms": "Sugerir zooms pelo cursor"
 	},
 	"trim": {
-		"cannotPlace": "Nao e possivel inserir corte aqui",
-		"existsOrNoSpace": "Ja existe corte nesse local ou nao ha espaco suficiente.",
+		"cannotPlace": "Não é possível inserir corte aqui",
+		"existsOrNoSpace": "Já existe corte nesse local ou não há espaço suficiente.",
 		"label": "Corte {{index}}",
 		"addTrim": "Adicionar corte (T)"
 	},
 	"speed": {
-		"cannotPlace": "Nao e possivel inserir velocidade aqui",
-		"existsOrNoSpace": "Ja existe uma regiao de velocidade nesse local ou nao ha espaco suficiente.",
+		"cannotPlace": "Não é possível inserir velocidade aqui",
+		"existsOrNoSpace": "Já existe uma região de velocidade nesse local ou não há espaço suficiente.",
 		"label": "Velocidade"
 	},
 	"annotation": {
-		"label": "Anotacao",
+		"label": "Anotação",
 		"image": "Imagem",
-		"addAnnotation": "Adicionar anotacao (A)"
+		"addAnnotation": "Adicionar anotação (A)"
 	},
 	"audio": {
-		"label": "Audio"
+		"label": "Áudio"
 	},
 	"addSpeed": "Adicionar velocidade (S)",
 	"resizeLeft": "Redimensionar para a esquerda",
