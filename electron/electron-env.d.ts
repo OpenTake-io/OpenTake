@@ -1,5 +1,6 @@
 /// <reference types="vite-plugin-electron/electron-env" />
 
+// biome-ignore lint/style/noNamespace: NodeJS.ProcessEnv augmentation requires a namespace declaration.
 declare namespace NodeJS {
 	interface ProcessEnv {
 		/**
@@ -60,6 +61,14 @@ interface UpdateStatusSummary {
 	detail?: string;
 }
 
+type RendererExtensionInfo = import("./extensions/extensionTypes").ExtensionInfo;
+type RendererExtensionReview = import("./extensions/extensionTypes").ExtensionReview;
+type RendererMarketplaceExtension = import("./extensions/extensionTypes").MarketplaceExtension;
+type RendererMarketplaceReviewStatus =
+	import("./extensions/extensionTypes").MarketplaceReviewStatus;
+type RendererMarketplaceSearchResult =
+	import("./extensions/extensionTypes").MarketplaceSearchResult;
+
 interface Window {
 	electronAPI: {
 		hudOverlaySetIgnoreMouse: (ignore: boolean) => void;
@@ -73,15 +82,18 @@ interface Window {
 		setHudOverlayCaptureProtection: (
 			enabled: boolean,
 		) => Promise<{ success: boolean; enabled: boolean }>;
+		getAssetBasePath: () => Promise<string | null>;
 		getSources: (opts: Electron.SourcesOptions) => Promise<ProcessedDesktopSource[]>;
 		switchToEditor: () => Promise<void>;
 		openSourceSelector: () => Promise<void>;
-		selectSource: (source: any) => Promise<any>;
-		showSourceHighlight: (source: any) => Promise<{ success: boolean }>;
-		getSelectedSource: () => Promise<any>;
-		onSelectedSourceChanged: (callback: (source: any) => void) => () => void;
+		selectSource: (source: ProcessedDesktopSource) => Promise<ProcessedDesktopSource>;
+		showSourceHighlight: (source: ProcessedDesktopSource) => Promise<{ success: boolean }>;
+		getSelectedSource: () => Promise<ProcessedDesktopSource | null>;
+		onSelectedSourceChanged: (
+			callback: (source: ProcessedDesktopSource | null) => void,
+		) => () => void;
 		startNativeScreenRecording: (
-			source: any,
+			source: ProcessedDesktopSource,
 			options?: {
 				capturesSystemAudio?: boolean;
 				capturesMicrophone?: boolean;
@@ -123,7 +135,7 @@ interface Window {
 			error?: string;
 		}>;
 		startFfmpegRecording: (
-			source: any,
+			source: ProcessedDesktopSource,
 		) => Promise<{ success: boolean; path?: string; message?: string; error?: string }>;
 		stopFfmpegRecording: () => Promise<{
 			success: boolean;
@@ -145,7 +157,6 @@ interface Window {
 			files?: string[];
 			error?: string;
 		}>;
-		getAssetBasePath: () => Promise<string | null>;
 		readLocalFile: (
 			filePath: string,
 		) => Promise<{ success: boolean; data?: Uint8Array; error?: string }>;
@@ -158,6 +169,7 @@ interface Window {
 			frameRate: number;
 			bitrate: number;
 			encodingMode: "fast" | "balanced" | "quality";
+			inputMode?: "rawvideo" | "h264-stream";
 		}) => Promise<{
 			success: boolean;
 			sessionId?: string;
@@ -459,14 +471,14 @@ interface Window {
 		cancelCountdown: () => Promise<{ success: boolean }>;
 		getActiveCountdown: () => Promise<{ success: boolean; seconds: number | null }>;
 		onCountdownTick: (callback: (seconds: number) => void) => () => void;
-		extensionsDiscover: () => Promise<any[]>;
-		extensionsList: () => Promise<any[]>;
-		extensionsGet: (id: string) => Promise<any | null>;
+		extensionsDiscover: () => Promise<RendererExtensionInfo[]>;
+		extensionsList: () => Promise<RendererExtensionInfo[]>;
+		extensionsGet: (id: string) => Promise<RendererExtensionInfo | null>;
 		extensionsEnable: (id: string) => Promise<{ success: boolean; error?: string }>;
 		extensionsDisable: (id: string) => Promise<{ success: boolean; error?: string }>;
 		extensionsInstallFromFolder: () => Promise<{
 			success: boolean;
-			extension?: any;
+			extension?: RendererExtensionInfo;
 			message?: string;
 			error?: string;
 			canceled?: boolean;
@@ -480,8 +492,8 @@ interface Window {
 			sort?: string;
 			page?: number;
 			pageSize?: number;
-		}) => Promise<any>;
-		extensionsMarketplaceGet: (id: string) => Promise<any | null>;
+		}) => Promise<RendererMarketplaceSearchResult & { error?: string }>;
+		extensionsMarketplaceGet: (id: string) => Promise<RendererMarketplaceExtension | null>;
 		extensionsMarketplaceInstall: (
 			extensionId: string,
 			downloadUrl: string,
@@ -490,13 +502,13 @@ interface Window {
 			extensionId: string,
 		) => Promise<{ success: boolean; reviewId?: string; error?: string }>;
 		extensionsReviewsList: (params: {
-			status?: string;
+			status?: RendererMarketplaceReviewStatus;
 			page?: number;
 			pageSize?: number;
-		}) => Promise<{ reviews: any[]; total: number }>;
+		}) => Promise<{ reviews: RendererExtensionReview[]; total: number; error?: string }>;
 		extensionsReviewUpdate: (
 			reviewId: string,
-			status: string,
+			status: RendererMarketplaceReviewStatus,
 			notes?: string,
 		) => Promise<{ success: boolean; error?: string }>;
 	};
@@ -518,6 +530,7 @@ interface CursorTelemetryPoint {
 	timeMs: number;
 	cx: number;
 	cy: number;
+	pressure?: number;
 	interactionType?:
 		| "move"
 		| "click"
