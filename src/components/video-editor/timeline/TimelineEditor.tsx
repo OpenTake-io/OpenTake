@@ -64,10 +64,8 @@ import { type AudioPeaksData, useAudioPeaks } from "./useAudioPeaks";
 import { buildInteractionZoomSuggestions } from "./zoomSuggestionUtils";
 
 const ZOOM_ROW_ID = "row-zoom";
-const TRIM_ROW_ID = "row-trim";
 const CLIP_ROW_ID = "row-clip";
 const ANNOTATION_ROW_ID = "row-annotation";
-const SPEED_ROW_ID = "row-speed";
 const AUDIO_ROW_ID = "row-audio";
 const ANNOTATION_ROW_PREFIX = `${ANNOTATION_ROW_ID}-`;
 const AUDIO_ROW_PREFIX = "row-audio-";
@@ -493,7 +491,7 @@ function TimelineAxis({
 				return (
 					<div
 						key={`minor-${time}`}
-						className="absolute bottom-0 h-1 w-[1px] bg-white/5"
+						className="absolute bottom-1 h-1 w-[1px] bg-white/5"
 						style={{ [sideProperty]: `${offset}px` }}
 					/>
 				);
@@ -510,18 +508,19 @@ function TimelineAxis({
 					flexDirection: "row",
 					alignItems: "flex-end",
 					[sideProperty]: `${offset}px`,
+					transform: "translateX(-50%)",
 				};
 
 				return (
 					<div key={marker.time} style={markerStyle}>
 						<div className="flex flex-col items-center pb-1">
-							<div className="h-2 w-[1px] bg-white/20 mb-1" />
+							<div className="mb-1.5 h-[5px] w-[5px] rounded-full bg-white/30" />
 							<span
 								className={cn(
 									"text-[10px] font-medium tabular-nums tracking-tight",
 									marker.time === currentTimeMs
 										? "text-[#2563EB]"
-										: "text-slate-500",
+										: "text-white/40",
 								)}
 							>
 								{marker.label}
@@ -530,6 +529,52 @@ function TimelineAxis({
 					</div>
 				);
 			})}
+		</div>
+	);
+}
+
+function ClipMarkerOverlay({ videoDurationMs }: { videoDurationMs: number }) {
+	const { direction, range, valueToPixels } = useTimelineContext();
+	const sideProperty = direction === "rtl" ? "right" : "left";
+
+	const { intervalMs } = useMemo(
+		() => calculateAxisScale(range.end - range.start),
+		[range.end, range.start],
+	);
+
+	const markers = useMemo(() => {
+		if (intervalMs <= 0) return [];
+		const maxTime = videoDurationMs > 0 ? videoDurationMs : range.end;
+		const visibleStart = Math.max(0, range.start);
+		const visibleEnd = Math.min(range.end, maxTime);
+		const firstMarker = Math.ceil(visibleStart / intervalMs) * intervalMs;
+		const result: { time: number; offset: number }[] = [];
+		for (let time = firstMarker; time <= maxTime; time += intervalMs) {
+			if (time > visibleStart && time < visibleEnd) {
+				result.push({
+					time: Math.round(time),
+					offset: valueToPixels(Math.round(time) - range.start),
+				});
+			}
+		}
+		return result;
+	}, [intervalMs, range.start, range.end, videoDurationMs, valueToPixels]);
+
+	return (
+		<div className="pointer-events-none absolute inset-0 z-[1]">
+			{markers.map(({ time, offset }) => (
+				<div
+					key={time}
+					className="absolute w-px"
+					style={{
+						top: "7.5%",
+						bottom: "7.5%",
+						[sideProperty]: `${offset}px`,
+						background:
+							"linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.10) 35%, rgba(255,255,255,0.10) 65%, transparent 100%)",
+					}}
+				/>
+			))}
 		</div>
 	);
 }
@@ -630,11 +675,8 @@ function Timeline({
 	);
 
 	const zoomItems = items.filter((item) => item.rowId === ZOOM_ROW_ID);
-	const trimItems = items.filter((item) => item.rowId === TRIM_ROW_ID);
-
 	const clipItems = items.filter((item) => item.rowId === CLIP_ROW_ID);
 	const annotationItems = items.filter((item) => isAnnotationTrackRowId(item.rowId));
-	const speedItems = items.filter((item) => item.rowId === SPEED_ROW_ID);
 	const audioItems = items.filter((item) => isAudioTrackRowId(item.rowId));
 	const audioRowIds = useMemo(
 		() =>
@@ -677,6 +719,7 @@ function Timeline({
 			<div className="relative z-10 flex flex-1 min-h-0 flex-col">
 				<Row id={CLIP_ROW_ID} isEmpty={clipItems.length === 0} hint="Press C to split clip">
 					{audioPeaks && <AudioWaveform peaks={audioPeaks} />}
+					<ClipMarkerOverlay videoDurationMs={videoDurationMs} />
 					{clipItems.map((item) => (
 						<Item
 							id={item.id}
@@ -686,22 +729,6 @@ function Timeline({
 							isSelected={selectAllBlocksActive || item.id === selectedClipId}
 							onSelect={() => onSelectClip?.(item.id)}
 							variant="clip"
-						>
-							{item.label}
-						</Item>
-					))}
-				</Row>
-
-				<Row id={TRIM_ROW_ID} isEmpty={trimItems.length === 0} hint="Press T to add trim">
-					{trimItems.map((item) => (
-						<Item
-							id={item.id}
-							key={item.id}
-							rowId={item.rowId}
-							span={item.span}
-							isSelected={selectAllBlocksActive || item.id === _selectedTrimId}
-							onSelect={() => onSelectTrim?.(item.id)}
-							variant="trim"
 						>
 							{item.label}
 						</Item>
@@ -720,27 +747,6 @@ function Timeline({
 							zoomDepth={item.zoomDepth}
 							zoomMode={item.zoomMode}
 							variant="zoom"
-						>
-							{item.label}
-						</Item>
-					))}
-				</Row>
-
-				<Row
-					id={SPEED_ROW_ID}
-					isEmpty={speedItems.length === 0}
-					hint="Press S to add speed"
-				>
-					{speedItems.map((item) => (
-						<Item
-							id={item.id}
-							key={item.id}
-							rowId={item.rowId}
-							span={item.span}
-							isSelected={selectAllBlocksActive || item.id === _selectedSpeedId}
-							onSelect={() => onSelectSpeed?.(item.id)}
-							speedValue={item.speedValue}
-							variant="speed"
 						>
 							{item.label}
 						</Item>
@@ -1726,14 +1732,6 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				variant: "zoom",
 			}));
 
-			const trims: TimelineRenderItem[] = trimRegions.map((region, index) => ({
-				id: region.id,
-				rowId: TRIM_ROW_ID,
-				span: { start: region.startMs, end: region.endMs },
-				label: `Trim ${index + 1}`,
-				variant: "trim",
-			}));
-
 			const clips: TimelineRenderItem[] = clipRegions.map((region, index) => ({
 				id: region.id,
 				rowId: CLIP_ROW_ID,
@@ -1764,15 +1762,6 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				};
 			});
 
-			const speeds: TimelineRenderItem[] = speedRegions.map((region, index) => ({
-				id: region.id,
-				rowId: SPEED_ROW_ID,
-				span: { start: region.startMs, end: region.endMs },
-				label: `Speed ${index + 1}`,
-				speedValue: region.speed,
-				variant: "speed",
-			}));
-
 			const audios: TimelineRenderItem[] = audioRegions.map((region) => {
 				const fileName =
 					region.audioPath
@@ -1788,8 +1777,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				};
 			});
 
-			return [...zooms, ...trims, ...clips, ...annotations, ...speeds, ...audios];
-		}, [zoomRegions, trimRegions, clipRegions, annotationRegions, speedRegions, audioRegions]);
+			return [...zooms, ...clips, ...annotations, ...audios];
+		}, [zoomRegions, clipRegions, annotationRegions, audioRegions]);
 
 		// Flat list of draggable row spans for neighbour-clamping during drag/resize.
 		const allRegionSpans = useMemo(() => {
@@ -1799,23 +1788,11 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				end: r.endMs,
 				rowId: ZOOM_ROW_ID,
 			}));
-			const trims = trimRegions.map((r) => ({
-				id: r.id,
-				start: r.startMs,
-				end: r.endMs,
-				rowId: TRIM_ROW_ID,
-			}));
 			const clips = clipRegions.map((r) => ({
 				id: r.id,
 				start: r.startMs,
 				end: r.endMs,
 				rowId: CLIP_ROW_ID,
-			}));
-			const speeds = speedRegions.map((r) => ({
-				id: r.id,
-				start: r.startMs,
-				end: r.endMs,
-				rowId: SPEED_ROW_ID,
 			}));
 			const audios = audioRegions.map((r) => ({
 				id: r.id,
@@ -1823,8 +1800,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				end: r.endMs,
 				rowId: getAudioTrackRowId(r.trackIndex ?? 0),
 			}));
-			return [...zooms, ...trims, ...clips, ...speeds, ...audios];
-		}, [zoomRegions, trimRegions, clipRegions, speedRegions, audioRegions]);
+			return [...zooms, ...clips, ...audios];
+		}, [zoomRegions, clipRegions, audioRegions]);
 
 		const handleItemSpanChange = useCallback(
 			(id: string, span: Span) => {

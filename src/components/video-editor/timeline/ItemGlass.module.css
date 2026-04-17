@@ -178,19 +178,12 @@
 }
 
 .glassGreen:hover .zoomEndCap,
-.glassGreen.selected .zoomEndCap,
 .glassRed:hover .zoomEndCap,
-.glassRed.selected .zoomEndCap,
 .glassYellow:hover .zoomEndCap,
-.glassYellow.selected .zoomEndCap,
 .glassAmber:hover .zoomEndCap,
-.glassAmber.selected .zoomEndCap,
 .glassPurple:hover .zoomEndCap,
-.glassPurple.selected .zoomEndCap,
 .glassCyan:hover .zoomEndCap,
-.glassCyan.selected .zoomEndCap,
-.glassDarkGreen:hover .zoomEndCap,
-.glassDarkGreen.selected .zoomEndCap {
+.glassDarkGreen:hover .zoomEndCap {
 	opacity: 1;
 }
 
