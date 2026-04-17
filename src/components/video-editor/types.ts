@@ -20,6 +20,7 @@ export interface CursorTelemetryPoint {
 	timeMs: number;
 	cx: number;
 	cy: number;
+	pressure?: number;
 	interactionType?:
 		| "move"
 		| "click"

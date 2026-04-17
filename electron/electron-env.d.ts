@@ -1,5 +1,6 @@
 /// <reference types="vite-plugin-electron/electron-env" />
 
+// biome-ignore lint/style/noNamespace: NodeJS.ProcessEnv augmentation requires a namespace declaration.
 declare namespace NodeJS {
 	interface ProcessEnv {
 		/**
@@ -60,6 +61,14 @@ interface UpdateStatusSummary {
 	detail?: string;
 }
 
+type RendererExtensionInfo = import("./extensions/extensionTypes").ExtensionInfo;
+type RendererExtensionReview = import("./extensions/extensionTypes").ExtensionReview;
+type RendererMarketplaceExtension = import("./extensions/extensionTypes").MarketplaceExtension;
+type RendererMarketplaceReviewStatus =
+	import("./extensions/extensionTypes").MarketplaceReviewStatus;
+type RendererMarketplaceSearchResult =
+	import("./extensions/extensionTypes").MarketplaceSearchResult;
+
 interface Window {
 	electronAPI: {
 		hudOverlaySetIgnoreMouse: (ignore: boolean) => void;
@@ -73,22 +82,32 @@ interface Window {
 		setHudOverlayCaptureProtection: (
 			enabled: boolean,
 		) => Promise<{ success: boolean; enabled: boolean }>;
+		getAssetBasePath: () => Promise<string | null>;
 		getSources: (opts: Electron.SourcesOptions) => Promise<ProcessedDesktopSource[]>;
 		switchToEditor: () => Promise<void>;
 		openSourceSelector: () => Promise<void>;
-		selectSource: (source: any) => Promise<any>;
-		showSourceHighlight: (source: any) => Promise<{ success: boolean }>;
-		getSelectedSource: () => Promise<any>;
-		onSelectedSourceChanged: (callback: (source: any) => void) => () => void;
+		selectSource: (source: ProcessedDesktopSource) => Promise<ProcessedDesktopSource>;
+		showSourceHighlight: (source: ProcessedDesktopSource) => Promise<{ success: boolean }>;
+		getSelectedSource: () => Promise<ProcessedDesktopSource | null>;
+		onSelectedSourceChanged: (
+			callback: (source: ProcessedDesktopSource | null) => void,
+		) => () => void;
 		startNativeScreenRecording: (
-			source: any,
+			source: ProcessedDesktopSource,
 			options?: {
 				capturesSystemAudio?: boolean;
 				capturesMicrophone?: boolean;
 				microphoneDeviceId?: string;
 				microphoneLabel?: string;
 			},
-		) => Promise<{ success: boolean; path?: string; message?: string; error?: string; userNotified?: boolean; microphoneFallbackRequired?: boolean }>;
+		) => Promise<{
+			success: boolean;
+			path?: string;
+			message?: string;
+			error?: string;
+			userNotified?: boolean;
+			microphoneFallbackRequired?: boolean;
+		}>;
 		stopNativeScreenRecording: () => Promise<{
 			success: boolean;
 			path?: string;
@@ -116,7 +135,7 @@ interface Window {
 			error?: string;
 		}>;
 		startFfmpegRecording: (
-			source: any,
+			source: ProcessedDesktopSource,
 		) => Promise<{ success: boolean; path?: string; message?: string; error?: string }>;
 		stopFfmpegRecording: () => Promise<{
 			success: boolean;
@@ -150,6 +169,7 @@ interface Window {
 			frameRate: number;
 			bitrate: number;
 			encodingMode: "fast" | "balanced" | "quality";
+			inputMode?: "rawvideo" | "h264-stream";
 		}) => Promise<{
 			success: boolean;
 			sessionId?: string;
@@ -244,7 +264,13 @@ interface Window {
 		writeExportedVideoToPath: (
 			videoData: ArrayBuffer,
 			outputPath: string,
-		) => Promise<{ success: boolean; path?: string; message?: string; error?: string; canceled?: boolean }>;
+		) => Promise<{
+			success: boolean;
+			path?: string;
+			message?: string;
+			error?: string;
+			canceled?: boolean;
+		}>;
 		openVideoFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
 		openAudioFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
 		openWhisperExecutablePicker: () => Promise<{
@@ -303,9 +329,7 @@ interface Window {
 		}>;
 		getCurrentVideoPath: () => Promise<{ success: boolean; path?: string }>;
 		clearCurrentVideoPath: () => Promise<{ success: boolean }>;
-		deleteRecordingFile: (
-			filePath: string,
-		) => Promise<{ success: boolean; error?: string }>;
+		deleteRecordingFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
 		saveProjectFile: (
 			projectData: unknown,
 			suggestedName?: string,
@@ -378,13 +402,17 @@ interface Window {
 		getUpdateStatusSummary: () => Promise<UpdateStatusSummary>;
 		previewUpdateToast: () => Promise<{ success: boolean }>;
 		checkForAppUpdates: () => Promise<{ success: boolean; logPath: string }>;
-		onUpdateToastStateChanged: (callback: (payload: UpdateToastState | null) => void) => () => void;
-		onUpdateReadyToast: (callback: (payload: {
-			version: string;
-			detail: string;
-			delayMs: number;
-			isPreview?: boolean;
-		}) => void) => () => void;
+		onUpdateToastStateChanged: (
+			callback: (payload: UpdateToastState | null) => void,
+		) => () => void;
+		onUpdateReadyToast: (
+			callback: (payload: {
+				version: string;
+				detail: string;
+				delayMs: number;
+				isPreview?: boolean;
+			}) => void,
+		) => () => void;
 		onMenuLoadProject: (callback: () => void) => () => void;
 		onMenuSaveProject: (callback: () => void) => () => void;
 		onMenuSaveProjectAs: (callback: () => void) => () => void;
@@ -412,7 +440,9 @@ interface Window {
 		setHasUnsavedChanges: (hasChanges: boolean) => void;
 		onRequestSaveBeforeClose: (callback: () => Promise<boolean>) => () => void;
 		isNativeWindowsCaptureAvailable: () => Promise<{ available: boolean }>;
-		muxNativeWindowsRecording: (pauseSegments?: Array<{ startMs: number; endMs: number }>) => Promise<{
+		muxNativeWindowsRecording: (
+			pauseSegments?: Array<{ startMs: number; endMs: number }>,
+		) => Promise<{
 			success: boolean;
 			path?: string;
 			message?: string;
@@ -423,8 +453,17 @@ interface Window {
 		/** Hide the OS cursor before browser capture starts. */
 		hideOsCursor: () => Promise<{ success: boolean }>;
 		/** Recording preferences (mic, system audio) */
-		getRecordingPreferences: () => Promise<{ success: boolean; microphoneEnabled: boolean; microphoneDeviceId?: string; systemAudioEnabled: boolean }>;
-		setRecordingPreferences: (prefs: { microphoneEnabled?: boolean; microphoneDeviceId?: string; systemAudioEnabled?: boolean }) => Promise<{ success: boolean; error?: string }>;
+		getRecordingPreferences: () => Promise<{
+			success: boolean;
+			microphoneEnabled: boolean;
+			microphoneDeviceId?: string;
+			systemAudioEnabled: boolean;
+		}>;
+		setRecordingPreferences: (prefs: {
+			microphoneEnabled?: boolean;
+			microphoneDeviceId?: string;
+			systemAudioEnabled?: boolean;
+		}) => Promise<{ success: boolean; error?: string }>;
 		/** Countdown timer before recording */
 		getCountdownDelay: () => Promise<{ success: boolean; delay: number }>;
 		setCountdownDelay: (delay: number) => Promise<{ success: boolean; error?: string }>;
@@ -432,14 +471,14 @@ interface Window {
 		cancelCountdown: () => Promise<{ success: boolean }>;
 		getActiveCountdown: () => Promise<{ success: boolean; seconds: number | null }>;
 		onCountdownTick: (callback: (seconds: number) => void) => () => void;
-		extensionsDiscover: () => Promise<any[]>;
-		extensionsList: () => Promise<any[]>;
-		extensionsGet: (id: string) => Promise<any | null>;
+		extensionsDiscover: () => Promise<RendererExtensionInfo[]>;
+		extensionsList: () => Promise<RendererExtensionInfo[]>;
+		extensionsGet: (id: string) => Promise<RendererExtensionInfo | null>;
 		extensionsEnable: (id: string) => Promise<{ success: boolean; error?: string }>;
 		extensionsDisable: (id: string) => Promise<{ success: boolean; error?: string }>;
 		extensionsInstallFromFolder: () => Promise<{
 			success: boolean;
-			extension?: any;
+			extension?: RendererExtensionInfo;
 			message?: string;
 			error?: string;
 			canceled?: boolean;
@@ -453,8 +492,8 @@ interface Window {
 			sort?: string;
 			page?: number;
 			pageSize?: number;
-		}) => Promise<any>;
-		extensionsMarketplaceGet: (id: string) => Promise<any | null>;
+		}) => Promise<RendererMarketplaceSearchResult & { error?: string }>;
+		extensionsMarketplaceGet: (id: string) => Promise<RendererMarketplaceExtension | null>;
 		extensionsMarketplaceInstall: (
 			extensionId: string,
 			downloadUrl: string,
@@ -463,13 +502,13 @@ interface Window {
 			extensionId: string,
 		) => Promise<{ success: boolean; reviewId?: string; error?: string }>;
 		extensionsReviewsList: (params: {
-			status?: string;
+			status?: RendererMarketplaceReviewStatus;
 			page?: number;
 			pageSize?: number;
-		}) => Promise<{ reviews: any[]; total: number }>;
+		}) => Promise<{ reviews: RendererExtensionReview[]; total: number; error?: string }>;
 		extensionsReviewUpdate: (
 			reviewId: string,
-			status: string,
+			status: RendererMarketplaceReviewStatus,
 			notes?: string,
 		) => Promise<{ success: boolean; error?: string }>;
 	};
@@ -491,7 +530,14 @@ interface CursorTelemetryPoint {
 	timeMs: number;
 	cx: number;
 	cy: number;
-	interactionType?: "move" | "click" | "double-click" | "right-click" | "middle-click" | "mouseup";
+	pressure?: number;
+	interactionType?:
+		| "move"
+		| "click"
+		| "double-click"
+		| "right-click"
+		| "middle-click"
+		| "mouseup";
 	cursorType?:
 		| "arrow"
 		| "text"
