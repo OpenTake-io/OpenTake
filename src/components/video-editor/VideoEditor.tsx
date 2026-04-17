@@ -1770,9 +1770,7 @@ export default function VideoEditor() {
 					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
 					setLastSavedSnapshot(null);
-					pendingFreshRecordingAutoZoomPathRef.current = autoApplyFreshRecordingAutoZooms
-						? sourceVideoUrl
-						: null;
+					pendingFreshRecordingAutoZoomPathRef.current = null;
 					setWebcam((prev) => ({
 						...prev,
 						enabled: false,

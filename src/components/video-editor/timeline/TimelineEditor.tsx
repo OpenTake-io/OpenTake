@@ -784,6 +784,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onOpenCropEditor,
 			isCropped = false,
 			videoPath,
+			hideToolbar = false,
 		},
 		ref,
 	) {
@@ -1849,164 +1850,166 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 
 		return (
 			<div className="flex-1 min-h-0 flex flex-col bg-[#17171a] overflow-auto">
-				<div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-[#161619]">
-					<div className="flex items-center gap-1">
-						<Button
-							onClick={handleAddZoom}
-							variant="ghost"
-							size="icon"
-							className="h-7 w-7 text-slate-400 hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all"
-							title="Add Zoom (Z)"
-						>
-							<ZoomIn className="w-4 h-4" />
-						</Button>
-						<Button
-							onClick={handleSuggestZooms}
-							variant="ghost"
-							size="icon"
-							className="h-7 w-7 text-slate-400 hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all"
-							title="Suggest Zooms from Cursor"
-						>
-							<WandSparkles className="w-4 h-4" />
-						</Button>
-						<Button
-							onClick={() => handleAddAnnotation()}
-							variant="ghost"
-							size="icon"
-							className="h-7 w-7 text-slate-400 hover:text-[#B4A046] hover:bg-[#B4A046]/10 transition-all"
-							title="Add Annotation (A)"
-						>
-							<MessageSquare className="w-4 h-4" />
-						</Button>
-						<Button
-							onClick={handleAddAudio}
-							variant="ghost"
-							size="icon"
-							className="h-7 w-7 text-slate-400 hover:text-[#a855f7] hover:bg-[#a855f7]/10 transition-all"
-							title="Add Audio"
-						>
-							<Music className="w-4 h-4" />
-						</Button>
-						<Button
-							onClick={handleSplitClip}
-							variant="ghost"
-							size="icon"
-							className="h-7 w-7 text-slate-400 hover:text-white hover:bg-white/10 transition-all"
-							title="Split Clip (C)"
-						>
-							<Scissors className="w-4 h-4" />
-						</Button>
-					</div>
-					<div className="flex items-center gap-2">
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button
-									variant="ghost"
-									size="sm"
-									className="h-7 px-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-white/10 transition-all gap-1"
-								>
-									<span className="font-medium">
-										{getAspectRatioLabel(aspectRatio)}
-									</span>
-									<ChevronDown className="w-3 h-3" />
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent
-								align="end"
-								className="bg-[#1a1a1c] border-white/10"
+				{hideToolbar ? null : (
+					<div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-[#161619]">
+						<div className="flex items-center gap-1">
+							<Button
+								onClick={handleAddZoom}
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7 text-slate-400 hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all"
+								title="Add Zoom (Z)"
 							>
-								{ASPECT_RATIOS.map((ratio) => (
-									<DropdownMenuItem
-										key={ratio}
-										onClick={() => onAspectRatioChange?.(ratio)}
-										className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer flex items-center justify-between gap-3"
-									>
-										<span>{getAspectRatioLabel(ratio)}</span>
-										{aspectRatio === ratio && (
-											<Check className="w-3 h-3 text-[#2563EB]" />
-										)}
-									</DropdownMenuItem>
-								))}
-								<div className="mx-1 my-1 h-px bg-white/10" />
-								<div className="px-2 py-1.5 flex items-center gap-2 text-slate-300">
-									<span className="text-sm">Custom</span>
-									<input
-										type="text"
-										inputMode="numeric"
-										value={customAspectWidth}
-										onChange={(event) =>
-											setCustomAspectWidth(
-												event.target.value.replace(/\D/g, ""),
-											)
-										}
-										onKeyDown={handleCustomAspectRatioKeyDown}
-										className="w-12 h-7 rounded border border-white/15 bg-black/20 px-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
-										aria-label="Custom aspect width"
-									/>
-									<span className="text-slate-500">:</span>
-									<input
-										type="text"
-										inputMode="numeric"
-										value={customAspectHeight}
-										onChange={(event) =>
-											setCustomAspectHeight(
-												event.target.value.replace(/\D/g, ""),
-											)
-										}
-										onKeyDown={handleCustomAspectRatioKeyDown}
-										className="w-12 h-7 rounded border border-white/15 bg-black/20 px-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
-										aria-label="Custom aspect height"
-									/>
+								<ZoomIn className="w-4 h-4" />
+							</Button>
+							<Button
+								onClick={handleSuggestZooms}
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7 text-slate-400 hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all"
+								title="Suggest Zooms from Cursor"
+							>
+								<WandSparkles className="w-4 h-4" />
+							</Button>
+							<Button
+								onClick={() => handleAddAnnotation()}
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7 text-slate-400 hover:text-[#B4A046] hover:bg-[#B4A046]/10 transition-all"
+								title="Add Annotation (A)"
+							>
+								<MessageSquare className="w-4 h-4" />
+							</Button>
+							<Button
+								onClick={handleAddAudio}
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7 text-slate-400 hover:text-[#a855f7] hover:bg-[#a855f7]/10 transition-all"
+								title="Add Audio"
+							>
+								<Music className="w-4 h-4" />
+							</Button>
+							<Button
+								onClick={handleSplitClip}
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7 text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+								title="Split Clip (C)"
+							>
+								<Scissors className="w-4 h-4" />
+							</Button>
+						</div>
+						<div className="flex items-center gap-2">
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
 									<Button
 										variant="ghost"
 										size="sm"
-										onClick={applyCustomAspectRatio}
-										className="h-7 px-2 text-xs text-slate-300 hover:text-white hover:bg-white/10"
+										className="h-7 px-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-white/10 transition-all gap-1"
 									>
-										Set
+										<span className="font-medium">
+											{getAspectRatioLabel(aspectRatio)}
+										</span>
+										<ChevronDown className="w-3 h-3" />
 									</Button>
-									{isCustomAspectRatio(aspectRatio) && (
-										<Check className="w-3 h-3 text-[#2563EB] ml-auto" />
-									)}
-								</div>
-							</DropdownMenuContent>
-						</DropdownMenu>
-						<div className="w-[1px] h-4 bg-white/10" />
-						<Button
-							variant="ghost"
-							size="sm"
-							onClick={() => onOpenCropEditor?.()}
-							className="h-7 px-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-white/10 transition-all gap-1.5"
-						>
-							<Crop className="w-3.5 h-3.5" />
-							<span className="font-medium">{t("sections.crop", "Crop")}</span>
-							{isCropped ? (
-								<span className="h-1.5 w-1.5 rounded-full bg-[#2563EB]" />
-							) : null}
-						</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent
+									align="end"
+									className="bg-[#1a1a1c] border-white/10"
+								>
+									{ASPECT_RATIOS.map((ratio) => (
+										<DropdownMenuItem
+											key={ratio}
+											onClick={() => onAspectRatioChange?.(ratio)}
+											className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer flex items-center justify-between gap-3"
+										>
+											<span>{getAspectRatioLabel(ratio)}</span>
+											{aspectRatio === ratio && (
+												<Check className="w-3 h-3 text-[#2563EB]" />
+											)}
+										</DropdownMenuItem>
+									))}
+									<div className="mx-1 my-1 h-px bg-white/10" />
+									<div className="px-2 py-1.5 flex items-center gap-2 text-slate-300">
+										<span className="text-sm">Custom</span>
+										<input
+											type="text"
+											inputMode="numeric"
+											value={customAspectWidth}
+											onChange={(event) =>
+												setCustomAspectWidth(
+													event.target.value.replace(/\D/g, ""),
+												)
+											}
+											onKeyDown={handleCustomAspectRatioKeyDown}
+											className="w-12 h-7 rounded border border-white/15 bg-black/20 px-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
+											aria-label="Custom aspect width"
+										/>
+										<span className="text-slate-500">:</span>
+										<input
+											type="text"
+											inputMode="numeric"
+											value={customAspectHeight}
+											onChange={(event) =>
+												setCustomAspectHeight(
+													event.target.value.replace(/\D/g, ""),
+												)
+											}
+											onKeyDown={handleCustomAspectRatioKeyDown}
+											className="w-12 h-7 rounded border border-white/15 bg-black/20 px-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
+											aria-label="Custom aspect height"
+										/>
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={applyCustomAspectRatio}
+											className="h-7 px-2 text-xs text-slate-300 hover:text-white hover:bg-white/10"
+										>
+											Set
+										</Button>
+										{isCustomAspectRatio(aspectRatio) && (
+											<Check className="w-3 h-3 text-[#2563EB] ml-auto" />
+										)}
+									</div>
+								</DropdownMenuContent>
+							</DropdownMenu>
+							<div className="w-[1px] h-4 bg-white/10" />
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={() => onOpenCropEditor?.()}
+								className="h-7 px-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-white/10 transition-all gap-1.5"
+							>
+								<Crop className="w-3.5 h-3.5" />
+								<span className="font-medium">{t("sections.crop", "Crop")}</span>
+								{isCropped ? (
+									<span className="h-1.5 w-1.5 rounded-full bg-[#2563EB]" />
+								) : null}
+							</Button>
+						</div>
+						<div className="flex-1" />
+						<div className="flex items-center gap-4 text-[10px] text-slate-500 font-medium">
+							<span className="flex items-center gap-1.5">
+								<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-sans">
+									Side Scroll
+								</kbd>
+								<span>Pan</span>
+							</span>
+							<span className="flex items-center gap-1.5">
+								<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-sans">
+									{scrollLabels.pan}
+								</kbd>
+								<span>Pan</span>
+							</span>
+							<span className="flex items-center gap-1.5">
+								<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-sans">
+									{scrollLabels.zoom}
+								</kbd>
+								<span>Zoom</span>
+							</span>
+						</div>
 					</div>
-					<div className="flex-1" />
-					<div className="flex items-center gap-4 text-[10px] text-slate-500 font-medium">
-						<span className="flex items-center gap-1.5">
-							<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-sans">
-								Side Scroll
-							</kbd>
-							<span>Pan</span>
-						</span>
-						<span className="flex items-center gap-1.5">
-							<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-sans">
-								{scrollLabels.pan}
-							</kbd>
-							<span>Pan</span>
-						</span>
-						<span className="flex items-center gap-1.5">
-							<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-sans">
-								{scrollLabels.zoom}
-							</kbd>
-							<span>Zoom</span>
-						</span>
-					</div>
-				</div>
+				)}
 				<div
 					ref={timelineContainerRef}
 					className="flex-1 min-h-0 overflow-auto bg-[#17171a] relative"
