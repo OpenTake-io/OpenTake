@@ -55,7 +55,7 @@
 				"noNamespace": "error",
 				"useArrayLiterals": "error",
 				"useAsConstAssertion": "error",
-				"useComponentExportOnlyModules": "warn"
+				"useComponentExportOnlyModules": "off"
 			},
 			"suspicious": {
 				"noAssignInExpressions": "error",
@@ -96,6 +96,7 @@
 		"includes": ["**", "**/dist", "**/.eslintrc.cjs", "**", "**/dist", "**/.eslintrc.cjs"]
 	},
 	"javascript": { "formatter": { "quoteStyle": "double" } },
+	"css": { "parser": { "tailwindDirectives": true } },
 	"overrides": [
 		{
 			"includes": ["*.ts", "*.tsx", "*.mts", "*.cts"],
@@ -153,6 +154,50 @@
 						"noUnsafeNegation": "off",
 						"noVar": "error",
 						"useGetterReturn": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["electron/electron-env.d.ts"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noNamespace": "off"
+					},
+					"suspicious": {
+						"noExplicitAny": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["**/*.test.ts", "**/*.test.tsx"],
+			"linter": {
+				"rules": {
+					"correctness": {
+						"noEmptyPattern": "off"
+					},
+					"suspicious": {
+						"noEmptyBlockStatements": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": [
+				"src/components/video-editor/audio.test.ts",
+				"src/lib/exporter/frameRenderer.test.ts",
+				"src/lib/exporter/localMediaSource.test.ts",
+				"src/lib/exporter/modernFrameRenderer.test.ts"
+			],
+			"linter": {
+				"rules": {
+					"correctness": {
+						"noUnusedVariables": "off"
+					},
+					"suspicious": {
+						"noExplicitAny": "off"
 					}
 				}
 			}

@@ -4,10 +4,7 @@ const DEFAULT_ENCODING_MODE: ExportEncodingMode = "balanced";
 type WebCodecsLatencyMode = "quality" | "realtime";
 const BASELINE_PIXELS_PER_SECOND = 1280 * 720 * 60;
 
-const LATENCY_MODE_PREFERENCES: Record<
-	ExportEncodingMode,
-	readonly WebCodecsLatencyMode[]
-> = {
+const LATENCY_MODE_PREFERENCES: Record<ExportEncodingMode, readonly WebCodecsLatencyMode[]> = {
 	fast: ["realtime", "quality"],
 	balanced: ["realtime", "quality"],
 	quality: ["quality", "realtime"],
@@ -62,7 +59,10 @@ function getEffectiveHardwareConcurrency(hardwareConcurrency?: number): number {
 }
 
 function getRelativePixelRate(width: number, height: number, frameRate: number): number {
-	return (Math.max(1, width) * Math.max(1, height) * Math.max(1, frameRate)) / BASELINE_PIXELS_PER_SECOND;
+	return (
+		(Math.max(1, width) * Math.max(1, height) * Math.max(1, frameRate)) /
+		BASELINE_PIXELS_PER_SECOND
+	);
 }
 
 export interface ExportBackpressureProfile {
@@ -123,10 +123,7 @@ export function getExportBackpressureProfile(
 	const isHighCoreSystem = hardwareConcurrency >= 8;
 	const isHeavyWorkload = relativePixelRate >= 1.5;
 	const isExtremeWorkload = relativePixelRate >= 3;
-	const maxEncodeQueue = getWebCodecsEncodeQueueLimit(
-		options.frameRate,
-		options.encodingMode,
-	);
+	const maxEncodeQueue = getWebCodecsEncodeQueueLimit(options.frameRate, options.encodingMode);
 
 	if (options.encodeBackend === "ffmpeg") {
 		if (isLowCoreSystem || isExtremeWorkload) {

@@ -1,21 +1,20 @@
-import type { Span } from "dnd-timeline";
 import {
 	Camera,
-	Captions,
-	Download,
+	Subtitles as Captions,
+	DownloadSimple as Download,
 	FolderOpen,
-	MousePointer2,
-	Puzzle,
-	Redo2,
-	Save,
-	Sparkles,
-	Undo2,
+	CursorClick as MousePointer2,
+	PuzzlePiece as Puzzle,
+	ArrowClockwise as Redo2,
+	FloppyDisk as Save,
+	Sparkle as Sparkles,
+	ArrowCounterClockwise as Undo2,
 	X,
-} from "lucide-react";
+} from "@phosphor-icons/react";
+import type { Span } from "dnd-timeline";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ExtensionIcon } from "./ExtensionIcon";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -49,6 +48,7 @@ import {
 	VideoExporter,
 } from "@/lib/exporter";
 import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
+import { extensionHost } from "@/lib/extensions";
 import {
 	clampMediaTimeToDuration,
 	estimateCompanionAudioStartDelaySeconds,
@@ -59,6 +59,8 @@ import { type AspectRatio, getAspectRatioValue } from "@/utils/aspectRatioUtils"
 import { resolveAutoCaptionSourcePath } from "./autoCaptionSource";
 import { CropControl } from "./CropControl";
 import { ExportSettingsMenu } from "./ExportSettingsMenu";
+import { ExtensionIcon } from "./ExtensionIcon";
+import ExtensionManager from "./ExtensionManager";
 import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
 import PlaybackControls from "./PlaybackControls";
 import ProjectBrowserDialog, { type ProjectLibraryEntry } from "./ProjectBrowserDialog";
@@ -72,8 +74,6 @@ import {
 	validateProjectData,
 } from "./projectPersistence";
 import { type EditorEffectSection, SettingsPanel } from "./SettingsPanel";
-import ExtensionManager from "./ExtensionManager";
-import { extensionHost } from "@/lib/extensions";
 import {
 	APP_HEADER_ICON_BUTTON_CLASS,
 	DiscordLinkButton,
@@ -89,14 +89,17 @@ import {
 	type AudioRegion,
 	type AutoCaptionSettings,
 	type CaptionCue,
+	type ClipRegion,
 	type CropRegion,
 	type CursorStyle,
 	type CursorTelemetryPoint,
 	clampFocusToDepth,
+	clipsToTrims,
 	DEFAULT_ANNOTATION_POSITION,
 	DEFAULT_ANNOTATION_SIZE,
 	DEFAULT_ANNOTATION_STYLE,
 	DEFAULT_AUTO_CAPTION_SETTINGS,
+	DEFAULT_AUTO_ZOOM_DEPTH,
 	DEFAULT_CONNECTED_ZOOM_DURATION_MS,
 	DEFAULT_CONNECTED_ZOOM_EASING,
 	DEFAULT_CONNECTED_ZOOM_GAP_MS,
@@ -106,8 +109,6 @@ import {
 	DEFAULT_PLAYBACK_SPEED,
 	DEFAULT_WEBCAM_OVERLAY,
 	DEFAULT_ZOOM_DEPTH,
-	DEFAULT_AUTO_ZOOM_DEPTH,
-	type ZoomMode,
 	DEFAULT_ZOOM_IN_DURATION_MS,
 	DEFAULT_ZOOM_IN_EASING,
 	DEFAULT_ZOOM_IN_OVERLAP_MS,
@@ -117,11 +118,10 @@ import {
 	type PlaybackSpeed,
 	type SpeedRegion,
 	type TrimRegion,
-	type ClipRegion,
-	clipsToTrims,
 	type WebcamOverlaySettings,
 	type ZoomDepth,
 	type ZoomFocus,
+	type ZoomMode,
 	type ZoomRegion,
 	type ZoomTransitionEasing,
 } from "./types";
@@ -186,7 +186,10 @@ async function writeSmokeExportReport(
 			reportBytes.byteOffset,
 			reportBytes.byteOffset + reportBytes.byteLength,
 		) as ArrayBuffer;
-		await window.electronAPI.writeExportedVideoToPath(reportBuffer, `${outputPath}.report.json`);
+		await window.electronAPI.writeExportedVideoToPath(
+			reportBuffer,
+			`${outputPath}.report.json`,
+		);
 	} catch (error) {
 		console.error("[smoke-export] Failed to write report", error);
 	}
@@ -254,16 +257,16 @@ function getSmokeExportConfig(search: string): SmokeExportConfig {
 					: enabled && params.get("smokeEncodingMode") === "quality"
 						? "quality"
 						: undefined,
-			shadowIntensity: enabled
-				? parseSmokeExportNonNegativeNumber(params.get("smokeShadowIntensity"))
-				: undefined,
-				webcamInputPath: enabled ? params.get("smokeWebcamInput") : null,
-				webcamShadow: enabled
-					? parseSmokeExportNonNegativeNumber(params.get("smokeWebcamShadow"))
-					: undefined,
-				webcamSize: enabled
-					? parseSmokeExportNonNegativeNumber(params.get("smokeWebcamSize"))
-					: undefined,
+		shadowIntensity: enabled
+			? parseSmokeExportNonNegativeNumber(params.get("smokeShadowIntensity"))
+			: undefined,
+		webcamInputPath: enabled ? params.get("smokeWebcamInput") : null,
+		webcamShadow: enabled
+			? parseSmokeExportNonNegativeNumber(params.get("smokeWebcamShadow"))
+			: undefined,
+		webcamSize: enabled
+			? parseSmokeExportNonNegativeNumber(params.get("smokeWebcamSize"))
+			: undefined,
 		pipelineModel:
 			enabled && params.get("smokePipelineModel") === "modern"
 				? "modern"
@@ -278,9 +281,15 @@ function getSmokeExportConfig(search: string): SmokeExportConfig {
 					: enabled && params.get("smokeBackendPreference") === "breeze"
 						? "breeze"
 						: undefined,
-		maxEncodeQueue: enabled ? parseSmokeExportNumber(params.get("smokeMaxEncodeQueue")) : undefined,
-		maxDecodeQueue: enabled ? parseSmokeExportNumber(params.get("smokeMaxDecodeQueue")) : undefined,
-		maxPendingFrames: enabled ? parseSmokeExportNumber(params.get("smokeMaxPendingFrames")) : undefined,
+		maxEncodeQueue: enabled
+			? parseSmokeExportNumber(params.get("smokeMaxEncodeQueue"))
+			: undefined,
+		maxDecodeQueue: enabled
+			? parseSmokeExportNumber(params.get("smokeMaxDecodeQueue"))
+			: undefined,
+		maxPendingFrames: enabled
+			? parseSmokeExportNumber(params.get("smokeMaxPendingFrames"))
+			: undefined,
 	};
 }
 
@@ -465,7 +474,9 @@ export default function VideoEditor() {
 	const [currentTime, setCurrentTime] = useState(0);
 	const [duration, setDuration] = useState(0);
 	const [wallpaper, setWallpaper] = useState<string>(initialEditorPreferences.wallpaper);
-	const [shadowIntensity, setShadowIntensity] = useState(initialEditorPreferences.shadowIntensity);
+	const [shadowIntensity, setShadowIntensity] = useState(
+		initialEditorPreferences.shadowIntensity,
+	);
 	const [backgroundBlur, setBackgroundBlur] = useState(initialEditorPreferences.backgroundBlur);
 	const [zoomMotionBlur, setZoomMotionBlur] = useState(initialEditorPreferences.zoomMotionBlur);
 	const [connectZooms, setConnectZooms] = useState(initialEditorPreferences.connectZooms);
@@ -499,7 +510,9 @@ export default function VideoEditor() {
 		initialEditorPreferences.cursorStyle ?? DEFAULT_CURSOR_STYLE,
 	);
 	const [cursorSize, setCursorSize] = useState(initialEditorPreferences.cursorSize);
-	const [cursorSmoothing, setCursorSmoothing] = useState(initialEditorPreferences.cursorSmoothing);
+	const [cursorSmoothing, setCursorSmoothing] = useState(
+		initialEditorPreferences.cursorSmoothing,
+	);
 	const [zoomSmoothness, setZoomSmoothness] = useState(0.5);
 	const [zoomClassicMode, setZoomClassicMode] = useState(false);
 	const [cursorMotionBlur, setCursorMotionBlur] = useState(
@@ -542,7 +555,9 @@ export default function VideoEditor() {
 	const [whisperModelPath, setWhisperModelPath] = useState<string | null>(
 		initialEditorPreferences.whisperModelPath,
 	);
-	const [downloadedWhisperModelPath, setDownloadedWhisperModelPath] = useState<string | null>(null);
+	const [downloadedWhisperModelPath, setDownloadedWhisperModelPath] = useState<string | null>(
+		null,
+	);
 	const [whisperModelDownloadStatus, setWhisperModelDownloadStatus] = useState<
 		"idle" | "downloading" | "downloaded" | "error"
 	>(initialEditorPreferences.whisperModelPath ? "downloaded" : "idle");
@@ -554,7 +569,9 @@ export default function VideoEditor() {
 	const [showExportDropdown, setShowExportDropdown] = useState(false);
 	const [previewVolume, setPreviewVolume] = useState(1);
 	const [sourceAudioFallbackPaths, setSourceAudioFallbackPaths] = useState<string[]>([]);
-	const [aspectRatio, setAspectRatio] = useState<AspectRatio>(initialEditorPreferences.aspectRatio);
+	const [aspectRatio, setAspectRatio] = useState<AspectRatio>(
+		initialEditorPreferences.aspectRatio,
+	);
 	const [activeEffectSection, setActiveEffectSection] = useState<EditorEffectSection>("scene");
 	const [exportQuality, setExportQuality] = useState<ExportQuality>(
 		initialEditorPreferences.exportQuality,
@@ -562,8 +579,9 @@ export default function VideoEditor() {
 	const [exportEncodingMode, setExportEncodingMode] = useState<ExportEncodingMode>(
 		initialEditorPreferences.exportEncodingMode,
 	);
-	const [exportBackendPreference, setExportBackendPreference] =
-		useState<ExportBackendPreference>(initialEditorPreferences.exportBackendPreference);
+	const [exportBackendPreference, setExportBackendPreference] = useState<ExportBackendPreference>(
+		initialEditorPreferences.exportBackendPreference,
+	);
 	const [exportPipelineModel, setExportPipelineModel] = useState<ExportPipelineModel>(
 		initialEditorPreferences.exportPipelineModel,
 	);
@@ -624,6 +642,10 @@ export default function VideoEditor() {
 	}, []);
 
 	useEffect(() => {
+		if (videoPath === autoSuggestedVideoPathRef.current) {
+			return;
+		}
+
 		autoSuggestedVideoPathRef.current = null;
 		pendingFreshRecordingAutoSuggestTelemetryCountRef.current = 0;
 		if (pendingFreshRecordingAutoSuggestTimeoutRef.current !== null) {
@@ -666,6 +688,29 @@ export default function VideoEditor() {
 			console.warn("Unable to refresh project library:", projectLibraryError);
 		}
 	}, []);
+
+	const effectiveSpeedRegions = useMemo<SpeedRegion[]>(() => {
+		const clipDerived: SpeedRegion[] = clipRegions
+			.filter((clip) => clip.speed !== 1)
+			.map((clip) => ({
+				id: `clip-speed-${clip.id}`,
+				startMs: clip.startMs,
+				endMs: clip.endMs,
+				speed: clip.speed as SpeedRegion["speed"],
+			}));
+		if (clipDerived.length === 0) return speedRegions;
+		// Timeline speed regions take precedence; only fill in clip speed where no overlap exists
+		const result = [...speedRegions];
+		for (const cs of clipDerived) {
+			const overlaps = speedRegions.some(
+				(sr) => sr.endMs > cs.startMs && sr.startMs < cs.endMs,
+			);
+			if (!overlaps) {
+				result.push(cs);
+			}
+		}
+		return result;
+	}, [clipRegions, speedRegions]);
 
 	const captureProjectThumbnail = useCallback(async () => {
 		const previewHandle = videoPlaybackRef.current;
@@ -756,7 +801,10 @@ export default function VideoEditor() {
 				await frameRenderer.renderFrame(videoFrame, frameTimestampUs);
 				return frameRenderer.getCanvas().toDataURL("image/png");
 			} catch (thumbnailRenderError) {
-				console.warn("Unable to render thumbnail from composed frame:", thumbnailRenderError);
+				console.warn(
+					"Unable to render thumbnail from composed frame:",
+					thumbnailRenderError,
+				);
 			} finally {
 				videoFrame?.close();
 				frameRenderer?.destroy();
@@ -775,7 +823,9 @@ export default function VideoEditor() {
 		}
 
 		const sourceWidth =
-			drawableSource instanceof HTMLVideoElement ? drawableSource.videoWidth : drawableSource.width;
+			drawableSource instanceof HTMLVideoElement
+				? drawableSource.videoWidth
+				: drawableSource.width;
 		const sourceHeight =
 			drawableSource instanceof HTMLVideoElement
 				? drawableSource.videoHeight
@@ -816,14 +866,14 @@ export default function VideoEditor() {
 		cursorSize,
 		cursorSmoothing,
 		zoomSmoothness,
+		zoomClassicMode,
 		cursorStyle,
 		cursorSway,
 		cursorTelemetry,
 		padding,
 		shadowIntensity,
 		showCursor,
-		speedRegions,
-		clipRegions,
+		effectiveSpeedRegions,
 		wallpaper,
 		webcam,
 		zoomInDurationMs,
@@ -926,37 +976,41 @@ export default function VideoEditor() {
 		supportedMp4SourceDimensions.width,
 	]);
 
-	const ensureSupportedMp4SourceDimensions = useCallback(async (frameRate: ExportMp4FrameRate) => {
-		const result = await probeSupportedMp4Dimensions({
-			width: desiredMp4SourceDimensions.width,
-			height: desiredMp4SourceDimensions.height,
-			frameRate,
-			codec: DEFAULT_MP4_CODEC,
-			getBitrate: getSourceQualityBitrate,
-		});
+	const ensureSupportedMp4SourceDimensions = useCallback(
+		async (frameRate: ExportMp4FrameRate) => {
+			const result = await probeSupportedMp4Dimensions({
+				width: desiredMp4SourceDimensions.width,
+				height: desiredMp4SourceDimensions.height,
+				frameRate,
+				codec: DEFAULT_MP4_CODEC,
+				getBitrate: getSourceQualityBitrate,
+			});
 
-		if (!result.encoderPath) {
-			throw new Error(
-				`Video encoding not supported on this system. Tried codec ${DEFAULT_MP4_CODEC} at ${frameRate} FPS up to ${desiredMp4SourceDimensions.width}x${desiredMp4SourceDimensions.height}.`,
-			);
-		}
-
-		setSupportedMp4SourceDimensions((current) => {
-			if (
-				current.width === result.width &&
-				current.height === result.height &&
-				current.capped === result.capped &&
-				current.encoderPath?.codec === result.encoderPath?.codec &&
-				current.encoderPath?.hardwareAcceleration === result.encoderPath?.hardwareAcceleration
-			) {
-				return current;
+			if (!result.encoderPath) {
+				throw new Error(
+					`Video encoding not supported on this system. Tried codec ${DEFAULT_MP4_CODEC} at ${frameRate} FPS up to ${desiredMp4SourceDimensions.width}x${desiredMp4SourceDimensions.height}.`,
+				);
 			}
 
-			return result;
-		});
+			setSupportedMp4SourceDimensions((current) => {
+				if (
+					current.width === result.width &&
+					current.height === result.height &&
+					current.capped === result.capped &&
+					current.encoderPath?.codec === result.encoderPath?.codec &&
+					current.encoderPath?.hardwareAcceleration ===
+						result.encoderPath?.hardwareAcceleration
+				) {
+					return current;
+				}
 
-		return result;
-	}, [desiredMp4SourceDimensions.height, desiredMp4SourceDimensions.width]);
+				return result;
+			});
+
+			return result;
+		},
+		[desiredMp4SourceDimensions.height, desiredMp4SourceDimensions.width],
+	);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -1006,8 +1060,8 @@ export default function VideoEditor() {
 		const update = () => {
 			const panels = extensionHost.getSettingsPanels();
 			const standalone = panels
-				.filter(p => !p.panel.parentSection)
-				.map(p => ({
+				.filter((p) => !p.panel.parentSection)
+				.map((p) => ({
 					id: `ext:${p.extensionId}/${p.panel.id}` as EditorEffectSection,
 					label: p.panel.label,
 					icon: p.panel.icon || (Puzzle as typeof Puzzle | string),
@@ -1128,7 +1182,8 @@ export default function VideoEditor() {
 
 		void (async () => {
 			try {
-				const result = await window.electronAPI.getVideoAudioFallbackPaths(currentSourcePath);
+				const result =
+					await window.electronAPI.getVideoAudioFallbackPaths(currentSourcePath);
 				if (cancelled) {
 					return;
 				}
@@ -1147,7 +1202,9 @@ export default function VideoEditor() {
 
 	const projectDisplayName = useMemo(() => {
 		const fileName =
-			currentProjectPath?.split(/[\\/]/).pop() ?? currentSourcePath?.split(/[\\/]/).pop() ?? "";
+			currentProjectPath?.split(/[\\/]/).pop() ??
+			currentSourcePath?.split(/[\\/]/).pop() ??
+			"";
 		const withoutExtension = fileName.replace(/\.recordly$/i, "").replace(/\.[^.]+$/, "");
 		return withoutExtension || t("editor.project.untitled", "Untitled");
 	}, [currentProjectPath, currentSourcePath, t]);
@@ -1230,6 +1287,7 @@ export default function VideoEditor() {
 			cursorSway,
 			borderRadius,
 			padding,
+			frame,
 			webcam,
 			zoomRegions,
 			trimRegions,
@@ -1320,7 +1378,8 @@ export default function VideoEditor() {
 				cloned.audioRegions.map((region) => region.id),
 			);
 			nextAnnotationZIndexRef.current =
-				cloned.annotationRegions.reduce((max, region) => Math.max(max, region.zIndex), 0) + 1;
+				cloned.annotationRegions.reduce((max, region) => Math.max(max, region.zIndex), 0) +
+				1;
 		},
 		[cloneSnapshot],
 	);
@@ -1415,8 +1474,9 @@ export default function VideoEditor() {
 			setWebcam(normalizedEditor.webcam);
 			setZoomRegions(normalizedEditor.zoomRegions);
 			setTrimRegions(normalizedEditor.trimRegions);
-			setClipRegions((normalizedEditor as any).clipRegions ?? []);
-			clipInitializedRef.current = ((normalizedEditor as any).clipRegions ?? []).length > 0;
+			setClipRegions(normalizedEditor.clipRegions);
+			clipInitializedRef.current =
+				normalizedEditor.clipRegions.length > 0 || normalizedEditor.trimRegions.length > 0;
 			setSpeedRegions(normalizedEditor.speedRegions);
 			setAnnotationRegions(normalizedEditor.annotationRegions);
 			setAudioRegions(normalizedEditor.audioRegions);
@@ -1450,7 +1510,7 @@ export default function VideoEditor() {
 			);
 			nextClipIdRef.current = deriveNextId(
 				"clip",
-				((normalizedEditor as any).clipRegions ?? []).map((region: ClipRegion) => region.id),
+				normalizedEditor.clipRegions.map((region) => region.id),
 			);
 			nextSpeedIdRef.current = deriveNextId(
 				"speed",
@@ -1477,7 +1537,9 @@ export default function VideoEditor() {
 			syncHistoryButtons();
 
 			setLastSavedSnapshot(
-				cloneStructured(createProjectData(sourcePath, buildPersistedEditorState(normalizedEditor))),
+				cloneStructured(
+					createProjectData(sourcePath, buildPersistedEditorState(normalizedEditor)),
+				),
 			);
 			await refreshProjectLibrary();
 			return true;
@@ -1638,10 +1700,14 @@ export default function VideoEditor() {
 						setBorderRadius(initialEditorPreferences.borderRadius);
 						setAspectRatio(initialEditorPreferences.aspectRatio);
 						setExportFormat(initialEditorPreferences.exportFormat);
-						setMp4FrameRate(initialEditorPreferences.mp4FrameRate ?? DEFAULT_MP4_EXPORT_FRAME_RATE);
+						setMp4FrameRate(
+							initialEditorPreferences.mp4FrameRate ?? DEFAULT_MP4_EXPORT_FRAME_RATE,
+						);
 						setExportQuality(initialEditorPreferences.exportQuality);
 						setExportEncodingMode(initialEditorPreferences.exportEncodingMode);
-						setExportBackendPreference(initialEditorPreferences.exportBackendPreference);
+						setExportBackendPreference(
+							initialEditorPreferences.exportBackendPreference,
+						);
 						setExportPipelineModel(initialEditorPreferences.exportPipelineModel);
 						setGifFrameRate(initialEditorPreferences.gifFrameRate);
 						setGifLoop(initialEditorPreferences.gifLoop);
@@ -1692,8 +1758,7 @@ export default function VideoEditor() {
 		}
 
 		loadInitialData();
-
-	}, [applyLoadedProject, smokeExportConfig.enabled, smokeExportConfig.inputPath]);
+	}, [applyLoadedProject, initialEditorPreferences, smokeExportConfig]);
 
 	useEffect(() => {
 		saveEditorPreferences({
@@ -1755,8 +1820,6 @@ export default function VideoEditor() {
 		cursorStyle,
 		cursorSize,
 		cursorSmoothing,
-		zoomSmoothness,
-		zoomClassicMode,
 		cursorMotionBlur,
 		cursorClickBounce,
 		cursorClickBounceDuration,
@@ -1894,7 +1957,9 @@ export default function VideoEditor() {
 					sessionResult?.success && sessionResult.session?.videoPath
 						? sessionResult.session.videoPath
 						: null,
-				currentVideoPath: currentVideoResult.success ? (currentVideoResult.path ?? null) : null,
+				currentVideoPath: currentVideoResult.success
+					? (currentVideoResult.path ?? null)
+					: null,
 			});
 		}
 
@@ -1926,7 +1991,9 @@ export default function VideoEditor() {
 
 			if (!result.success || !result.cues) {
 				toast.error(
-					result.message || getErrorMessage(result.error) || "Failed to generate captions",
+					result.message ||
+						getErrorMessage(result.error) ||
+						"Failed to generate captions",
 				);
 				return;
 			}
@@ -2225,30 +2292,6 @@ export default function VideoEditor() {
 
 	const effectiveZoomRegions = zoomRegions;
 
-	// Merge clip speeds into speed regions so playback + export respect per-clip speed
-	const effectiveSpeedRegions = useMemo<SpeedRegion[]>(() => {
-		const clipDerived: SpeedRegion[] = clipRegions
-			.filter((clip) => clip.speed !== 1)
-			.map((clip) => ({
-				id: `clip-speed-${clip.id}`,
-				startMs: clip.startMs,
-				endMs: clip.endMs,
-				speed: clip.speed as SpeedRegion["speed"],
-			}));
-		if (clipDerived.length === 0) return speedRegions;
-		// Timeline speed regions take precedence; only fill in clip speed where no overlap exists
-		const result = [...speedRegions];
-		for (const cs of clipDerived) {
-			const overlaps = speedRegions.some(
-				(sr) => sr.endMs > cs.startMs && sr.startMs < cs.endMs,
-			);
-			if (!overlaps) {
-				result.push(cs);
-			}
-		}
-		return result;
-	}, [clipRegions, speedRegions]);
-
 	function togglePlayPause() {
 		const playback = videoPlaybackRef.current;
 		const video = playback?.video;
@@ -2297,47 +2340,59 @@ export default function VideoEditor() {
 		}
 	}, []);
 
-	const handleZoomAdded = useCallback((span: Span) => {
-		const id = `zoom-${nextZoomIdRef.current++}`;
-		const newRegion: ZoomRegion = {
-			id,
-			startMs: Math.round(span.start),
-			endMs: Math.round(span.end),
-			depth: DEFAULT_ZOOM_DEPTH,
-			focus: { cx: 0.5, cy: 0.5 },
-			mode: "manual",
-		};
-		if (videoPath && pendingFreshRecordingAutoZoomPathRef.current === videoPath) {
-			autoSuggestedVideoPathRef.current = videoPath;
-			pendingFreshRecordingAutoZoomPathRef.current = null;
-		}
-		setZoomRegions((prev) => [...prev, newRegion]);
-		setSelectedZoomId(id);
-		setSelectedTrimId(null);
-		setSelectedAnnotationId(null);
-		extensionHost.emitEvent({ type: 'timeline:region-added', data: { id, startMs: newRegion.startMs, endMs: newRegion.endMs } });
-	}, [videoPath]);
+	const handleZoomAdded = useCallback(
+		(span: Span) => {
+			const id = `zoom-${nextZoomIdRef.current++}`;
+			const newRegion: ZoomRegion = {
+				id,
+				startMs: Math.round(span.start),
+				endMs: Math.round(span.end),
+				depth: DEFAULT_ZOOM_DEPTH,
+				focus: { cx: 0.5, cy: 0.5 },
+				mode: "manual",
+			};
+			if (videoPath && pendingFreshRecordingAutoZoomPathRef.current === videoPath) {
+				autoSuggestedVideoPathRef.current = videoPath;
+				pendingFreshRecordingAutoZoomPathRef.current = null;
+			}
+			setZoomRegions((prev) => [...prev, newRegion]);
+			setSelectedZoomId(id);
+			setSelectedTrimId(null);
+			setSelectedAnnotationId(null);
+			extensionHost.emitEvent({
+				type: "timeline:region-added",
+				data: { id, startMs: newRegion.startMs, endMs: newRegion.endMs },
+			});
+		},
+		[videoPath],
+	);
 
-	const handleZoomSuggested = useCallback((span: Span, focus: ZoomFocus) => {
-		const id = `zoom-${nextZoomIdRef.current++}`;
-		const newRegion: ZoomRegion = {
-			id,
-			startMs: Math.round(span.start),
-			endMs: Math.round(span.end),
-			depth: DEFAULT_AUTO_ZOOM_DEPTH,
-			focus: clampFocusToDepth(focus, DEFAULT_AUTO_ZOOM_DEPTH),
-			mode: "auto",
-		};
-		if (videoPath && pendingFreshRecordingAutoZoomPathRef.current === videoPath) {
-			autoSuggestedVideoPathRef.current = videoPath;
-			pendingFreshRecordingAutoZoomPathRef.current = null;
-		}
-		setZoomRegions((prev) => [...prev, newRegion]);
-		setSelectedZoomId(id);
-		setSelectedTrimId(null);
-		setSelectedAnnotationId(null);
-		extensionHost.emitEvent({ type: 'timeline:region-added', data: { id, startMs: newRegion.startMs, endMs: newRegion.endMs } });
-	}, [videoPath]);
+	const handleZoomSuggested = useCallback(
+		(span: Span, focus: ZoomFocus) => {
+			const id = `zoom-${nextZoomIdRef.current++}`;
+			const newRegion: ZoomRegion = {
+				id,
+				startMs: Math.round(span.start),
+				endMs: Math.round(span.end),
+				depth: DEFAULT_AUTO_ZOOM_DEPTH,
+				focus: clampFocusToDepth(focus, DEFAULT_AUTO_ZOOM_DEPTH),
+				mode: "auto",
+			};
+			if (videoPath && pendingFreshRecordingAutoZoomPathRef.current === videoPath) {
+				autoSuggestedVideoPathRef.current = videoPath;
+				pendingFreshRecordingAutoZoomPathRef.current = null;
+			}
+			setZoomRegions((prev) => [...prev, newRegion]);
+			setSelectedZoomId(id);
+			setSelectedTrimId(null);
+			setSelectedAnnotationId(null);
+			extensionHost.emitEvent({
+				type: "timeline:region-added",
+				data: { id, startMs: newRegion.startMs, endMs: newRegion.endMs },
+			});
+		},
+		[videoPath],
+	);
 
 	useEffect(() => {
 		if (
@@ -2474,11 +2529,7 @@ export default function VideoEditor() {
 		(mode: ZoomMode) => {
 			if (!selectedZoomId) return;
 			setZoomRegions((prev) =>
-				prev.map((region) =>
-					region.id === selectedZoomId
-						? { ...region, mode }
-						: region,
-				),
+				prev.map((region) => (region.id === selectedZoomId ? { ...region, mode } : region)),
 			);
 		},
 		[selectedZoomId],
@@ -2490,7 +2541,7 @@ export default function VideoEditor() {
 			if (selectedZoomId === id) {
 				setSelectedZoomId(null);
 			}
-			extensionHost.emitEvent({ type: 'timeline:region-removed', data: { id } });
+			extensionHost.emitEvent({ type: "timeline:region-removed", data: { id } });
 		},
 		[selectedZoomId],
 	);
@@ -2514,67 +2565,73 @@ export default function VideoEditor() {
 		}
 	}, []);
 
-	const handleClipSplit = useCallback(
-		(splitMs: number) => {
-			setClipRegions((prev) => {
-				const target = prev.find((c) => splitMs > c.startMs && splitMs < c.endMs);
-				if (!target) return prev;
-				const leftId = `clip-${nextClipIdRef.current++}`;
-				const rightId = `clip-${nextClipIdRef.current++}`;
-				const left: ClipRegion = { id: leftId, startMs: target.startMs, endMs: Math.round(splitMs), speed: target.speed };
-				const right: ClipRegion = { id: rightId, startMs: Math.round(splitMs), endMs: target.endMs, speed: target.speed };
-				return prev.flatMap((c) => (c.id === target.id ? [left, right] : [c]));
-			});
-		},
-		[],
-	);
+	const handleClipSplit = useCallback((splitMs: number) => {
+		setClipRegions((prev) => {
+			const target = prev.find((c) => splitMs > c.startMs && splitMs < c.endMs);
+			if (!target) return prev;
+			const leftId = `clip-${nextClipIdRef.current++}`;
+			const rightId = `clip-${nextClipIdRef.current++}`;
+			setSelectedClipId(leftId);
+			const left: ClipRegion = {
+				id: leftId,
+				startMs: target.startMs,
+				endMs: Math.round(splitMs),
+				speed: target.speed,
+			};
+			const right: ClipRegion = {
+				id: rightId,
+				startMs: Math.round(splitMs),
+				endMs: target.endMs,
+				speed: target.speed,
+			};
+			return prev.flatMap((c) => (c.id === target.id ? [left, right] : [c]));
+		});
+	}, []);
 
-	const handleClipSpanChange = useCallback((id: string, span: Span) => {
-		const oldClip = clipRegions.find((c) => c.id === id);
-		const newStart = Math.round(span.start);
-		const newEnd = Math.round(span.end);
+	const handleClipSpanChange = useCallback(
+		(id: string, span: Span) => {
+			const oldClip = clipRegions.find((c) => c.id === id);
+			const newStart = Math.round(span.start);
+			const newEnd = Math.round(span.end);
 
-		if (oldClip) {
-			const startDelta = newStart - oldClip.startMs;
-			const endDelta = newEnd - oldClip.endMs;
-			const isMove = Math.abs(startDelta - endDelta) < 1 && Math.abs(startDelta) > 0;
+			if (oldClip) {
+				const startDelta = newStart - oldClip.startMs;
+				const endDelta = newEnd - oldClip.endMs;
+				const isMove = Math.abs(startDelta - endDelta) < 1 && Math.abs(startDelta) > 0;
 
-			if (isMove) {
-				const delta = startDelta;
-				setZoomRegions((prev) =>
-					prev.map((zoom) => {
-						const overlaps = zoom.startMs < oldClip.endMs && zoom.endMs > oldClip.startMs;
-						if (overlaps) {
-							return {
-								...zoom,
-								startMs: zoom.startMs + delta,
-								endMs: zoom.endMs + delta,
-							};
-						}
-						return zoom;
-					}),
-				);
+				if (isMove) {
+					const delta = startDelta;
+					setZoomRegions((prev) =>
+						prev.map((zoom) => {
+							const overlaps =
+								zoom.startMs < oldClip.endMs && zoom.endMs > oldClip.startMs;
+							if (overlaps) {
+								return {
+									...zoom,
+									startMs: zoom.startMs + delta,
+									endMs: zoom.endMs + delta,
+								};
+							}
+							return zoom;
+						}),
+					);
+				}
 			}
-		}
 
-		setClipRegions((prev) =>
-			prev.map((clip) =>
-				clip.id === id
-					? { ...clip, startMs: newStart, endMs: newEnd }
-					: clip,
-			),
-		);
-	}, [clipRegions]);
+			setClipRegions((prev) =>
+				prev.map((clip) =>
+					clip.id === id ? { ...clip, startMs: newStart, endMs: newEnd } : clip,
+				),
+			);
+		},
+		[clipRegions],
+	);
 
 	const handleClipSpeedChange = useCallback(
 		(speed: number) => {
 			if (!selectedClipId) return;
 			setClipRegions((prev) =>
-				prev.map((clip) =>
-					clip.id === selectedClipId
-						? { ...clip, speed }
-						: clip,
-				),
+				prev.map((clip) => (clip.id === selectedClipId ? { ...clip, speed } : clip)),
 			);
 		},
 		[selectedClipId],
@@ -2694,7 +2751,9 @@ export default function VideoEditor() {
 		(speed: PlaybackSpeed) => {
 			if (!selectedSpeedId) return;
 			setSpeedRegions((prev) =>
-				prev.map((region) => (region.id === selectedSpeedId ? { ...region, speed } : region)),
+				prev.map((region) =>
+					region.id === selectedSpeedId ? { ...region, speed } : region,
+				),
 			);
 		},
 		[selectedSpeedId],
@@ -3192,7 +3251,9 @@ export default function VideoEditor() {
 						const result = await window.electronAPI.revealInFolder(filePath);
 						if (!result.success) {
 							const errorMessage =
-								result.error || result.message || "Failed to reveal item in folder.";
+								result.error ||
+								result.message ||
+								"Failed to reveal item in folder.";
 							toast.error(errorMessage);
 						}
 					} catch (err) {
@@ -3220,7 +3281,7 @@ export default function VideoEditor() {
 			setExportProgress(null);
 			setExportError(null);
 			clearPendingExportSave();
-			extensionHost.emitEvent({ type: 'export:start' });
+			extensionHost.emitEvent({ type: "export:start" });
 			const smokeExportStartedAt = smokeExportConfig.enabled ? performance.now() : null;
 
 			let keepExportDialogOpen = false;
@@ -3348,7 +3409,7 @@ export default function VideoEditor() {
 								? await window.electronAPI.writeExportedVideoToPath(
 										arrayBuffer,
 										smokeExportConfig.outputPath,
-								  )
+									)
 								: await window.electronAPI.saveExportedVideo(arrayBuffer, fileName);
 
 						if (saveResult.canceled) {
@@ -3391,28 +3452,30 @@ export default function VideoEditor() {
 					// MP4 Export
 					const quality = settings.quality ?? exportQuality;
 					const encodingMode = smokeExportConfig.enabled
-						? smokeExportConfig.encodingMode ?? settings.encodingMode ?? exportEncodingMode
-						: settings.encodingMode ?? exportEncodingMode;
+						? (smokeExportConfig.encodingMode ??
+							settings.encodingMode ??
+							exportEncodingMode)
+						: (settings.encodingMode ?? exportEncodingMode);
 					const selectedMp4FrameRate = settings.mp4FrameRate ?? mp4FrameRate;
 					const pipelineModel = smokeExportConfig.enabled
-						? smokeExportConfig.pipelineModel ??
-							(smokeExportConfig.useNativeExport ? "modern" : "legacy")
-						: settings.pipelineModel ?? exportPipelineModel;
+						? (smokeExportConfig.pipelineModel ??
+							(smokeExportConfig.useNativeExport ? "modern" : "legacy"))
+						: (settings.pipelineModel ?? exportPipelineModel);
 					const backendPreference =
 						pipelineModel === "legacy"
 							? "webcodecs"
 							: smokeExportConfig.enabled
-								? smokeExportConfig.backendPreference ??
-									(smokeExportConfig.useNativeExport ? "breeze" : "webcodecs")
-								: "auto";
-					const supportedSourceDimensions = await ensureSupportedMp4SourceDimensions(
-						selectedMp4FrameRate,
-					);
-					const { width: exportWidth, height: exportHeight } = calculateMp4ExportDimensions(
-						supportedSourceDimensions.width,
-						supportedSourceDimensions.height,
-						quality,
-					);
+								? (smokeExportConfig.backendPreference ??
+									(smokeExportConfig.useNativeExport ? "breeze" : "webcodecs"))
+								: (settings.backendPreference ?? exportBackendPreference);
+					const supportedSourceDimensions =
+						await ensureSupportedMp4SourceDimensions(selectedMp4FrameRate);
+					const { width: exportWidth, height: exportHeight } =
+						calculateMp4ExportDimensions(
+							supportedSourceDimensions.width,
+							supportedSourceDimensions.height,
+							quality,
+						);
 					let bitrate: number;
 
 					if (quality === "source") {
@@ -3504,9 +3567,9 @@ export default function VideoEditor() {
 					const exporter =
 						pipelineModel === "modern"
 							? new ModernVideoExporter({
-								...exporterConfig,
-								backendPreference,
-							})
+									...exporterConfig,
+									backendPreference,
+								})
 							: new VideoExporter(exporterConfig);
 
 					exporterRef.current = exporter;
@@ -3527,7 +3590,7 @@ export default function VideoEditor() {
 								? await window.electronAPI.writeExportedVideoToPath(
 										arrayBuffer,
 										smokeExportConfig.outputPath,
-								  )
+									)
 								: await window.electronAPI.saveExportedVideo(arrayBuffer, fileName);
 
 						if (saveResult.canceled) {
@@ -3654,7 +3717,7 @@ export default function VideoEditor() {
 					window.close();
 				}
 			} finally {
-				extensionHost.emitEvent({ type: 'export:complete' });
+				extensionHost.emitEvent({ type: "export:complete" });
 				setIsExporting(false);
 				exporterRef.current = null;
 				setShowExportDropdown(keepExportDialogOpen);
@@ -3666,8 +3729,7 @@ export default function VideoEditor() {
 			videoPath,
 			wallpaper,
 			trimRegions,
-			speedRegions,
-			clipRegions,
+			effectiveSpeedRegions,
 			shadowIntensity,
 			backgroundBlur,
 			zoomMotionBlur,
@@ -3694,8 +3756,8 @@ export default function VideoEditor() {
 			audioRegions,
 			sourceAudioFallbackPaths,
 			exportEncodingMode,
-			exportBackendPreference,
 			exportPipelineModel,
+			mp4FrameRate,
 			borderRadius,
 			padding,
 			cropRegion,
@@ -3703,6 +3765,7 @@ export default function VideoEditor() {
 			annotationRegions,
 			autoCaptions,
 			autoCaptionSettings,
+			frame,
 			isPlaying,
 			exportQuality,
 			effectiveZoomRegions,
@@ -3710,12 +3773,8 @@ export default function VideoEditor() {
 			markExportAsSaving,
 			remountPreview,
 			showExportSuccessToast,
-			smokeExportConfig.enabled,
-			smokeExportConfig.useNativeExport,
-			smokeExportConfig.maxDecodeQueue,
-			smokeExportConfig.maxEncodeQueue,
-			smokeExportConfig.maxPendingFrames,
-			smokeExportConfig.outputPath,
+			smokeExportConfig,
+			exportBackendPreference,
 		],
 	);
 
@@ -3932,19 +3991,24 @@ export default function VideoEditor() {
 
 	const isExportSaving = exportProgress?.phase === "saving";
 	const isExportFinalizing = exportProgress?.phase === "finalizing";
-	const isRenderingAudio = isExportFinalizing && typeof exportProgress?.audioProgress === "number";
+	const isRenderingAudio =
+		isExportFinalizing && typeof exportProgress?.audioProgress === "number";
 	const exportFinalizingProgress = isExportFinalizing
 		? Math.min(
 				typeof exportProgress?.renderProgress === "number"
 					? exportProgress.renderProgress
 					: (exportProgress?.percentage ?? 99),
 				99,
-		  )
+			)
 		: null;
 	const isLightningExportInProgress =
-		exportFormat === "mp4" && exportPipelineModel === "modern" && (isExporting || exportProgress !== null);
+		exportFormat === "mp4" &&
+		exportPipelineModel === "modern" &&
+		(isExporting || exportProgress !== null);
 	const isLegacyExportInProgress =
-		exportFormat === "mp4" && exportPipelineModel === "legacy" && (isExporting || exportProgress !== null);
+		exportFormat === "mp4" &&
+		exportPipelineModel === "legacy" &&
+		(isExporting || exportProgress !== null);
 	const exportRenderSpeedLabel =
 		typeof exportProgress?.renderFps === "number" &&
 		Number.isFinite(exportProgress.renderFps) &&
@@ -3963,11 +4027,7 @@ export default function VideoEditor() {
 		}
 
 		const rendererLabel =
-			renderBackend === "webgpu"
-				? "WebGPU"
-				: renderBackend === "webgl"
-					? "WebGL"
-					: null;
+			renderBackend === "webgpu" ? "WebGPU" : renderBackend === "webgl" ? "WebGL" : null;
 		const encoderLabel =
 			encodeBackend === "ffmpeg"
 				? "Breeze"
@@ -3977,7 +4037,7 @@ export default function VideoEditor() {
 		const pathLabel =
 			rendererLabel && encoderLabel
 				? `${rendererLabel} + ${encoderLabel}`
-				: rendererLabel ?? encoderLabel;
+				: (rendererLabel ?? encoderLabel);
 
 		if (!pathLabel) {
 			return encoderName ?? null;
@@ -4098,7 +4158,9 @@ export default function VideoEditor() {
 					<span className="text-sm font-semibold tracking-tight text-white/90">
 						{projectDisplayName}
 					</span>
-					<span className="text-xs font-medium tracking-tight text-slate-500">.recordly</span>
+					<span className="text-xs font-medium tracking-tight text-slate-500">
+						.recordly
+					</span>
 				</div>
 				<div
 					className="flex items-center gap-2 justify-self-end pr-3"
@@ -4120,12 +4182,16 @@ export default function VideoEditor() {
 						onClick={handleSaveProject}
 						className="inline-flex h-8 min-w-[96px] items-center justify-center gap-1.5 rounded-[5px] bg-white px-4 text-black transition-colors hover:bg-white/92"
 					>
-						<span className={`${hasUnsavedChanges ? "flex" : "hidden"} size-2 relative`}>
+						<span
+							className={`${hasUnsavedChanges ? "flex" : "hidden"} size-2 relative`}
+						>
 							<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#2563EB] opacity-75"></span>
 							<span className="relative inline-flex size-2 rounded-full bg-[#2563EB]"></span>
 						</span>
 						<Save className="h-4 w-4" />
-						<span className="text-sm font-semibold tracking-tight">{t("common.actions.save")}</span>
+						<span className="text-sm font-semibold tracking-tight">
+							{t("common.actions.save")}
+						</span>
 					</Button>
 					<div className="mx-1 h-5 w-px bg-white/10" />
 					<DropdownMenu
@@ -4158,7 +4224,10 @@ export default function VideoEditor() {
 												{t("editor.exportStatus.exporting", "Exporting")}
 											</p>
 											<p className="text-xs text-slate-400">
-												{t("editor.exportStatus.renderingFile", "Rendering your file.")}
+												{t(
+													"editor.exportStatus.renderingFile",
+													"Rendering your file.",
+												)}
 											</p>
 											{isLightningExportInProgress ? (
 												<p className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
@@ -4176,7 +4245,8 @@ export default function VideoEditor() {
 											) : null}
 											{isLegacyExportInProgress ? (
 												<p className="mt-1 text-[11px] text-slate-500">
-													Export too slow? Cancel and try Lightning export!
+													Export too slow? Cancel and try Lightning
+													export!
 												</p>
 											) : null}
 										</div>
@@ -4196,19 +4266,28 @@ export default function VideoEditor() {
 											<div
 												className="h-full bg-[#2563EB] transition-all duration-300 ease-out"
 												style={{
-													width: `${Math.min(isRenderingAudio ? (exportProgress.audioProgress ?? 0) * 100 : (exportFinalizingProgress ?? (exportProgress?.percentage ?? 8)), 100)}%`,
+													width: `${Math.min(isRenderingAudio ? (exportProgress.audioProgress ?? 0) * 100 : (exportFinalizingProgress ?? exportProgress?.percentage ?? 8), 100)}%`,
 												}}
 											/>
 										)}
 									</div>
-									<p className="mt-2 text-xs text-slate-400">{exportPercentLabel}</p>
+									<p className="mt-2 text-xs text-slate-400">
+										{exportPercentLabel}
+									</p>
 									{isRenderingAudio ? (
-										<p className="mt-1 text-[11px] text-slate-500">Audio requires real-time playback for speed/overlay edits</p>
+										<p className="mt-1 text-[11px] text-slate-500">
+											Audio requires real-time playback for speed/overlay
+											edits
+										</p>
 									) : exportRenderSpeedLabel ? (
-										<p className="mt-1 text-[11px] text-slate-500">{exportRenderSpeedLabel}</p>
+										<p className="mt-1 text-[11px] text-slate-500">
+											{exportRenderSpeedLabel}
+										</p>
 									) : null}
 									{exportRuntimeLabel ? (
-										<p className="mt-1 text-[11px] text-slate-500">Path: {exportRuntimeLabel}</p>
+										<p className="mt-1 text-[11px] text-slate-500">
+											Path: {exportRuntimeLabel}
+										</p>
 									) : null}
 								</div>
 							) : exportError ? (
@@ -4217,9 +4296,13 @@ export default function VideoEditor() {
 										{t("editor.exportStatus.issue", "Export issue")}
 									</p>
 									{exportRuntimeLabel ? (
-										<p className="mt-1 text-[11px] text-slate-500">Path: {exportRuntimeLabel}</p>
+										<p className="mt-1 text-[11px] text-slate-500">
+											Path: {exportRuntimeLabel}
+										</p>
 									) : null}
-									<p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-slate-400">{exportError}</p>
+									<p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-slate-400">
+										{exportError}
+									</p>
 									<div className="mt-4 flex gap-2">
 										{hasPendingExportSave ? (
 											<Button
@@ -4252,7 +4335,9 @@ export default function VideoEditor() {
 										)}
 									</p>
 									{exportRuntimeLabel ? (
-										<p className="mt-1 text-[11px] text-slate-500">Path: {exportRuntimeLabel}</p>
+										<p className="mt-1 text-[11px] text-slate-500">
+											Path: {exportRuntimeLabel}
+										</p>
 									) : null}
 									<p className="mt-3 truncate text-xs text-slate-500">
 										{exportedFilePath.split("/").pop()}
@@ -4307,290 +4392,352 @@ export default function VideoEditor() {
 			<div className="relative flex min-h-0 flex-1 flex-col gap-3 p-4">
 				{/* Top section: Video Preview + Settings */}
 				<div className="flex min-h-0 flex-1 gap-3">
-				{/* Left Column - Video Preview */}
-				<div className="order-2 flex h-full min-w-0 flex-[7] flex-col">
-							<div className="relative flex h-full flex-col overflow-hidden">
-								{/* Video preview */}
-								<div
-									className="flex w-full min-h-0 flex-1 items-stretch"
-									style={{ flex: "1 1 auto", margin: "6px 0 0" }}
-								>
-									<div className="flex w-11 flex-shrink-0 items-center justify-center pl-1">
-										<LayoutGroup id="preview-icon-rail">
-											<div className="flex flex-col items-center gap-3">
-												{editorSectionButtons.map((section) => {
-													const isActive = activeEffectSection === section.id;
-													return (
-														<motion.button
-															key={section.id}
-															type="button"
-															onClick={() => setActiveEffectSection(section.id)}
-															title={section.label}
-															className="group relative flex h-8 w-8 items-center justify-center text-white/75 outline-none transition-colors hover:text-white focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-															animate={{ scale: isActive ? 1.06 : 1, opacity: isActive ? 1 : 0.82 }}
-															transition={{ type: "spring", stiffness: 420, damping: 28 }}
-														>
-															<motion.span
-																animate={{ color: isActive ? "#2563EB" : "rgba(255,255,255,0.75)" }}
-																transition={{ duration: 0.16 }}
-															>
-																{typeof section.icon === "string" ? (
-																	<ExtensionIcon icon={section.icon} className="h-4 w-4" />
-																) : (
-																	<section.icon className="h-4 w-4" />
-																)}
-															</motion.span>
-															<AnimatePresence initial={false}>
-																{isActive ? (
-																	<motion.span
-																		layoutId="preview-active-dot"
-																		className="absolute -left-1 h-1.5 w-1.5 rounded-full bg-[#2563EB]"
-																		initial={{ opacity: 0, scale: 0.6 }}
-																		animate={{ opacity: 1, scale: 1 }}
-																		exit={{ opacity: 0, scale: 0.6 }}
-																		transition={{ type: "spring", stiffness: 500, damping: 32 }}
-																	/>
-																) : null}
-															</AnimatePresence>
-														</motion.button>
-													);
-												})}
-											</div>
-										</LayoutGroup>
-									</div>
-									<div className="flex min-w-0 flex-1 items-center justify-center pl-2 pr-1">
-										<div
-											className="relative overflow-hidden rounded-[30px]"
-											style={{
-												width: "auto",
-												height: "100%",
-												aspectRatio: getAspectRatioValue(
-													aspectRatio,
-													(() => {
-														const previewVideo = videoPlaybackRef.current?.video;
-														if (previewVideo && previewVideo.videoHeight > 0) {
-															return previewVideo.videoWidth / previewVideo.videoHeight;
+					{/* Left Column - Video Preview */}
+					<div className="order-2 flex h-full min-w-0 flex-[7] flex-col">
+						<div className="relative flex h-full flex-col overflow-hidden">
+							{/* Video preview */}
+							<div
+								className="flex w-full min-h-0 flex-1 items-stretch"
+								style={{ flex: "1 1 auto", margin: "6px 0 0" }}
+							>
+								<div className="flex w-11 flex-shrink-0 items-center justify-center pl-1">
+									<LayoutGroup id="preview-icon-rail">
+										<div className="flex flex-col items-center gap-3">
+											{editorSectionButtons.map((section) => {
+												const isActive = activeEffectSection === section.id;
+												return (
+													<motion.button
+														key={section.id}
+														type="button"
+														onClick={() =>
+															setActiveEffectSection(section.id)
 														}
-														return 16 / 9;
-													})(),
-												),
-												maxWidth: "100%",
-												margin: "0 auto",
-												boxSizing: "border-box",
-											}}
-										>
-											<VideoPlayback
-												key={`${videoPath || "no-video"}:${previewVersion}`}
-												aspectRatio={aspectRatio}
-												ref={videoPlaybackRef}
-												videoPath={videoPath || ""}
-												onDurationChange={setDuration}
-												onPreviewReadyChange={setIsPreviewReady}
-												onTimeUpdate={setCurrentTime}
-												currentTime={currentTime}
-												onPlayStateChange={setIsPlaying}
-												onError={setError}
-												wallpaper={wallpaper}
-												zoomRegions={effectiveZoomRegions}
-												selectedZoomId={selectedZoomId}
-												onSelectZoom={handleSelectZoom}
-												onZoomFocusChange={handleZoomFocusChange}
-												isPlaying={isPlaying}
-												showShadow={shadowIntensity > 0}
-												shadowIntensity={shadowIntensity}
-												backgroundBlur={backgroundBlur}
-												zoomMotionBlur={zoomMotionBlur}
-												connectZooms={connectZooms}
-												zoomInDurationMs={zoomInDurationMs}
-												zoomInOverlapMs={zoomInOverlapMs}
-												zoomOutDurationMs={zoomOutDurationMs}
-												connectedZoomGapMs={connectedZoomGapMs}
-												connectedZoomDurationMs={connectedZoomDurationMs}
-												zoomInEasing={zoomInEasing}
-												zoomOutEasing={zoomOutEasing}
-												connectedZoomEasing={connectedZoomEasing}
-												borderRadius={borderRadius}
-												padding={padding}
-												frame={frame}
-												cropRegion={cropRegion}
-												webcam={webcam}
-												webcamVideoPath={webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null}
-												trimRegions={trimRegions}
-												speedRegions={effectiveSpeedRegions}
-												annotationRegions={annotationRegions}
-												autoCaptions={autoCaptions}
-												autoCaptionSettings={autoCaptionSettings}
-												selectedAnnotationId={selectedAnnotationId}
-												onSelectAnnotation={handleSelectAnnotation}
-												onAnnotationPositionChange={handleAnnotationPositionChange}
-												onAnnotationSizeChange={handleAnnotationSizeChange}
-												cursorTelemetry={effectiveCursorTelemetry}
-												showCursor={showCursor}
-												cursorStyle={cursorStyle}
-												cursorSize={cursorSize}
-												cursorSmoothing={cursorSmoothing}
-												zoomSmoothness={zoomSmoothness}
-												zoomClassicMode={zoomClassicMode}
-												cursorMotionBlur={cursorMotionBlur}
-												cursorClickBounce={cursorClickBounce}
-												cursorClickBounceDuration={cursorClickBounceDuration}
-												cursorSway={cursorSway}
-												volume={hasSourceAudioFallback ? 0 : previewVolume}
-											/>
+														title={section.label}
+														className="group relative flex h-8 w-8 items-center justify-center text-white/75 outline-none transition-colors hover:text-white focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+														animate={{
+															scale: isActive ? 1.06 : 1,
+															opacity: isActive ? 1 : 0.82,
+														}}
+														transition={{
+															type: "spring",
+															stiffness: 420,
+															damping: 28,
+														}}
+													>
+														<motion.span
+															animate={{
+																color: isActive
+																	? "#2563EB"
+																	: "rgba(255,255,255,0.75)",
+															}}
+															transition={{ duration: 0.16 }}
+														>
+															{typeof section.icon === "string" ? (
+																<ExtensionIcon
+																	icon={section.icon}
+																	className="h-4 w-4"
+																/>
+															) : (
+																<section.icon className="h-4 w-4" />
+															)}
+														</motion.span>
+														<AnimatePresence initial={false}>
+															{isActive ? (
+																<motion.span
+																	layoutId="preview-active-dot"
+																	className="absolute -left-1 h-1.5 w-1.5 rounded-full bg-[#2563EB]"
+																	initial={{
+																		opacity: 0,
+																		scale: 0.6,
+																	}}
+																	animate={{
+																		opacity: 1,
+																		scale: 1,
+																	}}
+																	exit={{
+																		opacity: 0,
+																		scale: 0.6,
+																	}}
+																	transition={{
+																		type: "spring",
+																		stiffness: 500,
+																		damping: 32,
+																	}}
+																/>
+															) : null}
+														</AnimatePresence>
+													</motion.button>
+												);
+											})}
 										</div>
-									</div>
+									</LayoutGroup>
 								</div>
-								{/* Playback controls */}
-								<div
-									className="w-full flex justify-center items-center"
-									style={{
-										height: "48px",
-										flexShrink: 0,
-										padding: "6px 12px",
-										margin: "6px 0 6px 0",
-									}}
-								>
-									<div style={{ width: "100%", maxWidth: "700px" }}>
-										<PlaybackControls
-											isPlaying={isPlaying}
+								<div className="flex min-w-0 flex-1 items-center justify-center pl-2 pr-1">
+									<div
+										className="relative overflow-hidden rounded-[30px]"
+										style={{
+											width: "auto",
+											height: "100%",
+											aspectRatio: getAspectRatioValue(
+												aspectRatio,
+												(() => {
+													const previewVideo =
+														videoPlaybackRef.current?.video;
+													if (
+														previewVideo &&
+														previewVideo.videoHeight > 0
+													) {
+														return (
+															previewVideo.videoWidth /
+															previewVideo.videoHeight
+														);
+													}
+													return 16 / 9;
+												})(),
+											),
+											maxWidth: "100%",
+											margin: "0 auto",
+											boxSizing: "border-box",
+										}}
+									>
+										<VideoPlayback
+											key={`${videoPath || "no-video"}:${previewVersion}`}
+											aspectRatio={aspectRatio}
+											ref={videoPlaybackRef}
+											videoPath={videoPath || ""}
+											onDurationChange={setDuration}
+											onPreviewReadyChange={setIsPreviewReady}
+											onTimeUpdate={setCurrentTime}
 											currentTime={currentTime}
-											duration={duration}
-											onTogglePlayPause={togglePlayPause}
-											onSeek={handleSeek}
-											volume={previewVolume}
-											onVolumeChange={setPreviewVolume}
+											onPlayStateChange={setIsPlaying}
+											onError={setError}
+											wallpaper={wallpaper}
+											zoomRegions={effectiveZoomRegions}
+											selectedZoomId={selectedZoomId}
+											onSelectZoom={handleSelectZoom}
+											onZoomFocusChange={handleZoomFocusChange}
+											isPlaying={isPlaying}
+											showShadow={shadowIntensity > 0}
+											shadowIntensity={shadowIntensity}
+											backgroundBlur={backgroundBlur}
+											zoomMotionBlur={zoomMotionBlur}
+											connectZooms={connectZooms}
+											zoomInDurationMs={zoomInDurationMs}
+											zoomInOverlapMs={zoomInOverlapMs}
+											zoomOutDurationMs={zoomOutDurationMs}
+											connectedZoomGapMs={connectedZoomGapMs}
+											connectedZoomDurationMs={connectedZoomDurationMs}
+											zoomInEasing={zoomInEasing}
+											zoomOutEasing={zoomOutEasing}
+											connectedZoomEasing={connectedZoomEasing}
+											borderRadius={borderRadius}
+											padding={padding}
+											frame={frame}
+											cropRegion={cropRegion}
+											webcam={webcam}
+											webcamVideoPath={
+												webcam.sourcePath
+													? toFileUrl(webcam.sourcePath)
+													: null
+											}
+											trimRegions={trimRegions}
+											speedRegions={effectiveSpeedRegions}
+											annotationRegions={annotationRegions}
+											autoCaptions={autoCaptions}
+											autoCaptionSettings={autoCaptionSettings}
+											selectedAnnotationId={selectedAnnotationId}
+											onSelectAnnotation={handleSelectAnnotation}
+											onAnnotationPositionChange={
+												handleAnnotationPositionChange
+											}
+											onAnnotationSizeChange={handleAnnotationSizeChange}
+											cursorTelemetry={effectiveCursorTelemetry}
+											showCursor={showCursor}
+											cursorStyle={cursorStyle}
+											cursorSize={cursorSize}
+											cursorSmoothing={cursorSmoothing}
+											zoomSmoothness={zoomSmoothness}
+											zoomClassicMode={zoomClassicMode}
+											cursorMotionBlur={cursorMotionBlur}
+											cursorClickBounce={cursorClickBounce}
+											cursorClickBounceDuration={cursorClickBounceDuration}
+											cursorSway={cursorSway}
+											volume={hasSourceAudioFallback ? 0 : previewVolume}
 										/>
 									</div>
 								</div>
 							</div>
-				</div>
+							{/* Playback controls */}
+							<div
+								className="w-full flex justify-center items-center"
+								style={{
+									height: "48px",
+									flexShrink: 0,
+									padding: "6px 12px",
+									margin: "6px 0 6px 0",
+								}}
+							>
+								<div style={{ width: "100%", maxWidth: "700px" }}>
+									<PlaybackControls
+										isPlaying={isPlaying}
+										currentTime={currentTime}
+										duration={duration}
+										onTogglePlayPause={togglePlayPause}
+										onSeek={handleSeek}
+										volume={previewVolume}
+										onVolumeChange={setPreviewVolume}
+									/>
+								</div>
+							</div>
+						</div>
+					</div>
 
-				{/* Left section: settings panel */}
-				<div className="order-1 flex">
-					{activeEffectSection === "extensions" ? (
-						<ExtensionManager />
-					) : (
-					<SettingsPanel
-						panelMode="editor"
-						activeEffectSection={activeEffectSection}
-						selected={wallpaper}
-						onWallpaperChange={setWallpaper}
-						selectedZoomDepth={
-							selectedZoomId ? zoomRegions.find((z) => z.id === selectedZoomId)?.depth : null
-						}
-						onZoomDepthChange={(depth) => selectedZoomId && handleZoomDepthChange(depth)}
-						selectedZoomId={selectedZoomId}
-						selectedZoomMode={
-							selectedZoomId ? (zoomRegions.find((z) => z.id === selectedZoomId)?.mode ?? 'auto') : null
-						}
-						onZoomModeChange={(mode) => selectedZoomId && handleZoomModeChange(mode)}
-						onZoomDelete={handleZoomDelete}
-						selectedTrimId={selectedTrimId}
-						onTrimDelete={handleTrimDelete}
-						selectedClipId={selectedClipId}
-						selectedClipSpeed={
-							selectedClipId ? (clipRegions.find((c) => c.id === selectedClipId)?.speed ?? 1) : null
-						}
-						onClipSpeedChange={(speed) => selectedClipId && handleClipSpeedChange(speed)}
-						onClipDelete={handleClipDelete}
-						shadowIntensity={shadowIntensity}
-						onShadowChange={setShadowIntensity}
-						backgroundBlur={backgroundBlur}
-						onBackgroundBlurChange={setBackgroundBlur}
-						zoomMotionBlur={zoomMotionBlur}
-						onZoomMotionBlurChange={setZoomMotionBlur}
-						connectZooms={connectZooms}
-						onConnectZoomsChange={setConnectZooms}
-						zoomInDurationMs={zoomInDurationMs}
-						onZoomInDurationMsChange={setZoomInDurationMs}
-						zoomInOverlapMs={zoomInOverlapMs}
-						onZoomInOverlapMsChange={setZoomInOverlapMs}
-						zoomOutDurationMs={zoomOutDurationMs}
-						onZoomOutDurationMsChange={setZoomOutDurationMs}
-						connectedZoomGapMs={connectedZoomGapMs}
-						onConnectedZoomGapMsChange={setConnectedZoomGapMs}
-						connectedZoomDurationMs={connectedZoomDurationMs}
-						onConnectedZoomDurationMsChange={setConnectedZoomDurationMs}
-						zoomInEasing={zoomInEasing}
-						onZoomInEasingChange={setZoomInEasing}
-						zoomOutEasing={zoomOutEasing}
-						onZoomOutEasingChange={setZoomOutEasing}
-						connectedZoomEasing={connectedZoomEasing}
-						onConnectedZoomEasingChange={setConnectedZoomEasing}
-						showCursor={showCursor}
-						onShowCursorChange={setShowCursor}
-						loopCursor={loopCursor}
-						onLoopCursorChange={setLoopCursor}
-						cursorStyle={cursorStyle}
-						onCursorStyleChange={setCursorStyle}
-						cursorSize={cursorSize}
-						onCursorSizeChange={setCursorSize}
-						cursorSmoothing={cursorSmoothing}
-						onCursorSmoothingChange={setCursorSmoothing}
-						zoomSmoothness={zoomSmoothness}
-						onZoomSmoothnessChange={setZoomSmoothness}
-						zoomClassicMode={zoomClassicMode}
-						onZoomClassicModeChange={setZoomClassicMode}
-						cursorMotionBlur={cursorMotionBlur}
-						onCursorMotionBlurChange={setCursorMotionBlur}
-						cursorClickBounce={cursorClickBounce}
-						onCursorClickBounceChange={setCursorClickBounce}
-						cursorClickBounceDuration={cursorClickBounceDuration}
-						onCursorClickBounceDurationChange={setCursorClickBounceDuration}
-						cursorSway={cursorSway}
-						onCursorSwayChange={setCursorSway}
-						borderRadius={borderRadius}
-						onBorderRadiusChange={setBorderRadius}
-						webcam={webcam}
-						onWebcamChange={setWebcam}
-						onUploadWebcam={handleUploadWebcam}
-						onClearWebcam={handleClearWebcam}
-						padding={padding}
-						onPaddingChange={setPadding}
-						frame={frame}
-						onFrameChange={setFrame}
-						cropRegion={cropRegion}
-						onCropChange={setCropRegion}
-						aspectRatio={aspectRatio}
-						onAspectRatioChange={setAspectRatio}
-						selectedAnnotationId={selectedAnnotationId}
-						annotationRegions={annotationRegions}
-						autoCaptions={autoCaptions}
-						autoCaptionSettings={autoCaptionSettings}
-						whisperExecutablePath={whisperExecutablePath}
-						whisperModelPath={whisperModelPath}
-						whisperModelDownloadStatus={whisperModelDownloadStatus}
-						whisperModelDownloadProgress={whisperModelDownloadProgress}
-						isGeneratingCaptions={isGeneratingCaptions}
-						onAutoCaptionSettingsChange={setAutoCaptionSettings}
-						onPickWhisperExecutable={handlePickWhisperExecutable}
-						onPickWhisperModel={handlePickWhisperModel}
-						onGenerateAutoCaptions={handleGenerateAutoCaptions}
-						onClearAutoCaptions={handleClearAutoCaptions}
-						onDownloadWhisperSmallModel={handleDownloadWhisperSmallModel}
-						onDeleteWhisperSmallModel={handleDeleteWhisperSmallModel}
-						onAnnotationContentChange={handleAnnotationContentChange}
-						onAnnotationTypeChange={handleAnnotationTypeChange}
-						onAnnotationStyleChange={handleAnnotationStyleChange}
-						onAnnotationFigureDataChange={handleAnnotationFigureDataChange}
-						onAnnotationBlurIntensityChange={handleAnnotationBlurIntensityChange}
-						onAnnotationBlurColorChange={handleAnnotationBlurColorChange}
-						onAnnotationDelete={handleAnnotationDelete}
-						selectedSpeedId={selectedSpeedId}
-						selectedSpeedValue={
-							selectedSpeedId
-								? (speedRegions.find((r) => r.id === selectedSpeedId)?.speed ?? null)
-								: null
-						}
-						onSpeedChange={handleSpeedChange}
-						onSpeedDelete={handleSpeedDelete}
-					/>
-					)}
-				</div>
+					{/* Left section: settings panel */}
+					<div className="order-1 flex">
+						{activeEffectSection === "extensions" ? (
+							<ExtensionManager />
+						) : (
+							<SettingsPanel
+								panelMode="editor"
+								activeEffectSection={activeEffectSection}
+								selected={wallpaper}
+								onWallpaperChange={setWallpaper}
+								selectedZoomDepth={
+									selectedZoomId
+										? zoomRegions.find((z) => z.id === selectedZoomId)?.depth
+										: null
+								}
+								onZoomDepthChange={(depth) =>
+									selectedZoomId && handleZoomDepthChange(depth)
+								}
+								selectedZoomId={selectedZoomId}
+								selectedZoomMode={
+									selectedZoomId
+										? (zoomRegions.find((z) => z.id === selectedZoomId)?.mode ??
+											"auto")
+										: null
+								}
+								onZoomModeChange={(mode) =>
+									selectedZoomId && handleZoomModeChange(mode)
+								}
+								onZoomDelete={handleZoomDelete}
+								selectedTrimId={selectedTrimId}
+								onTrimDelete={handleTrimDelete}
+								selectedClipId={selectedClipId}
+								selectedClipSpeed={
+									selectedClipId
+										? (clipRegions.find((c) => c.id === selectedClipId)
+												?.speed ?? 1)
+										: null
+								}
+								onClipSpeedChange={(speed) =>
+									selectedClipId && handleClipSpeedChange(speed)
+								}
+								onClipDelete={handleClipDelete}
+								shadowIntensity={shadowIntensity}
+								onShadowChange={setShadowIntensity}
+								backgroundBlur={backgroundBlur}
+								onBackgroundBlurChange={setBackgroundBlur}
+								zoomMotionBlur={zoomMotionBlur}
+								onZoomMotionBlurChange={setZoomMotionBlur}
+								connectZooms={connectZooms}
+								onConnectZoomsChange={setConnectZooms}
+								zoomInDurationMs={zoomInDurationMs}
+								onZoomInDurationMsChange={setZoomInDurationMs}
+								zoomInOverlapMs={zoomInOverlapMs}
+								onZoomInOverlapMsChange={setZoomInOverlapMs}
+								zoomOutDurationMs={zoomOutDurationMs}
+								onZoomOutDurationMsChange={setZoomOutDurationMs}
+								connectedZoomGapMs={connectedZoomGapMs}
+								onConnectedZoomGapMsChange={setConnectedZoomGapMs}
+								connectedZoomDurationMs={connectedZoomDurationMs}
+								onConnectedZoomDurationMsChange={setConnectedZoomDurationMs}
+								zoomInEasing={zoomInEasing}
+								onZoomInEasingChange={setZoomInEasing}
+								zoomOutEasing={zoomOutEasing}
+								onZoomOutEasingChange={setZoomOutEasing}
+								connectedZoomEasing={connectedZoomEasing}
+								onConnectedZoomEasingChange={setConnectedZoomEasing}
+								showCursor={showCursor}
+								onShowCursorChange={setShowCursor}
+								loopCursor={loopCursor}
+								onLoopCursorChange={setLoopCursor}
+								cursorStyle={cursorStyle}
+								onCursorStyleChange={setCursorStyle}
+								cursorSize={cursorSize}
+								onCursorSizeChange={setCursorSize}
+								cursorSmoothing={cursorSmoothing}
+								onCursorSmoothingChange={setCursorSmoothing}
+								zoomSmoothness={zoomSmoothness}
+								onZoomSmoothnessChange={setZoomSmoothness}
+								zoomClassicMode={zoomClassicMode}
+								onZoomClassicModeChange={setZoomClassicMode}
+								cursorMotionBlur={cursorMotionBlur}
+								onCursorMotionBlurChange={setCursorMotionBlur}
+								cursorClickBounce={cursorClickBounce}
+								onCursorClickBounceChange={setCursorClickBounce}
+								cursorClickBounceDuration={cursorClickBounceDuration}
+								onCursorClickBounceDurationChange={setCursorClickBounceDuration}
+								cursorSway={cursorSway}
+								onCursorSwayChange={setCursorSway}
+								borderRadius={borderRadius}
+								onBorderRadiusChange={setBorderRadius}
+								webcam={webcam}
+								onWebcamChange={setWebcam}
+								onUploadWebcam={handleUploadWebcam}
+								onClearWebcam={handleClearWebcam}
+								padding={padding}
+								onPaddingChange={setPadding}
+								frame={frame}
+								onFrameChange={setFrame}
+								cropRegion={cropRegion}
+								onCropChange={setCropRegion}
+								aspectRatio={aspectRatio}
+								onAspectRatioChange={setAspectRatio}
+								selectedAnnotationId={selectedAnnotationId}
+								annotationRegions={annotationRegions}
+								autoCaptions={autoCaptions}
+								autoCaptionSettings={autoCaptionSettings}
+								whisperExecutablePath={whisperExecutablePath}
+								whisperModelPath={whisperModelPath}
+								whisperModelDownloadStatus={whisperModelDownloadStatus}
+								whisperModelDownloadProgress={whisperModelDownloadProgress}
+								isGeneratingCaptions={isGeneratingCaptions}
+								onAutoCaptionSettingsChange={setAutoCaptionSettings}
+								onPickWhisperExecutable={handlePickWhisperExecutable}
+								onPickWhisperModel={handlePickWhisperModel}
+								onGenerateAutoCaptions={handleGenerateAutoCaptions}
+								onClearAutoCaptions={handleClearAutoCaptions}
+								onDownloadWhisperSmallModel={handleDownloadWhisperSmallModel}
+								onDeleteWhisperSmallModel={handleDeleteWhisperSmallModel}
+								onAnnotationContentChange={handleAnnotationContentChange}
+								onAnnotationTypeChange={handleAnnotationTypeChange}
+								onAnnotationStyleChange={handleAnnotationStyleChange}
+								onAnnotationFigureDataChange={handleAnnotationFigureDataChange}
+								onAnnotationBlurIntensityChange={
+									handleAnnotationBlurIntensityChange
+								}
+								onAnnotationBlurColorChange={handleAnnotationBlurColorChange}
+								onAnnotationDelete={handleAnnotationDelete}
+								selectedSpeedId={selectedSpeedId}
+								selectedSpeedValue={
+									selectedSpeedId
+										? (speedRegions.find((r) => r.id === selectedSpeedId)
+												?.speed ?? null)
+										: null
+								}
+								onSpeedChange={handleSpeedChange}
+								onSpeedDelete={handleSpeedDelete}
+							/>
+						)}
+					</div>
 				</div>
 
 				{/* Timeline section - full width */}
-				<div className="min-h-[200px] flex-shrink-0 bg-[#17171a] rounded-2xl border border-white/10 shadow-lg overflow-auto flex flex-col" style={{ height: "33%" }}>
+				<div
+					className="min-h-[200px] flex-shrink-0 bg-[#17171a] rounded-2xl border border-white/10 shadow-lg overflow-auto flex flex-col"
+					style={{ height: "33%" }}
+				>
 					<TimelineEditor
 						videoDuration={duration}
 						currentTime={currentTime}
@@ -4652,8 +4799,12 @@ export default function VideoEditor() {
 					<div className="fixed left-1/2 top-1/2 z-[60] max-h-[90vh] w-[90vw] max-w-5xl -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-2xl border border-white/10 bg-[#09090b] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
 						<div className="mb-6 flex items-center justify-between">
 							<div>
-								<span className="text-xl font-bold text-slate-200">{t("settings.crop.title")}</span>
-								<p className="mt-2 text-sm text-slate-400">{t("settings.crop.instruction")}</p>
+								<span className="text-xl font-bold text-slate-200">
+									{t("settings.crop.title")}
+								</span>
+								<p className="mt-2 text-sm text-slate-400">
+									{t("settings.crop.instruction")}
+								</p>
 							</div>
 							<Button
 								variant="ghost"

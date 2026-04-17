@@ -146,6 +146,7 @@
 			"high": "높음",
 			"original": "원본"
 		},
+		"fpsTitle": "FPS",
 		"loop": "반복",
 		"outputDimensions": "출력: {{dimensions}}px",
 		"sizePresetOriginalShort": "원본",
