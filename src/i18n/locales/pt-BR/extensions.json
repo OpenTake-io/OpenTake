@@ -1,0 +1,60 @@
+{
+	"title": "Extensoes",
+	"tabs": {
+		"browse": "Explorar",
+		"installed": "Instaladas"
+	},
+	"actions": {
+		"submit": "Enviar uma extensao",
+		"docs": "Documentacao de extensoes",
+		"refresh": "Atualizar",
+		"openFolder": "Abrir pasta de extensoes",
+		"uninstall": "Desinstalar",
+		"install": "Instalar",
+		"installing": "Instalando",
+		"add": "Adicionar",
+		"retry": "Tentar novamente",
+		"close": "Fechar",
+		"folder": "Pasta"
+	},
+	"status": {
+		"enabled": "Ativada",
+		"disabled": "Desativada",
+		"installed": "Instalada"
+	},
+	"detail": {
+		"by": "Por {{author}}",
+		"unknownAuthor": "Autor desconhecido",
+		"noDescription": "Sem descricao",
+		"downloads": "{{count}} downloads",
+		"preview": "Previa",
+		"screenshotAlt": "Captura de tela {{number}}",
+		"description": "Descricao",
+		"tags": "Tags",
+		"permissions": "Permissoes",
+		"location": "Localizacao",
+		"error": "Erro: {{message}}"
+	},
+	"empty": {
+		"title": "Sem extensoes",
+		"description": "Instale extensoes para adicionar molduras, efeitos de cursor e ferramentas de edicao."
+	},
+	"search": {
+		"placeholder": "Buscar extensoes...",
+		"noResults": "Nenhuma extensao encontrada",
+		"noMarketplace": "Ainda nao ha extensoes disponiveis no marketplace",
+		"count": "{{count}} extensao",
+		"countPlural": "{{count}} extensoes"
+	},
+	"toast": {
+		"installedAndEnabled": "Extensao instalada e ativada",
+		"uninstalled": "{{name}} desinstalada",
+		"uninstallFailed": "Falha ao desinstalar {{name}}",
+		"searchFailed": "Falha ao buscar no marketplace",
+		"refreshed": "Extensoes atualizadas",
+		"refreshFailed": "Falha ao atualizar extensoes",
+		"marketplaceInstalled": "{{name}} instalada e ativada",
+		"marketplaceInstallFailed": "Falha ao instalar {{name}}",
+		"enableFailed": "Falha ao ativar extensao"
+	}
+}
