@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { MessageBoxOptions, MessageBoxReturnValue } from "electron";
 import { app, BrowserWindow, dialog } from "electron";
 import { autoUpdater } from "electron-updater";
-import type { MessageBoxOptions, MessageBoxReturnValue } from "electron";
 import { USER_DATA_PATH } from "./appPaths";
 
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -105,8 +105,7 @@ function createAutoCheckErrorToastPayload(): UpdateToastPayload {
 	return {
 		version: app.getVersion(),
 		phase: "error",
-		detail:
-			"Recordly could not check for updates automatically. Retry now, or inspect updater.log in your user data folder.",
+		detail: "Recordly could not check for updates automatically. Retry now, or inspect updater.log in your user data folder.",
 		delayMs: UPDATE_REMINDER_DELAY_MS,
 		primaryAction: "retry-check",
 	};
@@ -289,13 +288,10 @@ function simulateDevPreviewDownload(sendToRenderer?: UpdateToastSender) {
 	clearDevPreviewProgressTimer();
 
 	let progressPercent = 0;
-	emitUpdateToastState(
-		sendToRenderer,
-		{
-			...createDownloadingUpdateToastPayload(DEV_UPDATE_PREVIEW_VERSION, progressPercent),
-			isPreview: true,
-		},
-	);
+	emitUpdateToastState(sendToRenderer, {
+		...createDownloadingUpdateToastPayload(DEV_UPDATE_PREVIEW_VERSION, progressPercent),
+		isPreview: true,
+	});
 
 	devPreviewProgressTimer = setInterval(() => {
 		progressPercent = Math.min(100, progressPercent + DEV_UPDATE_PREVIEW_PROGRESS_INCREMENT);
@@ -316,18 +312,14 @@ function simulateDevPreviewDownload(sendToRenderer?: UpdateToastSender) {
 			return;
 		}
 
-		emitUpdateToastState(
-			sendToRenderer,
-			{
-				...createDownloadingUpdateToastPayload(DEV_UPDATE_PREVIEW_VERSION, progressPercent),
-				isPreview: true,
-			},
-		);
+		emitUpdateToastState(sendToRenderer, {
+			...createDownloadingUpdateToastPayload(DEV_UPDATE_PREVIEW_VERSION, progressPercent),
+			isPreview: true,
+		});
 	}, DEV_UPDATE_PREVIEW_PROGRESS_STEP_MS);
 
 	return { success: true };
 }
-
 
 export function dismissUpdateToast(
 	getMainWindow: () => BrowserWindow | null,
@@ -524,7 +516,7 @@ async function showAvailableUpdateDialog(
 async function showDownloadedUpdateDialog(
 	getMainWindow: () => BrowserWindow | null,
 	version: string,
-    options?: { isPreview?: boolean },
+	options?: { isPreview?: boolean },
 ) {
 	const isPreview = Boolean(options?.isPreview);
 	const result = await showMessageBox(getMainWindow, {
@@ -658,7 +650,11 @@ export function setupAutoUpdates(
 	writeUpdaterLog(`Updater initialized. logPath=${UPDATER_LOG_PATH}`);
 
 	autoUpdater.on("checking-for-update", () => {
-		setUpdateStatusSummary({ status: "checking", availableVersion: null, detail: "Checking for updates..." });
+		setUpdateStatusSummary({
+			status: "checking",
+			availableVersion: null,
+			detail: "Checking for updates...",
+		});
 		writeUpdaterLog("electron-updater emitted checking-for-update.");
 	});
 
@@ -782,7 +778,9 @@ export function setupAutoUpdates(
 		});
 		clearDeferredReminderTimer();
 
-		if (emitUpdateToastState(sendToRenderer, createDownloadedUpdateToastPayload(info.version))) {
+		if (
+			emitUpdateToastState(sendToRenderer, createDownloadedUpdateToastPayload(info.version))
+		) {
 			return;
 		}
 

@@ -12,7 +12,7 @@ import { loadAllCustomFonts } from "./lib/customFonts";
 
 export default function App() {
 	const [windowType, setWindowType] = useState("");
-	const { locale, t } = useI18n();
+	const { t } = useI18n();
 
 	useEffect(() => {
 		const params = new URLSearchParams(window.location.search);
@@ -44,17 +44,19 @@ export default function App() {
 
 	useEffect(() => {
 		document.title =
-			windowType === "editor" ? t("app.editorTitle", "Recordly Editor") : t("app.name", "Recordly");
-	}, [windowType, locale, t]);
+			windowType === "editor"
+				? t("app.editorTitle", "Recordly Editor")
+				: t("app.name", "Recordly");
+	}, [windowType, t]);
 
 	switch (windowType) {
 		case "hud-overlay":
-				return (
-					<>
-						<LaunchWindow />
-						<Toaster theme="dark" className="pointer-events-auto" />
-					</>
-				);
+			return (
+				<>
+					<LaunchWindow />
+					<Toaster theme="dark" className="pointer-events-auto" />
+				</>
+			);
 		case "source-selector":
 			return <SourceSelector />;
 		case "countdown":
@@ -78,7 +80,9 @@ export default function App() {
 							className="h-12 w-12 rounded-xl"
 						/>
 						<div>
-							<h1 className="text-xl font-semibold tracking-tight">{t("app.name", "Recordly")}</h1>
+							<h1 className="text-xl font-semibold tracking-tight">
+								{t("app.name", "Recordly")}
+							</h1>
 							<p className="text-sm text-white/65">
 								{t("app.subtitle", "Screen recording and editing")}
 							</p>

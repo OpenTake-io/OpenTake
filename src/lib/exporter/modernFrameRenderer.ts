@@ -23,28 +23,26 @@ import type {
 	ZoomTransitionEasing,
 } from "@/components/video-editor/types";
 import { getDefaultCaptionFontFamily, ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
+import { DEFAULT_FOCUS } from "@/components/video-editor/videoPlayback/constants";
 import {
-	DEFAULT_FOCUS,
-} from "@/components/video-editor/videoPlayback/constants";
+	type CursorFollowCameraState,
+	computeCursorFollowFocus,
+	createCursorFollowCameraState,
+	SNAP_TO_EDGES_RATIO_AUTO,
+} from "@/components/video-editor/videoPlayback/cursorFollowCamera";
 import {
 	DEFAULT_CURSOR_CONFIG,
 	PixiCursorOverlay,
 	preloadCursorAssets,
 } from "@/components/video-editor/videoPlayback/cursorRenderer";
-import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
 import {
-	type CursorFollowCameraState,
-	createCursorFollowCameraState,
-	computeCursorFollowFocus,
-	SNAP_TO_EDGES_RATIO_AUTO,
-} from "@/components/video-editor/videoPlayback/cursorFollowCamera";
-import {
-	type SpringState,
 	createSpringState,
-	stepSpringValue,
-	resetSpringState,
 	getZoomSpringConfig,
+	resetSpringState,
+	type SpringState,
+	stepSpringValue,
 } from "@/components/video-editor/videoPlayback/motionSmoothing";
+import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
 import {
 	applyZoomTransform,
 	computeFocusFromTransform,
@@ -62,14 +60,14 @@ import {
 	mapCursorToCanvasNormalized,
 	mapSmoothedCursorToCanvasNormalized,
 } from "@/lib/extensions/cursorCoordinates";
-import { applyCanvasSceneTransform } from "@/lib/extensions/sceneTransform";
-import { drawSquircleOnCanvas, drawSquircleOnGraphics } from "@/lib/geometry/squircle";
-import { clampMediaTimeToDuration } from "@/lib/mediaTiming";
 import {
 	executeExtensionCursorEffects,
 	executeExtensionRenderHooks,
 	notifyCursorInteraction,
 } from "@/lib/extensions/renderHooks";
+import { applyCanvasSceneTransform } from "@/lib/extensions/sceneTransform";
+import { drawSquircleOnCanvas, drawSquircleOnGraphics } from "@/lib/geometry/squircle";
+import { clampMediaTimeToDuration } from "@/lib/mediaTiming";
 import { isVideoWallpaperSource } from "@/lib/wallpapers";
 import {
 	type AnnotationRenderAssets,
@@ -90,7 +88,6 @@ interface FrameRenderConfig {
 	width: number;
 	height: number;
 	preferredRenderBackend?: ExportRenderBackend;
-	nativeReadbackMode?: "canvas" | "pixels";
 	wallpaper: string;
 	zoomRegions: ZoomRegion[];
 	showShadow: boolean;
@@ -372,8 +369,6 @@ export class FrameRenderer {
 	private webcamLayoutCache: WebcamLayoutCache | null = null;
 	private videoTextureUsesStartupStaging = false;
 	private webcamTextureUsesStartupStaging = false;
-	private nativePixelReadbackWarningShown = false;
-	private nativeReadbackBuffer: Uint8Array | null = null;
 	private compositeCanvas: HTMLCanvasElement | null = null;
 	private compositeCtx: CanvasRenderingContext2D | null = null;
 	private lastEmittedClickTimeMs = -1;
@@ -398,9 +393,10 @@ export class FrameRenderer {
 			return;
 		}
 
-		const activeFilters = this.shouldUseZoomMotionBlur() && this.motionBlurFilter
-			? [this.motionBlurFilter]
-			: null;
+		const activeFilters =
+			this.shouldUseZoomMotionBlur() && this.motionBlurFilter
+				? [this.motionBlurFilter]
+				: null;
 		this.videoEffectsContainer.filters = activeFilters;
 	}
 
@@ -480,11 +476,13 @@ export class FrameRenderer {
 			this.cursorOverlay = new PixiCursorOverlay({
 				dotRadius: DEFAULT_CURSOR_CONFIG.dotRadius * (this.config.cursorSize ?? 1.4),
 				style: this.config.cursorStyle ?? "tahoe",
-				smoothingFactor: this.config.cursorSmoothing ?? DEFAULT_CURSOR_CONFIG.smoothingFactor,
+				smoothingFactor:
+					this.config.cursorSmoothing ?? DEFAULT_CURSOR_CONFIG.smoothingFactor,
 				motionBlur: this.config.cursorMotionBlur ?? 0,
 				clickBounce: this.config.cursorClickBounce ?? DEFAULT_CURSOR_CONFIG.clickBounce,
 				clickBounceDuration:
-					this.config.cursorClickBounceDuration ?? DEFAULT_CURSOR_CONFIG.clickBounceDuration,
+					this.config.cursorClickBounceDuration ??
+					DEFAULT_CURSOR_CONFIG.clickBounceDuration,
 				sway: this.config.cursorSway ?? DEFAULT_CURSOR_CONFIG.sway,
 			});
 			this.cursorContainer.addChild(this.cursorOverlay.container);
@@ -713,7 +711,9 @@ export class FrameRenderer {
 		const targetWidth = Math.max(1, Math.ceil(width));
 		const targetHeight = Math.max(1, Math.ceil(height));
 		const currentCanvas =
-			kind === "scene" ? this.sceneVideoFrameStagingCanvas : this.webcamVideoFrameStagingCanvas;
+			kind === "scene"
+				? this.sceneVideoFrameStagingCanvas
+				: this.webcamVideoFrameStagingCanvas;
 		const currentContext =
 			kind === "scene" ? this.sceneVideoFrameStagingCtx : this.webcamVideoFrameStagingCtx;
 
@@ -861,7 +861,8 @@ export class FrameRenderer {
 
 				await new Promise<void>((resolve, reject) => {
 					video.onloadeddata = () => resolve();
-					video.onerror = () => reject(new Error(`Failed to load video wallpaper: ${wallpaper}`));
+					video.onerror = () =>
+						reject(new Error(`Failed to load video wallpaper: ${wallpaper}`));
 				});
 
 				this.backgroundVideoElement = video;
@@ -897,7 +898,11 @@ export class FrameRenderer {
 				await new Promise<void>((resolve, reject) => {
 					img.onload = () => resolve();
 					img.onerror = (err) => {
-						console.error("[FrameRenderer] Failed to load background image:", imageUrl, err);
+						console.error(
+							"[FrameRenderer] Failed to load background image:",
+							imageUrl,
+							err,
+						);
 						reject(new Error(`Failed to load background image: ${imageUrl}`));
 					};
 					img.src = imageUrl;
@@ -960,7 +965,9 @@ export class FrameRenderer {
 			}
 
 			const blurredCanvas =
-				this.config.backgroundBlur > 0 ? this.createPreblurredBackgroundCanvas(bgCanvas) : null;
+				this.config.backgroundBlur > 0
+					? this.createPreblurredBackgroundCanvas(bgCanvas)
+					: null;
 			const backgroundSource = blurredCanvas ?? bgCanvas;
 			const backgroundTexture = Texture.from(backgroundSource);
 			this.backgroundSprite = new Sprite(backgroundTexture);
@@ -1210,7 +1217,8 @@ export class FrameRenderer {
 	private updateAnnotationLayer(currentTimeMs: number): void {
 		for (const entry of this.annotationSprites) {
 			entry.sprite.visible =
-				currentTimeMs >= entry.annotation.startMs && currentTimeMs <= entry.annotation.endMs;
+				currentTimeMs >= entry.annotation.startMs &&
+				currentTimeMs <= entry.annotation.endMs;
 		}
 	}
 
@@ -1357,11 +1365,16 @@ export class FrameRenderer {
 			line.words.forEach((word) => {
 				const segmentText = `${word.leadingSpace ? " " : ""}${word.text}`;
 				const segmentWidth = ctx.measureText(segmentText).width;
-				const visualState = getCaptionWordVisualState(state.layout.hasWordTimings, word.state);
+				const visualState = getCaptionWordVisualState(
+					state.layout.hasWordTimings,
+					word.state,
+				);
 
 				ctx.save();
 				ctx.translate(cursorX, lineY);
-				ctx.fillStyle = visualState.isInactive ? settings.inactiveTextColor : settings.textColor;
+				ctx.fillStyle = visualState.isInactive
+					? settings.inactiveTextColor
+					: settings.textColor;
 				ctx.globalAlpha = visualState.opacity;
 				ctx.fillText(segmentText, 0, 0);
 				ctx.restore();
@@ -1484,7 +1497,9 @@ export class FrameRenderer {
 			!wallpaper.startsWith("/wallpapers/") &&
 			!wallpaper.startsWith("/app-icons/");
 
-		const wallpaperAsset = looksLikeAbsoluteFilePath ? `file://${encodeURI(wallpaper)}` : wallpaper;
+		const wallpaperAsset = looksLikeAbsoluteFilePath
+			? `file://${encodeURI(wallpaper)}`
+			: wallpaper;
 		return getRenderableAssetUrl(wallpaperAsset);
 	}
 
@@ -1875,7 +1890,10 @@ export class FrameRenderer {
 				const requestVideoFrameCallback = (
 					webcamVideo as HTMLVideoElement & {
 						requestVideoFrameCallback?: (
-							callback: (now: DOMHighResTimeStamp, metadata: VideoFrameCallbackMetadata) => void,
+							callback: (
+								now: DOMHighResTimeStamp,
+								metadata: VideoFrameCallbackMetadata,
+							) => void,
 						) => number;
 						cancelVideoFrameCallback?: (handle: number) => void;
 					}
@@ -2107,7 +2125,10 @@ export class FrameRenderer {
 			this.videoContainer.addChildAt(this.videoSprite, 0);
 			this.videoTextureUsesStartupStaging = usesStartupStaging;
 		} else if (this.videoTextureUsesStartupStaging !== usesStartupStaging) {
-			this.videoTextureSource = this.replaceSpriteTexture(this.videoSprite, resolvedVideoSource);
+			this.videoTextureSource = this.replaceSpriteTexture(
+				this.videoSprite,
+				resolvedVideoSource,
+			);
 			this.videoTextureUsesStartupStaging = usesStartupStaging;
 		} else if (this.videoTextureSource) {
 			this.videoTextureSource.resource = resolvedVideoSource;
@@ -2229,11 +2250,11 @@ export class FrameRenderer {
 		extensionHost.setSmoothedCursor(
 			smoothedCursor
 				? {
-					timeMs,
-					cx: smoothedCursor.cx,
-					cy: smoothedCursor.cy,
-					trail: smoothedCursor.trail,
-				}
+						timeMs,
+						cx: smoothedCursor.cx,
+						cy: smoothedCursor.cy,
+						trail: smoothedCursor.trail,
+					}
 				: null,
 		);
 		const rawCursor = this.getCursorPosition(cursorTimeMs);
@@ -2244,23 +2265,23 @@ export class FrameRenderer {
 			durationMs: 0,
 			cursor: smoothedCursor
 				? {
-					cx: smoothedCursor.cx,
-					cy: smoothedCursor.cy,
-					interactionType: rawCursor?.interactionType,
-				}
+						cx: smoothedCursor.cx,
+						cy: smoothedCursor.cy,
+						interactionType: rawCursor?.interactionType,
+					}
 				: rawCursor,
 			smoothedCursor,
 			videoLayout: maskRect
 				? {
-					maskRect: {
-						x: maskRect.x,
-						y: maskRect.y,
-						width: maskRect.width,
-						height: maskRect.height,
-					},
-					borderRadius: this.config.borderRadius ?? 0,
-					padding: this.config.padding ?? 0,
-				}
+						maskRect: {
+							x: maskRect.x,
+							y: maskRect.y,
+							width: maskRect.width,
+							height: maskRect.height,
+						},
+						borderRadius: this.config.borderRadius ?? 0,
+						padding: this.config.padding ?? 0,
+					}
 				: undefined,
 			zoom: {
 				scale: this.animationState.scale,
@@ -2401,7 +2422,10 @@ export class FrameRenderer {
 		const paddingScale = 1.0 - (padding / 100) * 0.4;
 		const viewportWidth = width * paddingScale;
 		const viewportHeight = height * paddingScale;
-		const scale = Math.min(viewportWidth / croppedVideoWidth, viewportHeight / croppedVideoHeight);
+		const scale = Math.min(
+			viewportWidth / croppedVideoWidth,
+			viewportHeight / croppedVideoHeight,
+		);
 
 		this.videoSprite.scale.set(scale);
 
@@ -2504,7 +2528,12 @@ export class FrameRenderer {
 
 			// Cursor follow: use cursor-follow camera for non-manual zoom regions
 			let regionFocus = region.focus;
-			if (!this.config.zoomClassicMode && region.mode !== 'manual' && this.config.cursorTelemetry && this.config.cursorTelemetry.length > 0) {
+			if (
+				!this.config.zoomClassicMode &&
+				region.mode !== "manual" &&
+				this.config.cursorTelemetry &&
+				this.config.cursorTelemetry.length > 0
+			) {
 				regionFocus = computeCursorFollowFocus(
 					this.cursorFollowCamera,
 					this.config.cursorTelemetry,
@@ -2579,9 +2608,8 @@ export class FrameRenderer {
 
 		// Spring-driven zoom animation for export — use content time, not wall-clock,
 		// so the spring advances at the same rate as the video regardless of render speed.
-		const deltaMs = this.lastContentTimeMs !== null
-			? timeMs - this.lastContentTimeMs
-			: 1000 / 60;
+		const deltaMs =
+			this.lastContentTimeMs !== null ? timeMs - this.lastContentTimeMs : 1000 / 60;
 		this.lastContentTimeMs = timeMs;
 
 		const zoomSpringConfig = getZoomSpringConfig(this.config.zoomSmoothness);
@@ -2594,9 +2622,24 @@ export class FrameRenderer {
 			resetSpringState(this.springX, state.x);
 			resetSpringState(this.springY, state.y);
 		} else {
-			state.appliedScale = stepSpringValue(this.springScale, projectedTransform.scale, deltaMs, zoomSpringConfig);
-			state.x = stepSpringValue(this.springX, projectedTransform.x, deltaMs, zoomSpringConfig);
-			state.y = stepSpringValue(this.springY, projectedTransform.y, deltaMs, zoomSpringConfig);
+			state.appliedScale = stepSpringValue(
+				this.springScale,
+				projectedTransform.scale,
+				deltaMs,
+				zoomSpringConfig,
+			);
+			state.x = stepSpringValue(
+				this.springX,
+				projectedTransform.x,
+				deltaMs,
+				zoomSpringConfig,
+			);
+			state.y = stepSpringValue(
+				this.springY,
+				projectedTransform.y,
+				deltaMs,
+				zoomSpringConfig,
+			);
 		}
 
 		this.lastMotionVector = {
@@ -2618,117 +2661,6 @@ export class FrameRenderer {
 
 		this.webcamDecodedFrame.close();
 		this.webcamDecodedFrame = null;
-	}
-
-	private getNativeReadbackBuffer(byteLength: number): Uint8Array {
-		if (!this.nativeReadbackBuffer || this.nativeReadbackBuffer.byteLength !== byteLength) {
-			this.nativeReadbackBuffer = new Uint8Array(byteLength);
-		}
-
-		return this.nativeReadbackBuffer;
-	}
-
-	private capturePixelsFromWebGL(): Uint8Array | null {
-		if (!this.app) {
-			throw new Error("Renderer not initialized");
-		}
-
-		const renderer = this.app.renderer as typeof this.app.renderer & {
-			gl?: WebGLRenderingContext | WebGL2RenderingContext;
-		};
-		const gl = renderer.gl;
-		if (!gl) {
-			return null;
-		}
-
-		const width = this.config.width;
-		const height = this.config.height;
-		const pixelByteLength = width * height * 4;
-		const pixelBuffer = this.getNativeReadbackBuffer(pixelByteLength);
-		while (gl.getError() !== gl.NO_ERROR) {
-			// Clear stale GL errors from earlier work before checking this readback attempt.
-		}
-
-		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-		gl.pixelStorei(gl.PACK_ALIGNMENT, 1);
-		gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixelBuffer);
-
-		let glError = gl.getError();
-		if (glError !== gl.NO_ERROR) {
-			// ANGLE/Metal may reject RGBA+UNSIGNED_BYTE on the default framebuffer.
-			// Blit to an FBO with explicit RGBA8 attachment where this is guaranteed.
-			const gl2 = gl as WebGL2RenderingContext;
-			if (typeof gl2.blitFramebuffer !== "function") {
-				throw new Error(`[FrameRenderer] WebGL readPixels failed with error code ${glError}`);
-			}
-
-			while (gl2.getError() !== gl2.NO_ERROR) {
-				// drain
-			}
-
-			const readFb = gl2.createFramebuffer();
-			const rb = gl2.createRenderbuffer();
-			try {
-				gl2.bindRenderbuffer(gl2.RENDERBUFFER, rb);
-				gl2.renderbufferStorage(gl2.RENDERBUFFER, gl2.RGBA8, width, height);
-				gl2.bindFramebuffer(gl2.DRAW_FRAMEBUFFER, readFb);
-				gl2.framebufferRenderbuffer(
-					gl2.DRAW_FRAMEBUFFER,
-					gl2.COLOR_ATTACHMENT0,
-					gl2.RENDERBUFFER,
-					rb,
-				);
-				gl2.bindFramebuffer(gl2.READ_FRAMEBUFFER, null);
-				gl2.blitFramebuffer(
-					0, 0, width, height,
-					0, 0, width, height,
-					gl2.COLOR_BUFFER_BIT,
-					gl2.NEAREST,
-				);
-				gl2.bindFramebuffer(gl2.FRAMEBUFFER, readFb);
-				gl2.readPixels(0, 0, width, height, gl2.RGBA, gl2.UNSIGNED_BYTE, pixelBuffer);
-				glError = gl2.getError();
-				if (glError !== gl2.NO_ERROR) {
-					throw new Error(
-						`[FrameRenderer] WebGL FBO readPixels failed with error code ${glError}`,
-					);
-				}
-			} finally {
-				gl2.bindFramebuffer(gl2.FRAMEBUFFER, null);
-				gl2.deleteFramebuffer(readFb);
-				gl2.deleteRenderbuffer(rb);
-			}
-		}
-
-		return pixelBuffer;
-	}
-
-	capturePixelsForNativeExport(): Uint8Array | null {
-		if (!this.app) {
-			throw new Error("Renderer not initialized");
-		}
-
-		if (this.outputCanvasOverride || this.shouldCompositeExtensionFrame()) {
-			return null;
-		}
-
-		if (this.config.nativeReadbackMode !== "pixels") {
-			return null;
-		}
-
-		try {
-			return this.capturePixelsFromWebGL();
-		} catch (error) {
-			if (!this.nativePixelReadbackWarningShown) {
-				this.nativePixelReadbackWarningShown = true;
-				console.warn(
-					"[FrameRenderer] Direct WebGL readback unavailable for native export; falling back to canvas capture.",
-					error,
-				);
-			}
-
-			return null;
-		}
 	}
 
 	getCanvas(): HTMLCanvasElement {
@@ -2872,7 +2804,6 @@ export class FrameRenderer {
 		this.captionRenderKey = null;
 		this.exportCompositeCanvas = null;
 		this.outputCanvasOverride = null;
-		this.nativeReadbackBuffer = null;
 
 		this.annotationScaleFactor = 1;
 		this.lastSyncedWebcamTime = null;

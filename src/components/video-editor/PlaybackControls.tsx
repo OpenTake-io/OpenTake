@@ -1,4 +1,4 @@
-import { Pause, Play, Volume2, VolumeX } from "lucide-react";
+import { Pause, Play, SpeakerHigh as Volume2, SpeakerX as VolumeX } from "@phosphor-icons/react";
 import { useScopedT } from "@/contexts/I18nContext";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
@@ -54,9 +54,9 @@ export default function PlaybackControls({
 				aria-label={isPlaying ? t("playback.pause") : t("playback.play")}
 			>
 				{isPlaying ? (
-					<Pause className="w-3.5 h-3.5 fill-current" />
+					<Pause className="w-3.5 h-3.5" weight="fill" />
 				) : (
-					<Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+					<Play className="w-3.5 h-3.5" weight="fill" />
 				)}
 			</Button>
 
@@ -67,7 +67,10 @@ export default function PlaybackControls({
 			<div className="flex-1 relative h-6 flex items-center group">
 				{/* Custom Track Background */}
 				<div className="absolute left-0 right-0 h-0.5 bg-white/10 rounded-full overflow-hidden">
-					<div className="h-full bg-[#2563EB] rounded-full" style={{ width: `${progress}%` }} />
+					<div
+						className="h-full bg-[#2563EB] rounded-full"
+						style={{ width: `${progress}%` }}
+					/>
 				</div>
 
 				{/* Interactive Input */}
@@ -103,7 +106,10 @@ export default function PlaybackControls({
 				)}
 				<div className="group relative flex h-6 w-20 items-center">
 					<div className="absolute left-0 right-0 h-0.5 rounded-full bg-white/10 overflow-hidden">
-						<div className="h-full rounded-full bg-white/70" style={{ width: `${volume * 100}%` }} />
+						<div
+							className="h-full rounded-full bg-white/70"
+							style={{ width: `${volume * 100}%` }}
+						/>
 					</div>
 					<input
 						type="range"

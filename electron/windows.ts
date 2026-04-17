@@ -307,7 +307,11 @@ ipcMain.on("hud-overlay-drag", (_event, phase: string, screenX: number, screenY:
 		hudDragLastCursor = { x: screenX, y: screenY };
 		hudDragFixedSize = { width: bounds.width, height: bounds.height };
 	} else if (phase === "move" && hudDragOffset) {
-		if (hudDragLastCursor && hudDragLastCursor.x === screenX && hudDragLastCursor.y === screenY) {
+		if (
+			hudDragLastCursor &&
+			hudDragLastCursor.x === screenX &&
+			hudDragLastCursor.y === screenY
+		) {
 			return;
 		}
 

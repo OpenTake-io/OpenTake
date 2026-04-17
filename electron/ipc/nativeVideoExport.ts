@@ -1,85 +1,86 @@
-const NATIVE_EXPORT_INPUT_BYTES_PER_PIXEL = 4
+const NATIVE_EXPORT_INPUT_BYTES_PER_PIXEL = 4;
 
-export type NativeExportEncodingMode = 'fast' | 'balanced' | 'quality'
+export type NativeExportEncodingMode = "fast" | "balanced" | "quality";
 
-export type NativeVideoExportAudioMode = 'none' | 'copy-source' | 'trim-source' | 'edited-track'
+export type NativeVideoExportAudioMode = "none" | "copy-source" | "trim-source" | "edited-track";
 
 export interface NativeVideoExportStartOptions {
-	width: number
-	height: number
-	frameRate: number
-	bitrate: number
-	encodingMode: NativeExportEncodingMode
+	width: number;
+	height: number;
+	frameRate: number;
+	bitrate: number;
+	encodingMode: NativeExportEncodingMode;
+	inputMode?: "rawvideo" | "h264-stream";
 }
 
 export interface NativeVideoExportAudioSegment {
-	startMs: number
-	endMs: number
+	startMs: number;
+	endMs: number;
 }
 
 export interface NativeVideoExportFinishOptions {
-	audioMode?: NativeVideoExportAudioMode
-	audioSourcePath?: string | null
-	trimSegments?: NativeVideoExportAudioSegment[]
-	editedAudioData?: ArrayBuffer
-	editedAudioMimeType?: string | null
+	audioMode?: NativeVideoExportAudioMode;
+	audioSourcePath?: string | null;
+	trimSegments?: NativeVideoExportAudioSegment[];
+	editedAudioData?: ArrayBuffer;
+	editedAudioMimeType?: string | null;
 }
 
 export function getNativeVideoInputByteSize(width: number, height: number): number {
-	return width * height * NATIVE_EXPORT_INPUT_BYTES_PER_PIXEL
+	return width * height * NATIVE_EXPORT_INPUT_BYTES_PER_PIXEL;
 }
 
 export function parseAvailableFfmpegEncoders(stdout: string): Set<string> {
-	const encoders = new Set<string>()
+	const encoders = new Set<string>();
 
 	for (const line of stdout.split(/\r?\n/)) {
-		const match = line.match(/^\s*[A-Z.]{6}\s+([a-z0-9_]+)/i)
+		const match = line.match(/^\s*[A-Z.]{6}\s+([a-z0-9_]+)/i);
 		if (match?.[1]) {
-			encoders.add(match[1])
+			encoders.add(match[1]);
 		}
 	}
 
-	return encoders
+	return encoders;
 }
 
 export function getPreferredNativeVideoEncoders(platform: NodeJS.Platform): string[] {
 	switch (platform) {
-		case 'darwin':
-			return ['h264_videotoolbox', 'libx264']
-		case 'win32':
-			return ['h264_nvenc', 'h264_qsv', 'h264_amf', 'h264_mf', 'libx264']
-		case 'linux':
-			return ['h264_nvenc', 'h264_qsv', 'libx264']
+		case "darwin":
+			return ["h264_videotoolbox", "libx264"];
+		case "win32":
+			return ["h264_nvenc", "h264_qsv", "h264_amf", "h264_mf", "libx264"];
+		case "linux":
+			return ["h264_nvenc", "h264_qsv", "libx264"];
 		default:
-			return ['libx264']
+			return ["libx264"];
 	}
 }
 
 function getLibx264ModeArgs(encodingMode: NativeExportEncodingMode): string[] {
 	switch (encodingMode) {
-		case 'fast':
-			return ['-preset', 'ultrafast', '-tune', 'zerolatency']
-		case 'quality':
-			return ['-preset', 'slow']
-		case 'balanced':
+		case "fast":
+			return ["-preset", "ultrafast", "-tune", "zerolatency"];
+		case "quality":
+			return ["-preset", "slow"];
+		case "balanced":
 		default:
-			return ['-preset', 'medium']
+			return ["-preset", "medium"];
 	}
 }
 
 function getBitrateArgs(bitrate: number): string[] {
-	const effectiveBitrate = Math.max(1_500_000, Math.round(bitrate))
-	const maxRate = Math.max(effectiveBitrate, Math.round(effectiveBitrate * 1.2))
-	const bufferSize = Math.max(maxRate * 2, effectiveBitrate * 2)
+	const effectiveBitrate = Math.max(1_500_000, Math.round(bitrate));
+	const maxRate = Math.max(effectiveBitrate, Math.round(effectiveBitrate * 1.2));
+	const bufferSize = Math.max(maxRate * 2, effectiveBitrate * 2);
 
 	return [
-		'-b:v',
+		"-b:v",
 		String(effectiveBitrate),
-		'-maxrate',
+		"-maxrate",
 		String(maxRate),
-		'-bufsize',
+		"-bufsize",
 		String(bufferSize),
-	]
+	];
 }
 
 export function buildNativeVideoExportArgs(
@@ -88,85 +89,111 @@ export function buildNativeVideoExportArgs(
 	outputPath: string,
 ): string[] {
 	const args = [
-		'-y',
-		'-hide_banner',
-		'-loglevel',
-		'error',
-		'-f',
-		'rawvideo',
-		'-pix_fmt',
-		'rgba',
-		'-s:v',
+		"-y",
+		"-hide_banner",
+		"-loglevel",
+		"error",
+		"-f",
+		"rawvideo",
+		"-pix_fmt",
+		"rgba",
+		"-s:v",
 		`${options.width}x${options.height}`,
-		'-framerate',
+		"-framerate",
 		String(options.frameRate),
-		'-i',
-		'pipe:0',
-		'-vf',
-		'vflip',
-		'-an',
-		'-c:v',
+		"-i",
+		"pipe:0",
+		"-vf",
+		"vflip",
+		"-an",
+		"-c:v",
 		encoder,
-		'-g',
+		"-g",
 		String(Math.max(1, Math.round(options.frameRate * 5))),
 		...getBitrateArgs(options.bitrate),
-	]
+	];
 
-	if (encoder === 'libx264') {
-		args.push(...getLibx264ModeArgs(options.encodingMode))
+	if (encoder === "libx264") {
+		args.push(...getLibx264ModeArgs(options.encodingMode));
 	}
 
-	args.push('-pix_fmt', 'yuv420p', '-movflags', '+faststart', outputPath)
-	return args
+	args.push("-pix_fmt", "yuv420p", "-movflags", "+faststart", outputPath);
+	return args;
 }
 
 function formatFfmpegSeconds(milliseconds: number): string {
-	return (milliseconds / 1000).toFixed(3)
+	return (milliseconds / 1000).toFixed(3);
 }
 
 export function buildTrimmedSourceAudioFilter(
 	segments: NativeVideoExportAudioSegment[],
 ): string | null {
 	if (segments.length === 0) {
-		return null
+		return null;
 	}
 
-	const filterParts: string[] = []
-	const segmentLabels: string[] = []
+	const filterParts: string[] = [];
+	const segmentLabels: string[] = [];
 
 	segments.forEach((segment, index) => {
-		const label = `trimmed_audio_${index}`
+		const label = `trimmed_audio_${index}`;
 		filterParts.push(
 			`[1:a]atrim=start=${formatFfmpegSeconds(segment.startMs)}:end=${formatFfmpegSeconds(segment.endMs)},asetpts=PTS-STARTPTS[${label}]`,
-		)
-		segmentLabels.push(`[${label}]`)
-	})
+		);
+		segmentLabels.push(`[${label}]`);
+	});
 
 	if (segmentLabels.length === 1) {
-		filterParts.push(`${segmentLabels[0]}anull[aout]`)
+		filterParts.push(`${segmentLabels[0]}anull[aout]`);
 	} else {
-		filterParts.push(`${segmentLabels.join('')}concat=n=${segmentLabels.length}:v=0:a=1[aout]`)
+		filterParts.push(`${segmentLabels.join("")}concat=n=${segmentLabels.length}:v=0:a=1[aout]`);
 	}
 
-	return filterParts.join(';')
+	return filterParts.join(";");
+}
+
+/**
+ * Builds FFmpeg arguments for a zero-copy H.264 stream export.
+ * FFmpeg receives a pre-encoded Annex B H.264 stream on stdin (produced by the
+ * browser's hardware VideoEncoder) and copies it straight into an MP4 container
+ * — no re-encoding step, no raw pixel IPC traffic.
+ */
+export function buildNativeH264StreamExportArgs(config: {
+        frameRate: number
+        outputPath: string
+}): string[] {
+        return [
+                '-y',
+                '-hide_banner',
+                '-loglevel',
+                'error',
+                // Input 0: pre-encoded H.264 Annex B stream from browser VideoEncoder via stdin
+                '-f', 'h264',
+                '-r', String(config.frameRate),
+                '-i', 'pipe:0',
+                '-an', // audio handled separately by muxNativeVideoExportAudio
+                '-c:v', 'copy',
+                '-movflags', '+faststart',
+                config.outputPath,
+        ]
 }
 
 export function getEditedAudioExtension(mimeType?: string | null): string {
 	if (!mimeType) {
-		return '.webm'
+		return ".webm";
 	}
 
-	if (mimeType.includes('wav')) {
-		return '.wav'
+	if (mimeType.includes("wav")) {
+		return ".wav";
 	}
 
-	if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
-		return '.m4a'
+	if (mimeType.includes("mp4") || mimeType.includes("m4a")) {
+		return ".m4a";
 	}
 
-	if (mimeType.includes('ogg')) {
-		return '.ogg'
+	if (mimeType.includes("ogg")) {
+		return ".ogg";
 	}
 
-	return '.webm'
+	return ".webm";
 }

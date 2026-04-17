@@ -101,7 +101,12 @@ function getTargetConfigs() {
 				archTag,
 				buildRoot: path.join(cacheRoot, `build-${archTag}`),
 				outputDir: path.join(nativeRoot, "bin", archTag),
-				configureArgs: ["-G", "Visual Studio 17 2022", "-A", arch === "arm64" ? "ARM64" : "x64"],
+				configureArgs: [
+					"-G",
+					"Visual Studio 17 2022",
+					"-A",
+					arch === "arm64" ? "ARM64" : "x64",
+				],
 			},
 		];
 	}
@@ -258,7 +263,9 @@ async function shouldSkipBuild(target) {
 		const binaryName = target.platform === "win32" ? "whisper-cli.exe" : "whisper-cli";
 		const binaryPath = path.join(target.outputDir, binaryName);
 		return (
-			manifest.version === whisperVersion && manifest.arch === target.arch && existsSync(binaryPath)
+			manifest.version === whisperVersion &&
+			manifest.arch === target.arch &&
+			existsSync(binaryPath)
 		);
 	} catch {
 		return false;

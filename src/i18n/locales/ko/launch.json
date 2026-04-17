@@ -56,6 +56,8 @@
 		"loadingSources": "소스를 불러오는 중...",
 		"screens": "화면",
 		"windows": "창",
+		"noScreensAvailable": "사용 가능한 화면이 없습니다",
+		"noWindowsAvailable": "사용 가능한 창이 없습니다",
 		"windowsNote": "보이는 창(최소화되지 않은 창)만 녹화할 수 있습니다.",
 		"windowPlaceholder": "창",
 		"cancel": "취소",
