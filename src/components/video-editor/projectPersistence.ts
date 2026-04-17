@@ -18,6 +18,7 @@ import {
 	type AutoCaptionSettings,
 	type CaptionCue,
 	type CaptionCueWord,
+	type ClipRegion,
 	type CropRegion,
 	type CursorStyle,
 	DEFAULT_ANNOTATION_POSITION,
@@ -57,7 +58,6 @@ import {
 	getDefaultCaptionFontFamily,
 	type SpeedRegion,
 	type TrimRegion,
-	type ClipRegion,
 	type WebcamOverlaySettings,
 	type ZoomRegion,
 	type ZoomTransitionEasing,
@@ -128,6 +128,19 @@ function isFiniteNumber(value: unknown): value is number {
 
 function clamp(value: number, min: number, max: number) {
 	return Math.min(max, Math.max(min, value));
+}
+
+function normalizeClipPlaybackSpeed(value: unknown): ClipRegion["speed"] {
+	return value === 0.25 ||
+		value === 0.5 ||
+		value === 0.75 ||
+		value === 1 ||
+		value === 1.25 ||
+		value === 1.5 ||
+		value === 1.75 ||
+		value === 2
+		? value
+		: 1;
 }
 
 export function normalizeExportEncodingMode(value: unknown): ExportEncodingMode {
@@ -304,10 +317,16 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 
 	const normalizedZoomRegions: ZoomRegion[] = Array.isArray(editor.zoomRegions)
 		? editor.zoomRegions
-				.filter((region): region is ZoomRegion => Boolean(region && typeof region.id === "string"))
+				.filter((region): region is ZoomRegion =>
+					Boolean(region && typeof region.id === "string"),
+				)
 				.map((region) => {
-					const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
-					const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
+					const rawStart = isFiniteNumber(region.startMs)
+						? Math.round(region.startMs)
+						: 0;
+					const rawEnd = isFiniteNumber(region.endMs)
+						? Math.round(region.endMs)
+						: rawStart + 1000;
 					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
 					const endMs = Math.max(startMs + 1, rawEnd);
 
@@ -315,10 +334,24 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						id: region.id,
 						startMs,
 						endMs,
-						depth: [1, 2, 3, 4, 5, 6].includes(region.depth) ? region.depth : DEFAULT_ZOOM_DEPTH,
+						mode:
+							region.mode === "auto" || region.mode === "manual"
+								? region.mode
+								: "manual",
+						depth: [1, 2, 3, 4, 5, 6].includes(region.depth)
+							? region.depth
+							: DEFAULT_ZOOM_DEPTH,
 						focus: {
-							cx: clamp(isFiniteNumber(region.focus?.cx) ? region.focus.cx : 0.5, 0, 1),
-							cy: clamp(isFiniteNumber(region.focus?.cy) ? region.focus.cy : 0.5, 0, 1),
+							cx: clamp(
+								isFiniteNumber(region.focus?.cx) ? region.focus.cx : 0.5,
+								0,
+								1,
+							),
+							cy: clamp(
+								isFiniteNumber(region.focus?.cy) ? region.focus.cy : 0.5,
+								0,
+								1,
+							),
 						},
 					};
 				})
@@ -326,10 +359,16 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 
 	const normalizedTrimRegions: TrimRegion[] = Array.isArray(editor.trimRegions)
 		? editor.trimRegions
-				.filter((region): region is TrimRegion => Boolean(region && typeof region.id === "string"))
+				.filter((region): region is TrimRegion =>
+					Boolean(region && typeof region.id === "string"),
+				)
 				.map((region) => {
-					const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
-					const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
+					const rawStart = isFiniteNumber(region.startMs)
+						? Math.round(region.startMs)
+						: 0;
+					const rawEnd = isFiniteNumber(region.endMs)
+						? Math.round(region.endMs)
+						: rawStart + 1000;
 					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
 					const endMs = Math.max(startMs + 1, rawEnd);
 					return {
@@ -340,29 +379,42 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				})
 		: [];
 
-	const normalizedClipRegions: ClipRegion[] = Array.isArray((editor as any).clipRegions)
-		? ((editor as any).clipRegions as ClipRegion[])
-				.filter((region): region is ClipRegion => Boolean(region && typeof region.id === "string"))
+	const normalizedClipRegions: ClipRegion[] = Array.isArray(editor.clipRegions)
+		? editor.clipRegions
+				.filter((region): region is ClipRegion =>
+					Boolean(region && typeof region.id === "string"),
+				)
 				.map((region) => {
-					const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
-					const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
+					const rawStart = isFiniteNumber(region.startMs)
+						? Math.round(region.startMs)
+						: 0;
+					const rawEnd = isFiniteNumber(region.endMs)
+						? Math.round(region.endMs)
+						: rawStart + 1000;
 					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
 					const endMs = Math.max(startMs + 1, rawEnd);
 					return {
 						id: region.id,
 						startMs,
 						endMs,
-						speed: isFiniteNumber((region as any).speed) ? (region as any).speed : 1,
+						speed: normalizeClipPlaybackSpeed(region.speed),
+						muted: Boolean(region.muted),
 					};
 				})
 		: [];
 
 	const normalizedSpeedRegions: SpeedRegion[] = Array.isArray(editor.speedRegions)
 		? editor.speedRegions
-				.filter((region): region is SpeedRegion => Boolean(region && typeof region.id === "string"))
+				.filter((region): region is SpeedRegion =>
+					Boolean(region && typeof region.id === "string"),
+				)
 				.map((region) => {
-					const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
-					const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
+					const rawStart = isFiniteNumber(region.startMs)
+						? Math.round(region.startMs)
+						: 0;
+					const rawEnd = isFiniteNumber(region.endMs)
+						? Math.round(region.endMs)
+						: rawStart + 1000;
 					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
 					const endMs = Math.max(startMs + 1, rawEnd);
 
@@ -392,8 +444,12 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 					Boolean(region && typeof region.id === "string"),
 				)
 				.map((region, index) => {
-					const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
-					const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
+					const rawStart = isFiniteNumber(region.startMs)
+						? Math.round(region.startMs)
+						: 0;
+					const rawEnd = isFiniteNumber(region.endMs)
+						? Math.round(region.endMs)
+						: rawStart + 1000;
 					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
 					const endMs = Math.max(startMs + 1, rawEnd);
 
@@ -401,10 +457,19 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						id: region.id,
 						startMs,
 						endMs,
-						type: region.type === "image" || region.type === "figure" || region.type === "blur" ? region.type : "text",
+						type:
+							region.type === "image" ||
+							region.type === "figure" ||
+							region.type === "blur"
+								? region.type
+								: "text",
 						content: typeof region.content === "string" ? region.content : "",
-						textContent: typeof region.textContent === "string" ? region.textContent : undefined,
-						imageContent: typeof region.imageContent === "string" ? region.imageContent : undefined,
+						textContent:
+							typeof region.textContent === "string" ? region.textContent : undefined,
+						imageContent:
+							typeof region.imageContent === "string"
+								? region.imageContent
+								: undefined,
 						position: {
 							x: clamp(
 								isFiniteNumber(region.position?.x)
@@ -439,7 +504,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						},
 						style: {
 							...DEFAULT_ANNOTATION_STYLE,
-							...(region.style && typeof region.style === "object" ? region.style : {}),
+							...(region.style && typeof region.style === "object"
+								? region.style
+								: {}),
 						},
 						zIndex: isFiniteNumber(region.zIndex) ? region.zIndex : index + 1,
 						figureData: region.figureData
@@ -448,10 +515,14 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 									...region.figureData,
 								}
 							: undefined,
-						blurIntensity: isFiniteNumber(region.blurIntensity) 
-							? clamp(region.blurIntensity, 1, 100) 
+						blurIntensity: isFiniteNumber(region.blurIntensity)
+							? clamp(region.blurIntensity, 1, 100)
 							: 20,
-						blurColor: typeof region.blurColor === "string" ? region.blurColor : undefined,
+						blurColor:
+							typeof region.blurColor === "string" ? region.blurColor : undefined,
+						trackIndex: isFiniteNumber(region.trackIndex)
+							? Math.max(0, Math.floor(region.trackIndex))
+							: 0,
 					};
 				})
 		: [];
@@ -460,10 +531,16 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		(editor as Partial<ProjectEditorState>).audioRegions,
 	)
 		? ((editor as Partial<ProjectEditorState>).audioRegions as AudioRegion[])
-				.filter((region): region is AudioRegion => Boolean(region && typeof region.id === "string"))
+				.filter((region): region is AudioRegion =>
+					Boolean(region && typeof region.id === "string"),
+				)
 				.map((region) => {
-					const rawStart = isFiniteNumber(region.startMs) ? Math.round(region.startMs) : 0;
-					const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
+					const rawStart = isFiniteNumber(region.startMs)
+						? Math.round(region.startMs)
+						: 0;
+					const rawEnd = isFiniteNumber(region.endMs)
+						? Math.round(region.endMs)
+						: rawStart + 1000;
 					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
 					const endMs = Math.max(startMs + 1, rawEnd);
 
@@ -473,6 +550,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						endMs,
 						audioPath: typeof region.audioPath === "string" ? region.audioPath : "",
 						volume: isFiniteNumber(region.volume) ? clamp(region.volume, 0, 1) : 1,
+						trackIndex: isFiniteNumber(region.trackIndex)
+							? Math.max(0, Math.floor(region.trackIndex))
+							: 0,
 					};
 				})
 		: [];
@@ -484,7 +564,9 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				.filter((cue): cue is CaptionCue => Boolean(cue && typeof cue.id === "string"))
 				.map((cue) => {
 					const rawStart = isFiniteNumber(cue.startMs) ? Math.round(cue.startMs) : 0;
-					const rawEnd = isFiniteNumber(cue.endMs) ? Math.round(cue.endMs) : rawStart + 1000;
+					const rawEnd = isFiniteNumber(cue.endMs)
+						? Math.round(cue.endMs)
+						: rawStart + 1000;
 					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
 					const endMs = Math.max(startMs + 1, rawEnd);
 					const words: CaptionCueWord[] | undefined = Array.isArray(cue.words)
@@ -499,8 +581,16 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 									const rawWordEnd = isFiniteNumber(word.endMs)
 										? Math.round(word.endMs)
 										: rawWordStart + 1;
-									const normalizedWordStart = clamp(rawWordStart, startMs, endMs - 1);
-									const normalizedWordEnd = clamp(rawWordEnd, normalizedWordStart + 1, endMs);
+									const normalizedWordStart = clamp(
+										rawWordStart,
+										startMs,
+										endMs - 1,
+									);
+									const normalizedWordEnd = clamp(
+										rawWordEnd,
+										normalizedWordStart + 1,
+										endMs,
+									);
 
 									return {
 										text: word.text.trim(),
@@ -533,7 +623,8 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				? rawAutoCaptionSettings.enabled
 				: DEFAULT_AUTO_CAPTION_SETTINGS.enabled,
 		language:
-			typeof rawAutoCaptionSettings.language === "string" && rawAutoCaptionSettings.language.trim()
+			typeof rawAutoCaptionSettings.language === "string" &&
+			rawAutoCaptionSettings.language.trim()
 				? rawAutoCaptionSettings.language.trim()
 				: DEFAULT_AUTO_CAPTION_SETTINGS.language,
 		fontFamily: getDefaultCaptionFontFamily(),
@@ -627,12 +718,11 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		cursorSmoothing: isFiniteNumber(editor.cursorSmoothing)
 			? clamp(editor.cursorSmoothing, 0, 2)
 			: DEFAULT_CURSOR_SMOOTHING,
-		zoomSmoothness: isFiniteNumber((editor as any).zoomSmoothness)
-			? clamp((editor as any).zoomSmoothness as number, 0, 1)
+		zoomSmoothness: isFiniteNumber(editor.zoomSmoothness)
+			? clamp(editor.zoomSmoothness, 0, 1)
 			: 0.5,
-		zoomClassicMode: typeof (editor as any).zoomClassicMode === 'boolean'
-			? (editor as any).zoomClassicMode
-			: false,
+		zoomClassicMode:
+			typeof editor.zoomClassicMode === "boolean" ? editor.zoomClassicMode : false,
 		cursorMotionBlur: isFiniteNumber((editor as Partial<ProjectEditorState>).cursorMotionBlur)
 			? clamp((editor as Partial<ProjectEditorState>).cursorMotionBlur as number, 0, 2)
 			: DEFAULT_CURSOR_MOTION_BLUR,
@@ -642,7 +732,11 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		cursorClickBounceDuration: isFiniteNumber(
 			(editor as Partial<ProjectEditorState>).cursorClickBounceDuration,
 		)
-			? clamp((editor as Partial<ProjectEditorState>).cursorClickBounceDuration as number, 60, 500)
+			? clamp(
+					(editor as Partial<ProjectEditorState>).cursorClickBounceDuration as number,
+					60,
+					500,
+				)
 			: DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
 		cursorSway: isFiniteNumber((editor as Partial<ProjectEditorState>).cursorSway)
 			? clamp((editor as Partial<ProjectEditorState>).cursorSway as number, 0, 2)
@@ -666,9 +760,12 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 		autoCaptionSettings: normalizedAutoCaptionSettings,
 		webcam: {
 			enabled:
-				typeof webcam.enabled === "boolean" ? webcam.enabled : DEFAULT_WEBCAM_OVERLAY.enabled,
+				typeof webcam.enabled === "boolean"
+					? webcam.enabled
+					: DEFAULT_WEBCAM_OVERLAY.enabled,
 			sourcePath: webcamSourcePath,
-			mirror: typeof webcam.mirror === "boolean" ? webcam.mirror : DEFAULT_WEBCAM_OVERLAY.mirror,
+			mirror:
+				typeof webcam.mirror === "boolean" ? webcam.mirror : DEFAULT_WEBCAM_OVERLAY.mirror,
 			positionPreset:
 				webcam.positionPreset === "top-left" ||
 				webcam.positionPreset === "top-center" ||
@@ -710,11 +807,15 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			cornerRadius: isFiniteNumber(webcam.cornerRadius)
 				? clamp(webcam.cornerRadius, 0, 160)
 				: DEFAULT_WEBCAM_CORNER_RADIUS,
-			shadow: isFiniteNumber(webcam.shadow) ? clamp(webcam.shadow, 0, 1) : DEFAULT_WEBCAM_SHADOW,
+			shadow: isFiniteNumber(webcam.shadow)
+				? clamp(webcam.shadow, 0, 1)
+				: DEFAULT_WEBCAM_SHADOW,
 			timeOffsetMs: isFiniteNumber(webcam.timeOffsetMs)
 				? Math.round(webcam.timeOffsetMs)
 				: DEFAULT_WEBCAM_TIME_OFFSET_MS,
-			margin: isFiniteNumber(webcam.margin) ? clamp(webcam.margin, 0, 96) : DEFAULT_WEBCAM_MARGIN,
+			margin: isFiniteNumber(webcam.margin)
+				? clamp(webcam.margin, 0, 96)
+				: DEFAULT_WEBCAM_MARGIN,
 		},
 		aspectRatio:
 			typeof editor.aspectRatio === "string" &&

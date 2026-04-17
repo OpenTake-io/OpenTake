@@ -14,11 +14,11 @@ function getTargetConfigs() {
 	return [
 		{
 			archTag: "darwin-arm64",
-			swiftTarget: "arm64-apple-macos13.0",
+			swiftTarget: "arm64-apple-macos14.0",
 		},
 		{
 			archTag: "darwin-x64",
-			swiftTarget: "x86_64-apple-macos13.0",
+			swiftTarget: "x86_64-apple-macos14.0",
 		},
 	];
 }
@@ -26,19 +26,19 @@ function getTargetConfigs() {
 const helpers = [
 	{
 		source: "ScreenCaptureKitRecorder.swift",
-		output: "openscreen-screencapturekit-helper",
+		output: "recordly-screencapturekit-helper",
 	},
 	{
 		source: "ScreenCaptureKitWindowList.swift",
-		output: "openscreen-window-list",
+		output: "recordly-window-list",
 	},
 	{
 		source: "SystemCursorAssets.swift",
-		output: "openscreen-system-cursors",
+		output: "recordly-system-cursors",
 	},
 	{
 		source: "NativeCursorMonitor.swift",
-		output: "openscreen-native-cursor-monitor",
+		output: "recordly-native-cursor-monitor",
 	},
 ];
 
