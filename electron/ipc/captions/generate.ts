@@ -12,9 +12,9 @@ import { resolveRecordingSession } from "../project/session";
 
 const execFileAsync = promisify(execFile);
 
-export async function ensureReadableFile(filePath: string, description: string) {
+export async function ensureReadableFile(filePath: string, options?: { executable?: boolean }) {
 	await fs.access(filePath, fsConstants.R_OK);
-	if (description === "whisper executable") {
+	if (options?.executable) {
 		try {
 			await fs.access(filePath, fsConstants.X_OK);
 		} catch {
@@ -113,7 +113,7 @@ export async function extractCaptionAudioSource(options: {
 
 	for (const candidate of candidates) {
 		try {
-			await ensureReadableFile(candidate.path, "video file");
+			await ensureReadableFile(candidate.path);
 			await execFileAsync(
 				options.ffmpegPath,
 				[
@@ -169,8 +169,8 @@ export async function generateAutoCaptionsFromVideo(options: {
 
 	const whisperExecutablePath = await resolveWhisperExecutablePath(options.whisperExecutablePath);
 	const whisperModelPath = path.resolve(options.whisperModelPath);
-	await ensureReadableFile(whisperExecutablePath, "whisper executable");
-	await ensureReadableFile(whisperModelPath, "whisper model");
+	await ensureReadableFile(whisperExecutablePath, { executable: true });
+	await ensureReadableFile(whisperModelPath);
 
 	const tempBase = path.join(
 		app.getPath("temp"),

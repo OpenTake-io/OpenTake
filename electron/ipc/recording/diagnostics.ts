@@ -55,13 +55,9 @@ export async function probeMediaDurationSeconds(filePath: string): Promise<numbe
 		await execFileAsync(ffmpegPath, ["-i", filePath, "-hide_banner"], { timeout: 5000 });
 	} catch (error) {
 		const stderr = (error as NodeJS.ErrnoException & { stderr?: string })?.stderr ?? "";
-		const match = stderr.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2})\.(\d{2,3})/);
-		if (match) {
-			const h = Number(match[1]);
-			const m = Number(match[2]);
-			const s = Number(match[3]);
-			const frac = Number(match[4]) / (match[4].length === 3 ? 1000 : 100);
-			return h * 3600 + m * 60 + s + frac;
+		const duration = parseFfmpegDurationSeconds(stderr);
+		if (duration !== null) {
+			return duration;
 		}
 	}
 	return 0;

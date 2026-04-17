@@ -32,21 +32,18 @@ const execFileAsync = promisify(execFile);
 export async function isNativeWindowsCaptureAvailable(): Promise<boolean> {
 	if (process.platform !== "win32") return false;
 
-	const helperPath = getWindowsCaptureExePath();
 	const os = await import("node:os");
 	const [major, , build] = os.release().split(".").map(Number);
 	const supported = major >= 10 && build >= 19041;
-	let helperExists = false;
+	if (!supported) return false;
 
 	try {
-		await fs.access(helperPath, fsConstants.X_OK);
-		helperExists = true;
+		await fs.access(getWindowsCaptureExePath(), fsConstants.X_OK);
 	} catch {
 		return false;
 	}
 
-	void helperExists;
-	return supported;
+	return true;
 }
 
 export function waitForWindowsCaptureStart(proc: ChildProcessWithoutNullStreams) {

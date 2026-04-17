@@ -183,7 +183,9 @@ export async function startInteractionCapture() {
 
 		hook.on("mousedown", onMouseDown);
 		hook.on("mouseup", onMouseUp);
-		hook.on("mousemove", onMouseMove);
+		if (process.platform === "linux") {
+			hook.on("mousemove", onMouseMove);
+		}
 
 		hook.start();
 
@@ -192,11 +194,15 @@ export async function startInteractionCapture() {
 				if (typeof hook.off === "function") {
 					hook.off("mousedown", onMouseDown);
 					hook.off("mouseup", onMouseUp);
-					hook.off("mousemove", onMouseMove);
+					if (process.platform === "linux") {
+						hook.off("mousemove", onMouseMove);
+					}
 				} else if (typeof hook.removeListener === "function") {
 					hook.removeListener("mousedown", onMouseDown);
 					hook.removeListener("mouseup", onMouseUp);
-					hook.removeListener("mousemove", onMouseMove);
+					if (process.platform === "linux") {
+						hook.removeListener("mousemove", onMouseMove);
+					}
 				}
 			} catch {
 				// ignore listener cleanup errors

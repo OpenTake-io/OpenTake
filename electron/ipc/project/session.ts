@@ -65,7 +65,7 @@ export async function resolveRecordingSessionManifest(
 			return {
 				videoPath: normalizedVideoPath,
 				webcamPath: null,
-				timeOffsetMs: 0,
+				timeOffsetMs: normalizeRecordingTimeOffsetMs(parsed.timeOffsetMs),
 			};
 		}
 

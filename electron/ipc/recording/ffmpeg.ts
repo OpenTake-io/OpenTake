@@ -1,4 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { access } from "node:fs/promises";
 import type { SelectedSource } from "../types";
 import {
 	ffmpegCaptureOutputBuffer,
@@ -165,7 +166,6 @@ export function waitForFfmpegCaptureStop(process: ChildProcessWithoutNullStreams
 			cleanup();
 
 			try {
-				const { access } = await import("node:fs/promises");
 				await access(outputPath);
 				if (code === 0 || code === null) {
 					resolve(outputPath);

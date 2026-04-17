@@ -41,10 +41,11 @@ export function getAssetRootPath() {
 }
 
 export function isPathInsideDirectory(candidatePath: string, directoryPath: string) {
+	const normalizedCandidatePath = normalizePath(candidatePath);
 	const normalizedDirectoryPath = normalizePath(directoryPath);
 	return (
-		candidatePath === normalizedDirectoryPath ||
-		candidatePath.startsWith(`${normalizedDirectoryPath}${path.sep}`)
+		normalizedCandidatePath === normalizedDirectoryPath ||
+		normalizedCandidatePath.startsWith(`${normalizedDirectoryPath}${path.sep}`)
 	);
 }
 
@@ -52,9 +53,9 @@ export function isAllowedLocalReadPath(candidatePath: string) {
 	const allowedPrefixes = [RECORDINGS_DIR, USER_DATA_PATH, getAssetRootPath(), app.getPath("temp")];
 
 	return (
-		existsSync(candidatePath) ||
-		allowedPrefixes.some((prefix) => isPathInsideDirectory(candidatePath, prefix)) ||
-		approvedLocalReadPaths.has(candidatePath)
+		existsSync(candidatePath) &&
+		(allowedPrefixes.some((prefix) => isPathInsideDirectory(candidatePath, prefix)) ||
+			approvedLocalReadPaths.has(candidatePath))
 	);
 }
 
@@ -238,7 +239,10 @@ export async function buildProjectLibraryEntry(
 
 		return {
 			path: normalizedPath,
-			name: path.basename(normalizedPath).replace(/\.(recordly|openscreen)$/i, ""),
+			name: path.basename(normalizedPath).replace(
+			new RegExp(`\\.(${[PROJECT_FILE_EXTENSION, ...LEGACY_PROJECT_FILE_EXTENSIONS].join("|")})$`, "i"),
+			"",
+		),
 			updatedAt: stats.mtimeMs,
 			thumbnailPath: thumbnailExists ? thumbnailPath : null,
 			isCurrent: Boolean(

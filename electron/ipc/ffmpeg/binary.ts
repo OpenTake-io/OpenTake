@@ -6,13 +6,17 @@ import { app } from "electron";
 const nodeRequire = createRequire(import.meta.url);
 
 export function loadFfmpegStatic(): string | null {
-	const moduleExports = nodeRequire("ffmpeg-static");
-	if (typeof moduleExports === "string") {
-		return moduleExports;
-	}
+	try {
+		const moduleExports = nodeRequire("ffmpeg-static");
+		if (typeof moduleExports === "string") {
+			return moduleExports;
+		}
 
-	if (typeof moduleExports?.default === "string") {
-		return moduleExports.default as string;
+		if (typeof moduleExports?.default === "string") {
+			return moduleExports.default as string;
+		}
+	} catch {
+		// ffmpeg-static not available; fall through to system FFmpeg
 	}
 
 	return null;
