@@ -1,7 +1,10 @@
 {
 	"playback": {
 		"play": "Play",
-		"pause": "Pause"
+		"pause": "Pause",
+		"skipBack": "Skip Back",
+		"skipForward": "Skip Forward",
+		"muteUnmute": "Mute/Unmute"
 	},
 	"annotations": {
 		"settings": "Annotation Settings",
@@ -118,6 +121,14 @@
 		"issue": "Export issue",
 		"complete": "Export complete",
 		"savedSuccessfully": "Your file was saved successfully."
+	},
+	"toolbar": {
+		"addLayer": "Add Layer",
+		"splitClip": "Split Clip (C)"
+	},
+	"timeline": {
+		"expand": "Expand Timeline",
+		"collapse": "Collapse Timeline"
 	},
 	"openRecordingsFolder": "Open recordings folder"
 }

@@ -130,19 +130,6 @@ function clamp(value: number, min: number, max: number) {
 	return Math.min(max, Math.max(min, value));
 }
 
-function normalizeClipPlaybackSpeed(value: unknown): ClipRegion["speed"] {
-	return value === 0.25 ||
-		value === 0.5 ||
-		value === 0.75 ||
-		value === 1 ||
-		value === 1.25 ||
-		value === 1.5 ||
-		value === 1.75 ||
-		value === 2
-		? value
-		: 1;
-}
-
 export function normalizeExportEncodingMode(value: unknown): ExportEncodingMode {
 	if (value === "fast" || value === "balanced" || value === "quality") {
 		return value;
@@ -334,10 +321,6 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						id: region.id,
 						startMs,
 						endMs,
-						mode:
-							region.mode === "auto" || region.mode === "manual"
-								? region.mode
-								: "manual",
 						depth: [1, 2, 3, 4, 5, 6].includes(region.depth)
 							? region.depth
 							: DEFAULT_ZOOM_DEPTH,
@@ -353,6 +336,10 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 								1,
 							),
 						},
+						mode:
+							region.mode === "auto" || region.mode === "manual"
+								? region.mode
+								: undefined,
 					};
 				})
 		: [];
@@ -397,8 +384,8 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						id: region.id,
 						startMs,
 						endMs,
-						speed: normalizeClipPlaybackSpeed(region.speed),
-						muted: Boolean(region.muted),
+						speed: isFiniteNumber(region.speed) ? region.speed : 1,
+						muted: typeof region.muted === "boolean" ? region.muted : false,
 					};
 				})
 		: [];

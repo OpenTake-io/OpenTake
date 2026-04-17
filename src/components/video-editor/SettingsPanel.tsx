@@ -26,9 +26,12 @@ import { type AspectRatio } from "@/utils/aspectRatioUtils";
 import minimalCursorUrl from "../../../Minimal Cursor.svg";
 import tahoeCursorUrl from "../../assets/cursors/Cursor=Default.svg";
 import { useI18n, useScopedT } from "../../contexts/I18nContext";
+import type { AppLocale } from "../../i18n/config";
+import { SUPPORTED_LOCALES } from "../../i18n/config";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
 import { SliderControl } from "./SliderControl";
+import { KeyboardShortcutsDialog } from "./TutorialHelp";
 import type {
 	AnnotationRegion,
 	AnnotationType,
@@ -37,6 +40,7 @@ import type {
 	CaptionCue,
 	CropRegion,
 	CursorStyle,
+	EditorEffectSection,
 	FigureData,
 	PlaybackSpeed,
 	WebcamOverlaySettings,
@@ -108,17 +112,6 @@ const CAPTION_ANIMATION_OPTIONS: Array<{ value: AutoCaptionAnimation; label: str
 ];
 
 type BackgroundTab = "image" | "video" | "color" | "gradient";
-export type EditorEffectSection =
-	| "scene"
-	| "cursor"
-	| "captions"
-	| "webcam"
-	| "zoom"
-	| "frame"
-	| "crop"
-	| "extensions"
-	| `ext:${string}`;
-
 function isHexWallpaper(value: string): boolean {
 	return /^#(?:[0-9a-f]{3}){1,2}$/i.test(value);
 }
@@ -224,7 +217,10 @@ function ExtensionSettingsSection({
 									className="w-20 h-1 accent-[#2563EB]"
 								/>
 								<span className="text-[10px] text-slate-500 w-8 text-right font-mono">
-									{(typeof value === "number" ? value : 0).toFixed(1)}
+									{(typeof value === "number"
+										? value
+										: (field.defaultValue as number)
+									).toFixed(1)}
 								</span>
 							</div>
 						</div>
@@ -339,7 +335,9 @@ interface SettingsPanelProps {
 	onTrimDelete?: (id: string) => void;
 	selectedClipId?: string | null;
 	selectedClipSpeed?: number | null;
+	selectedClipMuted?: boolean | null;
 	onClipSpeedChange?: (speed: number) => void;
+	onClipMutedChange?: (muted: boolean) => void;
 	onClipDelete?: (id: string) => void;
 	shadowIntensity?: number;
 	onShadowChange?: (intensity: number) => void;
@@ -349,6 +347,8 @@ interface SettingsPanelProps {
 	onZoomMotionBlurChange?: (amount: number) => void;
 	connectZooms?: boolean;
 	onConnectZoomsChange?: (enabled: boolean) => void;
+	autoApplyFreshRecordingAutoZooms?: boolean;
+	onAutoApplyFreshRecordingAutoZoomsChange?: (enabled: boolean) => void;
 	zoomInDurationMs?: number;
 	onZoomInDurationMsChange?: (duration: number) => void;
 	zoomInOverlapMs?: number;
@@ -430,8 +430,6 @@ interface SettingsPanelProps {
 	onSpeedDelete?: (id: string) => void;
 }
 
-export default SettingsPanel;
-
 const ZOOM_DEPTH_OPTIONS: Array<{ depth: ZoomDepth; label: string }> = [
 	{ depth: 1, label: "1.25×" },
 	{ depth: 2, label: "1.5×" },
@@ -484,6 +482,14 @@ const CAPTION_LANGUAGE_OPTIONS = [
 	{ value: "ja", label: "Japanese" },
 	{ value: "ko", label: "Korean" },
 ] as const;
+
+const APP_LANGUAGE_LABELS: Record<AppLocale, string> = {
+	en: "English",
+	es: "Español",
+	nl: "Nederlands",
+	ko: "한국어",
+	"zh-CN": "中文",
+};
 
 function loadPreviewImage(url: string) {
 	return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -684,7 +690,9 @@ export function SettingsPanel({
 	onTrimDelete,
 	selectedClipId,
 	selectedClipSpeed,
+	selectedClipMuted,
 	onClipSpeedChange,
+	onClipMutedChange,
 	onClipDelete,
 	shadowIntensity = 0.67,
 	onShadowChange,
@@ -692,6 +700,10 @@ export function SettingsPanel({
 	onBackgroundBlurChange,
 	zoomMotionBlur = 0,
 	onZoomMotionBlurChange,
+	connectZooms = true,
+	onConnectZoomsChange,
+	autoApplyFreshRecordingAutoZooms = true,
+	onAutoApplyFreshRecordingAutoZoomsChange,
 	showCursor = false,
 	onShowCursorChange,
 	loopCursor = false,
@@ -755,7 +767,7 @@ export function SettingsPanel({
 	onSpeedDelete,
 }: SettingsPanelProps) {
 	const tSettings = useScopedT("settings");
-	const { t } = useI18n();
+	const { locale, setLocale, t } = useI18n();
 	const isBackgroundPanel = panelMode === "background";
 	const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
 	const [builtInWallpapers, setBuiltInWallpapers] =
@@ -1179,9 +1191,7 @@ export function SettingsPanel({
 						preload="metadata"
 						className="h-full w-full select-none object-cover [transform:translateZ(0)]"
 						draggable={false}
-						onMouseEnter={(e) => {
-							void e.currentTarget.play().catch(() => undefined);
-						}}
+						onMouseEnter={(e) => e.currentTarget.play().catch(() => undefined)}
 						onMouseLeave={(e) => {
 							e.currentTarget.pause();
 							e.currentTarget.currentTime = 0;
@@ -1204,21 +1214,9 @@ export function SettingsPanel({
 		</div>
 	);
 
-	const handleDeleteClick = () => {
-		if (selectedZoomId && onZoomDelete) {
-			onZoomDelete(selectedZoomId);
-		}
-	};
-
 	const handleTrimDeleteClick = () => {
 		if (selectedTrimId && onTrimDelete) {
 			onTrimDelete(selectedTrimId);
-		}
-	};
-
-	const handleClipDeleteClick = () => {
-		if (selectedClipId && onClipDelete) {
-			onClipDelete(selectedClipId);
 		}
 	};
 
@@ -1726,8 +1724,11 @@ export function SettingsPanel({
 
 	if (isBackgroundPanel) {
 		return (
-			<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-[#161619] border border-white/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
-				<div className="flex-1 overflow-y-auto custom-scrollbar p-4">
+			<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-[#161619] rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
+				<div
+					className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pb-0"
+					style={{ scrollbarGutter: "stable" }}
+				>
 					<div className="mb-4 flex items-center gap-2">
 						<Palette className="w-4 h-4 text-[#2563EB]" />
 						<span className="text-sm font-medium text-slate-200">
@@ -1739,57 +1740,6 @@ export function SettingsPanel({
 			</div>
 		);
 	}
-
-	const zoomSectionContent = (
-		<section className="flex flex-col gap-2">
-			<div className="flex items-center justify-between gap-3">
-				<div className="flex items-center gap-3">
-					<SectionLabel>{tSettings("sections.zoom", "Zoom")}</SectionLabel>
-					<button
-						type="button"
-						onClick={resetZoomSection}
-						className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80"
-					>
-						{t("common.actions.reset", "Reset")}
-					</button>
-				</div>
-			</div>
-			<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-				<span className="text-[10px] text-slate-400">
-					{tSettings("effects.classicZoom", "Classic Animation")}
-				</span>
-				<Switch
-					checked={zoomClassicMode}
-					onCheckedChange={(v) => onZoomClassicModeChange?.(v)}
-					className="data-[state=checked]:bg-[#2563EB] scale-75"
-				/>
-			</div>
-			{!zoomClassicMode && (
-				<SliderControl
-					label={tSettings("effects.zoomSmoothness", "Zoom Smoothness")}
-					value={zoomSmoothness}
-					defaultValue={0.5}
-					min={0}
-					max={1}
-					step={0.01}
-					onChange={(v) => onZoomSmoothnessChange?.(v)}
-					formatValue={(v) => (v <= 0 ? tSettings("effects.off") : v.toFixed(2))}
-					parseInput={(text) => parseFloat(text)}
-				/>
-			)}
-			<SliderControl
-				label={tSettings("effects.zoomMotionBlur")}
-				value={zoomMotionBlur}
-				defaultValue={DEFAULT_ZOOM_MOTION_BLUR}
-				min={0}
-				max={2}
-				step={0.05}
-				onChange={(v) => onZoomMotionBlurChange?.(v)}
-				formatValue={(v) => `${v.toFixed(2)}×`}
-				parseInput={(text) => parseFloat(text.replace(/×$/, ""))}
-			/>
-		</section>
-	);
 
 	const frameSectionContent = (
 		<section className="flex flex-col gap-2">
@@ -2205,21 +2155,311 @@ export function SettingsPanel({
 	);
 
 	const effectSectionContent = (() => {
-		const sceneSectionContent = (
+		const settingsSectionContent = (
 			<div className="space-y-4">
-				{backgroundSettingsContent}
-				{zoomSectionContent}
-				{frameSectionContent}
-				{cropSectionContent}
-				{renderExtensionPanelsForSections("scene", "appearance", "zoom", "frame", "crop")}
+				<section className="flex flex-col gap-2">
+					<SectionLabel>{t("common.app.language", "Language")}</SectionLabel>
+					<Select value={locale} onValueChange={(value) => setLocale(value as AppLocale)}>
+						<SelectTrigger className="h-10 w-full rounded-xl border-white/10 bg-white/5 text-sm text-slate-200 hover:bg-white/10">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent className="border-white/10 bg-[#1a1a1f] text-slate-200">
+							{SUPPORTED_LOCALES.map((candidateLocale) => (
+								<SelectItem key={candidateLocale} value={candidateLocale}>
+									{APP_LANGUAGE_LABELS[candidateLocale]}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</section>
+
+				<section className="flex flex-col gap-1.5">
+					<div className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.03] px-2.5 py-2">
+						<div>
+							<div className="text-[11px] font-medium text-slate-200">
+								{tSettings(
+									"effects.autoApplyFreshRecordingZooms",
+									"Auto-apply fresh recording zooms",
+								)}
+							</div>
+							<div className="mt-0.5 text-[10px] text-slate-500">
+								{tSettings(
+									"effects.autoApplyFreshRecordingZoomsDescription",
+									"Suggest cursor-follow zooms automatically when you open a new recording.",
+								)}
+							</div>
+						</div>
+						<Switch
+							checked={autoApplyFreshRecordingAutoZooms}
+							onCheckedChange={onAutoApplyFreshRecordingAutoZoomsChange}
+							className="data-[state=checked]:bg-[#2563EB] scale-75"
+						/>
+					</div>
+					<div className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.03] px-2.5 py-2">
+						<div>
+							<div className="text-[11px] font-medium text-slate-200">
+								{tSettings("effects.connectZooms", "Connect neighboring zooms")}
+							</div>
+							<div className="mt-0.5 text-[10px] text-slate-500">
+								{tSettings(
+									"effects.connectZoomsDescription",
+									"Smooth consecutive zoom regions into a continuous camera move.",
+								)}
+							</div>
+						</div>
+						<Switch
+							checked={connectZooms}
+							onCheckedChange={onConnectZoomsChange}
+							className="data-[state=checked]:bg-[#2563EB] scale-75"
+						/>
+					</div>
+				</section>
+
+				<section className="flex flex-col gap-2">
+					<SectionLabel>{t("editor.keyboardShortcuts.title")}</SectionLabel>
+					<KeyboardShortcutsDialog
+						triggerLabel={t("editor.keyboardShortcuts.customize")}
+						triggerClassName="h-10 w-full justify-start rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
+					/>
+				</section>
 			</div>
 		);
 
+		const sceneSectionContent = (
+			<div className="space-y-4">
+				{backgroundSettingsContent}
+				{frameSectionContent}
+				{cropSectionContent}
+				{renderExtensionPanelsForSections("scene", "appearance", "frame", "crop")}
+			</div>
+		);
+
+		const zoomItemSectionContent = (
+			<section className="flex flex-col gap-2">
+				{selectedZoomId && (
+					<>
+						<div className="flex items-center justify-between gap-3">
+							<SectionLabel>{tSettings("sections.zoom", "Zoom")}</SectionLabel>
+							{selectedZoomDepth && (
+								<span className="rounded-full bg-[#2563EB]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#2563EB]">
+									{
+										ZOOM_DEPTH_OPTIONS.find(
+											(o) => o.depth === selectedZoomDepth,
+										)?.label
+									}
+								</span>
+							)}
+						</div>
+						<div className="mb-1">
+							<div className="flex rounded-lg border border-white/10 bg-white/5 p-0.5">
+								<button
+									type="button"
+									onClick={() => onZoomModeChange?.("auto")}
+									className={cn(
+										"flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+										selectedZoomMode === "auto"
+											? "bg-[#2563EB] text-white shadow-sm"
+											: "text-slate-400 hover:text-slate-200",
+									)}
+								>
+									{tSettings("zoom.modeAuto", "Auto")}
+								</button>
+								<button
+									type="button"
+									onClick={() => onZoomModeChange?.("manual")}
+									className={cn(
+										"flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+										selectedZoomMode === "manual"
+											? "bg-[#2563EB] text-white shadow-sm"
+											: "text-slate-400 hover:text-slate-200",
+									)}
+								>
+									{tSettings("zoom.modeManual", "Manual")}
+								</button>
+							</div>
+							<p className="mt-1.5 text-[10px] text-slate-500">
+								{selectedZoomMode === "manual"
+									? tSettings(
+											"zoom.modeManualDescription",
+											"Set a fixed focus point for this zoom",
+										)
+									: tSettings(
+											"zoom.modeAutoDescription",
+											"Camera follows cursor automatically",
+										)}
+							</p>
+						</div>
+						<div className="grid grid-cols-6 gap-1.5">
+							{ZOOM_DEPTH_OPTIONS.map((option) => {
+								const isActive = selectedZoomDepth === option.depth;
+								return (
+									<Button
+										key={option.depth}
+										type="button"
+										onClick={() => onZoomDepthChange?.(option.depth)}
+										className={cn(
+											"h-auto w-full rounded-lg border px-1 py-2 text-center shadow-sm transition-all duration-200 ease-out cursor-pointer",
+											isActive
+												? "border-[#2563EB] bg-[#2563EB] text-white"
+												: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
+										)}
+									>
+										<span className="text-xs font-semibold">
+											{option.label}
+										</span>
+									</Button>
+								);
+							})}
+						</div>
+						<div className="h-px bg-white/[0.06] my-1" />
+					</>
+				)}
+				<div className="flex items-center justify-between gap-3">
+					<SectionLabel>{tSettings("zoom.globalSettings", "Animation")}</SectionLabel>
+					<button
+						type="button"
+						onClick={resetZoomSection}
+						className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80"
+					>
+						{t("common.actions.reset", "Reset")}
+					</button>
+				</div>
+				<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
+					<span className="text-[10px] text-slate-400">
+						{tSettings("effects.classicZoom", "Classic Animation")}
+					</span>
+					<Switch
+						checked={zoomClassicMode}
+						onCheckedChange={(v) => onZoomClassicModeChange?.(v)}
+						className="data-[state=checked]:bg-[#2563EB] scale-75"
+					/>
+				</div>
+				{!zoomClassicMode && (
+					<SliderControl
+						label={tSettings("effects.zoomSmoothness", "Zoom Smoothness")}
+						value={zoomSmoothness}
+						defaultValue={0.5}
+						min={0}
+						max={1}
+						step={0.01}
+						onChange={(v) => onZoomSmoothnessChange?.(v)}
+						formatValue={(v) => (v <= 0 ? tSettings("effects.off") : v.toFixed(2))}
+						parseInput={(text) => parseFloat(text)}
+					/>
+				)}
+				<SliderControl
+					label={tSettings("effects.zoomMotionBlur")}
+					value={zoomMotionBlur}
+					defaultValue={DEFAULT_ZOOM_MOTION_BLUR}
+					min={0}
+					max={2}
+					step={0.05}
+					onChange={(v) => onZoomMotionBlurChange?.(v)}
+					formatValue={(v) => `${v.toFixed(2)}×`}
+					parseInput={(text) => parseFloat(text.replace(/×$/, ""))}
+				/>
+				{selectedZoomId && (
+					<Button
+						onClick={() => {
+							if (selectedZoomId && onZoomDelete) onZoomDelete(selectedZoomId);
+						}}
+						variant="destructive"
+						size="sm"
+						className="mt-1 h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
+					>
+						<Trash2 className="h-3 w-3" />
+						{tSettings("zoom.deleteZoom")}
+					</Button>
+				)}
+				{renderExtensionPanelsForSections("zoom", "appearance", "frame", "crop")}
+			</section>
+		);
+
+		const clipSectionContent = (
+			<section className="flex flex-col gap-2">
+				<div className="flex items-center justify-between gap-3">
+					<SectionLabel>{tSettings("clip.title", "Clip")}</SectionLabel>
+					{selectedClipSpeed != null && selectedClipSpeed !== 1 && (
+						<span className="rounded-full bg-[#06b6d4]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#06b6d4]">
+							{selectedClipSpeed}×
+						</span>
+					)}
+				</div>
+				<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
+					<span className="text-[10px] text-slate-400">
+						{tSettings("clip.muteAudio", "Mute Audio")}
+					</span>
+					<Switch
+						checked={selectedClipMuted ?? false}
+						onCheckedChange={(v) => onClipMutedChange?.(v)}
+						className="data-[state=checked]:bg-[#06b6d4] scale-75"
+					/>
+				</div>
+				<div className="flex items-center gap-3">
+					<SectionLabel>{tSettings("speed.label", "Speed")}</SectionLabel>
+				</div>
+				<div className="grid grid-cols-4 gap-1.5">
+					{[
+						{ speed: 0.25, label: "0.25×" },
+						{ speed: 0.5, label: "0.5×" },
+						{ speed: 0.75, label: "0.75×" },
+						{ speed: 1, label: "1×" },
+						{ speed: 1.25, label: "1.25×" },
+						{ speed: 1.5, label: "1.5×" },
+						{ speed: 2, label: "2×" },
+						{ speed: 2.5, label: "2.5×" },
+						{ speed: 3, label: "3×" },
+						{ speed: 4, label: "4×" },
+						{ speed: 5, label: "5×" },
+						{ speed: 8, label: "8×" },
+						{ speed: 10, label: "10×" },
+						{ speed: 15, label: "15×" },
+						{ speed: 20, label: "20×" },
+						{ speed: 30, label: "30×" },
+					].map((option) => {
+						const isActive = selectedClipSpeed === option.speed;
+						return (
+							<Button
+								key={option.speed}
+								type="button"
+								onClick={() => onClipSpeedChange?.(option.speed)}
+								className={cn(
+									"h-auto w-full rounded-lg border px-0.5 py-2 text-center shadow-sm transition-all duration-200 ease-out cursor-pointer",
+									isActive
+										? "border-[#06b6d4] bg-[#06b6d4] text-white"
+										: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
+								)}
+							>
+								<span className="text-[10px] font-semibold">{option.label}</span>
+							</Button>
+						);
+					})}
+				</div>
+				{selectedClipId && (
+					<Button
+						onClick={() => {
+							if (selectedClipId && onClipDelete) onClipDelete(selectedClipId);
+						}}
+						variant="destructive"
+						size="sm"
+						className="mt-1 h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
+					>
+						<Trash2 className="h-3 w-3" />
+						{tSettings("clip.delete", "Delete Clip")}
+					</Button>
+				)}
+			</section>
+		);
+
 		switch (activeEffectSection) {
+			case "settings":
+				return settingsSectionContent;
 			case "scene":
 				return sceneSectionContent;
 			case "zoom":
-				return sceneSectionContent;
+				return zoomItemSectionContent;
+			case "clip":
+				return clipSectionContent;
 			case "frame":
 				return sceneSectionContent;
 			case "crop":
@@ -2605,7 +2845,7 @@ export function SettingsPanel({
 	})();
 
 	return (
-		<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-[#161619] border border-white/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
+		<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-[#161619] rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
 			<div
 				className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pb-0"
 				style={{ scrollbarGutter: "stable" }}
@@ -2626,99 +2866,10 @@ export function SettingsPanel({
 			<div
 				className={cn(
 					"flex-shrink-0 border-t border-white/10 bg-[#151518] p-4 pt-3",
-					!selectedZoomId &&
-						!selectedTrimId &&
-						!selectedSpeedId &&
-						!selectedClipId &&
-						"hidden",
+					!selectedTrimId && !selectedSpeedId && "hidden",
 				)}
 			>
-				{selectedZoomId && (
-					<div className="mb-4">
-						<div className="mb-3 flex items-center justify-between">
-							<span className="text-sm font-medium text-slate-200">
-								{tSettings("zoom.level")}
-							</span>
-							<div className="flex items-center gap-2">
-								{selectedZoomDepth && (
-									<span className="rounded-full bg-[#2563EB]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#2563EB]">
-										{
-											ZOOM_DEPTH_OPTIONS.find(
-												(o) => o.depth === selectedZoomDepth,
-											)?.label
-										}
-									</span>
-								)}
-							</div>
-						</div>
-						<div className="mb-3">
-							<div className="flex rounded-lg border border-white/10 bg-white/5 p-0.5">
-								<button
-									type="button"
-									onClick={() => onZoomModeChange?.("auto")}
-									className={cn(
-										"flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
-										selectedZoomMode === "auto"
-											? "bg-[#2563EB] text-white shadow-sm"
-											: "text-slate-400 hover:text-slate-200",
-									)}
-								>
-									Auto
-								</button>
-								<button
-									type="button"
-									onClick={() => onZoomModeChange?.("manual")}
-									className={cn(
-										"flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
-										selectedZoomMode === "manual"
-											? "bg-[#2563EB] text-white shadow-sm"
-											: "text-slate-400 hover:text-slate-200",
-									)}
-								>
-									Manual
-								</button>
-							</div>
-							<p className="mt-1.5 text-[10px] text-slate-500">
-								{selectedZoomMode === "manual"
-									? "Set a fixed focus point for this zoom"
-									: "Camera follows cursor automatically"}
-							</p>
-						</div>
-						<div className="grid grid-cols-6 gap-1.5">
-							{ZOOM_DEPTH_OPTIONS.map((option) => {
-								const isActive = selectedZoomDepth === option.depth;
-								return (
-									<Button
-										key={option.depth}
-										type="button"
-										onClick={() => onZoomDepthChange?.(option.depth)}
-										className={cn(
-											"h-auto w-full rounded-lg border px-1 py-2 text-center shadow-sm transition-all duration-200 ease-out cursor-pointer",
-											isActive
-												? "border-[#2563EB] bg-[#2563EB] text-white"
-												: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
-										)}
-									>
-										<span className="text-xs font-semibold">
-											{option.label}
-										</span>
-									</Button>
-								);
-							})}
-						</div>
-						<Button
-							onClick={handleDeleteClick}
-							variant="destructive"
-							size="sm"
-							className="mt-2 h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
-						>
-							<Trash2 className="h-3 w-3" />
-							{tSettings("zoom.deleteZoom")}
-						</Button>
-					</div>
-				)}
-
-				{selectedTrimId && !selectedZoomId && (
+				{selectedTrimId && (
 					<div className="mb-4">
 						<Button
 							onClick={handleTrimDeleteClick}
@@ -2775,59 +2926,6 @@ export function SettingsPanel({
 						>
 							<Trash2 className="h-3 w-3" />
 							{tSettings("speed.deleteRegion")}
-						</Button>
-					</div>
-				)}
-
-				{selectedClipId && (
-					<div className="mb-4">
-						<div className="mb-3 flex items-center justify-between">
-							<span className="text-sm font-medium text-slate-200">Clip Speed</span>
-							{selectedClipSpeed != null && selectedClipSpeed !== 1 && (
-								<span className="rounded-full bg-[#06b6d4]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#06b6d4]">
-									{selectedClipSpeed}×
-								</span>
-							)}
-						</div>
-						<div className="grid grid-cols-8 gap-1.5">
-							{[
-								{ speed: 0.25, label: "0.25×" },
-								{ speed: 0.5, label: "0.5×" },
-								{ speed: 0.75, label: "0.75×" },
-								{ speed: 1, label: "1×" },
-								{ speed: 1.25, label: "1.25×" },
-								{ speed: 1.5, label: "1.5×" },
-								{ speed: 1.75, label: "1.75×" },
-								{ speed: 2, label: "2×" },
-							].map((option) => {
-								const isActive = selectedClipSpeed === option.speed;
-								return (
-									<Button
-										key={option.speed}
-										type="button"
-										onClick={() => onClipSpeedChange?.(option.speed)}
-										className={cn(
-											"h-auto w-full rounded-lg border px-0.5 py-2 text-center shadow-sm transition-all duration-200 ease-out cursor-pointer",
-											isActive
-												? "border-[#06b6d4] bg-[#06b6d4] text-white"
-												: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
-										)}
-									>
-										<span className="text-[10px] font-semibold">
-											{option.label}
-										</span>
-									</Button>
-								);
-							})}
-						</div>
-						<Button
-							onClick={handleClipDeleteClick}
-							variant="destructive"
-							size="sm"
-							className="mt-2 h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
-						>
-							<Trash2 className="h-3 w-3" />
-							Delete Clip
 						</Button>
 					</div>
 				)}

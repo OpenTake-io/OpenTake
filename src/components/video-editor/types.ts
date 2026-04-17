@@ -53,6 +53,19 @@ export interface CursorVisualSettings {
 export type CursorStyle = "tahoe" | "dot" | "figma" | "mono" | (string & {}); // extension-contributed cursor styles
 export const DEFAULT_CURSOR_STYLE: CursorStyle = "tahoe";
 
+export type EditorEffectSection =
+	| "scene"
+	| "cursor"
+	| "captions"
+	| "webcam"
+	| "settings"
+	| "zoom"
+	| "frame"
+	| "crop"
+	| "extensions"
+	| "clip"
+	| `ext:${string}`;
+
 export type ZoomTransitionEasing = "recordly" | "glide" | "smooth" | "snappy" | "linear";
 
 export type WebcamCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
@@ -136,6 +149,12 @@ export interface ClipRegion {
 	muted?: boolean;
 }
 
+export function getClipSourceEndMs(clip: ClipRegion): number {
+	const displayDurationMs = Math.max(0, clip.endMs - clip.startMs);
+	const speed = Number.isFinite(clip.speed) && clip.speed > 0 ? clip.speed : 1;
+	return Math.round(clip.startMs + displayDurationMs * speed);
+}
+
 /** Convert clip regions (kept segments) to trim regions (gaps to remove). */
 export function clipsToTrims(clips: ClipRegion[], totalDurationMs: number): TrimRegion[] {
 	if (clips.length === 0) return [];
@@ -147,7 +166,7 @@ export function clipsToTrims(clips: ClipRegion[], totalDurationMs: number): Trim
 		if (clip.startMs > cursor) {
 			trims.push({ id: `trim-gap-${trimId++}`, startMs: cursor, endMs: clip.startMs });
 		}
-		cursor = clip.endMs;
+		cursor = getClipSourceEndMs(clip);
 	}
 	if (cursor < totalDurationMs) {
 		trims.push({ id: `trim-gap-${trimId++}`, startMs: cursor, endMs: totalDurationMs });
@@ -245,10 +264,10 @@ export interface AnnotationRegion {
 	size: AnnotationSize;
 	style: AnnotationTextStyle;
 	zIndex: number;
+	trackIndex?: number;
 	figureData?: FigureData;
 	blurIntensity?: number;
 	blurColor?: string;
-	trackIndex?: number;
 }
 
 export const DEFAULT_ANNOTATION_POSITION: AnnotationPosition = {

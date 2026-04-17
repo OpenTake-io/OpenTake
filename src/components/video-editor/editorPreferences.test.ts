@@ -97,6 +97,7 @@ describe("editorPreferences", () => {
 			cursorSway: DEFAULT_EDITOR_PREFERENCES.cursorSway,
 			borderRadius: DEFAULT_EDITOR_PREFERENCES.borderRadius,
 			padding: DEFAULT_EDITOR_PREFERENCES.padding,
+			frame: DEFAULT_EDITOR_PREFERENCES.frame,
 			aspectRatio: "native",
 			exportEncodingMode: DEFAULT_EDITOR_PREFERENCES.exportEncodingMode,
 			exportBackendPreference: DEFAULT_EDITOR_PREFERENCES.exportBackendPreference,
@@ -111,6 +112,8 @@ describe("editorPreferences", () => {
 			customAspectWidth: "21",
 			customAspectHeight: "9",
 			customWallpapers: ["data:image/jpeg;base64,abc"],
+			autoApplyFreshRecordingAutoZooms:
+				DEFAULT_EDITOR_PREFERENCES.autoApplyFreshRecordingAutoZooms,
 			whisperExecutablePath: DEFAULT_EDITOR_PREFERENCES.whisperExecutablePath,
 			whisperModelPath: DEFAULT_EDITOR_PREFERENCES.whisperModelPath,
 		});
@@ -167,6 +170,7 @@ describe("editorPreferences", () => {
 			cursorSway: DEFAULT_EDITOR_PREFERENCES.cursorSway,
 			borderRadius: DEFAULT_EDITOR_PREFERENCES.borderRadius,
 			padding: DEFAULT_EDITOR_PREFERENCES.padding,
+			frame: DEFAULT_EDITOR_PREFERENCES.frame,
 			exportEncodingMode: DEFAULT_EDITOR_PREFERENCES.exportEncodingMode,
 			exportBackendPreference: DEFAULT_EDITOR_PREFERENCES.exportBackendPreference,
 			exportPipelineModel: DEFAULT_EDITOR_PREFERENCES.exportPipelineModel,
@@ -180,6 +184,8 @@ describe("editorPreferences", () => {
 			customAspectWidth: "21",
 			customAspectHeight: "9",
 			customWallpapers: DEFAULT_EDITOR_PREFERENCES.customWallpapers,
+			autoApplyFreshRecordingAutoZooms:
+				DEFAULT_EDITOR_PREFERENCES.autoApplyFreshRecordingAutoZooms,
 			whisperExecutablePath: DEFAULT_EDITOR_PREFERENCES.whisperExecutablePath,
 			whisperModelPath: DEFAULT_EDITOR_PREFERENCES.whisperModelPath,
 		});
@@ -231,6 +237,7 @@ describe("editorPreferences", () => {
 			cursorSway: 1.5,
 			borderRadius: 18,
 			padding: 30,
+			frame: DEFAULT_EDITOR_PREFERENCES.frame,
 			aspectRatio: "4:5",
 			exportEncodingMode: "quality",
 			exportBackendPreference: DEFAULT_EDITOR_PREFERENCES.exportBackendPreference,
@@ -244,6 +251,7 @@ describe("editorPreferences", () => {
 			customAspectWidth: "4",
 			customAspectHeight: "5",
 			customWallpapers: ["data:image/jpeg;base64,abc", "data:image/jpeg;base64,abc"],
+			autoApplyFreshRecordingAutoZooms: false,
 		});
 
 		expect(loadEditorPreferences()).toEqual({
@@ -271,6 +279,7 @@ describe("editorPreferences", () => {
 			cursorSway: 1.5,
 			borderRadius: 18,
 			padding: 30,
+			frame: DEFAULT_EDITOR_PREFERENCES.frame,
 			aspectRatio: "4:5",
 			exportEncodingMode: "quality",
 			exportBackendPreference: DEFAULT_EDITOR_PREFERENCES.exportBackendPreference,
@@ -285,6 +294,7 @@ describe("editorPreferences", () => {
 			customAspectWidth: "4",
 			customAspectHeight: "5",
 			customWallpapers: ["data:image/jpeg;base64,abc"],
+			autoApplyFreshRecordingAutoZooms: false,
 			whisperExecutablePath: DEFAULT_EDITOR_PREFERENCES.whisperExecutablePath,
 			whisperModelPath: DEFAULT_EDITOR_PREFERENCES.whisperModelPath,
 		});

@@ -1,7 +1,10 @@
 {
 	"playback": {
 		"play": "播放",
-		"pause": "暂停"
+		"pause": "暂停",
+		"skipBack": "后退",
+		"skipForward": "前进",
+		"muteUnmute": "静音/取消静音"
 	},
 	"annotations": {
 		"settings": "注释设置",
@@ -118,6 +121,14 @@
 		"issue": "导出问题",
 		"complete": "导出完成",
 		"savedSuccessfully": "文件已成功保存。"
+	},
+	"toolbar": {
+		"addLayer": "添加图层",
+		"splitClip": "拆分片段 (C)"
+	},
+	"timeline": {
+		"expand": "展开时间轴",
+		"collapse": "折叠时间轴"
 	},
 	"openRecordingsFolder": "打开录制文件夹"
 }

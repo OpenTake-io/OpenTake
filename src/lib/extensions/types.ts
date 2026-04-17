@@ -297,7 +297,9 @@ export interface RenderHookContext {
 	 * Get dominant colors in the video content area.
 	 * Returns up to `count` colors sorted by frequency.
 	 */
-	getDominantColors(count?: number): Array<{ r: number; g: number; b: number; frequency: number }>;
+	getDominantColors(
+		count?: number,
+	): Array<{ r: number; g: number; b: number; frequency: number }>;
 }
 
 /** Render hook phases — extensions draw in the registered phase */

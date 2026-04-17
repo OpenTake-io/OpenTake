@@ -1,22 +1,19 @@
 import type { Range, Span } from "dnd-timeline";
 import { useTimelineContext } from "dnd-timeline";
 import {
-	CaretDown as ChevronDown,
-	CaretUp as ChevronUp,
-	MagicWand as WandSparkles,
-	MagnifyingGlassPlus as ZoomIn,
-	Pause,
-	Play,
+	Check,
+	ChevronDown,
+	Crop,
+	MessageSquare,
+	Music,
 	Plus,
 	Scissors,
-	SkipBack,
-	SkipForward,
-	SpeakerHigh as Volume2,
-	SpeakerLow as Volume1,
-	SpeakerX as VolumeX,
-} from "@phosphor-icons/react";
+	WandSparkles,
+	ZoomIn,
+} from "lucide-react";
 import {
 	forwardRef,
+	type KeyboardEvent as ReactKeyboardEvent,
 	useCallback,
 	useEffect,
 	useImperativeHandle,
@@ -34,12 +31,18 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
+import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
-import type { AspectRatio } from "@/utils/aspectRatioUtils";
-
+import {
+	ASPECT_RATIOS,
+	type AspectRatio,
+	getAspectRatioLabel,
+	isCustomAspectRatio,
+} from "@/utils/aspectRatioUtils";
+import { formatShortcut } from "@/utils/platformUtils";
+import { loadEditorPreferences, saveEditorPreferences } from "../editorPreferences";
 import { toFileUrl } from "../projectPersistence";
 import type {
 	AnnotationRegion,
@@ -55,15 +58,16 @@ import type {
 import AudioWaveform from "./AudioWaveform";
 import Item from "./Item";
 import KeyframeMarkers from "./KeyframeMarkers";
-import timelineStyles from "./Timeline.module.css";
+import Row from "./Row";
 import TimelineWrapper from "./TimelineWrapper";
-import Track from "./Track";
 import { type AudioPeaksData, useAudioPeaks } from "./useAudioPeaks";
 import { buildInteractionZoomSuggestions } from "./zoomSuggestionUtils";
 
 const ZOOM_ROW_ID = "row-zoom";
+const TRIM_ROW_ID = "row-trim";
 const CLIP_ROW_ID = "row-clip";
 const ANNOTATION_ROW_ID = "row-annotation";
+const SPEED_ROW_ID = "row-speed";
 const AUDIO_ROW_ID = "row-audio";
 const ANNOTATION_ROW_PREFIX = `${ANNOTATION_ROW_ID}-`;
 const AUDIO_ROW_PREFIX = "row-audio-";
@@ -155,10 +159,6 @@ interface TimelineEditorProps {
 	onOpenCropEditor?: () => void;
 	isCropped?: boolean;
 	videoPath?: string | null;
-	isPlaying?: boolean;
-	onTogglePlayPause?: () => void;
-	volume?: number;
-	onVolumeChange?: (volume: number) => void;
 	hideToolbar?: boolean;
 }
 
@@ -167,11 +167,8 @@ export interface TimelineEditorHandle {
 	suggestZooms: () => void;
 	splitClip: () => void;
 	addAnnotation: (trackIndex?: number) => void;
-	addAudio: () => void;
-	isCollapsed: boolean;
-	toggleCollapsed: () => void;
+	addAudio: () => Promise<void>;
 	keyframes: { id: string; time: number }[];
-	formatTime: (seconds: number) => string;
 }
 
 interface TimelineScaleConfig {
@@ -303,87 +300,25 @@ function PlaybackCursor({
 	onSeek,
 	timelineRef,
 	keyframes = [],
-	onPanTimeline,
 }: {
 	currentTimeMs: number;
 	videoDurationMs: number;
 	onSeek?: (time: number) => void;
 	timelineRef: React.RefObject<HTMLDivElement>;
 	keyframes?: { id: string; time: number }[];
-	onPanTimeline?: (deltaMs: number) => void;
 }) {
 	const { sidebarWidth, direction, range, valueToPixels, pixelsToValue } = useTimelineContext();
 	const sideProperty = direction === "rtl" ? "right" : "left";
 	const [isDragging, setIsDragging] = useState(false);
-	const edgeScrubRef = useRef<number | null>(null);
-	const lastMouseXRef = useRef(0);
 
 	useEffect(() => {
 		if (!isDragging) return;
 
-		const edgeZone = 60; // px from edge to trigger scrub
-		const scrubSpeed = 0.015; // fraction of visible range per frame
-
-		const startEdgeScrub = () => {
-			if (edgeScrubRef.current !== null) return;
-			const tick = () => {
-				const el = timelineRef.current;
-				if (!el || !onPanTimeline || !onSeek) {
-					edgeScrubRef.current = null;
-					return;
-				}
-				const rect = el.getBoundingClientRect();
-				const x = lastMouseXRef.current;
-				const leftEdge = rect.left + sidebarWidth;
-				const rightEdge = rect.right;
-				const visibleMs = range.end - range.start;
-				let delta = 0;
-				if (x < leftEdge + edgeZone) {
-					delta = -scrubSpeed * visibleMs * (1 - Math.max(0, x - leftEdge) / edgeZone);
-				} else if (x > rightEdge - edgeZone) {
-					delta = scrubSpeed * visibleMs * (1 - Math.max(0, rightEdge - x) / edgeZone);
-				}
-				if (delta !== 0) {
-					onPanTimeline(delta);
-					// Also move the playhead to track the edge
-					const clickX = lastMouseXRef.current - rect.left - sidebarWidth;
-					const relativeMs = pixelsToValue(clickX);
-					const absoluteMs = Math.max(
-						0,
-						Math.min(range.start + delta + relativeMs, videoDurationMs),
-					);
-					onSeek(absoluteMs / 1000);
-				}
-				edgeScrubRef.current = requestAnimationFrame(tick);
-			};
-			edgeScrubRef.current = requestAnimationFrame(tick);
-		};
-
-		const stopEdgeScrub = () => {
-			if (edgeScrubRef.current !== null) {
-				cancelAnimationFrame(edgeScrubRef.current);
-				edgeScrubRef.current = null;
-			}
-		};
-
 		const handleMouseMove = (e: MouseEvent) => {
 			if (!timelineRef.current || !onSeek) return;
-			lastMouseXRef.current = e.clientX;
 
 			const rect = timelineRef.current.getBoundingClientRect();
 			const clickX = e.clientX - rect.left - sidebarWidth;
-			const leftEdge = rect.left + sidebarWidth;
-			const rightEdge = rect.right;
-
-			// Start/stop edge scrubbing
-			if (
-				onPanTimeline &&
-				(e.clientX < leftEdge + edgeZone || e.clientX > rightEdge - edgeZone)
-			) {
-				startEdgeScrub();
-			} else {
-				stopEdgeScrub();
-			}
 
 			// Allow dragging outside to 0 or max, but clamp the value
 			const relativeMs = pixelsToValue(clickX);
@@ -407,7 +342,6 @@ function PlaybackCursor({
 
 		const handleMouseUp = () => {
 			setIsDragging(false);
-			stopEdgeScrub();
 			document.body.style.cursor = "";
 		};
 
@@ -418,7 +352,6 @@ function PlaybackCursor({
 		return () => {
 			window.removeEventListener("mousemove", handleMouseMove);
 			window.removeEventListener("mouseup", handleMouseUp);
-			stopEdgeScrub();
 			document.body.style.cursor = "";
 		};
 	}, [
@@ -431,7 +364,6 @@ function PlaybackCursor({
 		videoDurationMs,
 		pixelsToValue,
 		keyframes,
-		onPanTimeline,
 	]);
 
 	if (videoDurationMs <= 0 || currentTimeMs < 0) {
@@ -455,7 +387,7 @@ function PlaybackCursor({
 			}}
 		>
 			<div
-				className="absolute top-0 bottom-0 w-[2px] bg-white/80 shadow-[0_0_8px_rgba(255,255,255,0.15)] cursor-ew-resize pointer-events-auto hover:shadow-[0_0_12px_rgba(255,255,255,0.25)] transition-shadow group/handle"
+				className="absolute top-0 bottom-0 w-[2px] bg-[#2563EB] shadow-[0_0_10px_rgba(37,99,235,0.5)] cursor-ew-resize pointer-events-auto hover:shadow-[0_0_15px_rgba(37,99,235,0.7)] transition-shadow"
 				style={{
 					[sideProperty]: `${offset}px`,
 				}}
@@ -468,13 +400,10 @@ function PlaybackCursor({
 					className="absolute -top-1 left-1/2 -translate-x-1/2 hover:scale-125 transition-transform"
 					style={{ width: "16px", height: "16px" }}
 				>
-					<div className="w-3 h-3 mx-auto mt-[2px] bg-white rotate-45 rounded-sm shadow-lg border border-white/30" />
-				</div>
-				<div className="absolute -top-7 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-md bg-white text-[10px] text-black font-medium tabular-nums whitespace-nowrap shadow-lg pointer-events-none opacity-0 group-hover/handle:opacity-100 transition-opacity">
-					{formatPlayheadTime(clampedTime)}
+					<div className="w-3 h-3 mx-auto mt-[2px] bg-[#2563EB] rotate-45 rounded-sm shadow-lg border border-white/20" />
 				</div>
 				{isDragging && (
-					<div className="absolute -top-7 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-md bg-white text-[10px] text-black font-medium tabular-nums whitespace-nowrap shadow-lg pointer-events-none">
+					<div className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/80 text-[10px] text-white/90 font-medium tabular-nums whitespace-nowrap border border-white/10 shadow-lg pointer-events-none">
 						{formatPlayheadTime(clampedTime)}
 					</div>
 				)}
@@ -552,134 +481,55 @@ function TimelineAxis({
 	}, [intervalMs, range.end, range.start, videoDurationMs]);
 
 	return (
-		<div className="relative h-9 overflow-hidden border-b border-[rgba(255,255,255,0.06)] bg-transparent select-none">
-			{sidebarWidth > 0 ? (
-				<div
-					className="absolute inset-y-0 z-[1] border-r border-[rgba(255,255,255,0.06)] bg-transparent"
-					style={{ width: `${sidebarWidth}px`, [sideProperty]: 0 }}
-				/>
-			) : null}
-			<div
-				className="relative h-full"
-				style={{
-					[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth}px`,
-				}}
-			>
-				{/* Minor Ticks */}
-				{markers.minorTicks.map((time) => {
-					const offset = valueToPixels(time - range.start);
-					return (
-						<div
-							key={`minor-${time}`}
-							className="absolute bottom-1 h-1 w-[1px] bg-white/5"
-							style={{ [sideProperty]: `${offset}px` }}
-						/>
-					);
-				})}
-
-				{/* Major Markers */}
-				{markers.markers.map((marker) => {
-					const offset = valueToPixels(marker.time - range.start);
-					const markerStyle: React.CSSProperties = {
-						position: "absolute",
-						bottom: 0,
-						height: "100%",
-						display: "flex",
-						flexDirection: "row",
-						alignItems: "flex-end",
-						[sideProperty]: `${offset}px`,
-						transform: "translateX(-50%)",
-					};
-
-					return (
-						<div key={marker.time} style={markerStyle}>
-							<div className="flex flex-col items-center pb-1">
-								<div className="mb-1.5 h-[5px] w-[5px] rounded-full bg-white/30" />
-								<span
-									className={cn(
-										"text-[10px] font-medium tabular-nums tracking-tight",
-										marker.time === currentTimeMs
-											? "text-[#2563EB]"
-											: "text-white/40",
-									)}
-								>
-									{marker.label}
-								</span>
-							</div>
-						</div>
-					);
-				})}
-			</div>
-		</div>
-	);
-}
-
-function ClipMarkerOverlay({ videoDurationMs }: { videoDurationMs: number }) {
-	const { direction, range, valueToPixels } = useTimelineContext();
-	const sideProperty = direction === "rtl" ? "right" : "left";
-
-	const { intervalMs } = useMemo(
-		() => calculateAxisScale(range.end - range.start),
-		[range.end, range.start],
-	);
-
-	const markers = useMemo(() => {
-		if (intervalMs <= 0) return [];
-		const maxTime = videoDurationMs > 0 ? videoDurationMs : range.end;
-		const visibleStart = Math.max(0, range.start);
-		const visibleEnd = Math.min(range.end, maxTime);
-		const firstMarker = Math.ceil(visibleStart / intervalMs) * intervalMs;
-		const result: { time: number; offset: number }[] = [];
-		for (let time = firstMarker; time <= maxTime; time += intervalMs) {
-			if (time > visibleStart && time < visibleEnd) {
-				result.push({ time: Math.round(time), offset: valueToPixels(Math.round(time) - range.start) });
-			}
-		}
-		return result;
-	}, [intervalMs, range.start, range.end, videoDurationMs, valueToPixels]);
-
-	return (
-		<div className="pointer-events-none absolute inset-0 z-[1]">
-			{markers.map(({ time, offset }) => (
-				<div
-					key={time}
-					className="absolute w-px"
-					style={{
-						top: "7.5%",
-						bottom: "7.5%",
-						[sideProperty]: `${offset}px`,
-						background:
-							"linear-gradient(to bottom, transparent 0%, rgba(255,255,255,0.10) 35%, rgba(255,255,255,0.10) 65%, transparent 100%)",
-					}}
-				/>
-			))}
-		</div>
-	);
-}
-
-function HoverCursor({ hoverX }: { hoverX: number }) {
-	const { sidebarWidth, direction, range, pixelsToValue } = useTimelineContext();
-	const sideProperty = direction === "rtl" ? "right" : "left";
-	const timeMs = range.start + pixelsToValue(hoverX);
-	return (
 		<div
-			className="pointer-events-none absolute top-0 bottom-0 z-40"
-			style={{ [sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth - 1}px` }}
+			className="h-8 bg-[#161619] border-b border-white/10 relative overflow-hidden select-none"
+			style={{
+				[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth}px`,
+			}}
 		>
-			<div
-				className="absolute top-0 bottom-0 w-[2px] bg-white/30"
-				style={{ [sideProperty]: `${hoverX}px` }}
-			>
-				<div
-					className="absolute -top-1 left-1/2 -translate-x-1/2"
-					style={{ width: "16px", height: "16px" }}
-				>
-					<div className="w-3 h-3 mx-auto mt-[2px] bg-white/30 rotate-45 rounded-sm border border-white/20" />
-				</div>
-				<div className="absolute -top-7 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded-md bg-white/20 text-[10px] text-white/60 font-medium tabular-nums whitespace-nowrap">
-					{formatPlayheadTime(timeMs)}
-				</div>
-			</div>
+			{/* Minor Ticks */}
+			{markers.minorTicks.map((time) => {
+				const offset = valueToPixels(time - range.start);
+				return (
+					<div
+						key={`minor-${time}`}
+						className="absolute bottom-0 h-1 w-[1px] bg-white/5"
+						style={{ [sideProperty]: `${offset}px` }}
+					/>
+				);
+			})}
+
+			{/* Major Markers */}
+			{markers.markers.map((marker) => {
+				const offset = valueToPixels(marker.time - range.start);
+				const markerStyle: React.CSSProperties = {
+					position: "absolute",
+					bottom: 0,
+					height: "100%",
+					display: "flex",
+					flexDirection: "row",
+					alignItems: "flex-end",
+					[sideProperty]: `${offset}px`,
+				};
+
+				return (
+					<div key={marker.time} style={markerStyle}>
+						<div className="flex flex-col items-center pb-1">
+							<div className="h-2 w-[1px] bg-white/20 mb-1" />
+							<span
+								className={cn(
+									"text-[10px] font-medium tabular-nums tracking-tight",
+									marker.time === currentTimeMs
+										? "text-[#2563EB]"
+										: "text-slate-500",
+								)}
+							>
+								{marker.label}
+							</span>
+						</div>
+					</div>
+				);
+			})}
 		</div>
 	);
 }
@@ -705,8 +555,6 @@ function Timeline({
 	onClearBlockSelection,
 	keyframes = [],
 	audioPeaks,
-	onPanTimeline,
-	hiddenTrackIds,
 }: {
 	items: TimelineRenderItem[];
 	videoDurationMs: number;
@@ -728,12 +576,9 @@ function Timeline({
 	onClearBlockSelection?: () => void;
 	keyframes?: { id: string; time: number }[];
 	audioPeaks?: AudioPeaksData | null;
-	onPanTimeline?: (deltaMs: number) => void;
-	hiddenTrackIds?: Set<string>;
 }) {
 	const { setTimelineRef, style, sidebarWidth, range, pixelsToValue } = useTimelineContext();
 	const localTimelineRef = useRef<HTMLDivElement | null>(null);
-	const [hoverX, setHoverX] = useState<number | null>(null);
 
 	const setRefs = useCallback(
 		(node: HTMLDivElement | null) => {
@@ -776,17 +621,20 @@ function Timeline({
 			onSelectAnnotation,
 			onSelectSpeed,
 			onSelectAudio,
+			onClearBlockSelection,
 			videoDurationMs,
 			sidebarWidth,
 			range.start,
 			pixelsToValue,
-			onClearBlockSelection,
 		],
 	);
 
 	const zoomItems = items.filter((item) => item.rowId === ZOOM_ROW_ID);
+	const trimItems = items.filter((item) => item.rowId === TRIM_ROW_ID);
+
 	const clipItems = items.filter((item) => item.rowId === CLIP_ROW_ID);
 	const annotationItems = items.filter((item) => isAnnotationTrackRowId(item.rowId));
+	const speedItems = items.filter((item) => item.rowId === SPEED_ROW_ID);
 	const audioItems = items.filter((item) => isAudioTrackRowId(item.rowId));
 	const audioRowIds = useMemo(
 		() =>
@@ -813,16 +661,10 @@ function Timeline({
 		<div
 			ref={setRefs}
 			style={style}
-			className="group relative flex h-full min-h-0 cursor-pointer flex-col overflow-hidden select-none bg-transparent"
+			className="select-none bg-[#17171a] h-full min-h-0 relative cursor-pointer group flex flex-col"
 			onClick={handleTimelineClick}
-			onMouseMove={(e) => {
-				const rect = e.currentTarget.getBoundingClientRect();
-				const x = e.clientX - rect.left - sidebarWidth;
-				if (x >= 0) setHoverX(x);
-				else setHoverX(null);
-			}}
-			onMouseLeave={() => setHoverX(null)}
 		>
+			<div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px)] bg-[length:20px_100%] pointer-events-none" />
 			<TimelineAxis videoDurationMs={videoDurationMs} currentTimeMs={currentTimeMs} />
 			<PlaybackCursor
 				currentTimeMs={currentTimeMs}
@@ -830,19 +672,11 @@ function Timeline({
 				onSeek={onSeek}
 				timelineRef={localTimelineRef}
 				keyframes={keyframes}
-				onPanTimeline={onPanTimeline}
 			/>
-			{hoverX !== null && <HoverCursor hoverX={hoverX} />}
 
 			<div className="relative z-10 flex flex-1 min-h-0 flex-col">
-				<Track
-					id={CLIP_ROW_ID}
-					isEmpty={clipItems.length === 0}
-					hint="Press C to split clip"
-					trackStyle={{ background: "rgba(255,255,255,0)" }}
-				>
+				<Row id={CLIP_ROW_ID} isEmpty={clipItems.length === 0} hint="Press C to split clip">
 					{audioPeaks && <AudioWaveform peaks={audioPeaks} />}
-					<ClipMarkerOverlay videoDurationMs={videoDurationMs} />
 					{clipItems.map((item) => (
 						<Item
 							id={item.id}
@@ -856,93 +690,125 @@ function Timeline({
 							{item.label}
 						</Item>
 					))}
-				</Track>
+				</Row>
 
-				{!hiddenTrackIds?.has(ZOOM_ROW_ID) && (
-					<Track
-						id={ZOOM_ROW_ID}
-						isEmpty={zoomItems.length === 0}
-						hint="Press Z to add zoom"
-						trackStyle={{ background: "transparent" }}
-					>
-						{zoomItems.map((item) => (
-							<Item
-								id={item.id}
-								key={item.id}
-								rowId={item.rowId}
-								span={item.span}
-								isSelected={selectAllBlocksActive || item.id === selectedZoomId}
-								onSelect={() => onSelectZoom?.(item.id)}
-								zoomDepth={item.zoomDepth}
-								zoomMode={item.zoomMode}
-								variant="zoom"
-							>
-								{item.label}
-							</Item>
-						))}
-					</Track>
-				)}
+				<Row id={TRIM_ROW_ID} isEmpty={trimItems.length === 0} hint="Press T to add trim">
+					{trimItems.map((item) => (
+						<Item
+							id={item.id}
+							key={item.id}
+							rowId={item.rowId}
+							span={item.span}
+							isSelected={selectAllBlocksActive || item.id === _selectedTrimId}
+							onSelect={() => onSelectTrim?.(item.id)}
+							variant="trim"
+						>
+							{item.label}
+						</Item>
+					))}
+				</Row>
 
-				{!hiddenTrackIds?.has(ANNOTATION_ROW_ID) &&
-					annotationRowIds.map((rowId) => {
-						const rowItems = annotationItems.filter(
-							(item) =>
-								getAnnotationTrackRowId(getAnnotationTrackIndex(item.rowId)) ===
-								rowId,
-						);
+				<Row id={ZOOM_ROW_ID} isEmpty={zoomItems.length === 0} hint="Press Z to add zoom">
+					{zoomItems.map((item) => (
+						<Item
+							id={item.id}
+							key={item.id}
+							rowId={item.rowId}
+							span={item.span}
+							isSelected={selectAllBlocksActive || item.id === selectedZoomId}
+							onSelect={() => onSelectZoom?.(item.id)}
+							zoomDepth={item.zoomDepth}
+							zoomMode={item.zoomMode}
+							variant="zoom"
+						>
+							{item.label}
+						</Item>
+					))}
+				</Row>
 
-						return (
-							<Track key={rowId} id={rowId} isEmpty={false}>
-								{rowItems.map((item) => (
-									<Item
-										id={item.id}
-										key={item.id}
-										rowId={item.rowId}
-										span={item.span}
-										isSelected={
-											selectAllBlocksActive ||
-											item.id === selectedAnnotationId
-										}
-										onSelect={() => onSelectAnnotation?.(item.id)}
-										variant="annotation"
-									>
-										{item.label}
-									</Item>
-								))}
-							</Track>
-						);
-					})}
+				<Row
+					id={SPEED_ROW_ID}
+					isEmpty={speedItems.length === 0}
+					hint="Press S to add speed"
+				>
+					{speedItems.map((item) => (
+						<Item
+							id={item.id}
+							key={item.id}
+							rowId={item.rowId}
+							span={item.span}
+							isSelected={selectAllBlocksActive || item.id === _selectedSpeedId}
+							onSelect={() => onSelectSpeed?.(item.id)}
+							speedValue={item.speedValue}
+							variant="speed"
+						>
+							{item.label}
+						</Item>
+					))}
+				</Row>
 
-				{!hiddenTrackIds?.has(AUDIO_ROW_ID) &&
-					audioRowIds.map((rowId) => {
-						const rowItems = audioItems.filter(
-							(item) => getAudioTrackRowId(getAudioTrackIndex(item.rowId)) === rowId,
-						);
-						return (
-							<Track
-								key={rowId}
-								id={rowId}
-								isEmpty={false}
-								trackStyle={{ background: "rgba(255,255,255,0.054)" }}
-							>
-								{rowItems.map((item) => (
-									<Item
-										id={item.id}
-										key={item.id}
-										rowId={item.rowId}
-										span={item.span}
-										isSelected={
-											selectAllBlocksActive || item.id === selectedAudioId
-										}
-										onSelect={() => onSelectAudio?.(item.id)}
-										variant="audio"
-									>
-										{item.label}
-									</Item>
-								))}
-							</Track>
-						);
-					})}
+				{annotationRowIds.map((rowId, index) => {
+					const rowItems = annotationItems.filter(
+						(item) =>
+							getAnnotationTrackRowId(getAnnotationTrackIndex(item.rowId)) === rowId,
+					);
+
+					return (
+						<Row
+							key={rowId}
+							id={rowId}
+							isEmpty={rowItems.length === 0}
+							hint={index === 0 ? "Press A to add annotation" : undefined}
+						>
+							{rowItems.map((item) => (
+								<Item
+									id={item.id}
+									key={item.id}
+									rowId={item.rowId}
+									span={item.span}
+									isSelected={
+										selectAllBlocksActive || item.id === selectedAnnotationId
+									}
+									onSelect={() => onSelectAnnotation?.(item.id)}
+									variant="annotation"
+								>
+									{item.label}
+								</Item>
+							))}
+						</Row>
+					);
+				})}
+
+				{audioRowIds.map((rowId, index) => {
+					const rowItems = audioItems.filter(
+						(item) => getAudioTrackRowId(getAudioTrackIndex(item.rowId)) === rowId,
+					);
+
+					return (
+						<Row
+							key={rowId}
+							id={rowId}
+							isEmpty={rowItems.length === 0}
+							hint={index === 0 ? "Click music icon to add audio" : undefined}
+						>
+							{rowItems.map((item) => (
+								<Item
+									id={item.id}
+									key={item.id}
+									rowId={item.rowId}
+									span={item.span}
+									isSelected={
+										selectAllBlocksActive || item.id === selectedAudioId
+									}
+									onSelect={() => onSelectAudio?.(item.id)}
+									variant="audio"
+								>
+									{item.label}
+								</Item>
+							))}
+						</Row>
+					);
+				})}
 			</div>
 		</div>
 	);
@@ -996,24 +862,25 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onAudioDelete,
 			selectedAudioId,
 			onSelectAudio,
+			aspectRatio = "native",
+			onAspectRatioChange,
+			onOpenCropEditor,
+			isCropped = false,
 			videoPath,
-			isPlaying = false,
-			onTogglePlayPause,
-			volume = 1,
-			onVolumeChange,
 			hideToolbar = false,
 		},
 		ref,
 	) {
+		const t = useScopedT("settings");
+		const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
 		const totalMs = useMemo(
 			() => Math.max(0, Math.round(videoDuration * 1000)),
 			[videoDuration],
 		);
-		const playheadTimeMs = useMemo(
+		const currentTimeMs = useMemo(
 			() => Math.round((playheadTime ?? currentTime) * 1000),
-			[playheadTime, currentTime],
+			[currentTime, playheadTime],
 		);
-		const timelineCurrentTimeMs = playheadTimeMs;
 		const timelineScale = useMemo(() => calculateTimelineScale(videoDuration), [videoDuration]);
 		const safeMinDurationMs = useMemo(
 			() =>
@@ -1027,95 +894,80 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 		const [keyframes, setKeyframes] = useState<{ id: string; time: number }[]>([]);
 		const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null);
 		const [selectAllBlocksActive, setSelectAllBlocksActive] = useState(false);
-		const [isCollapsed, setIsCollapsed] = useState(false);
-		const [hiddenTrackIds, setHiddenTrackIds] = useState<Set<string>>(() => new Set());
+		const [customAspectWidth, setCustomAspectWidth] = useState(
+			initialEditorPreferences.customAspectWidth,
+		);
+		const [customAspectHeight, setCustomAspectHeight] = useState(
+			initialEditorPreferences.customAspectHeight,
+		);
+		const [scrollLabels, setScrollLabels] = useState({
+			pan: "Shift + Ctrl + Scroll",
+			zoom: "Ctrl + Scroll",
+		});
 		const isTimelineFocusedRef = useRef(false);
 		const timelineContainerRef = useRef<HTMLDivElement>(null);
 		const { shortcuts: keyShortcuts, isMac } = useShortcuts();
 		const audioPeaks = useAudioPeaks(videoPath);
 
-		function formatTime(seconds: number) {
-			if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return "0:00";
-			const mins = Math.floor(seconds / 60);
-			const secs = Math.floor(seconds % 60);
-			return `${mins}:${secs.toString().padStart(2, "0")}`;
-		}
-
 		useEffect(() => {
-			if (totalMs === 0) {
-				setRange({ start: 0, end: FALLBACK_RANGE_MS });
-				return;
-			}
-			if (videoPath) {
-				try {
-					const saved = localStorage.getItem(`timeline-zoom:${videoPath}`);
-					if (saved) {
-						const parsed: Range = JSON.parse(saved);
-						if (
-							typeof parsed.start === "number" &&
-							typeof parsed.end === "number" &&
-							parsed.start >= 0 &&
-							parsed.end > parsed.start
-						) {
-							setRange({
-								start: Math.max(0, parsed.start),
-								end: Math.min(totalMs, parsed.end),
-							});
-							return;
-						}
-					}
-				} catch {
-					// ignore malformed storage
-				}
-			}
 			setRange(createInitialRange(totalMs));
-		}, [totalMs, videoPath]);
+		}, [totalMs]);
 
 		useEffect(() => {
-			if (!videoPath || totalMs === 0) return;
-			try {
-				localStorage.setItem(`timeline-zoom:${videoPath}`, JSON.stringify(range));
-			} catch {
-				// ignore storage errors
-			}
-		}, [range, videoPath, totalMs]);
-
-		useEffect(() => {
-			if (!videoPath) {
-				setHiddenTrackIds(new Set());
+			if (aspectRatio === "native") {
 				return;
 			}
-			try {
-				const saved = localStorage.getItem(`timeline-hidden-tracks:${videoPath}`);
-				if (saved) {
-					setHiddenTrackIds(new Set(JSON.parse(saved) as string[]));
-					return;
-				}
-			} catch {
-				// ignore
+			const [width, height] = aspectRatio.split(":");
+			if (width && height) {
+				setCustomAspectWidth(width);
+				setCustomAspectHeight(height);
 			}
-			setHiddenTrackIds(new Set());
-		}, [videoPath]);
+		}, [aspectRatio]);
 
 		useEffect(() => {
-			if (!videoPath) return;
-			try {
-				localStorage.setItem(
-					`timeline-hidden-tracks:${videoPath}`,
-					JSON.stringify([...hiddenTrackIds]),
-				);
-			} catch {
-				// ignore
+			saveEditorPreferences({
+				customAspectWidth,
+				customAspectHeight,
+			});
+		}, [customAspectHeight, customAspectWidth]);
+
+		const applyCustomAspectRatio = useCallback(() => {
+			const width = Number.parseInt(customAspectWidth, 10);
+			const height = Number.parseInt(customAspectHeight, 10);
+			if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+				toast.error("Custom aspect ratio must be positive numbers.");
+				return;
 			}
-		}, [hiddenTrackIds, videoPath]);
+			onAspectRatioChange?.(`${width}:${height}` as AspectRatio);
+		}, [customAspectHeight, customAspectWidth, onAspectRatioChange]);
+
+		const handleCustomAspectRatioKeyDown = useCallback(
+			(event: ReactKeyboardEvent<HTMLInputElement>) => {
+				// Prevent Radix DropdownMenu typeahead from selecting preset items while typing.
+				event.stopPropagation();
+				if (event.key === "Enter") {
+					event.preventDefault();
+					applyCustomAspectRatio();
+				}
+			},
+			[applyCustomAspectRatio],
+		);
+
+		useEffect(() => {
+			formatShortcut(["shift", "mod", "Scroll"]).then((pan) => {
+				formatShortcut(["mod", "Scroll"]).then((zoom) => {
+					setScrollLabels({ pan, zoom });
+				});
+			});
+		}, []);
 
 		// Add keyframe at current playhead position
 		const addKeyframe = useCallback(() => {
 			if (totalMs === 0) return;
-			const time = Math.max(0, Math.min(timelineCurrentTimeMs, totalMs));
+			const time = Math.max(0, Math.min(currentTimeMs, totalMs));
 			if (keyframes.some((kf) => Math.abs(kf.time - time) < 1)) return;
 			setKeyframes((prev) => [...prev, { id: uuidv4(), time }]);
-		}, [timelineCurrentTimeMs, totalMs, keyframes]);
+		}, [currentTimeMs, totalMs, keyframes]);
 
 		// Delete selected keyframe
 		const deleteSelectedKeyframe = useCallback(() => {
@@ -1282,7 +1134,9 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			[onSelectAudio],
 		);
 
-		// (zoom persistence is handled above; duplicate effect removed)
+		useEffect(() => {
+			setRange(createInitialRange(totalMs));
+		}, [totalMs]);
 
 		// Normalize regions only when timeline bounds change (not on every region edit).
 		// Using refs to read current regions avoids a dependency-loop that re-fires
@@ -1422,7 +1276,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 
 		// Keep newly added timeline regions at the original short default instead of
 		// scaling them with the full recording length.
-		const defaultRegionDurationMs = useMemo(() => Math.min(1500, totalMs), [totalMs]);
+		const defaultRegionDurationMs = useMemo(() => Math.min(1000, totalMs), [totalMs]);
 
 		const handleAddZoom = useCallback(() => {
 			if (!videoDuration || videoDuration === 0 || totalMs === 0) {
@@ -1435,7 +1289,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			}
 
 			// Always place zoom at playhead
-			const startPos = Math.max(0, Math.min(timelineCurrentTimeMs, totalMs));
+			const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
 			// Find the next zoom region after the playhead
 			const sorted = [...zoomRegions].sort((a, b) => a.startMs - b.startMs);
 			const nextRegion = sorted.find((region) => region.startMs > startPos);
@@ -1458,7 +1312,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 		}, [
 			videoDuration,
 			totalMs,
-			timelineCurrentTimeMs,
+			currentTimeMs,
 			zoomRegions,
 			onZoomAdded,
 			defaultRegionDurationMs,
@@ -1559,7 +1413,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			}
 
 			// Always place trim at playhead
-			const startPos = Math.max(0, Math.min(timelineCurrentTimeMs, totalMs));
+			const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
 			// Find the next trim region after the playhead
 			const sorted = [...trimRegions].sort((a, b) => a.startMs - b.startMs);
 			const nextRegion = sorted.find((region) => region.startMs > startPos);
@@ -1582,7 +1436,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 		}, [
 			videoDuration,
 			totalMs,
-			timelineCurrentTimeMs,
+			currentTimeMs,
 			trimRegions,
 			onTrimAdded,
 			defaultRegionDurationMs,
@@ -1592,8 +1446,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onClipSplit) {
 				return;
 			}
-			onClipSplit(timelineCurrentTimeMs);
-		}, [videoDuration, totalMs, timelineCurrentTimeMs, onClipSplit]);
+			onClipSplit(currentTimeMs);
+		}, [videoDuration, totalMs, currentTimeMs, onClipSplit]);
 
 		const handleAddSpeed = useCallback(() => {
 			if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onSpeedAdded) {
@@ -1606,7 +1460,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			}
 
 			// Always place speed region at playhead
-			const startPos = Math.max(0, Math.min(timelineCurrentTimeMs, totalMs));
+			const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
 			// Find the next speed region after the playhead
 			const sorted = [...speedRegions].sort((a, b) => a.startMs - b.startMs);
 			const nextRegion = sorted.find((region) => region.startMs > startPos);
@@ -1629,7 +1483,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 		}, [
 			videoDuration,
 			totalMs,
-			timelineCurrentTimeMs,
+			currentTimeMs,
 			speedRegions,
 			onSpeedAdded,
 			defaultRegionDurationMs,
@@ -1640,7 +1494,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				return;
 			}
 
-			const result = await window.electronAPI?.openAudioFilePicker?.();
+			const result = await window.electronAPI.openAudioFilePicker();
 			if (!result?.success || !result.path) {
 				return;
 			}
@@ -1665,43 +1519,26 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				return;
 			}
 
-			const startPos = Math.max(0, Math.min(timelineCurrentTimeMs, totalMs));
+			const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
+			const sorted = [...audioRegions].sort((a, b) => a.startMs - b.startMs);
+			const nextRegion = sorted.find((region) => region.startMs > startPos);
+			const gapToNext = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
 
-			// Find the first track row with no overlap at startPos
-			let rowTrackIndex = 0;
-			let rowGap = 0;
-			for (let attempt = 0; attempt < 100; attempt++) {
-				const rowRegions = audioRegions.filter((r) => (r.trackIndex ?? 0) === attempt);
-				const sortedRow = [...rowRegions].sort((a, b) => a.startMs - b.startMs);
-				const isRowOverlapping = sortedRow.some(
-					(region) => startPos >= region.startMs && startPos < region.endMs,
-				);
-				if (!isRowOverlapping) {
-					const nextInRow = sortedRow.find((region) => region.startMs > startPos);
-					const gap = nextInRow ? nextInRow.startMs - startPos : totalMs - startPos;
-					if (gap > 0) {
-						rowTrackIndex = attempt;
-						rowGap = gap;
-						break;
-					}
-				}
-			}
-
-			if (rowGap <= 0) {
+			const isOverlapping = sorted.some(
+				(region) => startPos >= region.startMs && startPos < region.endMs,
+			);
+			if (isOverlapping || gapToNext <= 0) {
 				toast.error("Cannot place audio here", {
-					description: "Not enough space available at this position.",
+					description:
+						"Audio region already exists at this location or not enough space available.",
 				});
 				return;
 			}
 
 			// Use full audio duration, but clamp to available gap and video length
-			const actualDuration = Math.min(audioDurationMs, rowGap, totalMs - startPos);
-			onAudioAdded(
-				{ start: startPos, end: startPos + actualDuration },
-				result.path,
-				rowTrackIndex,
-			);
-		}, [videoDuration, totalMs, timelineCurrentTimeMs, audioRegions, onAudioAdded]);
+			const actualDuration = Math.min(audioDurationMs, gapToNext, totalMs - startPos);
+			onAudioAdded({ start: startPos, end: startPos + actualDuration }, result.path);
+		}, [videoDuration, totalMs, currentTimeMs, audioRegions, onAudioAdded]);
 
 		const handleAddAnnotation = useCallback(
 			(trackIndex = 0) => {
@@ -1715,18 +1552,12 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				}
 
 				// Multiple annotations can exist at the same timestamp
-				const startPos = Math.max(0, Math.min(timelineCurrentTimeMs, totalMs));
+				const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
 				const endPos = Math.min(startPos + defaultDuration, totalMs);
 
 				onAnnotationAdded({ start: startPos, end: endPos }, trackIndex);
 			},
-			[
-				videoDuration,
-				totalMs,
-				timelineCurrentTimeMs,
-				onAnnotationAdded,
-				defaultRegionDurationMs,
-			],
+			[videoDuration, totalMs, currentTimeMs, onAnnotationAdded, defaultRegionDurationMs],
 		);
 
 		useEffect(() => {
@@ -1771,11 +1602,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				// Tab: Cycle through overlapping annotations at current time
 				if (e.key === "Tab" && annotationRegions.length > 0) {
 					const overlapping = annotationRegions
-						.filter(
-							(a) =>
-								timelineCurrentTimeMs >= a.startMs &&
-								timelineCurrentTimeMs <= a.endMs,
-						)
+						.filter((a) => currentTimeMs >= a.startMs && currentTimeMs <= a.endMs)
 						.sort((a, b) => a.zIndex - b.zIndex); // Sort by z-index
 
 					if (overlapping.length > 0) {
@@ -1849,12 +1676,12 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			selectedSpeedId,
 			selectedAudioId,
 			annotationRegions,
+			currentTimeMs,
 			hasAnyTimelineBlocks,
 			onSelectAnnotation,
 			keyShortcuts,
 			isMac,
 			selectAllBlocksActive,
-			timelineCurrentTimeMs,
 		]);
 
 		const clampedRange = useMemo<Range>(() => {
@@ -1876,20 +1703,15 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				splitClip: handleSplitClip,
 				addAnnotation: handleAddAnnotation,
 				addAudio: handleAddAudio,
-				isCollapsed,
-				toggleCollapsed: () => setIsCollapsed((prev) => !prev),
 				keyframes,
-				formatTime,
 			}),
 			[
+				handleAddAnnotation,
+				handleAddAudio,
 				handleAddZoom,
 				handleSuggestZooms,
 				handleSplitClip,
-				handleAddAnnotation,
-				handleAddAudio,
-				isCollapsed,
 				keyframes,
-				formatTime,
 			],
 		);
 
@@ -1902,6 +1724,14 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				zoomDepth: region.depth,
 				zoomMode: region.mode ?? "auto",
 				variant: "zoom",
+			}));
+
+			const trims: TimelineRenderItem[] = trimRegions.map((region, index) => ({
+				id: region.id,
+				rowId: TRIM_ROW_ID,
+				span: { start: region.startMs, end: region.endMs },
+				label: `Trim ${index + 1}`,
+				variant: "trim",
 			}));
 
 			const clips: TimelineRenderItem[] = clipRegions.map((region, index) => ({
@@ -1934,6 +1764,15 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				};
 			});
 
+			const speeds: TimelineRenderItem[] = speedRegions.map((region, index) => ({
+				id: region.id,
+				rowId: SPEED_ROW_ID,
+				span: { start: region.startMs, end: region.endMs },
+				label: `Speed ${index + 1}`,
+				speedValue: region.speed,
+				variant: "speed",
+			}));
+
 			const audios: TimelineRenderItem[] = audioRegions.map((region) => {
 				const fileName =
 					region.audioPath
@@ -1949,8 +1788,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				};
 			});
 
-			return [...zooms, ...clips, ...annotations, ...audios];
-		}, [zoomRegions, clipRegions, annotationRegions, audioRegions]);
+			return [...zooms, ...trims, ...clips, ...annotations, ...speeds, ...audios];
+		}, [zoomRegions, trimRegions, clipRegions, annotationRegions, speedRegions, audioRegions]);
 
 		// Flat list of draggable row spans for neighbour-clamping during drag/resize.
 		const allRegionSpans = useMemo(() => {
@@ -1960,11 +1799,23 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				end: r.endMs,
 				rowId: ZOOM_ROW_ID,
 			}));
+			const trims = trimRegions.map((r) => ({
+				id: r.id,
+				start: r.startMs,
+				end: r.endMs,
+				rowId: TRIM_ROW_ID,
+			}));
 			const clips = clipRegions.map((r) => ({
 				id: r.id,
 				start: r.startMs,
 				end: r.endMs,
 				rowId: CLIP_ROW_ID,
+			}));
+			const speeds = speedRegions.map((r) => ({
+				id: r.id,
+				start: r.startMs,
+				end: r.endMs,
+				rowId: SPEED_ROW_ID,
 			}));
 			const audios = audioRegions.map((r) => ({
 				id: r.id,
@@ -1972,30 +1823,38 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				end: r.endMs,
 				rowId: getAudioTrackRowId(r.trackIndex ?? 0),
 			}));
-			return [...zooms, ...clips, ...audios];
-		}, [zoomRegions, clipRegions, audioRegions]);
+			return [...zooms, ...trims, ...clips, ...speeds, ...audios];
+		}, [zoomRegions, trimRegions, clipRegions, speedRegions, audioRegions]);
 
 		const handleItemSpanChange = useCallback(
 			(id: string, span: Span) => {
 				// Check if it's a zoom, trim, clip, speed, or annotation item
 				if (zoomRegions.some((r) => r.id === id)) {
 					onZoomSpanChange(id, span);
+				} else if (trimRegions.some((r) => r.id === id)) {
+					onTrimSpanChange?.(id, span);
 				} else if (clipRegions.some((r) => r.id === id)) {
 					onClipSpanChange?.(id, span);
 				} else if (annotationRegions.some((r) => r.id === id)) {
 					onAnnotationSpanChange?.(id, span);
+				} else if (speedRegions.some((r) => r.id === id)) {
+					onSpeedSpanChange?.(id, span);
 				} else if (audioRegions.some((r) => r.id === id)) {
 					onAudioSpanChange?.(id, span);
 				}
 			},
 			[
 				zoomRegions,
+				trimRegions,
 				clipRegions,
 				annotationRegions,
+				speedRegions,
 				audioRegions,
 				onZoomSpanChange,
+				onTrimSpanChange,
 				onClipSpanChange,
 				onAnnotationSpanChange,
+				onSpeedSpanChange,
 				onAudioSpanChange,
 			],
 		);
@@ -2022,11 +1881,10 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 
 		const handleTimelineWheel = useCallback(
 			(event: WheelEvent<HTMLDivElement>) => {
-				if (totalMs <= 0) {
+				if (event.ctrlKey || event.metaKey || totalMs <= 0) {
 					return;
 				}
 
-				// Horizontal scroll (trackpad side-scroll or shift+scroll) → pan
 				const rawHorizontalDelta =
 					Math.abs(event.deltaX) > 0
 						? event.deltaX
@@ -2034,50 +1892,26 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							? event.deltaY
 							: 0;
 
-				if (rawHorizontalDelta !== 0) {
-					event.preventDefault();
-					const containerWidth = timelineContainerRef.current?.clientWidth ?? 0;
-					const visibleRangeMs = clampedRange.end - clampedRange.start;
-					if (containerWidth <= 0 || visibleRangeMs <= 0) return;
-					const horizontalDeltaPx = normalizeWheelDeltaToPixels(
-						rawHorizontalDelta,
-						event.deltaMode,
-					);
-					const deltaMs = (horizontalDeltaPx / containerWidth) * visibleRangeMs;
-					panTimelineRange(deltaMs);
+				if (rawHorizontalDelta === 0) {
 					return;
 				}
 
-				// Vertical scroll → zoom in/out (no modifier key needed)
-				if (Math.abs(event.deltaY) > 0) {
-					event.preventDefault();
-					event.stopPropagation();
-					const containerWidth = timelineContainerRef.current?.clientWidth ?? 0;
-					const visibleRangeMs = clampedRange.end - clampedRange.start;
-					if (containerWidth <= 0 || visibleRangeMs <= 0) return;
+				const containerWidth = timelineContainerRef.current?.clientWidth ?? 0;
+				const visibleRangeMs = clampedRange.end - clampedRange.start;
 
-					// Zoom centered on cursor position
-					const rect = timelineContainerRef.current!.getBoundingClientRect();
-					const cursorFraction = Math.max(
-						0,
-						Math.min(1, (event.clientX - rect.left) / containerWidth),
-					);
-					const cursorMs = clampedRange.start + cursorFraction * visibleRangeMs;
-
-					const zoomFactor = event.deltaY > 0 ? 1.15 : 1 / 1.15;
-					const newVisibleMs = Math.max(
-						500,
-						Math.min(totalMs, visibleRangeMs * zoomFactor),
-					);
-
-					const newStart = Math.max(0, cursorMs - cursorFraction * newVisibleMs);
-					const newEnd = Math.min(totalMs, newStart + newVisibleMs);
-
-					setRange({
-						start: newEnd - newVisibleMs > 0 ? newEnd - newVisibleMs : 0,
-						end: newEnd,
-					});
+				if (containerWidth <= 0 || visibleRangeMs <= 0) {
+					return;
 				}
+
+				event.preventDefault();
+
+				const horizontalDeltaPx = normalizeWheelDeltaToPixels(
+					rawHorizontalDelta,
+					event.deltaMode,
+				);
+				const deltaMs = (horizontalDeltaPx / containerWidth) * visibleRangeMs;
+
+				panTimelineRange(deltaMs);
 			},
 			[clampedRange.end, clampedRange.start, panTimelineRange, totalMs],
 		);
@@ -2099,57 +1933,15 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 		}
 
 		return (
-			<div className="flex min-h-0 flex-1 flex-col gap-1.5">
-				{!hideToolbar && (
-					<div className="relative flex items-center px-1 py-1">
-						{/* Left tools */}
-						<div className="z-10 flex min-w-0 flex-1 items-center gap-1.5">
-							<DropdownMenu>
-								<DropdownMenuTrigger asChild>
-									<Button
-										variant="ghost"
-										size="sm"
-										className="h-7 gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 text-[11px] text-white/65 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-all hover:bg-white/[0.08] hover:text-white"
-									>
-										<Plus className="w-3.5 h-3.5" />
-										<span className="font-medium">Add Layer</span>
-										<ChevronDown className="w-3 h-3" />
-									</Button>
-								</DropdownMenuTrigger>
-								<DropdownMenuContent
-									align="start"
-									className="bg-[#1a1a1c] border-white/10"
-								>
-									<DropdownMenuItem
-										onClick={() => {
-											const nextTrackIndex =
-												annotationRegions.length > 0
-													? Math.max(
-															...annotationRegions.map(
-																(region) => region.trackIndex ?? 0,
-															),
-														) + 1
-													: 0;
-											handleAddAnnotation(nextTrackIndex);
-										}}
-										className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
-									>
-										Annotation
-									</DropdownMenuItem>
-									<DropdownMenuItem
-										onClick={handleAddAudio}
-										className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
-									>
-										Audio
-									</DropdownMenuItem>
-								</DropdownMenuContent>
-							</DropdownMenu>
-							<div className="w-[1px] h-4 bg-white/10 mx-1" />
+			<div className="flex-1 min-h-0 flex flex-col bg-[#17171a] overflow-auto">
+				{hideToolbar ? null : (
+					<div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-[#161619]">
+						<div className="flex items-center gap-1">
 							<Button
 								onClick={handleAddZoom}
 								variant="ghost"
 								size="icon"
-								className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-[#2563EB]/10 hover:text-[#2563EB]"
+								className="h-7 w-7 text-slate-400 hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all"
 								title="Add Zoom (Z)"
 							>
 								<ZoomIn className="w-4 h-4" />
@@ -2158,229 +1950,217 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 								onClick={handleSuggestZooms}
 								variant="ghost"
 								size="icon"
-								className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-[#2563EB]/10 hover:text-[#2563EB]"
+								className="h-7 w-7 text-slate-400 hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all"
 								title="Suggest Zooms from Cursor"
 							>
 								<WandSparkles className="w-4 h-4" />
 							</Button>
 							<Button
+								onClick={() => handleAddAnnotation()}
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7 text-slate-400 hover:text-[#B4A046] hover:bg-[#B4A046]/10 transition-all"
+								title="Add Annotation (A)"
+							>
+								<MessageSquare className="w-4 h-4" />
+							</Button>
+							<Button
+								onClick={handleAddAudio}
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7 text-slate-400 hover:text-[#a855f7] hover:bg-[#a855f7]/10 transition-all"
+								title="Add Audio"
+							>
+								<Music className="w-4 h-4" />
+							</Button>
+							<Button
 								onClick={handleSplitClip}
 								variant="ghost"
 								size="icon"
-								className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+								className="h-7 w-7 text-slate-400 hover:text-white hover:bg-white/10 transition-all"
 								title="Split Clip (C)"
 							>
 								<Scissors className="w-4 h-4" />
 							</Button>
 						</div>
-						{/* Playback controls - absolutely centered under the preview column */}
-						<div className="absolute inset-0 flex items-center pointer-events-none">
-							<div className="flex items-center gap-1.5 pointer-events-auto w-full justify-center pr-8">
-								<span className="mr-1 text-[10px] font-medium tabular-nums text-slate-400">
-									{formatTime(currentTime)}
-								</span>
-								<Button
-									variant="ghost"
-									size="icon"
-									className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
-									title="Skip Back"
-									onClick={() => {
-										if (!onSeek) return;
-										const currentMs = currentTime * 1000;
-										const prevKeyframe = [...keyframes]
-											.reverse()
-											.find((k) => k.time < currentMs - 50);
-										if (prevKeyframe) {
-											onSeek(prevKeyframe.time / 1000);
-										} else {
-											onSeek(Math.max(0, currentTime - 5));
-										}
-									}}
+						<div className="flex items-center gap-2">
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<Button
+										variant="ghost"
+										size="sm"
+										className="h-7 px-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-white/10 transition-all gap-1"
+									>
+										<span className="font-medium">
+											{getAspectRatioLabel(aspectRatio)}
+										</span>
+										<ChevronDown className="w-3 h-3" />
+									</Button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent
+									align="end"
+									className="bg-[#1a1a1c] border-white/10"
 								>
-									<SkipBack className="w-3.5 h-3.5" weight="fill" />
-								</Button>
-								<Button
-									variant="ghost"
-									size="icon"
-									className={cn(
-										"h-7 w-7 rounded-full border border-white/10 transition-all shadow-[0_8px_18px_rgba(0,0,0,0.18)]",
-										isPlaying
-											? "bg-white/10 text-white hover:bg-white/20"
-											: "bg-white text-black hover:bg-white/90",
-									)}
-									onClick={onTogglePlayPause}
-									title={isPlaying ? "Pause" : "Play"}
-								>
-									{isPlaying ? (
-										<Pause className="w-3.5 h-3.5" weight="fill" />
-									) : (
-										<Play className="w-3.5 h-3.5" weight="fill" />
-									)}
-								</Button>
-								<Button
-									variant="ghost"
-									size="icon"
-									className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
-									title="Skip Forward"
-									onClick={() => {
-										if (!onSeek) return;
-										const currentMs = currentTime * 1000;
-										const nextKeyframe = keyframes.find(
-											(k) => k.time > currentMs + 50,
-										);
-										if (nextKeyframe) {
-											onSeek(nextKeyframe.time / 1000);
-										} else {
-											onSeek(Math.min(videoDuration, currentTime + 5));
-										}
-									}}
-								>
-									<SkipForward className="w-3.5 h-3.5" weight="fill" />
-								</Button>
-								<span className="text-[10px] font-medium text-slate-500 tabular-nums ml-1">
-									{formatTime(videoDuration)}
-								</span>
-							</div>
-						</div>
-						{/* Right section: volume inline slider */}
-						<div className="z-10 ml-auto flex items-center gap-2">
+									{ASPECT_RATIOS.map((ratio) => (
+										<DropdownMenuItem
+											key={ratio}
+											onClick={() => onAspectRatioChange?.(ratio)}
+											className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer flex items-center justify-between gap-3"
+										>
+											<span>{getAspectRatioLabel(ratio)}</span>
+											{aspectRatio === ratio && (
+												<Check className="w-3 h-3 text-[#2563EB]" />
+											)}
+										</DropdownMenuItem>
+									))}
+									<div className="mx-1 my-1 h-px bg-white/10" />
+									<div className="px-2 py-1.5 flex items-center gap-2 text-slate-300">
+										<span className="text-sm">Custom</span>
+										<input
+											type="text"
+											inputMode="numeric"
+											value={customAspectWidth}
+											onChange={(event) =>
+												setCustomAspectWidth(
+													event.target.value.replace(/\D/g, ""),
+												)
+											}
+											onKeyDown={handleCustomAspectRatioKeyDown}
+											className="w-12 h-7 rounded border border-white/15 bg-black/20 px-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
+											aria-label="Custom aspect width"
+										/>
+										<span className="text-slate-500">:</span>
+										<input
+											type="text"
+											inputMode="numeric"
+											value={customAspectHeight}
+											onChange={(event) =>
+												setCustomAspectHeight(
+													event.target.value.replace(/\D/g, ""),
+												)
+											}
+											onKeyDown={handleCustomAspectRatioKeyDown}
+											className="w-12 h-7 rounded border border-white/15 bg-black/20 px-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
+											aria-label="Custom aspect height"
+										/>
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={applyCustomAspectRatio}
+											className="h-7 px-2 text-xs text-slate-300 hover:text-white hover:bg-white/10"
+										>
+											Set
+										</Button>
+										{isCustomAspectRatio(aspectRatio) && (
+											<Check className="w-3 h-3 text-[#2563EB] ml-auto" />
+										)}
+									</div>
+								</DropdownMenuContent>
+							</DropdownMenu>
+							<div className="w-[1px] h-4 bg-white/10" />
 							<Button
 								variant="ghost"
-								size="icon"
-								title={isCollapsed ? "Expand Timeline" : "Collapse Timeline"}
-								className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
-								onClick={() => setIsCollapsed((prev) => !prev)}
+								size="sm"
+								onClick={() => onOpenCropEditor?.()}
+								className="h-7 px-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-white/10 transition-all gap-1.5"
 							>
-								{isCollapsed ? (
-									<ChevronUp className="w-3.5 h-3.5" />
-								) : (
-									<ChevronDown className="w-3.5 h-3.5" />
-								)}
+								<Crop className="w-3.5 h-3.5" />
+								<span className="font-medium">{t("sections.crop", "Crop")}</span>
+								{isCropped ? (
+									<span className="h-1.5 w-1.5 rounded-full bg-[#2563EB]" />
+								) : null}
 							</Button>
-							{/* Volume icon + inline pill slider */}
-							<div className="flex items-center gap-1.5">
-								<button
-									type="button"
-									className="text-slate-400 hover:text-white transition-colors"
-									title="Mute/Unmute"
-									onClick={() => onVolumeChange?.(volume <= 0.001 ? 1 : 0)}
-								>
-									{volume <= 0.001 ? (
-										<VolumeX className="w-3.5 h-3.5" />
-									) : volume < 0.5 ? (
-										<Volume1 className="w-3.5 h-3.5" />
-									) : (
-										<Volume2 className="w-3.5 h-3.5" />
-									)}
-								</button>
-								<div className="relative flex h-7 w-24 select-none items-center overflow-hidden rounded-full border border-white/[0.06] bg-black/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-									<div
-										className="absolute inset-y-[3px] left-[3px] right-auto rounded-[10px] bg-white/[0.08]"
-										style={{
-											width:
-												volume > 0
-													? `max(calc(${volume * 100}% - 6px), 1.2rem)`
-													: 0,
-										}}
-									/>
-									<div
-										className="pointer-events-none absolute bottom-[18%] top-[18%] z-10 w-[2px] rounded-full bg-white/95 shadow-[0_0_10px_rgba(37,99,235,0.28)]"
-										style={{ left: `calc(${volume * 100}% - 8px)` }}
-									/>
-									<span className="pointer-events-none relative z-10 pl-2 text-[10px] font-medium text-slate-400">
-										{Math.round(volume * 100)}%
-									</span>
-									<input
-										type="range"
-										min="0"
-										max="1"
-										step="0.01"
-										value={volume}
-										onChange={(e) => onVolumeChange?.(Number(e.target.value))}
-										className="absolute inset-0 h-full w-full cursor-ew-resize opacity-0"
-									/>
-								</div>
-							</div>
+						</div>
+						<div className="flex-1" />
+						<div className="flex items-center gap-4 text-[10px] text-slate-500 font-medium">
+							<span className="flex items-center gap-1.5">
+								<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-sans">
+									Side Scroll
+								</kbd>
+								<span>Pan</span>
+							</span>
+							<span className="flex items-center gap-1.5">
+								<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-sans">
+									{scrollLabels.pan}
+								</kbd>
+								<span>Pan</span>
+							</span>
+							<span className="flex items-center gap-1.5">
+								<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-sans">
+									{scrollLabels.zoom}
+								</kbd>
+								<span>Zoom</span>
+							</span>
 						</div>
 					</div>
 				)}
 				<div
-					className={cn(
-						"flex min-h-0 flex-1 flex-col overflow-hidden rounded-[16px]",
-						isCollapsed && "hidden",
-					)}
+					ref={timelineContainerRef}
+					className="flex-1 min-h-0 overflow-auto bg-[#17171a] relative"
+					tabIndex={0}
+					onFocus={() => {
+						isTimelineFocusedRef.current = true;
+					}}
+					onBlur={() => {
+						isTimelineFocusedRef.current = false;
+					}}
+					onMouseDown={() => {
+						timelineContainerRef.current?.focus();
+						isTimelineFocusedRef.current = true;
+					}}
+					onClick={() => {
+						setSelectedKeyframeId(null);
+						setSelectAllBlocksActive(false);
+					}}
+					onWheel={handleTimelineWheel}
 				>
-					<div
-						ref={timelineContainerRef}
-						className={cn(
-							"relative min-h-0 flex-1 overflow-auto outline-none",
-							timelineStyles.scrollArea,
-						)}
-						tabIndex={0}
-						onFocus={() => {
-							isTimelineFocusedRef.current = true;
-						}}
-						onBlur={() => {
-							isTimelineFocusedRef.current = false;
-						}}
-						onMouseDown={() => {
-							timelineContainerRef.current?.focus();
-							isTimelineFocusedRef.current = true;
-						}}
-						onClick={() => {
-							setSelectedKeyframeId(null);
-							setSelectAllBlocksActive(false);
-						}}
-						onWheel={handleTimelineWheel}
+					<TimelineWrapper
+						range={clampedRange}
+						videoDuration={videoDuration}
+						hasOverlap={hasOverlap}
+						onRangeChange={setRange}
+						minItemDurationMs={timelineScale.minItemDurationMs}
+						minVisibleRangeMs={timelineScale.minVisibleRangeMs}
+						onItemSpanChange={handleItemSpanChange}
+						allRegionSpans={allRegionSpans}
 					>
-						<TimelineWrapper
-							range={clampedRange}
-							videoDuration={videoDuration}
-							hasOverlap={hasOverlap}
-							onRangeChange={setRange}
-							minItemDurationMs={timelineScale.minItemDurationMs}
-							minVisibleRangeMs={timelineScale.minVisibleRangeMs}
-							onItemSpanChange={handleItemSpanChange}
-							allRegionSpans={allRegionSpans}
-						>
-							<KeyframeMarkers
-								keyframes={keyframes}
-								selectedKeyframeId={selectedKeyframeId}
-								setSelectedKeyframeId={setSelectedKeyframeId}
-								onKeyframeMove={handleKeyframeMove}
-								videoDurationMs={totalMs}
-								timelineRef={timelineContainerRef}
-							/>
-							<Timeline
-								items={timelineItems}
-								videoDurationMs={totalMs}
-								currentTimeMs={playheadTimeMs}
-								onSeek={onSeek}
-								onSelectZoom={handleSelectZoom}
-								onSelectTrim={handleSelectTrim}
-								onSelectClip={handleSelectClip}
-								onSelectAnnotation={handleSelectAnnotation}
-								onSelectSpeed={handleSelectSpeed}
-								onSelectAudio={handleSelectAudio}
-								selectedZoomId={selectedZoomId}
-								selectedTrimId={selectedTrimId}
-								selectedClipId={selectedClipId}
-								selectedAnnotationId={selectedAnnotationId}
-								selectedSpeedId={selectedSpeedId}
-								selectedAudioId={selectedAudioId}
-								selectAllBlocksActive={selectAllBlocksActive}
-								onClearBlockSelection={clearSelectedBlocks}
-								keyframes={keyframes}
-								audioPeaks={audioPeaks}
-								onPanTimeline={panTimelineRange}
-								hiddenTrackIds={hiddenTrackIds}
-							/>
-						</TimelineWrapper>
-					</div>
+						<KeyframeMarkers
+							keyframes={keyframes}
+							selectedKeyframeId={selectedKeyframeId}
+							setSelectedKeyframeId={setSelectedKeyframeId}
+							onKeyframeMove={handleKeyframeMove}
+							videoDurationMs={totalMs}
+							timelineRef={timelineContainerRef}
+						/>
+						<Timeline
+							items={timelineItems}
+							videoDurationMs={totalMs}
+							currentTimeMs={currentTimeMs}
+							onSeek={onSeek}
+							onSelectZoom={handleSelectZoom}
+							onSelectTrim={handleSelectTrim}
+							onSelectClip={handleSelectClip}
+							onSelectAnnotation={handleSelectAnnotation}
+							onSelectSpeed={handleSelectSpeed}
+							onSelectAudio={handleSelectAudio}
+							selectedZoomId={selectedZoomId}
+							selectedTrimId={selectedTrimId}
+							selectedClipId={selectedClipId}
+							selectedAnnotationId={selectedAnnotationId}
+							selectedSpeedId={selectedSpeedId}
+							selectedAudioId={selectedAudioId}
+							selectAllBlocksActive={selectAllBlocksActive}
+							onClearBlockSelection={clearSelectedBlocks}
+							keyframes={keyframes}
+							audioPeaks={audioPeaks}
+						/>
+					</TimelineWrapper>
 				</div>
 			</div>
 		);
 	},
 );
+
+TimelineEditor.displayName = "TimelineEditor";
 
 export default TimelineEditor;
