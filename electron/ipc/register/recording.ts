@@ -1040,17 +1040,25 @@ export function registerRecordingHandlers(
   ipcMain.handle('get-recorded-video-path', async () => {
     try {
       const recordingsDir = await getRecordingsDir()
-      const files = await fs.readdir(recordingsDir)
-      const videoFiles = files.filter(file => /\.(webm|mov|mp4)$/i.test(file))
-      
-      if (videoFiles.length === 0) {
+      const entries = await fs.readdir(recordingsDir, { withFileTypes: true })
+      const candidates = await Promise.all(
+        entries
+          .filter((entry) => entry.isFile() && /^recording-\d+\.(webm|mov|mp4)$/i.test(entry.name))
+          .map(async (entry) => {
+            const fullPath = path.join(recordingsDir, entry.name)
+            const stat = await fs.stat(fullPath).catch(() => null)
+            return stat ? { path: fullPath, mtimeMs: stat.mtimeMs } : null
+          }),
+      )
+      const latestVideo = candidates
+        .filter((candidate): candidate is { path: string; mtimeMs: number } => candidate !== null)
+        .sort((left, right) => right.mtimeMs - left.mtimeMs)[0]
+
+      if (!latestVideo) {
         return { success: false, message: 'No recorded video found' }
       }
-      
-      const latestVideo = videoFiles.sort().reverse()[0]
-      const videoPath = path.join(recordingsDir, latestVideo)
-      
-      return { success: true, path: videoPath }
+
+      return { success: true, path: latestVideo.path }
     } catch (error) {
       console.error('Failed to get video path:', error)
       return { success: false, message: 'Failed to get video path', error: String(error) }

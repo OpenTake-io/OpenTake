@@ -326,7 +326,10 @@ export async function resolveNativeVideoEncoder(
 	ffmpegPath: string,
 	encodingMode: NativeExportEncodingMode,
 ) {
-	if (cachedNativeVideoEncoder?.ffmpegPath === ffmpegPath) {
+	if (
+		cachedNativeVideoEncoder?.ffmpegPath === ffmpegPath &&
+		cachedNativeVideoEncoder?.encodingMode === encodingMode
+	) {
 		return cachedNativeVideoEncoder.encoderName;
 	}
 
@@ -341,7 +344,7 @@ export async function resolveNativeVideoEncoder(
 		}
 
 		if (await probeNativeVideoEncoder(ffmpegPath, encoderName, encodingMode)) {
-			setCachedNativeVideoEncoder({ ffmpegPath, encoderName });
+			setCachedNativeVideoEncoder({ ffmpegPath, encodingMode, encoderName });
 			return encoderName;
 		}
 	}
@@ -451,7 +454,6 @@ export async function muxExportedVideoAudioBuffer(
 	} finally {
 		await Promise.allSettled([
 			removeTemporaryExportFile(tempVideoPath),
-			removeTemporaryExportFile(`${tempVideoPath}.muxed.mp4`),
 			removeTemporaryExportFile(
 				path.join(
 					path.dirname(tempVideoPath),

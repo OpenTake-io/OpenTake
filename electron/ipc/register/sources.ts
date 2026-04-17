@@ -283,12 +283,23 @@ export function registerSourceHandlers({
 
 			// ── 1. Bring window to front ──
 			if (isWindow && process.platform === "darwin") {
-				const appName = source.appName || source.name?.split(" — ")[0]?.trim();
+				const rawAppName = source.appName || source.name?.split(" — ")[0]?.trim();
+				const appName =
+					rawAppName && /^[\w .&()+'-]{1,64}$/.test(rawAppName) ? rawAppName : null;
 				if (appName) {
 					try {
 						await execFileAsync(
 							"osascript",
-							["-e", `tell application "${appName}" to activate`],
+							[
+								"-e",
+								"on run argv",
+								"-e",
+								"tell application (item 1 of argv) to activate",
+								"-e",
+								"end run",
+								"--",
+								appName,
+							],
 							{ timeout: 2000 },
 						);
 						await new Promise((resolve) => setTimeout(resolve, 350));
@@ -332,13 +343,23 @@ export function registerSourceHandlers({
 				bounds = getDisplayBoundsForSource(source);
 			}
 
+			if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
+				const primaryBounds = getScreen().getPrimaryDisplay().bounds;
+				if (primaryBounds.width <= 0 || primaryBounds.height <= 0) {
+					return { success: false };
+				}
+				bounds = primaryBounds;
+			}
+
+			const resolvedBounds = bounds;
+
 			// ── 3. Show traveling wave highlight ──
 			const pad = 6;
 			const highlightWin = new BrowserWindow({
-				x: bounds.x - pad,
-				y: bounds.y - pad,
-				width: bounds.width + pad * 2,
-				height: bounds.height + pad * 2,
+				x: resolvedBounds.x - pad,
+				y: resolvedBounds.y - pad,
+				width: resolvedBounds.width + pad * 2,
+				height: resolvedBounds.height + pad * 2,
 				frame: false,
 				transparent: true,
 				alwaysOnTop: true,

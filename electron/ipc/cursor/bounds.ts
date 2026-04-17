@@ -29,29 +29,33 @@ export async function getNativeMacWindowSources(options?: { maxAgeMs?: number })
 		return cachedNativeMacWindowSources;
 	}
 
-	const binaryPath = await ensureNativeWindowListBinary();
-	const { stdout } = await execFileAsync(binaryPath, [], {
-		timeout: 30000,
-		maxBuffer: 10 * 1024 * 1024,
-	});
+	try {
+		const binaryPath = await ensureNativeWindowListBinary();
+		const { stdout } = await execFileAsync(binaryPath, [], {
+			timeout: 30000,
+			maxBuffer: 10 * 1024 * 1024,
+		});
 
-	const parsed = JSON.parse(stdout);
-	if (!Array.isArray(parsed)) {
-		return [] as NativeMacWindowSource[];
-	}
-
-	const entries = parsed.filter((entry: unknown): entry is NativeMacWindowSource => {
-		if (!entry || typeof entry !== "object") {
-			return false;
+		const parsed = JSON.parse(stdout);
+		if (!Array.isArray(parsed)) {
+			return [] as NativeMacWindowSource[];
 		}
 
-		const candidate = entry as Partial<NativeMacWindowSource>;
-		return typeof candidate.id === "string" && typeof candidate.name === "string";
-	});
+		const entries = parsed.filter((entry: unknown): entry is NativeMacWindowSource => {
+			if (!entry || typeof entry !== "object") {
+				return false;
+			}
 
-	setCachedNativeMacWindowSources(entries);
-	setCachedNativeMacWindowSourcesAtMs(now);
-	return entries;
+			const candidate = entry as Partial<NativeMacWindowSource>;
+			return typeof candidate.id === "string" && typeof candidate.name === "string";
+		});
+
+		setCachedNativeMacWindowSources(entries);
+		setCachedNativeMacWindowSourcesAtMs(now);
+		return entries;
+	} catch {
+		return cachedNativeMacWindowSources ?? ([] as NativeMacWindowSource[]);
+	}
 }
 
 export function getWindowBoundsFromNativeSource(
@@ -180,8 +184,9 @@ export async function resolveWindowsWindowBounds(source: SelectedSource): Promis
 		"if ($windowId) {",
 		"  $handle = [Int64]$windowId",
 		"}",
+		"$escapedWindowTitle = if ($windowTitle) { [WildcardPattern]::Escape($windowTitle) } else { $null }",
 		"if ($handle -le 0 -and $windowTitle) {",
-		'  $matchingProcess = Get-Process | Where-Object { $_.MainWindowTitle -eq $windowTitle -or $_.MainWindowTitle -like "*$windowTitle*" } | Select-Object -First 1',
+		'  $matchingProcess = Get-Process | Where-Object { $_.MainWindowTitle -eq $windowTitle -or ($escapedWindowTitle -and $_.MainWindowTitle -like "*$escapedWindowTitle*") } | Select-Object -First 1',
 		"  if ($matchingProcess) {",
 		"    $handle = $matchingProcess.MainWindowHandle.ToInt64()",
 		"  }",

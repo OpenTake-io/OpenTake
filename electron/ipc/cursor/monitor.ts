@@ -112,20 +112,35 @@ export async function startNativeCursorMonitor() {
 		}
 
 		setNativeCursorMonitorProcess(proc as Parameters<typeof setNativeCursorMonitorProcess>[0]);
-
-		proc.once("error", (error) => {
-			console.warn("Native cursor monitor process error:", error);
+		const spawned = proc;
+		if (!spawned) {
 			setNativeCursorMonitorProcess(null);
-			setNativeCursorMonitorOutputBuffer("");
 			setCurrentCursorVisualType("arrow");
+			return;
+		}
+
+		spawned.once("error", (error) => {
+			console.warn("Native cursor monitor process error:", error);
+			if (nativeCursorMonitorProcess === spawned) {
+				setNativeCursorMonitorProcess(null);
+				setNativeCursorMonitorOutputBuffer("");
+				setCurrentCursorVisualType("arrow");
+			}
 		});
 
-		if (proc.stdout) proc.stdout.on("data", handleCursorMonitorStdout);
+		if (spawned.stdout) spawned.stdout.on("data", handleCursorMonitorStdout);
+		if (spawned.stderr) {
+			spawned.stderr.on("data", () => {
+				// Drain stderr so helper logging cannot block the process.
+			});
+		}
 
-		proc.once("close", () => {
-			setNativeCursorMonitorProcess(null);
-			setNativeCursorMonitorOutputBuffer("");
-			setCurrentCursorVisualType("arrow");
+		spawned.once("close", () => {
+			if (nativeCursorMonitorProcess === spawned) {
+				setNativeCursorMonitorProcess(null);
+				setNativeCursorMonitorOutputBuffer("");
+				setCurrentCursorVisualType("arrow");
+			}
 		});
 	} catch (error) {
 		console.warn("Failed to start native cursor monitor:", error);

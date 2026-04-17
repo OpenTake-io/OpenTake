@@ -52,9 +52,10 @@ export function waitForNativeCaptureStart(process: ChildProcessWithoutNullStream
 			reject(new Error("Timed out waiting for ScreenCaptureKit recorder to start"));
 		}, 12000);
 
+		let stdoutBuffer = "";
 		const onStdout = (chunk: Buffer) => {
-			const text = chunk.toString();
-			if (text.includes("Recording started")) {
+			stdoutBuffer += chunk.toString();
+			if (stdoutBuffer.includes("Recording started")) {
 				cleanup();
 				resolve();
 			}
