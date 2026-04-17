@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import { useTimelineContext } from "dnd-timeline";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AudioPeaksData } from "./useAudioPeaks";
 
 interface AudioWaveformProps {
@@ -74,7 +74,7 @@ export default function AudioWaveform({ peaks }: AudioWaveformProps) {
 			ctx.lineTo(px, midY + barHeight);
 		}
 
-		ctx.strokeStyle = "rgba(59, 130, 246, 0.45)";
+		ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
 		ctx.lineWidth = dpr;
 		ctx.stroke();
 	}, [peaks, range.start, range.end, resizeKey]);

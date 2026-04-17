@@ -1,104 +1,98 @@
-import { ZOOM_DEPTH_SCALES, clampFocusToDepth, type ZoomFocus, type ZoomDepth } from "../types";
+import { clampFocusToDepth, ZOOM_DEPTH_SCALES, type ZoomDepth, type ZoomFocus } from "../types";
 
 interface StageSize {
-  width: number;
-  height: number;
+	width: number;
+	height: number;
 }
 
 function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
+	return Math.max(min, Math.min(max, value));
 }
 
 function easeIntoBoundary(normalized: number) {
-  const t = clamp(normalized, 0, 1);
-  return -t * t * t + 2 * t * t;
+	const t = clamp(normalized, 0, 1);
+	return -t * t * t + 2 * t * t;
 }
 
 function softClampToRange(value: number, min: number, max: number, softness: number) {
-  const clamped = clamp(value, min, max);
+	const clamped = clamp(value, min, max);
 
-  if (softness <= 0 || max <= min) {
-    return clamped;
-  }
+	if (softness <= 0 || max <= min) {
+		return clamped;
+	}
 
-  if (clamped < min + softness) {
-    const normalized = (clamped - min) / softness;
-    return min + softness * easeIntoBoundary(normalized);
-  }
+	if (clamped < min + softness) {
+		const normalized = (clamped - min) / softness;
+		return min + softness * easeIntoBoundary(normalized);
+	}
 
-  if (clamped > max - softness) {
-    const normalized = (max - clamped) / softness;
-    return max - softness * easeIntoBoundary(normalized);
-  }
+	if (clamped > max - softness) {
+		const normalized = (max - clamped) / softness;
+		return max - softness * easeIntoBoundary(normalized);
+	}
 
-  return clamped;
+	return clamped;
 }
 
 function getFocusBounds(depth: ZoomDepth) {
-  const zoomScale = ZOOM_DEPTH_SCALES[depth];
-  return getFocusBoundsForScale(zoomScale);
+	const zoomScale = ZOOM_DEPTH_SCALES[depth];
+	return getFocusBoundsForScale(zoomScale);
 }
 
 function getFocusBoundsForScale(zoomScale: number) {
-  const marginX = 1 / (2 * zoomScale);
-  const marginY = 1 / (2 * zoomScale);
+	const marginX = 1 / (2 * zoomScale);
+	const marginY = 1 / (2 * zoomScale);
 
-  return {
-    minX: marginX,
-    maxX: 1 - marginX,
-    minY: marginY,
-    maxY: 1 - marginY,
-  };
+	return {
+		minX: marginX,
+		maxX: 1 - marginX,
+		minY: marginY,
+		maxY: 1 - marginY,
+	};
 }
 
 export function clampFocusToStage(
-  focus: ZoomFocus,
-  depth: ZoomDepth,
-  _stageSize: StageSize
+	focus: ZoomFocus,
+	depth: ZoomDepth,
+	_stageSize: StageSize,
 ): ZoomFocus {
-  const baseFocus = clampFocusToDepth(focus, depth);
-  const bounds = getFocusBounds(depth);
+	const baseFocus = clampFocusToDepth(focus, depth);
+	const bounds = getFocusBounds(depth);
 
-  return {
-    cx: clamp(baseFocus.cx, bounds.minX, bounds.maxX),
-    cy: clamp(baseFocus.cy, bounds.minY, bounds.maxY),
-  };
+	return {
+		cx: clamp(baseFocus.cx, bounds.minX, bounds.maxX),
+		cy: clamp(baseFocus.cy, bounds.minY, bounds.maxY),
+	};
 }
 
-export function clampFocusToScale(
-  focus: ZoomFocus,
-  zoomScale: number,
-): ZoomFocus {
-  const baseFocus = {
-    cx: clamp(focus.cx, 0, 1),
-    cy: clamp(focus.cy, 0, 1),
-  };
-  const bounds = getFocusBoundsForScale(zoomScale);
+export function clampFocusToScale(focus: ZoomFocus, zoomScale: number): ZoomFocus {
+	const baseFocus = {
+		cx: clamp(focus.cx, 0, 1),
+		cy: clamp(focus.cy, 0, 1),
+	};
+	const bounds = getFocusBoundsForScale(zoomScale);
 
-  return {
-    cx: clamp(baseFocus.cx, bounds.minX, bounds.maxX),
-    cy: clamp(baseFocus.cy, bounds.minY, bounds.maxY),
-  };
+	return {
+		cx: clamp(baseFocus.cx, bounds.minX, bounds.maxX),
+		cy: clamp(baseFocus.cy, bounds.minY, bounds.maxY),
+	};
 }
 
-export function softenFocusToScale(
-  focus: ZoomFocus,
-  zoomScale: number
-): ZoomFocus {
-  const baseFocus = {
-    cx: clamp(focus.cx, 0, 1),
-    cy: clamp(focus.cy, 0, 1),
-  };
-  const bounds = getFocusBoundsForScale(zoomScale);
-  const horizontalRange = bounds.maxX - bounds.minX;
-  const verticalRange = bounds.maxY - bounds.minY;
-  const horizontalSoftness = Math.min(0.12, horizontalRange * 0.35);
-  const verticalSoftness = Math.min(0.12, verticalRange * 0.35);
+export function softenFocusToScale(focus: ZoomFocus, zoomScale: number): ZoomFocus {
+	const baseFocus = {
+		cx: clamp(focus.cx, 0, 1),
+		cy: clamp(focus.cy, 0, 1),
+	};
+	const bounds = getFocusBoundsForScale(zoomScale);
+	const horizontalRange = bounds.maxX - bounds.minX;
+	const verticalRange = bounds.maxY - bounds.minY;
+	const horizontalSoftness = Math.min(0.12, horizontalRange * 0.35);
+	const verticalSoftness = Math.min(0.12, verticalRange * 0.35);
 
-  return {
-    cx: softClampToRange(baseFocus.cx, bounds.minX, bounds.maxX, horizontalSoftness),
-    cy: softClampToRange(baseFocus.cy, bounds.minY, bounds.maxY, verticalSoftness),
-  };
+	return {
+		cx: softClampToRange(baseFocus.cx, bounds.minX, bounds.maxX, horizontalSoftness),
+		cy: softClampToRange(baseFocus.cy, bounds.minY, bounds.maxY, verticalSoftness),
+	};
 }
 
 /**
@@ -119,50 +113,63 @@ export function softenFocusToScale(
  * @param snapToEdgesRatio 0.25 for manual zooms, 0.5 for system/auto zooms
  */
 export function edgeSnapFocus(
-  cursorFocus: ZoomFocus,
-  zoomScale: number,
-  snapToEdgesRatio: number,
+	cursorFocus: ZoomFocus,
+	zoomScale: number,
+	snapToEdgesRatio: number,
 ): ZoomFocus {
-  const bounds = getFocusBoundsForScale(zoomScale);
+	const bounds = getFocusBoundsForScale(zoomScale);
 
-  const snappedX = clampedInterpolate(cursorFocus.cx, snapToEdgesRatio, 1 - snapToEdgesRatio + 0.0001);
-  const snappedY = clampedInterpolate(cursorFocus.cy, snapToEdgesRatio, 1 - snapToEdgesRatio + 0.0001);
+	const snappedX = clampedInterpolate(
+		cursorFocus.cx,
+		snapToEdgesRatio,
+		1 - snapToEdgesRatio + 0.0001,
+	);
+	const snappedY = clampedInterpolate(
+		cursorFocus.cy,
+		snapToEdgesRatio,
+		1 - snapToEdgesRatio + 0.0001,
+	);
 
-  return {
-    cx: bounds.minX + snappedX * (bounds.maxX - bounds.minX),
-    cy: bounds.minY + snappedY * (bounds.maxY - bounds.minY),
-  };
+	return {
+		cx: bounds.minX + snappedX * (bounds.maxX - bounds.minX),
+		cy: bounds.minY + snappedY * (bounds.maxY - bounds.minY),
+	};
 }
 
 /**
  * Clamped linear interpolation: maps `value` from [inMin, inMax] → [0, 1].
  */
 function clampedInterpolate(value: number, inMin: number, inMax: number): number {
-  if (inMax <= inMin) return 0;
-  const t = (value - inMin) / (inMax - inMin);
-  return clamp(t, 0, 1);
+	if (inMax <= inMin) return 0;
+	const t = (value - inMin) / (inMax - inMin);
+	return clamp(t, 0, 1);
 }
 
 export function stageFocusToVideoSpace(
-  focus: ZoomFocus,
-  stageSize: StageSize,
-  videoSize: { width: number; height: number },
-  baseScale: number,
-  baseOffset: { x: number; y: number }
+	focus: ZoomFocus,
+	stageSize: StageSize,
+	videoSize: { width: number; height: number },
+	baseScale: number,
+	baseOffset: { x: number; y: number },
 ): ZoomFocus {
-  if (!stageSize.width || !stageSize.height || !videoSize.width || !videoSize.height || baseScale <= 0) {
-    return focus;
-  }
+	if (
+		!stageSize.width ||
+		!stageSize.height ||
+		!videoSize.width ||
+		!videoSize.height ||
+		baseScale <= 0
+	) {
+		return focus;
+	}
 
-  const stageX = focus.cx * stageSize.width;
-  const stageY = focus.cy * stageSize.height;
+	const stageX = focus.cx * stageSize.width;
+	const stageY = focus.cy * stageSize.height;
 
-  const videoNormX = (stageX - baseOffset.x) / (videoSize.width * baseScale);
-  const videoNormY = (stageY - baseOffset.y) / (videoSize.height * baseScale);
+	const videoNormX = (stageX - baseOffset.x) / (videoSize.width * baseScale);
+	const videoNormY = (stageY - baseOffset.y) / (videoSize.height * baseScale);
 
-  return {
-    cx: videoNormX,
-    cy: videoNormY,
-  };
+	return {
+		cx: videoNormX,
+		cy: videoNormY,
+	};
 }
-

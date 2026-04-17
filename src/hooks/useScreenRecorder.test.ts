@@ -38,7 +38,11 @@ function stopRecording(
 	const recorderState = recorder.state;
 	if (recorderState === "recording" || recorderState === "paused") {
 		if (recorderState === "paused") {
-			recorder.resume();
+			try {
+				recorder.resume();
+			} catch {
+				// Stopping a paused recorder is still valid; mirror the hook's fallback path.
+			}
 		}
 		if (webcamRecorder && webcamRecorder.state !== "inactive") {
 			webcamRecorder.stop();
@@ -192,6 +196,19 @@ describe("useScreenRecorder state machine", () => {
 			stopRecording(recorder, false);
 
 			expect(callOrder).toEqual(["resume", "stop"]);
+		});
+
+		it("still stops when resume throws from paused state", () => {
+			recorder.pause();
+			recorder.resume.mockImplementation(() => {
+				throw new Error("resume failed");
+			});
+
+			const result = stopRecording(recorder, false);
+
+			expect(result.stopped).toBe(true);
+			expect(recorder.stop).toHaveBeenCalled();
+			expect(recorder.state).toBe("inactive");
 		});
 
 		it("does nothing when already inactive", () => {

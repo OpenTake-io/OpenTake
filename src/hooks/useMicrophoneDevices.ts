@@ -57,7 +57,11 @@ export function useMicrophoneDevices(enabled: boolean = true, preferredDeviceId?
 					setDevices(audioInputs);
 					setSelectedDeviceId((currentDeviceId) => {
 						const normalizedPreferredDeviceId = preferredDeviceId ?? "default";
-						if (audioInputs.some((device) => device.deviceId === normalizedPreferredDeviceId)) {
+						if (
+							audioInputs.some(
+								(device) => device.deviceId === normalizedPreferredDeviceId,
+							)
+						) {
 							return normalizedPreferredDeviceId;
 						}
 
@@ -79,7 +83,9 @@ export function useMicrophoneDevices(enabled: boolean = true, preferredDeviceId?
 			} catch (error) {
 				if (mounted) {
 					const message =
-						error instanceof Error ? error.message : "Failed to enumerate audio devices";
+						error instanceof Error
+							? error.message
+							: "Failed to enumerate audio devices";
 					setError(message);
 					setIsLoading(false);
 					console.error("Error loading microphone devices:", error);
