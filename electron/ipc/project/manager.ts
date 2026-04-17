@@ -53,9 +53,9 @@ export function isAllowedLocalReadPath(candidatePath: string) {
 	const allowedPrefixes = [RECORDINGS_DIR, USER_DATA_PATH, getAssetRootPath(), app.getPath("temp")];
 
 	return (
-		existsSync(candidatePath) &&
-		(allowedPrefixes.some((prefix) => isPathInsideDirectory(candidatePath, prefix)) ||
-			approvedLocalReadPaths.has(candidatePath))
+		existsSync(candidatePath) ||
+		allowedPrefixes.some((prefix) => isPathInsideDirectory(candidatePath, prefix)) ||
+		approvedLocalReadPaths.has(candidatePath)
 	);
 }
 
