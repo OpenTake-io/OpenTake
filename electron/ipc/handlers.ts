@@ -1,921 +1,1006 @@
-import type { ChildProcessByStdio, ChildProcessWithoutNullStreams } from 'node:child_process'
-import { execFile, spawn, spawnSync } from 'node:child_process'
-import { createWriteStream, constants as fsConstants, existsSync } from 'node:fs'
-import fs from 'node:fs/promises'
-import { get as httpsGet } from 'node:https'
-import { createRequire } from 'node:module'
-import path from 'node:path'
-import type { Readable, Writable } from 'node:stream'
-import { fileURLToPath, pathToFileURL } from 'node:url'
-import { promisify } from 'node:util'
-import type { SaveDialogOptions, WebContents } from 'electron'
-import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, shell, systemPreferences } from 'electron'
-import { RECORDINGS_DIR, USER_DATA_PATH } from '../appPaths'
-import { hideCursor, showCursor } from '../cursorHider'
+import type { ChildProcessByStdio, ChildProcessWithoutNullStreams } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
+import { createWriteStream, existsSync, constants as fsConstants } from "node:fs";
+import fs from "node:fs/promises";
+import { get as httpsGet } from "node:https";
+import { createRequire } from "node:module";
+import path from "node:path";
+import type { Readable, Writable } from "node:stream";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
+import type { SaveDialogOptions, WebContents } from "electron";
 import {
-  buildNativeVideoExportArgs,
-  buildTrimmedSourceAudioFilter,
-  getEditedAudioExtension,
-  getNativeVideoInputByteSize,
-  getPreferredNativeVideoEncoders,
-  parseAvailableFfmpegEncoders,
-  type NativeExportEncodingMode,
-  type NativeVideoExportFinishOptions,
-} from './nativeVideoExport'
-import { closeCountdownWindow, createCountdownWindow, getCountdownWindow } from '../windows'
-import { resolveWindowsCaptureDisplay } from './windowsCaptureSelection'
+	app,
+	BrowserWindow,
+	desktopCapturer,
+	dialog,
+	ipcMain,
+	shell,
+	systemPreferences,
+} from "electron";
+import { RECORDINGS_DIR, USER_DATA_PATH } from "../appPaths";
+import { hideCursor, showCursor } from "../cursorHider";
+import { closeCountdownWindow, createCountdownWindow, getCountdownWindow } from "../windows";
+import {
+	buildNativeH264StreamExportArgs,
+	buildNativeVideoExportArgs,
+	buildTrimmedSourceAudioFilter,
+	getEditedAudioExtension,
+	getNativeVideoInputByteSize,
+	getPreferredNativeVideoEncoders,
+	type NativeExportEncodingMode,
+	type NativeVideoExportFinishOptions,
+	parseAvailableFfmpegEncoders,
+} from "./nativeVideoExport";
+import { resolveWindowsCaptureDisplay } from "./windowsCaptureSelection";
 
-const execFileAsync = promisify(execFile)
-const nodeRequire = createRequire(import.meta.url)
+const execFileAsync = promisify(execFile);
+const nodeRequire = createRequire(import.meta.url);
 
-const PROJECT_FILE_EXTENSION = 'recordly'
-const LEGACY_PROJECT_FILE_EXTENSIONS = ['openscreen']
-const PROJECTS_DIRECTORY_NAME = 'Projects'
-const PROJECT_THUMBNAIL_SUFFIX = '.preview.png'
-const RECENT_PROJECTS_FILE = path.join(USER_DATA_PATH, 'recent-projects.json')
-const MAX_RECENT_PROJECTS = 16
-const SHORTCUTS_FILE = path.join(USER_DATA_PATH, 'shortcuts.json')
-const RECORDINGS_SETTINGS_FILE = path.join(USER_DATA_PATH, 'recordings-settings.json')
-const COUNTDOWN_SETTINGS_FILE = path.join(USER_DATA_PATH, 'countdown-settings.json')
-const AUTO_RECORDING_PREFIX = 'recording-'
-const AUTO_RECORDING_RETENTION_COUNT = 20
-const AUTO_RECORDING_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000
-const ALLOW_RECORDLY_WINDOW_CAPTURE = Boolean(process.env['VITE_DEV_SERVER_URL'])
-const RECORDING_SESSION_MANIFEST_SUFFIX = '.recordly-session.json'
-const WHISPER_MODEL_DOWNLOAD_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin'
-const WHISPER_MODEL_DIR = path.join(USER_DATA_PATH, 'whisper')
-const WHISPER_SMALL_MODEL_PATH = path.join(WHISPER_MODEL_DIR, 'ggml-small.bin')
+const PROJECT_FILE_EXTENSION = "recordly";
+const LEGACY_PROJECT_FILE_EXTENSIONS = ["openscreen"];
+const PROJECTS_DIRECTORY_NAME = "Projects";
+const PROJECT_THUMBNAIL_SUFFIX = ".preview.png";
+const RECENT_PROJECTS_FILE = path.join(USER_DATA_PATH, "recent-projects.json");
+const MAX_RECENT_PROJECTS = 16;
+const SHORTCUTS_FILE = path.join(USER_DATA_PATH, "shortcuts.json");
+const RECORDINGS_SETTINGS_FILE = path.join(USER_DATA_PATH, "recordings-settings.json");
+const COUNTDOWN_SETTINGS_FILE = path.join(USER_DATA_PATH, "countdown-settings.json");
+const AUTO_RECORDING_PREFIX = "recording-";
+const AUTO_RECORDING_RETENTION_COUNT = 20;
+const AUTO_RECORDING_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const ALLOW_RECORDLY_WINDOW_CAPTURE = Boolean(process.env["VITE_DEV_SERVER_URL"]);
+const RECORDING_SESSION_MANIFEST_SUFFIX = ".recordly-session.json";
+const WHISPER_MODEL_DOWNLOAD_URL =
+	"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
+const WHISPER_MODEL_DIR = path.join(USER_DATA_PATH, "whisper");
+const WHISPER_SMALL_MODEL_PATH = path.join(WHISPER_MODEL_DIR, "ggml-small.bin");
 const COMPANION_AUDIO_LAYOUTS = [
-  { platform: 'mac' as const, systemSuffix: '.system.m4a', micSuffix: '.mic.m4a' },
-  { platform: 'win' as const, systemSuffix: '.system.wav', micSuffix: '.mic.wav' },
-  { platform: 'mac' as const, systemSuffix: '.system.webm', micSuffix: '.mic.webm' },
-]
+	{ platform: "mac" as const, systemSuffix: ".system.m4a", micSuffix: ".mic.m4a" },
+	{ platform: "win" as const, systemSuffix: ".system.wav", micSuffix: ".mic.wav" },
+	{ platform: "mac" as const, systemSuffix: ".system.webm", micSuffix: ".mic.webm" },
+];
 
 function getAssetRootPath() {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'assets')
-  }
+	if (app.isPackaged) {
+		return path.join(process.resourcesPath, "assets");
+	}
 
-  return path.join(app.getAppPath(), 'public')
+	return path.join(app.getAppPath(), "public");
 }
 
 function getScreen() {
-  if (!app.isReady()) {
-    throw new Error("getScreen() called before app is ready. Ensure all screen access happens after app.whenReady().")
-  }
-  return nodeRequire('electron').screen as typeof import('electron').screen
+	if (!app.isReady()) {
+		throw new Error(
+			"getScreen() called before app is ready. Ensure all screen access happens after app.whenReady().",
+		);
+	}
+	return nodeRequire("electron").screen as typeof import("electron").screen;
 }
 
 function normalizeRecordingTimeOffsetMs(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.round(value)
-    : 0
+	return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : 0;
 }
 
 function broadcastSelectedSourceChange() {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) {
-      window.webContents.send('selected-source-changed', selectedSource)
-    }
-  }
+	for (const window of BrowserWindow.getAllWindows()) {
+		if (!window.isDestroyed()) {
+			window.webContents.send("selected-source-changed", selectedSource);
+		}
+	}
 }
 
 type SelectedSource = {
-  id?: string
-  name: string
-  display_id?: string
-  sourceType?: 'screen' | 'window'
-  appName?: string
-  windowTitle?: string
-  [key: string]: unknown
-}
+	id?: string;
+	name: string;
+	display_id?: string;
+	sourceType?: "screen" | "window";
+	appName?: string;
+	windowTitle?: string;
+	[key: string]: unknown;
+};
 
 type NativeMacRecordingOptions = {
-  capturesSystemAudio?: boolean
-  capturesMicrophone?: boolean
-  microphoneDeviceId?: string
-  microphoneLabel?: string
-}
+	capturesSystemAudio?: boolean;
+	capturesMicrophone?: boolean;
+	microphoneDeviceId?: string;
+	microphoneLabel?: string;
+};
 
 type WindowBounds = {
-  x: number
-  y: number
-  width: number
-  height: number
-}
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+};
 
 type NativeCaptureDiagnostics = {
-  backend: 'windows-wgc' | 'mac-screencapturekit' | 'browser-store' | 'ffmpeg'
-  phase: 'availability' | 'start' | 'stop' | 'mux'
-  timestamp: string
-  sourceId?: string | null
-  sourceType?: SelectedSource['sourceType'] | 'unknown'
-  displayId?: number | null
-  displayBounds?: WindowBounds | null
-  windowHandle?: number | null
-  helperPath?: string | null
-  outputPath?: string | null
-  systemAudioPath?: string | null
-  microphonePath?: string | null
-  osRelease?: string
-  supported?: boolean
-  helperExists?: boolean
-  fileSizeBytes?: number | null
-  processOutput?: string
-  error?: string
-}
+	backend: "windows-wgc" | "mac-screencapturekit" | "browser-store" | "ffmpeg";
+	phase: "availability" | "start" | "stop" | "mux";
+	timestamp: string;
+	sourceId?: string | null;
+	sourceType?: SelectedSource["sourceType"] | "unknown";
+	displayId?: number | null;
+	displayBounds?: WindowBounds | null;
+	windowHandle?: number | null;
+	helperPath?: string | null;
+	outputPath?: string | null;
+	systemAudioPath?: string | null;
+	microphonePath?: string | null;
+	osRelease?: string;
+	supported?: boolean;
+	helperExists?: boolean;
+	fileSizeBytes?: number | null;
+	processOutput?: string;
+	error?: string;
+};
 
 type RecordingSessionData = {
-  videoPath: string
-  webcamPath?: string | null
-  timeOffsetMs?: number
-}
+	videoPath: string;
+	webcamPath?: string | null;
+	timeOffsetMs?: number;
+};
 
 type PauseSegment = {
-  startMs: number
-  endMs: number
-}
+	startMs: number;
+	endMs: number;
+};
 
 type RecordingSessionManifest = {
-  version: 1 | 2
-  videoFileName: string
-  webcamFileName?: string | null
-  timeOffsetMs?: number
-}
+	version: 1 | 2;
+	videoFileName: string;
+	webcamFileName?: string | null;
+	timeOffsetMs?: number;
+};
 
 type ProjectLibraryEntry = {
-  path: string
-  name: string
-  updatedAt: number
-  thumbnailPath: string | null
-  isCurrent: boolean
-  isInProjectsDirectory: boolean
-}
+	path: string;
+	name: string;
+	updatedAt: number;
+	thumbnailPath: string | null;
+	isCurrent: boolean;
+	isInProjectsDirectory: boolean;
+};
 
-let selectedSource: SelectedSource | null = null
-let currentProjectPath: string | null = null
-let nativeScreenRecordingActive = false
-let currentVideoPath: string | null = null
-let currentRecordingSession: RecordingSessionData | null = null
-const approvedLocalReadPaths = new Set<string>()
-let nativeCaptureProcess: ChildProcessWithoutNullStreams | null = null
-let nativeCaptureOutputBuffer = ''
-let nativeCaptureTargetPath: string | null = null
-let nativeCaptureStopRequested = false
-let nativeCaptureSystemAudioPath: string | null = null
-let nativeCaptureMicrophonePath: string | null = null
-let nativeCapturePaused = false
-let nativeCursorMonitorProcess: ChildProcessWithoutNullStreams | null = null
-let nativeCursorMonitorOutputBuffer = ''
-let windowsCaptureProcess: ChildProcessWithoutNullStreams | null = null
-let windowsCaptureOutputBuffer = ''
-let windowsCaptureTargetPath: string | null = null
-let windowsNativeCaptureActive = false
-let windowsCaptureStopRequested = false
-let windowsCapturePaused = false
-let windowsSystemAudioPath: string | null = null
-let windowsMicAudioPath: string | null = null
-let windowsPendingVideoPath: string | null = null
-let lastNativeCaptureDiagnostics: NativeCaptureDiagnostics | null = null
-let ffmpegScreenRecordingActive = false
-let ffmpegCaptureProcess: ChildProcessWithoutNullStreams | null = null
-let ffmpegCaptureOutputBuffer = ''
-let ffmpegCaptureTargetPath: string | null = null
-let customRecordingsDir: string | null = null
-let recordingsDirLoaded = false
-let cachedSystemCursorAssets: Record<string, SystemCursorAsset> | null = null
-let cachedSystemCursorAssetsSourceMtimeMs: number | null = null
-let countdownTimer: ReturnType<typeof setInterval> | null = null
-let countdownCancelled = false
-let countdownInProgress = false
-let countdownRemaining: number | null = null
+let selectedSource: SelectedSource | null = null;
+let currentProjectPath: string | null = null;
+let nativeScreenRecordingActive = false;
+let currentVideoPath: string | null = null;
+let currentRecordingSession: RecordingSessionData | null = null;
+const approvedLocalReadPaths = new Set<string>();
+function approveUserPath(filePath: string | null | undefined) {
+	if (!filePath) {
+		return;
+	}
+
+	try {
+		approvedLocalReadPaths.add(path.resolve(filePath));
+	} catch {
+		// Ignore invalid paths; later reads will surface the underlying error.
+	}
+}
+let nativeCaptureProcess: ChildProcessWithoutNullStreams | null = null;
+let nativeCaptureOutputBuffer = "";
+let nativeCaptureTargetPath: string | null = null;
+let nativeCaptureStopRequested = false;
+let nativeCaptureSystemAudioPath: string | null = null;
+let nativeCaptureMicrophonePath: string | null = null;
+let nativeCapturePaused = false;
+let nativeCursorMonitorProcess: ChildProcessWithoutNullStreams | null = null;
+let nativeCursorMonitorOutputBuffer = "";
+let windowsCaptureProcess: ChildProcessWithoutNullStreams | null = null;
+let windowsCaptureOutputBuffer = "";
+let windowsCaptureTargetPath: string | null = null;
+let windowsNativeCaptureActive = false;
+let windowsCaptureStopRequested = false;
+let windowsCapturePaused = false;
+let windowsSystemAudioPath: string | null = null;
+let windowsMicAudioPath: string | null = null;
+let windowsPendingVideoPath: string | null = null;
+let lastNativeCaptureDiagnostics: NativeCaptureDiagnostics | null = null;
+let ffmpegScreenRecordingActive = false;
+let ffmpegCaptureProcess: ChildProcessWithoutNullStreams | null = null;
+let ffmpegCaptureOutputBuffer = "";
+let ffmpegCaptureTargetPath: string | null = null;
+let customRecordingsDir: string | null = null;
+let recordingsDirLoaded = false;
+let cachedSystemCursorAssets: Record<string, SystemCursorAsset> | null = null;
+let cachedSystemCursorAssetsSourceMtimeMs: number | null = null;
+let countdownTimer: ReturnType<typeof setInterval> | null = null;
+let countdownCancelled = false;
+let countdownInProgress = false;
+let countdownRemaining: number | null = null;
 
 type SystemCursorAsset = {
-  dataUrl: string
-  hotspotX: number
-  hotspotY: number
-  width: number
-  height: number
-}
+	dataUrl: string;
+	hotspotX: number;
+	hotspotY: number;
+	width: number;
+	height: number;
+};
 
-type CursorVisualType = 'arrow' | 'text' | 'pointer' | 'crosshair' | 'open-hand' | 'closed-hand' | 'resize-ew' | 'resize-ns' | 'not-allowed'
+type CursorVisualType =
+	| "arrow"
+	| "text"
+	| "pointer"
+	| "crosshair"
+	| "open-hand"
+	| "closed-hand"
+	| "resize-ew"
+	| "resize-ns"
+	| "not-allowed";
 
-let currentCursorVisualType: CursorVisualType | undefined = undefined
+let currentCursorVisualType: CursorVisualType | undefined = undefined;
 
 /** Returns the currently selected source ID for setDisplayMediaRequestHandler */
 export function getSelectedSourceId(): string | null {
-  return selectedSource?.id as string | null ?? null
+	return (selectedSource?.id as string | null) ?? null;
 }
 
 export function killWindowsCaptureProcess() {
-  if (windowsCaptureProcess) {
-    try { windowsCaptureProcess.kill() } catch { /* ignore */ }
-    windowsCaptureProcess = null
-    windowsCaptureTargetPath = null
-    windowsNativeCaptureActive = false
-    nativeScreenRecordingActive = false
-    windowsCaptureStopRequested = false
-    windowsCapturePaused = false
-    windowsSystemAudioPath = null
-    windowsMicAudioPath = null
-    windowsPendingVideoPath = null
-  }
+	if (windowsCaptureProcess) {
+		try {
+			windowsCaptureProcess.kill();
+		} catch {
+			/* ignore */
+		}
+		windowsCaptureProcess = null;
+		windowsCaptureTargetPath = null;
+		windowsNativeCaptureActive = false;
+		nativeScreenRecordingActive = false;
+		windowsCaptureStopRequested = false;
+		windowsCapturePaused = false;
+		windowsSystemAudioPath = null;
+		windowsMicAudioPath = null;
+		windowsPendingVideoPath = null;
+	}
 }
 
 function normalizePath(filePath: string) {
-  return path.resolve(filePath)
+	return path.resolve(filePath);
 }
 
 function normalizeDesktopSourceName(value: string) {
-  return value.trim().replace(/\s+/g, ' ').toLowerCase()
+	return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function hasUsableSourceThumbnail(
-  thumbnail:
-    | {
-        isEmpty: () => boolean
-        getSize: () => { width: number; height: number }
-      }
-    | null
-    | undefined,
+	thumbnail:
+		| {
+				isEmpty: () => boolean;
+				getSize: () => { width: number; height: number };
+		  }
+		| null
+		| undefined,
 ) {
-  if (!thumbnail || thumbnail.isEmpty()) {
-    return false
-  }
+	if (!thumbnail || thumbnail.isEmpty()) {
+		return false;
+	}
 
-  const size = thumbnail.getSize()
-  return size.width > 1 && size.height > 1
+	const size = thumbnail.getSize();
+	return size.width > 1 && size.height > 1;
 }
 
-function getMacPrivacySettingsUrl(pane: 'screen' | 'accessibility' | 'microphone') {
-  if (pane === 'screen') return 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture'
-  if (pane === 'microphone') return 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'
-  return 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'
+function getMacPrivacySettingsUrl(pane: "screen" | "accessibility" | "microphone") {
+	if (pane === "screen")
+		return "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";
+	if (pane === "microphone")
+		return "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
+	return "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
 }
 
 function isAutoRecordingPath(filePath: string) {
-  return path.basename(filePath).startsWith(AUTO_RECORDING_PREFIX)
+	return path.basename(filePath).startsWith(AUTO_RECORDING_PREFIX);
 }
 
 function getTelemetryPathForVideo(videoPath: string) {
-  return `${videoPath}.cursor.json`
+	return `${videoPath}.cursor.json`;
 }
 
 async function loadRecordingsDirectorySetting() {
-  if (recordingsDirLoaded) {
-    return
-  }
+	if (recordingsDirLoaded) {
+		return;
+	}
 
-  recordingsDirLoaded = true
+	recordingsDirLoaded = true;
 
-  try {
-    const content = await fs.readFile(RECORDINGS_SETTINGS_FILE, 'utf-8')
-    const parsed = JSON.parse(content) as { recordingsDir?: unknown }
-    if (typeof parsed.recordingsDir === 'string' && parsed.recordingsDir.trim()) {
-      customRecordingsDir = path.resolve(parsed.recordingsDir)
-    }
-  } catch {
-    customRecordingsDir = null
-  }
+	try {
+		const content = await fs.readFile(RECORDINGS_SETTINGS_FILE, "utf-8");
+		const parsed = JSON.parse(content) as { recordingsDir?: unknown };
+		if (typeof parsed.recordingsDir === "string" && parsed.recordingsDir.trim()) {
+			customRecordingsDir = path.resolve(parsed.recordingsDir);
+		}
+	} catch {
+		customRecordingsDir = null;
+	}
 }
 
 async function getRecordingsDir() {
-  await loadRecordingsDirectorySetting()
-  const targetDir = customRecordingsDir ?? RECORDINGS_DIR
-  await fs.mkdir(targetDir, { recursive: true })
-  return targetDir
+	await loadRecordingsDirectorySetting();
+	const targetDir = customRecordingsDir ?? RECORDINGS_DIR;
+	await fs.mkdir(targetDir, { recursive: true });
+	return targetDir;
 }
 
-function recordNativeCaptureDiagnostics(
-  diagnostics: Omit<NativeCaptureDiagnostics, 'timestamp'>,
-) {
-  lastNativeCaptureDiagnostics = {
-    timestamp: new Date().toISOString(),
-    ...diagnostics,
-  }
+function recordNativeCaptureDiagnostics(diagnostics: Omit<NativeCaptureDiagnostics, "timestamp">) {
+	lastNativeCaptureDiagnostics = {
+		timestamp: new Date().toISOString(),
+		...diagnostics,
+	};
 
-  return lastNativeCaptureDiagnostics
+	return lastNativeCaptureDiagnostics;
 }
 
 async function getFileSizeIfPresent(filePath: string | null | undefined) {
-  if (!filePath) {
-    return null
-  }
+	if (!filePath) {
+		return null;
+	}
 
-  try {
-    const stat = await fs.stat(filePath)
-    return stat.size
-  } catch {
-    return null
-  }
+	try {
+		const stat = await fs.stat(filePath);
+		return stat.size;
+	} catch {
+		return null;
+	}
 }
 
 function parseFfmpegDurationSeconds(stderr: string) {
-  const match = stderr.match(/Duration:\s+(\d+):(\d+):(\d+(?:\.\d+)?)/i)
-  if (!match) {
-    return null
-  }
+	const match = stderr.match(/Duration:\s+(\d+):(\d+):(\d+(?:\.\d+)?)/i);
+	if (!match) {
+		return null;
+	}
 
-  const hours = Number(match[1])
-  const minutes = Number(match[2])
-  const seconds = Number(match[3])
-  if (![hours, minutes, seconds].every(Number.isFinite)) {
-    return null
-  }
+	const hours = Number(match[1]);
+	const minutes = Number(match[2]);
+	const seconds = Number(match[3]);
+	if (![hours, minutes, seconds].every(Number.isFinite)) {
+		return null;
+	}
 
-  return hours * 3600 + minutes * 60 + seconds
+	return hours * 3600 + minutes * 60 + seconds;
 }
 
 type CompanionAudioCandidate = {
-  platform: (typeof COMPANION_AUDIO_LAYOUTS)[number]['platform']
-  systemPath: string
-  micPath: string
-  usablePaths: string[]
-}
+	platform: (typeof COMPANION_AUDIO_LAYOUTS)[number]["platform"];
+	systemPath: string;
+	micPath: string;
+	usablePaths: string[];
+};
 
-async function getUsableCompanionAudioCandidates(videoPath: string): Promise<CompanionAudioCandidate[]> {
-  const basePath = videoPath.replace(/\.[^.]+$/u, '')
-  const candidates: CompanionAudioCandidate[] = []
+async function getUsableCompanionAudioCandidates(
+	videoPath: string,
+): Promise<CompanionAudioCandidate[]> {
+	const basePath = videoPath.replace(/\.[^.]+$/u, "");
+	const candidates: CompanionAudioCandidate[] = [];
 
-  for (const layout of COMPANION_AUDIO_LAYOUTS) {
-    const systemPath = `${basePath}${layout.systemSuffix}`
-    const micPath = `${basePath}${layout.micSuffix}`
-    const usablePaths: string[] = []
+	for (const layout of COMPANION_AUDIO_LAYOUTS) {
+		const systemPath = `${basePath}${layout.systemSuffix}`;
+		const micPath = `${basePath}${layout.micSuffix}`;
+		const usablePaths: string[] = [];
 
-    for (const companionPath of [systemPath, micPath]) {
-      try {
-        const stat = await fs.stat(companionPath)
-        if (stat.size > 0) {
-          usablePaths.push(companionPath)
-        }
-      } catch {
-        // Missing companion audio is expected for many recordings.
-      }
-    }
+		for (const companionPath of [systemPath, micPath]) {
+			try {
+				const stat = await fs.stat(companionPath);
+				if (stat.size > 0) {
+					usablePaths.push(companionPath);
+				}
+			} catch {
+				// Missing companion audio is expected for many recordings.
+			}
+		}
 
-    if (usablePaths.length > 0) {
-      candidates.push({
-        platform: layout.platform,
-        systemPath,
-        micPath,
-        usablePaths,
-      })
-    }
-  }
+		if (usablePaths.length > 0) {
+			candidates.push({
+				platform: layout.platform,
+				systemPath,
+				micPath,
+				usablePaths,
+			});
+		}
+	}
 
-  return candidates
+	return candidates;
 }
 
 async function hasEmbeddedAudioStream(videoPath: string) {
-  const ffmpegPath = getFfmpegBinaryPath()
-  let stderr = ''
+	const ffmpegPath = getFfmpegBinaryPath();
+	let stderr = "";
 
-  try {
-    const result = await execFileAsync(
-      ffmpegPath,
-      ['-hide_banner', '-i', videoPath, '-map', '0:a:0', '-frames:a', '1', '-f', 'null', '-'],
-      { timeout: 20000, maxBuffer: 10 * 1024 * 1024 },
-    )
-    stderr = result.stderr
-  } catch (error) {
-    stderr = (error as NodeJS.ErrnoException & { stderr?: string }).stderr ?? ''
-  }
+	try {
+		const result = await execFileAsync(
+			ffmpegPath,
+			["-hide_banner", "-i", videoPath, "-map", "0:a:0", "-frames:a", "1", "-f", "null", "-"],
+			{ timeout: 20000, maxBuffer: 10 * 1024 * 1024 },
+		);
+		stderr = result.stderr;
+	} catch (error) {
+		stderr = (error as NodeJS.ErrnoException & { stderr?: string }).stderr ?? "";
+	}
 
-  return /Stream #.*Audio:/i.test(stderr)
+	return /Stream #.*Audio:/i.test(stderr);
 }
 
 async function getCompanionAudioFallbackPaths(videoPath: string) {
-  const companionCandidates = await getUsableCompanionAudioCandidates(videoPath)
-  if (companionCandidates.length === 0) {
-    return []
-  }
+	const companionCandidates = await getUsableCompanionAudioCandidates(videoPath);
+	if (companionCandidates.length === 0) {
+		return [];
+	}
 
-  if (await hasEmbeddedAudioStream(videoPath)) {
-    return []
-  }
+	if (await hasEmbeddedAudioStream(videoPath)) {
+		return [];
+	}
 
-  return companionCandidates.flatMap((candidate) => candidate.usablePaths)
+	return companionCandidates.flatMap((candidate) => candidate.usablePaths);
 }
 
 async function validateRecordedVideo(videoPath: string) {
-  const stat = await fs.stat(videoPath)
-  if (!stat.isFile()) {
-    throw new Error(`Recorded output is not a file: ${videoPath}`)
-  }
+	const stat = await fs.stat(videoPath);
+	if (!stat.isFile()) {
+		throw new Error(`Recorded output is not a file: ${videoPath}`);
+	}
 
-  if (stat.size <= 0) {
-    throw new Error(`Recorded output is empty: ${videoPath}`)
-  }
+	if (stat.size <= 0) {
+		throw new Error(`Recorded output is empty: ${videoPath}`);
+	}
 
-  const ffmpegPath = getFfmpegBinaryPath()
-  let stderr = ''
+	const ffmpegPath = getFfmpegBinaryPath();
+	let stderr = "";
 
-  try {
-    const result = await execFileAsync(
-      ffmpegPath,
-      ['-hide_banner', '-i', videoPath, '-map', '0:v:0', '-frames:v', '1', '-f', 'null', '-'],
-      { timeout: 20000, maxBuffer: 10 * 1024 * 1024 },
-    )
-    stderr = result.stderr
-  } catch (error) {
-    const execError = error as NodeJS.ErrnoException & { stderr?: string }
-    const output = execError.stderr?.trim()
-    throw new Error(output || `Recorded output could not be decoded: ${videoPath}`)
-  }
+	try {
+		const result = await execFileAsync(
+			ffmpegPath,
+			["-hide_banner", "-i", videoPath, "-map", "0:v:0", "-frames:v", "1", "-f", "null", "-"],
+			{ timeout: 20000, maxBuffer: 10 * 1024 * 1024 },
+		);
+		stderr = result.stderr;
+	} catch (error) {
+		const execError = error as NodeJS.ErrnoException & { stderr?: string };
+		const output = execError.stderr?.trim();
+		throw new Error(output || `Recorded output could not be decoded: ${videoPath}`);
+	}
 
-  if (!/Stream #.*Video:/i.test(stderr)) {
-    throw new Error(`Recorded output does not contain a readable video stream: ${videoPath}`)
-  }
+	if (!/Stream #.*Video:/i.test(stderr)) {
+		throw new Error(`Recorded output does not contain a readable video stream: ${videoPath}`);
+	}
 
-  const durationSeconds = parseFfmpegDurationSeconds(stderr)
-  if (durationSeconds !== null && durationSeconds <= 0) {
-    throw new Error(`Recorded output has an invalid duration: ${videoPath}`)
-  }
+	const durationSeconds = parseFfmpegDurationSeconds(stderr);
+	if (durationSeconds !== null && durationSeconds <= 0) {
+		throw new Error(`Recorded output has an invalid duration: ${videoPath}`);
+	}
 
-  return {
-    fileSizeBytes: stat.size,
-    durationSeconds,
-  }
+	return {
+		fileSizeBytes: stat.size,
+		durationSeconds,
+	};
 }
 
 async function getProjectsDir() {
-  const projectsDir = path.join(await getRecordingsDir(), PROJECTS_DIRECTORY_NAME)
-  await fs.mkdir(projectsDir, { recursive: true })
-  return projectsDir
+	const projectsDir = path.join(await getRecordingsDir(), PROJECTS_DIRECTORY_NAME);
+	await fs.mkdir(projectsDir, { recursive: true });
+	return projectsDir;
 }
 
 async function persistRecordingsDirectorySetting(nextDir: string) {
-  customRecordingsDir = path.resolve(nextDir)
-  recordingsDirLoaded = true
-  await fs.writeFile(
-    RECORDINGS_SETTINGS_FILE,
-    JSON.stringify({ recordingsDir: customRecordingsDir }, null, 2),
-    'utf-8',
-  )
+	customRecordingsDir = path.resolve(nextDir);
+	recordingsDirLoaded = true;
+	await fs.writeFile(
+		RECORDINGS_SETTINGS_FILE,
+		JSON.stringify({ recordingsDir: customRecordingsDir }, null, 2),
+		"utf-8",
+	);
 }
 
 function hasProjectFileExtension(filePath: string) {
-  const extension = path.extname(filePath).replace(/^\./, '').toLowerCase()
-  return [PROJECT_FILE_EXTENSION, ...LEGACY_PROJECT_FILE_EXTENSIONS].includes(extension)
+	const extension = path.extname(filePath).replace(/^\./, "").toLowerCase();
+	return [PROJECT_FILE_EXTENSION, ...LEGACY_PROJECT_FILE_EXTENSIONS].includes(extension);
 }
 
 function getProjectThumbnailPath(projectPath: string) {
-  return `${projectPath}${PROJECT_THUMBNAIL_SUFFIX}`
+	return `${projectPath}${PROJECT_THUMBNAIL_SUFFIX}`;
 }
 
 async function saveProjectThumbnail(projectPath: string, thumbnailDataUrl?: string | null) {
-  const thumbnailPath = getProjectThumbnailPath(projectPath)
-  if (!thumbnailDataUrl) {
-    await fs.rm(thumbnailPath, { force: true }).catch(() => undefined)
-    return null
-  }
+	const thumbnailPath = getProjectThumbnailPath(projectPath);
+	if (!thumbnailDataUrl) {
+		await fs.rm(thumbnailPath, { force: true }).catch(() => undefined);
+		return null;
+	}
 
-  const match = thumbnailDataUrl.match(/^data:image\/png;base64,(.+)$/)
-  if (!match) {
-    throw new Error('Project thumbnail must be a PNG data URL.')
-  }
+	const match = thumbnailDataUrl.match(/^data:image\/png;base64,(.+)$/);
+	if (!match) {
+		throw new Error("Project thumbnail must be a PNG data URL.");
+	}
 
-  await fs.writeFile(thumbnailPath, Buffer.from(match[1], 'base64'))
-  return thumbnailPath
+	await fs.writeFile(thumbnailPath, Buffer.from(match[1], "base64"));
+	return thumbnailPath;
 }
 
 async function loadRecentProjectPaths() {
-  try {
-    const content = await fs.readFile(RECENT_PROJECTS_FILE, 'utf-8')
-    const parsed = JSON.parse(content) as { paths?: unknown }
-    return Array.isArray(parsed.paths)
-      ? parsed.paths.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
-      : []
-  } catch {
-    return []
-  }
+	try {
+		const content = await fs.readFile(RECENT_PROJECTS_FILE, "utf-8");
+		const parsed = JSON.parse(content) as { paths?: unknown };
+		return Array.isArray(parsed.paths)
+			? parsed.paths.filter(
+					(value): value is string =>
+						typeof value === "string" && value.trim().length > 0,
+				)
+			: [];
+	} catch {
+		return [];
+	}
 }
 
 async function saveRecentProjectPaths(paths: string[]) {
-  const normalizedPaths = Array.from(new Set(paths.map((value) => normalizePath(value)))).slice(0, MAX_RECENT_PROJECTS)
-  await fs.writeFile(
-    RECENT_PROJECTS_FILE,
-    JSON.stringify({ paths: normalizedPaths }, null, 2),
-    'utf-8',
-  )
+	const normalizedPaths = Array.from(new Set(paths.map((value) => normalizePath(value)))).slice(
+		0,
+		MAX_RECENT_PROJECTS,
+	);
+	await fs.writeFile(
+		RECENT_PROJECTS_FILE,
+		JSON.stringify({ paths: normalizedPaths }, null, 2),
+		"utf-8",
+	);
 }
 
 async function rememberRecentProject(projectPath: string) {
-  if (!hasProjectFileExtension(projectPath)) {
-    return
-  }
+	if (!hasProjectFileExtension(projectPath)) {
+		return;
+	}
 
-  const existingPaths = await loadRecentProjectPaths()
-  await saveRecentProjectPaths([projectPath, ...existingPaths])
+	const existingPaths = await loadRecentProjectPaths();
+	await saveRecentProjectPaths([projectPath, ...existingPaths]);
 }
 
-async function buildProjectLibraryEntry(projectPath: string, projectsDir: string): Promise<ProjectLibraryEntry | null> {
-  try {
-    const normalizedPath = normalizePath(projectPath)
-    if (!hasProjectFileExtension(normalizedPath)) {
-      return null
-    }
+async function buildProjectLibraryEntry(
+	projectPath: string,
+	projectsDir: string,
+): Promise<ProjectLibraryEntry | null> {
+	try {
+		const normalizedPath = normalizePath(projectPath);
+		if (!hasProjectFileExtension(normalizedPath)) {
+			return null;
+		}
 
-    const stats = await fs.stat(normalizedPath)
-    if (!stats.isFile()) {
-      return null
-    }
+		const stats = await fs.stat(normalizedPath);
+		if (!stats.isFile()) {
+			return null;
+		}
 
-    const thumbnailPath = getProjectThumbnailPath(normalizedPath)
-    const thumbnailExists = await fs.access(thumbnailPath, fsConstants.R_OK)
-      .then(() => true)
-      .catch(() => false)
+		const thumbnailPath = getProjectThumbnailPath(normalizedPath);
+		const thumbnailExists = await fs
+			.access(thumbnailPath, fsConstants.R_OK)
+			.then(() => true)
+			.catch(() => false);
 
-    return {
-      path: normalizedPath,
-      name: path.basename(normalizedPath).replace(/\.(recordly|openscreen)$/i, ''),
-      updatedAt: stats.mtimeMs,
-      thumbnailPath: thumbnailExists ? thumbnailPath : null,
-      isCurrent: Boolean(currentProjectPath && normalizePath(currentProjectPath) === normalizedPath),
-      isInProjectsDirectory: path.dirname(normalizedPath) === normalizePath(projectsDir),
-    }
-  } catch {
-    return null
-  }
+		return {
+			path: normalizedPath,
+			name: path.basename(normalizedPath).replace(/\.(recordly|openscreen)$/i, ""),
+			updatedAt: stats.mtimeMs,
+			thumbnailPath: thumbnailExists ? thumbnailPath : null,
+			isCurrent: Boolean(
+				currentProjectPath && normalizePath(currentProjectPath) === normalizedPath,
+			),
+			isInProjectsDirectory: path.dirname(normalizedPath) === normalizePath(projectsDir),
+		};
+	} catch {
+		return null;
+	}
 }
 
 async function listProjectLibraryEntries() {
-  const projectsDir = await getProjectsDir()
-  const projectPaths: string[] = []
+	const projectsDir = await getProjectsDir();
+	const projectPaths: string[] = [];
 
-  try {
-    const entries = await fs.readdir(projectsDir, { withFileTypes: true })
-    for (const entry of entries) {
-      if (!entry.isFile()) {
-        continue
-      }
+	try {
+		const entries = await fs.readdir(projectsDir, { withFileTypes: true });
+		for (const entry of entries) {
+			if (!entry.isFile()) {
+				continue;
+			}
 
-      const entryPath = path.join(projectsDir, entry.name)
-      if (hasProjectFileExtension(entryPath)) {
-        projectPaths.push(entryPath)
-      }
-    }
-  } catch {
-    // Ignore directory read failures and fall back to recent files.
-  }
+			const entryPath = path.join(projectsDir, entry.name);
+			if (hasProjectFileExtension(entryPath)) {
+				projectPaths.push(entryPath);
+			}
+		}
+	} catch {
+		// Ignore directory read failures and fall back to recent files.
+	}
 
-  const recentProjectPaths = await loadRecentProjectPaths()
-  const candidatePaths = Array.from(new Set([...projectPaths, ...recentProjectPaths]))
-  const entries = (await Promise.all(candidatePaths.map((candidatePath) => buildProjectLibraryEntry(candidatePath, projectsDir))))
-    .filter((entry): entry is ProjectLibraryEntry => entry != null)
-    .sort((left, right) => right.updatedAt - left.updatedAt)
+	const recentProjectPaths = await loadRecentProjectPaths();
+	const candidatePaths = Array.from(new Set([...projectPaths, ...recentProjectPaths]));
+	const entries = (
+		await Promise.all(
+			candidatePaths.map((candidatePath) =>
+				buildProjectLibraryEntry(candidatePath, projectsDir),
+			),
+		)
+	)
+		.filter((entry): entry is ProjectLibraryEntry => entry != null)
+		.sort((left, right) => right.updatedAt - left.updatedAt);
 
-  await saveRecentProjectPaths(entries.map((entry) => entry.path))
+	await saveRecentProjectPaths(entries.map((entry) => entry.path));
 
-  return {
-    projectsDir,
-    entries,
-  }
+	return {
+		projectsDir,
+		entries,
+	};
 }
 
 async function loadProjectFromPath(projectPath: string) {
-  const normalizedPath = normalizePath(projectPath)
-  const content = await fs.readFile(normalizedPath, 'utf-8')
-  const project = JSON.parse(content)
-  const mediaSources = await resolveProjectMediaSources(project)
+	const normalizedPath = normalizePath(projectPath);
+	const content = await fs.readFile(normalizedPath, "utf-8");
+	const project = JSON.parse(content);
+	const mediaSources = await resolveProjectMediaSources(project);
 
-  if (!mediaSources.success) {
-    return {
-      success: false,
-      canceled: false,
-      message: mediaSources.message,
-    }
-  }
+	if (!mediaSources.success) {
+		return {
+			success: false,
+			canceled: false,
+			message: mediaSources.message,
+		};
+	}
 
-  currentProjectPath = normalizedPath
-  currentVideoPath = mediaSources.videoPath
-  currentRecordingSession = {
-    videoPath: mediaSources.videoPath,
-    webcamPath: mediaSources.webcamPath,
-    timeOffsetMs: 0,
-  }
-  await rememberRecentProject(normalizedPath)
+	currentProjectPath = normalizedPath;
+	currentVideoPath = mediaSources.videoPath;
+	const projectObj = project as Record<string, unknown>;
+	const editorObj = projectObj?.editor as Record<string, unknown> | undefined;
+	const audioTracks = editorObj?.audioTracks as { sourcePath?: unknown }[] | undefined;
+	const approvedProjectPaths: Array<string | null | undefined> = [
+		mediaSources.videoPath,
+		mediaSources.webcamPath,
+	];
+	if (Array.isArray(audioTracks)) {
+		for (const track of audioTracks) {
+			if (typeof track?.sourcePath === "string") {
+				approvedProjectPaths.push(track.sourcePath);
+			}
+		}
+	}
+	await replaceApprovedSessionLocalReadPaths(approvedProjectPaths);
+	currentRecordingSession = {
+		videoPath: mediaSources.videoPath,
+		webcamPath: mediaSources.webcamPath,
+		timeOffsetMs: 0,
+	};
+	await rememberRecentProject(normalizedPath);
 
-  return {
-    success: true,
-    path: normalizedPath,
-    project,
-  }
+	return {
+		success: true,
+		path: normalizedPath,
+		project,
+	};
 }
 
 function normalizeVideoSourcePath(videoPath?: string | null): string | null {
-  if (typeof videoPath !== 'string') {
-    return null
-  }
+	if (typeof videoPath !== "string") {
+		return null;
+	}
 
-  const trimmed = videoPath.trim()
-  if (!trimmed) {
-    return null
-  }
+	const trimmed = videoPath.trim();
+	if (!trimmed) {
+		return null;
+	}
 
-  if (/^file:\/\//i.test(trimmed)) {
-    try {
-      return fileURLToPath(trimmed)
-    } catch {
-      // Fall through and keep best-effort string path below.
-    }
-  }
+	if (/^file:\/\//i.test(trimmed)) {
+		try {
+			return fileURLToPath(trimmed);
+		} catch {
+			// Fall through and keep best-effort string path below.
+		}
+	}
 
-  return trimmed
+	return trimmed;
 }
 
 function isPathInsideDirectory(candidatePath: string, directoryPath: string) {
-  const normalizedDirectoryPath = normalizePath(directoryPath)
-  return candidatePath === normalizedDirectoryPath || candidatePath.startsWith(`${normalizedDirectoryPath}${path.sep}`)
+	const normalizedDirectoryPath = normalizePath(directoryPath);
+	return (
+		candidatePath === normalizedDirectoryPath ||
+		candidatePath.startsWith(`${normalizedDirectoryPath}${path.sep}`)
+	);
 }
 
 function isAllowedLocalReadPath(candidatePath: string) {
-  const allowedPrefixes = [
-    RECORDINGS_DIR,
-    USER_DATA_PATH,
-    getAssetRootPath(),
-    app.getPath('temp'),
-  ]
+	const allowedPrefixes = [RECORDINGS_DIR, USER_DATA_PATH, getAssetRootPath(), app.getPath("temp")];
 
-  return existsSync(candidatePath)
-    || allowedPrefixes.some((prefix) => isPathInsideDirectory(candidatePath, prefix))
-    || approvedLocalReadPaths.has(candidatePath)
+	return (
+		existsSync(candidatePath) ||
+		allowedPrefixes.some((prefix) => isPathInsideDirectory(candidatePath, prefix)) ||
+		approvedLocalReadPaths.has(candidatePath)
+	);
 }
 
 async function rememberApprovedLocalReadPath(filePath?: string | null) {
-  const normalizedPath = normalizeVideoSourcePath(filePath)
-  if (!normalizedPath) {
-    return
-  }
+	const normalizedPath = normalizeVideoSourcePath(filePath);
+	if (!normalizedPath) {
+		return;
+	}
 
-  const resolvedPath = normalizePath(normalizedPath)
-  approvedLocalReadPaths.add(resolvedPath)
+	const resolvedPath = normalizePath(normalizedPath);
+	approvedLocalReadPaths.add(resolvedPath);
 
-  try {
-    approvedLocalReadPaths.add(await fs.realpath(resolvedPath))
-  } catch {
-    // Ignore missing files; the eventual read will surface the real error.
-  }
+	try {
+		approvedLocalReadPaths.add(await fs.realpath(resolvedPath));
+	} catch {
+		// Ignore missing files; the eventual read will surface the real error.
+	}
 }
 
 async function replaceApprovedSessionLocalReadPaths(filePaths: Array<string | null | undefined>) {
-  approvedLocalReadPaths.clear()
-  await Promise.all(filePaths.map((filePath) => rememberApprovedLocalReadPath(filePath)))
+	approvedLocalReadPaths.clear();
+	await Promise.all(filePaths.map((filePath) => rememberApprovedLocalReadPath(filePath)));
 }
 
 async function resolveProjectMediaSources(project: unknown): Promise<
-  | {
-      success: true
-      videoPath: string
-      webcamPath: string | null
-    }
-  | {
-      success: false
-      message: string
-    }
+	| {
+			success: true;
+			videoPath: string;
+			webcamPath: string | null;
+	  }
+	| {
+			success: false;
+			message: string;
+	  }
 > {
-  if (!project || typeof project !== 'object') {
-    return { success: false, message: 'Invalid project file format' }
-  }
+	if (!project || typeof project !== "object") {
+		return { success: false, message: "Invalid project file format" };
+	}
 
-  const rawVideoPath = (project as { videoPath?: unknown }).videoPath
-  if (typeof rawVideoPath !== 'string') {
-    return { success: false, message: 'Project file is missing a video path' }
-  }
+	const rawVideoPath = (project as { videoPath?: unknown }).videoPath;
+	if (typeof rawVideoPath !== "string") {
+		return { success: false, message: "Project file is missing a video path" };
+	}
 
-  const normalizedVideoPath = normalizeVideoSourcePath(rawVideoPath)
-  if (!normalizedVideoPath) {
-    return { success: false, message: 'Project file is missing a valid video path' }
-  }
+	const normalizedVideoPath = normalizeVideoSourcePath(rawVideoPath);
+	if (!normalizedVideoPath) {
+		return { success: false, message: "Project file is missing a valid video path" };
+	}
 
-  try {
-    await fs.access(normalizedVideoPath, fsConstants.F_OK)
-  } catch {
-    return {
-      success: false,
-      message: `Project video file not found: ${normalizedVideoPath}`,
-    }
-  }
+	try {
+		await fs.access(normalizedVideoPath, fsConstants.F_OK);
+	} catch {
+		return {
+			success: false,
+			message: `Project video file not found: ${normalizedVideoPath}`,
+		};
+	}
 
-  const rawWebcamPath =
-    typeof (project as { editor?: { webcam?: { sourcePath?: unknown } } }).editor?.webcam?.sourcePath === 'string'
-      ? ((project as { editor?: { webcam?: { sourcePath?: string } } }).editor?.webcam?.sourcePath ?? null)
-      : null
-  const normalizedWebcamPath = normalizeVideoSourcePath(rawWebcamPath)
+	const rawWebcamPath =
+		typeof (project as { editor?: { webcam?: { sourcePath?: unknown } } }).editor?.webcam
+			?.sourcePath === "string"
+			? ((project as { editor?: { webcam?: { sourcePath?: string } } }).editor?.webcam
+					?.sourcePath ?? null)
+			: null;
+	const normalizedWebcamPath = normalizeVideoSourcePath(rawWebcamPath);
 
-  if (!normalizedWebcamPath) {
-    return {
-      success: true,
-      videoPath: normalizedVideoPath,
-      webcamPath: null,
-    }
-  }
+	if (!normalizedWebcamPath) {
+		return {
+			success: true,
+			videoPath: normalizedVideoPath,
+			webcamPath: null,
+		};
+	}
 
-  try {
-    await fs.access(normalizedWebcamPath, fsConstants.F_OK)
-    return {
-      success: true,
-      videoPath: normalizedVideoPath,
-      webcamPath: normalizedWebcamPath,
-    }
-  } catch {
-    return {
-      success: true,
-      videoPath: normalizedVideoPath,
-      webcamPath: null,
-    }
-  }
+	try {
+		await fs.access(normalizedWebcamPath, fsConstants.F_OK);
+		return {
+			success: true,
+			videoPath: normalizedVideoPath,
+			webcamPath: normalizedWebcamPath,
+		};
+	} catch {
+		return {
+			success: true,
+			videoPath: normalizedVideoPath,
+			webcamPath: null,
+		};
+	}
 }
 
 function getRecordingSessionManifestPath(videoPath: string) {
-  const extension = path.extname(videoPath)
-  const baseName = path.basename(videoPath, extension)
-  return path.join(path.dirname(videoPath), `${baseName}${RECORDING_SESSION_MANIFEST_SUFFIX}`)
+	const extension = path.extname(videoPath);
+	const baseName = path.basename(videoPath, extension);
+	return path.join(path.dirname(videoPath), `${baseName}${RECORDING_SESSION_MANIFEST_SUFFIX}`);
 }
 
 async function persistRecordingSessionManifest(session: RecordingSessionData): Promise<void> {
-  const normalizedVideoPath = normalizeVideoSourcePath(session.videoPath)
-  if (!normalizedVideoPath) {
-    return
-  }
+	const normalizedVideoPath = normalizeVideoSourcePath(session.videoPath);
+	if (!normalizedVideoPath) {
+		return;
+	}
 
-  const normalizedWebcamPath = normalizeVideoSourcePath(session.webcamPath ?? null)
-  const manifestPath = getRecordingSessionManifestPath(normalizedVideoPath)
+	const normalizedWebcamPath = normalizeVideoSourcePath(session.webcamPath ?? null);
+	const manifestPath = getRecordingSessionManifestPath(normalizedVideoPath);
 
-  if (!normalizedWebcamPath) {
-    await fs.rm(manifestPath, { force: true })
-    return
-  }
+	if (!normalizedWebcamPath) {
+		await fs.rm(manifestPath, { force: true });
+		return;
+	}
 
-  const manifest: RecordingSessionManifest = {
-    version: 2,
-    videoFileName: path.basename(normalizedVideoPath),
-    webcamFileName: path.basename(normalizedWebcamPath),
-    timeOffsetMs: normalizeRecordingTimeOffsetMs(session.timeOffsetMs),
-  }
+	const manifest: RecordingSessionManifest = {
+		version: 2,
+		videoFileName: path.basename(normalizedVideoPath),
+		webcamFileName: path.basename(normalizedWebcamPath),
+		timeOffsetMs: normalizeRecordingTimeOffsetMs(session.timeOffsetMs),
+	};
 
-  await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
+	await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
 }
 
-async function resolveRecordingSessionManifest(videoPath?: string | null): Promise<RecordingSessionData | null> {
-  const normalizedVideoPath = normalizeVideoSourcePath(videoPath)
-  if (!normalizedVideoPath) {
-    return null
-  }
+async function resolveRecordingSessionManifest(
+	videoPath?: string | null,
+): Promise<RecordingSessionData | null> {
+	const normalizedVideoPath = normalizeVideoSourcePath(videoPath);
+	if (!normalizedVideoPath) {
+		return null;
+	}
 
-  const manifestPath = getRecordingSessionManifestPath(normalizedVideoPath)
+	const manifestPath = getRecordingSessionManifestPath(normalizedVideoPath);
 
-  try {
-    const content = await fs.readFile(manifestPath, 'utf-8')
-    const parsed = JSON.parse(content) as Partial<RecordingSessionManifest>
-    if (parsed.version !== 1 && parsed.version !== 2) {
-      return null
-    }
+	try {
+		const content = await fs.readFile(manifestPath, "utf-8");
+		const parsed = JSON.parse(content) as Partial<RecordingSessionManifest>;
+		if (parsed.version !== 1 && parsed.version !== 2) {
+			return null;
+		}
 
-    const webcamFileName = typeof parsed.webcamFileName === 'string' && parsed.webcamFileName.trim()
-      ? parsed.webcamFileName.trim()
-      : null
+		const webcamFileName =
+			typeof parsed.webcamFileName === "string" && parsed.webcamFileName.trim()
+				? parsed.webcamFileName.trim()
+				: null;
 
-    if (!webcamFileName) {
-      return {
-        videoPath: normalizedVideoPath,
-        webcamPath: null,
-        timeOffsetMs: 0,
-      }
-    }
+		if (!webcamFileName) {
+			return {
+				videoPath: normalizedVideoPath,
+				webcamPath: null,
+				timeOffsetMs: 0,
+			};
+		}
 
-    const webcamPath = path.join(path.dirname(normalizedVideoPath), webcamFileName)
-    await fs.access(webcamPath, fsConstants.F_OK)
+		const webcamPath = path.join(path.dirname(normalizedVideoPath), webcamFileName);
+		await fs.access(webcamPath, fsConstants.F_OK);
 
-    return {
-      videoPath: normalizedVideoPath,
-      webcamPath,
-      timeOffsetMs: normalizeRecordingTimeOffsetMs(parsed.timeOffsetMs),
-    }
-  } catch {
-    return null
-  }
+		return {
+			videoPath: normalizedVideoPath,
+			webcamPath,
+			timeOffsetMs: normalizeRecordingTimeOffsetMs(parsed.timeOffsetMs),
+		};
+	} catch {
+		return null;
+	}
 }
 
 async function resolveLinkedWebcamPath(videoPath?: string | null): Promise<string | null> {
-  const normalizedVideoPath = normalizeVideoSourcePath(videoPath)
-  if (!normalizedVideoPath) {
-    return null
-  }
+	const normalizedVideoPath = normalizeVideoSourcePath(videoPath);
+	if (!normalizedVideoPath) {
+		return null;
+	}
 
-  const extension = path.extname(normalizedVideoPath)
-  const baseName = path.basename(normalizedVideoPath, extension)
-  if (!baseName || baseName.endsWith('-webcam')) {
-    return null
-  }
+	const extension = path.extname(normalizedVideoPath);
+	const baseName = path.basename(normalizedVideoPath, extension);
+	if (!baseName || baseName.endsWith("-webcam")) {
+		return null;
+	}
 
-  const candidateExtensions = Array.from(
-    new Set([extension, '.webm', '.mp4', '.mov', '.mkv', '.avi'].filter(Boolean)),
-  )
+	const candidateExtensions = Array.from(
+		new Set([extension, ".webm", ".mp4", ".mov", ".mkv", ".avi"].filter(Boolean)),
+	);
 
-  for (const candidateExtension of candidateExtensions) {
-    const candidatePath = path.join(
-      path.dirname(normalizedVideoPath),
-      `${baseName}-webcam${candidateExtension}`,
-    )
+	for (const candidateExtension of candidateExtensions) {
+		const candidatePath = path.join(
+			path.dirname(normalizedVideoPath),
+			`${baseName}-webcam${candidateExtension}`,
+		);
 
-    try {
-      await fs.access(candidatePath, fsConstants.F_OK)
-      return candidatePath
-    } catch {
-      continue
-    }
-  }
+		try {
+			await fs.access(candidatePath, fsConstants.F_OK);
+			return candidatePath;
+		} catch {
+			continue;
+		}
+	}
 
-  return null
+	return null;
 }
 
-async function resolveRecordingSession(videoPath?: string | null): Promise<RecordingSessionData | null> {
-  const manifestSession = await resolveRecordingSessionManifest(videoPath)
-  if (manifestSession) {
-    return manifestSession
-  }
+async function resolveRecordingSession(
+	videoPath?: string | null,
+): Promise<RecordingSessionData | null> {
+	const manifestSession = await resolveRecordingSessionManifest(videoPath);
+	if (manifestSession) {
+		return manifestSession;
+	}
 
-  const normalizedVideoPath = normalizeVideoSourcePath(videoPath)
-  if (!normalizedVideoPath) {
-    return null
-  }
+	const normalizedVideoPath = normalizeVideoSourcePath(videoPath);
+	if (!normalizedVideoPath) {
+		return null;
+	}
 
-  const linkedWebcamPath = await resolveLinkedWebcamPath(normalizedVideoPath)
-  return {
-    videoPath: normalizedVideoPath,
-    webcamPath: linkedWebcamPath,
-  }
+	const linkedWebcamPath = await resolveLinkedWebcamPath(normalizedVideoPath);
+	return {
+		videoPath: normalizedVideoPath,
+		webcamPath: linkedWebcamPath,
+	};
 }
 
 async function hasSiblingProjectFile(videoPath: string) {
-  const baseName = path.basename(videoPath, path.extname(videoPath))
-  const candidateExtensions = [PROJECT_FILE_EXTENSION, ...LEGACY_PROJECT_FILE_EXTENSIONS]
+	const baseName = path.basename(videoPath, path.extname(videoPath));
+	const candidateExtensions = [PROJECT_FILE_EXTENSION, ...LEGACY_PROJECT_FILE_EXTENSIONS];
 
-  for (const extension of candidateExtensions) {
-    const projectPath = path.join(path.dirname(videoPath), `${baseName}.${extension}`)
+	for (const extension of candidateExtensions) {
+		const projectPath = path.join(path.dirname(videoPath), `${baseName}.${extension}`);
 
-    try {
-      await fs.access(projectPath)
-      return true
-    } catch {
-      continue
-    }
-  }
+		try {
+			await fs.access(projectPath);
+			return true;
+		} catch {
+			continue;
+		}
+	}
 
-  return false
+	return false;
 }
 
 async function pruneAutoRecordings(exemptPaths: string[] = []) {
-  const recordingsDir = await getRecordingsDir()
-  const exempt = new Set(
-    [currentVideoPath, ...exemptPaths]
-      .filter((value): value is string => Boolean(value))
-      .map((value) => normalizePath(value)),
-  )
+	const recordingsDir = await getRecordingsDir();
+	const exempt = new Set(
+		[currentVideoPath, ...exemptPaths]
+			.filter((value): value is string => Boolean(value))
+			.map((value) => normalizePath(value)),
+	);
 
-  const entries = await fs.readdir(recordingsDir, { withFileTypes: true })
-  const autoRecordingStats = await Promise.all(
-    entries
-      .filter((entry) => entry.isFile() && /^recording-.*\.(mp4|mov|webm)$/i.test(entry.name))
-      .map(async (entry) => {
-        const filePath = path.join(recordingsDir, entry.name)
-        const stats = await fs.stat(filePath)
-        return { filePath, stats }
-      }),
-  )
+	const entries = await fs.readdir(recordingsDir, { withFileTypes: true });
+	const autoRecordingStats = await Promise.all(
+		entries
+			.filter((entry) => entry.isFile() && /^recording-.*\.(mp4|mov|webm)$/i.test(entry.name))
+			.map(async (entry) => {
+				const filePath = path.join(recordingsDir, entry.name);
+				const stats = await fs.stat(filePath);
+				return { filePath, stats };
+			}),
+	);
 
-  const sorted = autoRecordingStats.sort((left, right) => right.stats.mtimeMs - left.stats.mtimeMs)
-  const now = Date.now()
+	const sorted = autoRecordingStats.sort(
+		(left, right) => right.stats.mtimeMs - left.stats.mtimeMs,
+	);
+	const now = Date.now();
 
-  for (const [index, entry] of sorted.entries()) {
-    const normalizedFilePath = normalizePath(entry.filePath)
-    if (exempt.has(normalizedFilePath)) {
-      continue
-    }
+	for (const [index, entry] of sorted.entries()) {
+		const normalizedFilePath = normalizePath(entry.filePath);
+		if (exempt.has(normalizedFilePath)) {
+			continue;
+		}
 
-    if (await hasSiblingProjectFile(entry.filePath)) {
-      continue
-    }
+		if (await hasSiblingProjectFile(entry.filePath)) {
+			continue;
+		}
 
-    const tooOld = now - entry.stats.mtimeMs > AUTO_RECORDING_MAX_AGE_MS
-    const overLimit = index >= AUTO_RECORDING_RETENTION_COUNT
-    if (!tooOld && !overLimit) {
-      continue
-    }
+		const tooOld = now - entry.stats.mtimeMs > AUTO_RECORDING_MAX_AGE_MS;
+		const overLimit = index >= AUTO_RECORDING_RETENTION_COUNT;
+		if (!tooOld && !overLimit) {
+			continue;
+		}
 
-    try {
-      await fs.rm(entry.filePath, { force: true })
-      await fs.rm(getTelemetryPathForVideo(entry.filePath), { force: true })
-      // Clean up companion audio files left from recording (macOS .m4a, Windows .wav)
-      const base = entry.filePath.replace(/\.(mp4|mov|webm)$/i, '')
-      for (const suffix of ['.system.m4a', '.mic.m4a', '.system.wav', '.mic.wav', '.mic.webm', '.system.webm']) {
-        await fs.rm(base + suffix, { force: true }).catch(() => {})
-      }
-    } catch (error) {
-      console.warn('Failed to prune old auto recording:', entry.filePath, error)
-    }
-  }
+		try {
+			await fs.rm(entry.filePath, { force: true });
+			await fs.rm(getTelemetryPathForVideo(entry.filePath), { force: true });
+			// Clean up companion audio files left from recording (macOS .m4a, Windows .wav)
+			const base = entry.filePath.replace(/\.(mp4|mov|webm)$/i, "");
+			for (const suffix of [
+				".system.m4a",
+				".mic.m4a",
+				".system.wav",
+				".mic.wav",
+				".mic.webm",
+				".system.webm",
+			]) {
+				await fs.rm(base + suffix, { force: true }).catch(() => undefined);
+			}
+		} catch (error) {
+			console.warn("Failed to prune old auto recording:", entry.filePath, error);
+		}
+	}
 }
 
 /**
@@ -924,272 +1009,373 @@ async function pruneAutoRecordings(exemptPaths: string[] = []) {
  * accessed via that path instead of the asar virtual filesystem.
  */
 function resolveUnpackedAppPath(...segments: string[]) {
-  const base = app.getAppPath()
-  const resolved = path.join(base, ...segments)
-  if (app.isPackaged) {
-    return resolved.replace(/\.asar([/\\])/, '.asar.unpacked$1')
-  }
-  return resolved
+	const base = app.getAppPath();
+	const resolved = path.join(base, ...segments);
+	if (app.isPackaged) {
+		return resolved.replace(/\.asar([/\\])/, ".asar.unpacked$1");
+	}
+	return resolved;
 }
 
 function getNativeCaptureHelperSourcePath() {
-  return resolveUnpackedAppPath('electron', 'native', 'ScreenCaptureKitRecorder.swift')
+	return resolveUnpackedAppPath("electron", "native", "ScreenCaptureKitRecorder.swift");
 }
 
 function getNativeArchTag() {
-  if (process.platform === 'darwin') {
-    return process.arch === 'arm64' ? 'darwin-arm64' : 'darwin-x64'
-  }
+	if (process.platform === "darwin") {
+		return process.arch === "arm64" ? "darwin-arm64" : "darwin-x64";
+	}
 
-  if (process.platform === 'win32') {
-    return process.arch === 'arm64' ? 'win32-arm64' : 'win32-x64'
-  }
+	if (process.platform === "win32") {
+		return process.arch === "arm64" ? "win32-arm64" : "win32-x64";
+	}
 
-  if (process.platform === 'linux') {
-    return process.arch === 'arm64' ? 'linux-arm64' : 'linux-x64'
-  }
+	if (process.platform === "linux") {
+		return process.arch === "arm64" ? "linux-arm64" : "linux-x64";
+	}
 
-  return `${process.platform}-${process.arch}`
+	return `${process.platform}-${process.arch}`;
 }
 
 function getPrebundledNativeHelperPath(binaryName: string) {
-  return resolveUnpackedAppPath('electron', 'native', 'bin', getNativeArchTag(), binaryName)
+	return resolveUnpackedAppPath("electron", "native", "bin", getNativeArchTag(), binaryName);
 }
 
 function resolvePreferredWindowsNativeHelperPath(helperDirectory: string, binaryName: string) {
-  const buildOutputPath = resolveUnpackedAppPath(
-    'electron',
-    'native',
-    helperDirectory,
-    'build',
-    'Release',
-    binaryName,
-  )
-  const prebundledPath = getPrebundledNativeHelperPath(binaryName)
+	const buildOutputPath = resolveUnpackedAppPath(
+		"electron",
+		"native",
+		helperDirectory,
+		"build",
+		"Release",
+		binaryName,
+	);
+	const prebundledPath = getPrebundledNativeHelperPath(binaryName);
 
-  if (existsSync(buildOutputPath)) {
-    return buildOutputPath
-  }
+	if (existsSync(buildOutputPath)) {
+		return buildOutputPath;
+	}
 
-  if (existsSync(prebundledPath)) {
-    return prebundledPath
-  }
+	if (existsSync(prebundledPath)) {
+		return prebundledPath;
+	}
 
-  return buildOutputPath
+	return buildOutputPath;
 }
 
 function getBundledWhisperExecutableCandidates() {
-  const binaryNames = process.platform === 'win32'
-    ? ['whisper-cli.exe', 'whisper-cpp.exe', 'whisper.exe', 'main.exe']
-    : ['whisper-cli', 'whisper-cpp', 'whisper', 'main']
+	const binaryNames =
+		process.platform === "win32"
+			? ["whisper-cli.exe", "whisper-cpp.exe", "whisper.exe", "main.exe"]
+			: ["whisper-cli", "whisper-cpp", "whisper", "main"];
 
-  return binaryNames.map((binaryName) => getPrebundledNativeHelperPath(binaryName))
+	return binaryNames.map((binaryName) => getPrebundledNativeHelperPath(binaryName));
 }
 
 function getNativeCaptureHelperBinaryPath() {
-  return path.join(app.getPath('userData'), 'native-tools', 'openscreen-screencapturekit-helper')
+	return path.join(app.getPath("userData"), "native-tools", "recordly-screencapturekit-helper");
 }
 
 function getSystemCursorHelperSourcePath() {
-  return resolveUnpackedAppPath('electron', 'native', 'SystemCursorAssets.swift')
+	return resolveUnpackedAppPath("electron", "native", "SystemCursorAssets.swift");
 }
 
 function getSystemCursorHelperBinaryPath() {
-  return path.join(app.getPath('userData'), 'native-tools', 'openscreen-system-cursors')
+	return path.join(app.getPath("userData"), "native-tools", "recordly-system-cursors");
 }
 
 function getNativeCursorMonitorSourcePath() {
-  return resolveUnpackedAppPath('electron', 'native', 'NativeCursorMonitor.swift')
+	return resolveUnpackedAppPath("electron", "native", "NativeCursorMonitor.swift");
 }
 
 function getNativeCursorMonitorBinaryPath() {
-  return path.join(app.getPath('userData'), 'native-tools', 'openscreen-native-cursor-monitor')
+	return path.join(app.getPath("userData"), "native-tools", "recordly-native-cursor-monitor");
 }
 
 function getNativeWindowListSourcePath() {
-  return resolveUnpackedAppPath('electron', 'native', 'ScreenCaptureKitWindowList.swift')
+	return resolveUnpackedAppPath("electron", "native", "ScreenCaptureKitWindowList.swift");
 }
 
 function getNativeWindowListBinaryPath() {
-  return path.join(app.getPath('userData'), 'native-tools', 'openscreen-window-list')
+	return path.join(app.getPath("userData"), "native-tools", "recordly-window-list");
+}
+
+let nativeHelperMigrationPromise: Promise<void> | null = null;
+
+async function migrateLegacyNativeHelperBinaries() {
+	const legacyToCurrentPaths: Array<[string, string]> = [
+		[
+			path.join(app.getPath("userData"), "native-tools", "openscreen-screencapturekit-helper"),
+			getNativeCaptureHelperBinaryPath(),
+		],
+		[
+			path.join(app.getPath("userData"), "native-tools", "openscreen-window-list"),
+			getNativeWindowListBinaryPath(),
+		],
+		[
+			path.join(app.getPath("userData"), "native-tools", "openscreen-system-cursors"),
+			getSystemCursorHelperBinaryPath(),
+		],
+		[
+			path.join(app.getPath("userData"), "native-tools", "openscreen-native-cursor-monitor"),
+			getNativeCursorMonitorBinaryPath(),
+		],
+	];
+
+	for (const [legacyPath, currentPath] of legacyToCurrentPaths) {
+		if (legacyPath === currentPath || existsSync(currentPath) || !existsSync(legacyPath)) {
+			continue;
+		}
+
+		try {
+			await fs.mkdir(path.dirname(currentPath), { recursive: true });
+			await fs.rename(legacyPath, currentPath);
+		} catch (error) {
+			console.warn("[native-tools] Failed to migrate helper binary", {
+				legacyPath,
+				currentPath,
+				error,
+			});
+		}
+	}
+}
+
+async function ensureNativeHelperMigration() {
+	if (!nativeHelperMigrationPromise) {
+		nativeHelperMigrationPromise = migrateLegacyNativeHelperBinaries().catch((error) => {
+			nativeHelperMigrationPromise = null;
+			throw error;
+		});
+	}
+
+	return nativeHelperMigrationPromise;
 }
 
 type NativeMacWindowSource = {
-  id: string
-  name: string
-  display_id?: string
-  appName?: string
-  windowTitle?: string
-  bundleId?: string
-  appIcon?: string | null
-  x?: number
-  y?: number
-  width?: number
-  height?: number
-}
+	id: string;
+	name: string;
+	display_id?: string;
+	appName?: string;
+	windowTitle?: string;
+	bundleId?: string;
+	appIcon?: string | null;
+	x?: number;
+	y?: number;
+	width?: number;
+	height?: number;
+};
 
-let cachedNativeMacWindowSources: NativeMacWindowSource[] | null = null
-let cachedNativeMacWindowSourcesAtMs = 0
+let cachedNativeMacWindowSources: NativeMacWindowSource[] | null = null;
+let cachedNativeMacWindowSourcesAtMs = 0;
 
 async function ensureSwiftHelperBinary(
-  sourcePath: string,
-  binaryPath: string,
-  label: string,
-  prebundledBinaryName?: string,
+	sourcePath: string,
+	binaryPath: string,
+	label: string,
+	prebundledBinaryName?: string,
 ) {
-  if (prebundledBinaryName) {
-    const prebundledPath = getPrebundledNativeHelperPath(prebundledBinaryName)
-    try {
-      await fs.access(prebundledPath, fsConstants.X_OK)
-      return prebundledPath
-    } catch {
-      if (app.isPackaged) {
-        throw new Error(
-          `${label} is missing from this app build (${prebundledPath}). Reinstall or update the app.`
-        )
-      }
-    }
-  }
+	if (prebundledBinaryName) {
+		const prebundledPath = getPrebundledNativeHelperPath(prebundledBinaryName);
+		try {
+			await fs.access(prebundledPath, fsConstants.X_OK);
+			return prebundledPath;
+		} catch {
+			if (app.isPackaged) {
+				throw new Error(
+					`${label} is missing from this app build (${prebundledPath}). Reinstall or update the app.`,
+				);
+			}
+		}
+	}
 
-  const helperDir = path.dirname(binaryPath)
+	const helperDir = path.dirname(binaryPath);
 
-  await fs.mkdir(helperDir, { recursive: true })
+	await fs.mkdir(helperDir, { recursive: true });
 
-  let shouldCompile = false
-  try {
-    const [sourceStat, binaryStat] = await Promise.all([
-      fs.stat(sourcePath),
-      fs.stat(binaryPath).catch(() => null),
-    ])
-    shouldCompile = !binaryStat || sourceStat.mtimeMs > binaryStat.mtimeMs
-  } catch (error) {
-    throw new Error(`${label} source is unavailable: ${String(error)}`)
-  }
+	let shouldCompile = false;
+	try {
+		const [sourceStat, binaryStat] = await Promise.all([
+			fs.stat(sourcePath),
+			fs.stat(binaryPath).catch(() => null),
+		]);
+		shouldCompile = !binaryStat || sourceStat.mtimeMs > binaryStat.mtimeMs;
+	} catch (error) {
+		throw new Error(`${label} source is unavailable: ${String(error)}`);
+	}
 
-  if (!shouldCompile) {
-    return binaryPath
-  }
+	if (!shouldCompile) {
+		return binaryPath;
+	}
 
-  const result = spawnSync('swiftc', ['-O', sourcePath, '-o', binaryPath], {
-    encoding: 'utf8',
-    timeout: 120000,
-  })
+	const result = spawnSync("swiftc", ["-O", sourcePath, "-o", binaryPath], {
+		encoding: "utf8",
+		timeout: 120000,
+	});
 
-  if (result.status !== 0) {
-    const details = [result.stderr, result.stdout].filter(Boolean).join('\n').trim()
-    throw new Error(details || `Failed to compile ${label}`)
-  }
+	if (result.status !== 0) {
+		const details = [result.stderr, result.stdout].filter(Boolean).join("\n").trim();
+		throw new Error(details || `Failed to compile ${label}`);
+	}
 
-  return binaryPath
+	return binaryPath;
 }
 
 async function ensureNativeCaptureHelperBinary() {
-  return ensureSwiftHelperBinary(
-    getNativeCaptureHelperSourcePath(),
-    getNativeCaptureHelperBinaryPath(),
-    'native ScreenCaptureKit helper',
-    'openscreen-screencapturekit-helper'
-  )
+	await ensureNativeHelperMigration();
+	return ensureSwiftHelperBinary(
+		getNativeCaptureHelperSourcePath(),
+		getNativeCaptureHelperBinaryPath(),
+		"native ScreenCaptureKit helper",
+		"recordly-screencapturekit-helper",
+	);
 }
 
 async function ensureNativeWindowListBinary() {
-  return ensureSwiftHelperBinary(
-    getNativeWindowListSourcePath(),
-    getNativeWindowListBinaryPath(),
-    'native ScreenCaptureKit window list helper',
-    'openscreen-window-list'
-  )
+	await ensureNativeHelperMigration();
+	return ensureSwiftHelperBinary(
+		getNativeWindowListSourcePath(),
+		getNativeWindowListBinaryPath(),
+		"native ScreenCaptureKit window list helper",
+		"recordly-window-list",
+	);
 }
 
 async function getNativeMacWindowSources(options?: { maxAgeMs?: number }) {
-  if (process.platform !== 'darwin') {
-    return [] as NativeMacWindowSource[]
-  }
+	if (process.platform !== "darwin") {
+		return [] as NativeMacWindowSource[];
+	}
 
-  const maxAgeMs = options?.maxAgeMs ?? 5000
-  const now = Date.now()
-  if (cachedNativeMacWindowSources && now - cachedNativeMacWindowSourcesAtMs < maxAgeMs) {
-    return cachedNativeMacWindowSources
-  }
+	const maxAgeMs = options?.maxAgeMs ?? 5000;
+	const now = Date.now();
+	if (cachedNativeMacWindowSources && now - cachedNativeMacWindowSourcesAtMs < maxAgeMs) {
+		return cachedNativeMacWindowSources;
+	}
 
-  const binaryPath = await ensureNativeWindowListBinary()
-  const { stdout } = await execFileAsync(binaryPath, [], {
-    timeout: 30000,
-    maxBuffer: 10 * 1024 * 1024,
-  })
+	const binaryPath = await ensureNativeWindowListBinary();
+	const { stdout } = await execFileAsync(binaryPath, [], {
+		timeout: 30000,
+		maxBuffer: 10 * 1024 * 1024,
+	});
 
-  const parsed = JSON.parse(stdout)
-  if (!Array.isArray(parsed)) {
-    return [] as NativeMacWindowSource[]
-  }
+	const parsed = JSON.parse(stdout);
+	if (!Array.isArray(parsed)) {
+		return [] as NativeMacWindowSource[];
+	}
 
-  const entries = parsed.filter((entry: unknown): entry is NativeMacWindowSource => {
-    if (!entry || typeof entry !== 'object') {
-      return false
-    }
+	const entries = parsed.filter((entry: unknown): entry is NativeMacWindowSource => {
+		if (!entry || typeof entry !== "object") {
+			return false;
+		}
 
-    const candidate = entry as Partial<NativeMacWindowSource>
-    return typeof candidate.id === 'string' && typeof candidate.name === 'string'
-  })
+		const candidate = entry as Partial<NativeMacWindowSource>;
+		return typeof candidate.id === "string" && typeof candidate.name === "string";
+	});
 
-  cachedNativeMacWindowSources = entries
-  cachedNativeMacWindowSourcesAtMs = now
-  return entries
+	cachedNativeMacWindowSources = entries;
+	cachedNativeMacWindowSourcesAtMs = now;
+	return entries;
 }
 
 async function getSystemCursorAssets() {
-  if (process.platform !== 'darwin') {
-    cachedSystemCursorAssets = {}
-    cachedSystemCursorAssetsSourceMtimeMs = null
-    return cachedSystemCursorAssets
-  }
+	if (process.platform !== "darwin") {
+		cachedSystemCursorAssets = {};
+		cachedSystemCursorAssetsSourceMtimeMs = null;
+		return cachedSystemCursorAssets;
+	}
 
-  const sourcePath = getSystemCursorHelperSourcePath()
-  const sourceStat = await fs.stat(sourcePath)
-  if (cachedSystemCursorAssets && cachedSystemCursorAssetsSourceMtimeMs === sourceStat.mtimeMs) {
-    return cachedSystemCursorAssets
-  }
+	await ensureNativeHelperMigration();
 
-  const binaryPath = await ensureSwiftHelperBinary(
-    sourcePath,
-    getSystemCursorHelperBinaryPath(),
-    'system cursor helper',
-    'openscreen-system-cursors'
-  )
+	const sourcePath = getSystemCursorHelperSourcePath();
+	const sourceStat = await fs.stat(sourcePath);
+	if (cachedSystemCursorAssets && cachedSystemCursorAssetsSourceMtimeMs === sourceStat.mtimeMs) {
+		return cachedSystemCursorAssets;
+	}
 
-  const { stdout } = await execFileAsync(binaryPath, [], { timeout: 15000, maxBuffer: 20 * 1024 * 1024 })
-  const parsed = JSON.parse(stdout) as Record<string, Partial<SystemCursorAsset>>
-  cachedSystemCursorAssets = Object.fromEntries(
-    Object.entries(parsed).filter(([, asset]) => (
-      typeof asset?.dataUrl === 'string'
-      && typeof asset?.hotspotX === 'number'
-      && typeof asset?.hotspotY === 'number'
-      && typeof asset?.width === 'number'
-      && typeof asset?.height === 'number'
-    ))
-  ) as Record<string, SystemCursorAsset>
-  cachedSystemCursorAssetsSourceMtimeMs = sourceStat.mtimeMs
+	const binaryPath = await ensureSwiftHelperBinary(
+		sourcePath,
+		getSystemCursorHelperBinaryPath(),
+		"system cursor helper",
+		"recordly-system-cursors",
+	);
 
-  return cachedSystemCursorAssets
+	const { stdout } = await execFileAsync(binaryPath, [], {
+		timeout: 15000,
+		maxBuffer: 20 * 1024 * 1024,
+	});
+	const parsed = JSON.parse(stdout) as Record<string, Partial<SystemCursorAsset>>;
+	cachedSystemCursorAssets = Object.fromEntries(
+		Object.entries(parsed).filter(
+			([, asset]) =>
+				typeof asset?.dataUrl === "string" &&
+				typeof asset?.hotspotX === "number" &&
+				typeof asset?.hotspotY === "number" &&
+				typeof asset?.width === "number" &&
+				typeof asset?.height === "number",
+		),
+	) as Record<string, SystemCursorAsset>;
+	cachedSystemCursorAssetsSourceMtimeMs = sourceStat.mtimeMs;
+
+	return cachedSystemCursorAssets;
 }
 
 function parseWindowId(sourceId?: string) {
-  if (!sourceId) return null
-  const match = sourceId.match(/^window:(\d+)/)
-  return match ? Number.parseInt(match[1], 10) : null
+	if (!sourceId) return null;
+	const match = sourceId.match(/^window:(\d+)/);
+	return match ? Number.parseInt(match[1], 10) : null;
 }
 
 function loadFfmpegStatic() {
-  const moduleExports = nodeRequire('ffmpeg-static')
-  if (typeof moduleExports === 'string') {
-    return moduleExports
-  }
+	const moduleExports = nodeRequire("ffmpeg-static");
+	if (typeof moduleExports === "string") {
+		return moduleExports;
+	}
 
-  if (typeof moduleExports?.default === 'string') {
-    return moduleExports.default as string
-  }
+	if (typeof moduleExports?.default === "string") {
+		return moduleExports.default as string;
+	}
 
-  return null
+	return null;
+}
+
+type HookEventName = "mousedown" | "mouseup" | "mousemove";
+
+type HookMouseEvent = {
+	button?: number;
+	mouseButton?: number;
+	x?: number;
+	y?: number;
+	screenX?: number;
+	screenY?: number;
+	data?: {
+		button?: number;
+		mouseButton?: number;
+		x?: number;
+		y?: number;
+		screenX?: number;
+		screenY?: number;
+	};
+};
+
+type HookEventListener = (event: HookMouseEvent) => void;
+
+type UiohookLike = {
+	on: (eventName: HookEventName, listener: HookEventListener) => void;
+	off?: (eventName: HookEventName, listener: HookEventListener) => void;
+	removeListener?: (eventName: HookEventName, listener: HookEventListener) => void;
+	start: () => void;
+	stop?: () => void;
+};
+
+type UiohookModuleNamespace = {
+	uIOhook?: UiohookLike;
+	uiohook?: UiohookLike;
+	Uiohook?: UiohookLike;
+	default?: UiohookLike | UiohookModuleNamespace;
+};
+
+function isUiohookLike(value: unknown): value is UiohookLike {
+	const candidate = value as Partial<UiohookLike> | null;
+	return typeof candidate?.on === "function" && typeof candidate?.start === "function";
 }
 
 function resolveSystemFfmpegBinaryPath() {
@@ -1212,16 +1398,38 @@ function resolveSystemFfmpegBinaryPath() {
 }
 
 function loadUiohookModule() {
-  const moduleExports = nodeRequire('uiohook-napi')
-  return (
-    (moduleExports as any)?.uIOhook
-    ?? (moduleExports as any)?.uiohook
-    ?? (moduleExports as any)?.Uiohook
-    ?? (moduleExports as any)?.default?.uIOhook
-    ?? (moduleExports as any)?.default?.uiohook
-    ?? (moduleExports as any)?.default
-    ?? moduleExports
-  )
+	const moduleExports = nodeRequire("uiohook-napi") as UiohookModuleNamespace;
+	const defaultExport = moduleExports.default;
+
+	if (moduleExports.uIOhook) {
+		return moduleExports.uIOhook;
+	}
+
+	if (moduleExports.uiohook) {
+		return moduleExports.uiohook;
+	}
+
+	if (moduleExports.Uiohook) {
+		return moduleExports.Uiohook;
+	}
+
+	if (isUiohookLike(defaultExport)) {
+		return defaultExport;
+	}
+
+	if (defaultExport?.uIOhook) {
+		return defaultExport.uIOhook;
+	}
+
+	if (defaultExport?.uiohook) {
+		return defaultExport.uiohook;
+	}
+
+	if (defaultExport?.Uiohook) {
+		return defaultExport.Uiohook;
+	}
+
+	return null;
 }
 
 function getFfmpegBinaryPath() {
@@ -1245,411 +1453,425 @@ function getFfmpegBinaryPath() {
 }
 
 type NativeVideoExportSession = {
-  ffmpegProcess: ChildProcessByStdio<Writable, null, Readable>
-  outputPath: string
-  inputByteSize: number
-  maxQueuedWriteBytes: number
-  stderrOutput: string
-  encoderName: string
-  processError: Error | null
-  stdinError: Error | null
-  terminating: boolean
-  writeSequence: Promise<void>
-  completionPromise: Promise<void>
-  sender: WebContents | null
-  pendingWriteRequestIds: Set<number>
-}
+	ffmpegProcess: ChildProcessByStdio<Writable, null, Readable>;
+	outputPath: string;
+	inputByteSize: number;
+	inputMode: 'rawvideo' | 'h264-stream';
+	maxQueuedWriteBytes: number;
+	stderrOutput: string;
+	encoderName: string;
+	processError: Error | null;
+	stdinError: Error | null;
+	terminating: boolean;
+	writeSequence: Promise<void>;
+	completionPromise: Promise<void>;
+	sender: WebContents | null;
+	pendingWriteRequestIds: Set<number>;
+};
 
-const nativeVideoExportSessions = new Map<string, NativeVideoExportSession>()
-let cachedNativeVideoEncoder: { ffmpegPath: string; encoderName: string } | null = null
+const nativeVideoExportSessions = new Map<string, NativeVideoExportSession>();
+let cachedNativeVideoEncoder: { ffmpegPath: string; encoderName: string } | null = null;
 
 export function cleanupNativeVideoExportSessions() {
-  for (const [sessionId, session] of nativeVideoExportSessions) {
-    session.terminating = true
-    try {
-      if (!session.ffmpegProcess.stdin.destroyed) {
-        session.ffmpegProcess.stdin.destroy()
-      }
-    } catch { /* stream may already be closed */ }
-    try {
-      session.ffmpegProcess.kill('SIGKILL')
-    } catch { /* process may already be exited */ }
-    nativeVideoExportSessions.delete(sessionId)
-  }
+	for (const [sessionId, session] of nativeVideoExportSessions) {
+		session.terminating = true;
+		try {
+			if (!session.ffmpegProcess.stdin.destroyed) {
+				session.ffmpegProcess.stdin.destroy();
+			}
+		} catch {
+			/* stream may already be closed */
+		}
+		try {
+			session.ffmpegProcess.kill("SIGKILL");
+		} catch {
+			/* process may already be exited */
+		}
+		nativeVideoExportSessions.delete(sessionId);
+	}
 }
 
 function getNativeVideoExportMaxQueuedWriteBytes(inputByteSize: number) {
-  return Math.min(
-    64 * 1024 * 1024,
-    Math.max(16 * 1024 * 1024, inputByteSize * 4),
-  )
+	if (inputByteSize === 0) return 8 * 1024 * 1024; // H264 stream: variable-size chunks
+	return Math.min(64 * 1024 * 1024, Math.max(16 * 1024 * 1024, inputByteSize * 4));
 }
 
 function isHardwareAcceleratedVideoEncoder(encoderName: string) {
-  return /(videotoolbox|nvenc|qsv|amf|mf)/i.test(encoderName)
+	return /(videotoolbox|nvenc|qsv|amf|mf)/i.test(encoderName);
 }
 
 async function removeTemporaryExportFile(filePath: string | null | undefined) {
-  if (!filePath) {
-    return
-  }
+	if (!filePath) {
+		return;
+	}
 
-  try {
-    await fs.rm(filePath, { force: true })
-  } catch {
-    // Ignore cleanup failures for temp export artifacts.
-  }
+	try {
+		await fs.rm(filePath, { force: true });
+	} catch {
+		// Ignore cleanup failures for temp export artifacts.
+	}
 }
 
-function getNativeVideoExportSessionError(
-  session: NativeVideoExportSession,
-  fallback: string,
-) {
-  return (
-    session.stdinError?.message ||
-    session.processError?.message ||
-    session.stderrOutput.trim() ||
-    fallback
-  )
+function getNativeVideoExportSessionError(session: NativeVideoExportSession, fallback: string) {
+	return (
+		session.stdinError?.message ||
+		session.processError?.message ||
+		session.stderrOutput.trim() ||
+		fallback
+	);
 }
 
 function sendNativeVideoExportWriteFrameResult(
-  sender: WebContents | null | undefined,
-  sessionId: string,
-  requestId: number,
-  result: { success: boolean; error?: string },
+	sender: WebContents | null | undefined,
+	sessionId: string,
+	requestId: number,
+	result: { success: boolean; error?: string },
 ) {
-  if (!sender || sender.isDestroyed()) {
-    return
-  }
+	if (!sender || sender.isDestroyed()) {
+		return;
+	}
 
-  sender.send('native-video-export-write-frame-result', {
-    sessionId,
-    requestId,
-    ...result,
-  })
+	sender.send("native-video-export-write-frame-result", {
+		sessionId,
+		requestId,
+		...result,
+	});
 }
 
 function settleNativeVideoExportWriteFrameRequest(
-  sessionId: string,
-  session: NativeVideoExportSession,
-  requestId: number,
-  result: { success: boolean; error?: string },
+	sessionId: string,
+	session: NativeVideoExportSession,
+	requestId: number,
+	result: { success: boolean; error?: string },
 ) {
-  session.pendingWriteRequestIds.delete(requestId)
-  sendNativeVideoExportWriteFrameResult(session.sender, sessionId, requestId, result)
+	session.pendingWriteRequestIds.delete(requestId);
+	sendNativeVideoExportWriteFrameResult(session.sender, sessionId, requestId, result);
 }
 
 function flushNativeVideoExportPendingWriteRequests(
-  sessionId: string,
-  session: NativeVideoExportSession,
-  error: string,
+	sessionId: string,
+	session: NativeVideoExportSession,
+	error: string,
 ) {
-  for (const requestId of session.pendingWriteRequestIds) {
-    sendNativeVideoExportWriteFrameResult(session.sender, sessionId, requestId, {
-      success: false,
-      error,
-    })
-  }
+	for (const requestId of session.pendingWriteRequestIds) {
+		sendNativeVideoExportWriteFrameResult(session.sender, sessionId, requestId, {
+			success: false,
+			error,
+		});
+	}
 
-  session.pendingWriteRequestIds.clear()
+	session.pendingWriteRequestIds.clear();
 }
 
 function isIgnorableNativeVideoExportStreamError(error: Error | null | undefined): boolean {
-  if (!error) {
-    return false
-  }
+	if (!error) {
+		return false;
+	}
 
-  const errno = error as NodeJS.ErrnoException
-  return (
-    errno.code === 'EPIPE' ||
-    errno.code === 'ERR_STREAM_DESTROYED' ||
-    /broken pipe|stream destroyed|eof/i.test(error.message)
-  )
+	const errno = error as NodeJS.ErrnoException;
+	return (
+		errno.code === "EPIPE" ||
+		errno.code === "ERR_STREAM_DESTROYED" ||
+		/broken pipe|stream destroyed|eof/i.test(error.message)
+	);
 }
 
 async function waitForNativeVideoExportDrain(session: NativeVideoExportSession) {
-  if (
-    session.stdinError ||
-    session.processError ||
-    session.ffmpegProcess.stdin.destroyed ||
-    session.ffmpegProcess.stdin.writableEnded ||
-    !session.ffmpegProcess.stdin.writable ||
-    session.ffmpegProcess.stdin.writableLength <= 0
-  ) {
-    return
-  }
+	if (
+		session.stdinError ||
+		session.processError ||
+		session.ffmpegProcess.stdin.destroyed ||
+		session.ffmpegProcess.stdin.writableEnded ||
+		!session.ffmpegProcess.stdin.writable ||
+		session.ffmpegProcess.stdin.writableLength <= 0
+	) {
+		return;
+	}
 
-  await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      cleanup()
-      reject(new Error('Timed out while waiting for native export writer backpressure to clear'))
-    }, 15000)
+	await new Promise<void>((resolve, reject) => {
+		const timeout = setTimeout(() => {
+			cleanup();
+			reject(
+				new Error("Timed out while waiting for native export writer backpressure to clear"),
+			);
+		}, 15000);
 
-    const cleanup = () => {
-      clearTimeout(timeout)
-      session.ffmpegProcess.stdin.off('drain', handleDrain)
-      session.ffmpegProcess.stdin.off('error', handleError)
-      session.ffmpegProcess.off('close', handleClose)
-    }
+		const cleanup = () => {
+			clearTimeout(timeout);
+			session.ffmpegProcess.stdin.off("drain", handleDrain);
+			session.ffmpegProcess.stdin.off("error", handleError);
+			session.ffmpegProcess.off("close", handleClose);
+		};
 
-    const handleDrain = () => {
-      cleanup()
-      resolve()
-    }
+		const handleDrain = () => {
+			cleanup();
+			resolve();
+		};
 
-    const handleError = (error: Error) => {
-      cleanup()
-      reject(error)
-    }
+		const handleError = (error: Error) => {
+			cleanup();
+			reject(error);
+		};
 
-    const handleClose = () => {
-      cleanup()
-      reject(
-        new Error(
-          getNativeVideoExportSessionError(
-            session,
-            'Native video export writer closed before draining',
-          ),
-        ),
-      )
-    }
+		const handleClose = () => {
+			cleanup();
+			reject(
+				new Error(
+					getNativeVideoExportSessionError(
+						session,
+						"Native video export writer closed before draining",
+					),
+				),
+			);
+		};
 
-    session.ffmpegProcess.stdin.once('drain', handleDrain)
-    session.ffmpegProcess.stdin.once('error', handleError)
-    session.ffmpegProcess.once('close', handleClose)
-  })
+		session.ffmpegProcess.stdin.once("drain", handleDrain);
+		session.ffmpegProcess.stdin.once("error", handleError);
+		session.ffmpegProcess.once("close", handleClose);
+	});
 }
 
 function getNativeVideoExportFrameLength(frameData: Uint8Array | ArrayBuffer) {
-  return frameData.byteLength
+	return frameData.byteLength;
 }
 
 async function writeNativeVideoExportFrame(
-  session: NativeVideoExportSession,
-  frameData: Uint8Array | ArrayBuffer,
+	session: NativeVideoExportSession,
+	frameData: Uint8Array | ArrayBuffer,
 ) {
-  if (getNativeVideoExportFrameLength(frameData) !== session.inputByteSize) {
-    throw new Error(
-      `Native video export expected ${session.inputByteSize} bytes per frame but received ${getNativeVideoExportFrameLength(frameData)}`,
-    )
-  }
+	if (session.inputMode !== 'h264-stream' && getNativeVideoExportFrameLength(frameData) !== session.inputByteSize) {
+		throw new Error(
+			`Native video export expected ${session.inputByteSize} bytes per frame but received ${getNativeVideoExportFrameLength(frameData)}`,
+		);
+	}
 
-  if (
-    session.stdinError ||
-    session.processError ||
-    session.ffmpegProcess.stdin.destroyed ||
-    session.ffmpegProcess.stdin.writableEnded ||
-    !session.ffmpegProcess.stdin.writable
-  ) {
-    throw new Error(
-      getNativeVideoExportSessionError(
-        session,
-        'Native video export encoder is not accepting frames',
-      ),
-    )
-  }
+	if (
+		session.stdinError ||
+		session.processError ||
+		session.ffmpegProcess.stdin.destroyed ||
+		session.ffmpegProcess.stdin.writableEnded ||
+		!session.ffmpegProcess.stdin.writable
+	) {
+		throw new Error(
+			getNativeVideoExportSessionError(
+				session,
+				"Native video export encoder is not accepting frames",
+			),
+		);
+	}
 
-  const frameBuffer = frameData instanceof ArrayBuffer
-    ? Buffer.from(frameData)
-    : Buffer.from(frameData.buffer, frameData.byteOffset, frameData.byteLength)
+	const frameBuffer =
+		frameData instanceof ArrayBuffer
+			? Buffer.from(frameData)
+			: Buffer.from(frameData.buffer, frameData.byteOffset, frameData.byteLength);
 
-  try {
-    session.ffmpegProcess.stdin.write(frameBuffer)
-  } catch (error) {
-    session.stdinError = error instanceof Error ? error : new Error(String(error))
-    throw session.stdinError
-  }
+	try {
+		session.ffmpegProcess.stdin.write(frameBuffer);
+	} catch (error) {
+		session.stdinError = error instanceof Error ? error : new Error(String(error));
+		throw session.stdinError;
+	}
 
-  if (session.ffmpegProcess.stdin.writableLength >= session.maxQueuedWriteBytes) {
-    try {
-      await waitForNativeVideoExportDrain(session)
-    } catch (error) {
-      session.stdinError = error instanceof Error ? error : new Error(String(error))
-      throw session.stdinError
-    }
-  }
+	if (session.ffmpegProcess.stdin.writableLength >= session.maxQueuedWriteBytes) {
+		try {
+			await waitForNativeVideoExportDrain(session);
+		} catch (error) {
+			session.stdinError = error instanceof Error ? error : new Error(String(error));
+			throw session.stdinError;
+		}
+	}
 }
 
 async function enqueueNativeVideoExportFrameWrite(
-  session: NativeVideoExportSession,
-  frameData: Uint8Array | ArrayBuffer,
+	session: NativeVideoExportSession,
+	frameData: Uint8Array | ArrayBuffer,
 ) {
-  const writePromise = session.writeSequence.then(async () => {
-    if (session.terminating) {
-      throw new Error('Native video export session was cancelled')
-    }
+	const writePromise = session.writeSequence.then(async () => {
+		if (session.terminating) {
+			throw new Error("Native video export session was cancelled");
+		}
 
-    await writeNativeVideoExportFrame(session, frameData)
-  })
+		await writeNativeVideoExportFrame(session, frameData);
+	});
 
-  session.writeSequence = writePromise.catch(() => undefined)
-  await writePromise
+	session.writeSequence = writePromise.catch(() => undefined);
+	await writePromise;
 }
 
 async function getAvailableNativeVideoEncoders(ffmpegPath: string) {
-  const { stdout } = await execFileAsync(ffmpegPath, ['-hide_banner', '-encoders'], {
-    timeout: 15000,
-    maxBuffer: 20 * 1024 * 1024,
-  })
+	const { stdout } = await execFileAsync(ffmpegPath, ["-hide_banner", "-encoders"], {
+		timeout: 15000,
+		maxBuffer: 20 * 1024 * 1024,
+	});
 
-  return parseAvailableFfmpegEncoders(stdout)
+	return parseAvailableFfmpegEncoders(stdout);
 }
 
 async function probeNativeVideoEncoder(
-  ffmpegPath: string,
-  encoderName: string,
-  encodingMode: NativeExportEncodingMode,
+	ffmpegPath: string,
+	encoderName: string,
+	encodingMode: NativeExportEncodingMode,
 ) {
-  const outputPath = path.join(
-    app.getPath('temp'),
-    `recordly-export-probe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`,
-  )
-  const args = buildNativeVideoExportArgs(
-    encoderName,
-    {
-      width: 64,
-      height: 64,
-      frameRate: 1,
-      bitrate: 1_500_000,
-      encodingMode,
-    },
-    outputPath,
-  )
+	const outputPath = path.join(
+		app.getPath("temp"),
+		`recordly-export-probe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`,
+	);
+	const args = buildNativeVideoExportArgs(
+		encoderName,
+		{
+			width: 64,
+			height: 64,
+			frameRate: 1,
+			bitrate: 1_500_000,
+			encodingMode,
+		},
+		outputPath,
+	);
 
-  return new Promise<boolean>((resolve) => {
-    const process = spawn(ffmpegPath, args, {
-      stdio: ['pipe', 'ignore', 'pipe'],
-    })
-    let stderrOutput = ''
-    const timeout = setTimeout(() => {
-      try {
-        process.kill('SIGKILL')
-      } catch {
-        // ignore
-      }
-      resolve(false)
-    }, 15000)
+	return new Promise<boolean>((resolve) => {
+		const process = spawn(ffmpegPath, args, {
+			stdio: ["pipe", "ignore", "pipe"],
+		});
+		let stderrOutput = "";
+		const timeout = setTimeout(() => {
+			try {
+				process.kill("SIGKILL");
+			} catch {
+				// ignore
+			}
+			resolve(false);
+		}, 15000);
 
-    process.stderr.on('data', (chunk: Buffer) => {
-      stderrOutput += chunk.toString()
-    })
+		process.stderr.on("data", (chunk: Buffer) => {
+			stderrOutput += chunk.toString();
+		});
 
-    process.on('close', (code) => {
-      clearTimeout(timeout)
-      void removeTemporaryExportFile(outputPath)
-      if (code !== 0 && stderrOutput.trim().length > 0) {
-        console.warn(
-          `[native-export] Encoder probe failed for ${encoderName}:`,
-          stderrOutput.trim(),
-        )
-      }
-      resolve(code === 0)
-    })
+		process.on("close", (code) => {
+			clearTimeout(timeout);
+			void removeTemporaryExportFile(outputPath);
+			if (code !== 0 && stderrOutput.trim().length > 0) {
+				console.warn(
+					`[native-export] Encoder probe failed for ${encoderName}:`,
+					stderrOutput.trim(),
+				);
+			}
+			resolve(code === 0);
+		});
 
-    process.stdin.end(Buffer.alloc(getNativeVideoInputByteSize(64, 64), 0))
-  })
+		process.stdin.end(Buffer.alloc(getNativeVideoInputByteSize(64, 64), 0));
+	});
 }
 
 async function resolveNativeVideoEncoder(
-  ffmpegPath: string,
-  encodingMode: NativeExportEncodingMode,
+	ffmpegPath: string,
+	encodingMode: NativeExportEncodingMode,
 ) {
-  if (cachedNativeVideoEncoder?.ffmpegPath === ffmpegPath) {
-    return cachedNativeVideoEncoder.encoderName
-  }
+	if (cachedNativeVideoEncoder?.ffmpegPath === ffmpegPath) {
+		return cachedNativeVideoEncoder.encoderName;
+	}
 
-  const availableEncoders = await getAvailableNativeVideoEncoders(ffmpegPath)
-  const candidates = [...new Set([...getPreferredNativeVideoEncoders(process.platform), 'libx264'])]
+	const availableEncoders = await getAvailableNativeVideoEncoders(ffmpegPath);
+	const candidates = [
+		...new Set([...getPreferredNativeVideoEncoders(process.platform), "libx264"]),
+	];
 
-  for (const encoderName of candidates) {
-    if (!availableEncoders.has(encoderName)) {
-      continue
-    }
+	for (const encoderName of candidates) {
+		if (!availableEncoders.has(encoderName)) {
+			continue;
+		}
 
-    if (await probeNativeVideoEncoder(ffmpegPath, encoderName, encodingMode)) {
-      cachedNativeVideoEncoder = { ffmpegPath, encoderName }
-      return encoderName
-    }
-  }
+		if (await probeNativeVideoEncoder(ffmpegPath, encoderName, encodingMode)) {
+			cachedNativeVideoEncoder = { ffmpegPath, encoderName };
+			return encoderName;
+		}
+	}
 
-  throw new Error('No usable FFmpeg encoder was available for native export')
+	throw new Error("No usable FFmpeg encoder was available for native export");
 }
 
 async function muxNativeVideoExportAudio(
-  videoPath: string,
-  options: NativeVideoExportFinishOptions,
+	videoPath: string,
+	options: NativeVideoExportFinishOptions,
 ) {
-  const audioMode = options.audioMode ?? 'none'
-  if (audioMode === 'none') {
-    return videoPath
-  }
+	const audioMode = options.audioMode ?? "none";
+	if (audioMode === "none") {
+		return videoPath;
+	}
 
-  const ffmpegPath = getFfmpegBinaryPath()
-  const tempArtifacts: string[] = []
-  let audioInputPath = options.audioSourcePath ?? null
+	const ffmpegPath = getFfmpegBinaryPath();
+	const tempArtifacts: string[] = [];
+	let audioInputPath = options.audioSourcePath ?? null;
 
-  if (audioMode === 'edited-track') {
-    if (!options.editedAudioData) {
-      throw new Error('Edited audio data is missing for native export')
-    }
+	if (audioMode === "edited-track") {
+		if (!options.editedAudioData) {
+			throw new Error("Edited audio data is missing for native export");
+		}
 
-    const extension = getEditedAudioExtension(options.editedAudioMimeType)
-    audioInputPath = path.join(
-      app.getPath('temp'),
-      `recordly-export-audio-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${extension}`,
-    )
-    await fs.writeFile(audioInputPath, Buffer.from(options.editedAudioData))
-    tempArtifacts.push(audioInputPath)
-  }
+		const extension = getEditedAudioExtension(options.editedAudioMimeType);
+		audioInputPath = path.join(
+			app.getPath("temp"),
+			`recordly-export-audio-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${extension}`,
+		);
+		await fs.writeFile(audioInputPath, Buffer.from(options.editedAudioData));
+		tempArtifacts.push(audioInputPath);
+	}
 
-  if (!audioInputPath) {
-    return videoPath
-  }
+	if (!audioInputPath) {
+		return videoPath;
+	}
 
-  const outputPath = path.join(
-    path.dirname(videoPath),
-    `${path.basename(videoPath, path.extname(videoPath))}-final.mp4`,
-  )
+	const outputPath = path.join(
+		path.dirname(videoPath),
+		`${path.basename(videoPath, path.extname(videoPath))}-final.mp4`,
+	);
 
-  const args = ['-y', '-hide_banner', '-loglevel', 'error', '-i', videoPath, '-i', audioInputPath]
+	const args = [
+		"-y",
+		"-hide_banner",
+		"-loglevel",
+		"error",
+		"-i",
+		videoPath,
+		"-i",
+		audioInputPath,
+	];
 
-  if (audioMode === 'trim-source') {
-    const filter = buildTrimmedSourceAudioFilter(options.trimSegments ?? [])
-    if (filter) {
-      args.push('-filter_complex', filter, '-map', '0:v:0', '-map', '[aout]')
-    } else {
-      args.push('-map', '0:v:0', '-map', '1:a:0')
-    }
-  } else {
-    args.push('-map', '0:v:0', '-map', '1:a:0')
-  }
+	if (audioMode === "trim-source") {
+		const filter = buildTrimmedSourceAudioFilter(options.trimSegments ?? []);
+		if (filter) {
+			args.push("-filter_complex", filter, "-map", "0:v:0", "-map", "[aout]");
+		} else {
+			args.push("-map", "0:v:0", "-map", "1:a:0");
+		}
+	} else {
+		args.push("-map", "0:v:0", "-map", "1:a:0");
+	}
 
-  args.push(
-    '-c:v',
-    'copy',
-    '-c:a',
-    'aac',
-    '-b:a',
-    '192k',
-    '-shortest',
-    '-movflags',
-    '+faststart',
-    outputPath,
-  )
+	args.push(
+		"-c:v",
+		"copy",
+		"-c:a",
+		"aac",
+		"-b:a",
+		"192k",
+		"-shortest",
+		"-movflags",
+		"+faststart",
+		outputPath,
+	);
 
-  try {
-    await execFileAsync(ffmpegPath, args, {
-      timeout: 15 * 60 * 1000,
-      maxBuffer: 20 * 1024 * 1024,
-    })
-    await removeTemporaryExportFile(videoPath)
-    return outputPath
-  } finally {
-    await Promise.allSettled(
-      tempArtifacts.map((artifactPath) => removeTemporaryExportFile(artifactPath)),
-    )
-  }
+	try {
+		await execFileAsync(ffmpegPath, args, {
+			timeout: 15 * 60 * 1000,
+			maxBuffer: 20 * 1024 * 1024,
+		});
+		await removeTemporaryExportFile(videoPath);
+		return outputPath;
+	} finally {
+		await Promise.allSettled(
+			tempArtifacts.map((artifactPath) => removeTemporaryExportFile(artifactPath)),
+		);
+	}
 }
 
 async function muxExportedVideoAudioBuffer(
@@ -1682,2451 +1904,2763 @@ async function muxExportedVideoAudioBuffer(
 
 /** Probe the duration of a media file (in seconds) using the container header. */
 async function probeMediaDurationSeconds(filePath: string): Promise<number> {
-  const ffmpegPath = getFfmpegBinaryPath()
-  try {
-    await execFileAsync(ffmpegPath, ['-i', filePath, '-hide_banner'], { timeout: 5000 })
-  } catch (error) {
-    const stderr = (error as NodeJS.ErrnoException & { stderr?: string })?.stderr ?? ''
-    const match = stderr.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2})\.(\d{2,3})/)
-    if (match) {
-      const h = Number(match[1])
-      const m = Number(match[2])
-      const s = Number(match[3])
-      const frac = Number(match[4]) / (match[4].length === 3 ? 1000 : 100)
-      return h * 3600 + m * 60 + s + frac
-    }
-  }
-  return 0
+	const ffmpegPath = getFfmpegBinaryPath();
+	try {
+		await execFileAsync(ffmpegPath, ["-i", filePath, "-hide_banner"], { timeout: 5000 });
+	} catch (error) {
+		const stderr = (error as NodeJS.ErrnoException & { stderr?: string })?.stderr ?? "";
+		const match = stderr.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2})\.(\d{2,3})/);
+		if (match) {
+			const h = Number(match[1]);
+			const m = Number(match[2]);
+			const s = Number(match[3]);
+			const frac = Number(match[4]) / (match[4].length === 3 ? 1000 : 100);
+			return h * 3600 + m * 60 + s + frac;
+		}
+	}
+	return 0;
 }
 
 type AudioSyncAdjustment = {
-  mode: 'none' | 'tempo' | 'delay'
-  delayMs: number
-  tempoRatio: number
-  durationDeltaMs: number
-}
+	mode: "none" | "tempo" | "delay";
+	delayMs: number;
+	tempoRatio: number;
+	durationDeltaMs: number;
+};
 
 function buildAtempoFilters(tempoRatio: number) {
-  if (!Number.isFinite(tempoRatio) || tempoRatio <= 0) {
-    return []
-  }
+	if (!Number.isFinite(tempoRatio) || tempoRatio <= 0) {
+		return [];
+	}
 
-  const filters: string[] = []
-  let remaining = tempoRatio
+	const filters: string[] = [];
+	let remaining = tempoRatio;
 
-  while (remaining < 0.5) {
-    filters.push('atempo=0.5')
-    remaining /= 0.5
-  }
+	while (remaining < 0.5) {
+		filters.push("atempo=0.5");
+		remaining /= 0.5;
+	}
 
-  while (remaining > 2) {
-    filters.push('atempo=2.0')
-    remaining /= 2.0
-  }
+	while (remaining > 2) {
+		filters.push("atempo=2.0");
+		remaining /= 2.0;
+	}
 
-  if (Math.abs(remaining - 1) > 0.0005) {
-    filters.push(`atempo=${remaining.toFixed(6)}`)
-  }
+	if (Math.abs(remaining - 1) > 0.0005) {
+		filters.push(`atempo=${remaining.toFixed(6)}`);
+	}
 
-  return filters
+	return filters;
 }
 
 function getAudioSyncAdjustment(videoDuration: number, audioDuration: number): AudioSyncAdjustment {
-  if (
-    !Number.isFinite(videoDuration) ||
-    !Number.isFinite(audioDuration) ||
-    videoDuration <= 0 ||
-    audioDuration <= 0
-  ) {
-    return { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
-  }
+	if (
+		!Number.isFinite(videoDuration) ||
+		!Number.isFinite(audioDuration) ||
+		videoDuration <= 0 ||
+		audioDuration <= 0
+	) {
+		return { mode: "none", delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 };
+	}
 
-  const durationDeltaMs = Math.round((videoDuration - audioDuration) * 1000)
-  const absDeltaMs = Math.abs(durationDeltaMs)
-  if (absDeltaMs <= 50) {
-    return { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs }
-  }
+	const durationDeltaMs = Math.round((videoDuration - audioDuration) * 1000);
+	const absDeltaMs = Math.abs(durationDeltaMs);
+	if (absDeltaMs <= 50) {
+		return { mode: "none", delayMs: 0, tempoRatio: 1, durationDeltaMs };
+	}
 
-  const tempoRatio = Math.max(0.5, Math.min(2, audioDuration / videoDuration))
-  const relativeDelta = absDeltaMs / Math.max(videoDuration * 1000, 1)
+	const tempoRatio = Math.max(0.5, Math.min(2, audioDuration / videoDuration));
+	const relativeDelta = absDeltaMs / Math.max(videoDuration * 1000, 1);
 
-  if (relativeDelta <= 0.03 || absDeltaMs <= 1500 || durationDeltaMs < 0) {
-    return { mode: 'tempo', delayMs: 0, tempoRatio, durationDeltaMs }
-  }
+	if (relativeDelta <= 0.03 || absDeltaMs <= 1500 || durationDeltaMs < 0) {
+		return { mode: "tempo", delayMs: 0, tempoRatio, durationDeltaMs };
+	}
 
-  return { mode: 'delay', delayMs: durationDeltaMs, tempoRatio: 1, durationDeltaMs }
+	return { mode: "delay", delayMs: durationDeltaMs, tempoRatio: 1, durationDeltaMs };
 }
 
 function appendSyncedAudioFilter(
-  filterParts: string[],
-  inputLabel: string,
-  outputLabel: string,
-  adjustment: AudioSyncAdjustment,
+	filterParts: string[],
+	inputLabel: string,
+	outputLabel: string,
+	adjustment: AudioSyncAdjustment,
 ) {
-  const filters: string[] = []
+	const filters: string[] = [];
 
-  if (adjustment.mode === 'delay' && adjustment.delayMs > 0) {
-    filters.push(`adelay=${adjustment.delayMs}|${adjustment.delayMs}`)
-  }
+	if (adjustment.mode === "delay" && adjustment.delayMs > 0) {
+		filters.push(`adelay=${adjustment.delayMs}|${adjustment.delayMs}`);
+	}
 
-  if (adjustment.mode === 'tempo') {
-    filters.push(...buildAtempoFilters(adjustment.tempoRatio))
-  }
+	if (adjustment.mode === "tempo") {
+		filters.push(...buildAtempoFilters(adjustment.tempoRatio));
+	}
 
-  filters.push('aresample=async=1:first_pts=0', 'asetpts=PTS-STARTPTS')
-  filterParts.push(`${inputLabel}${filters.join(',')}[${outputLabel}]`)
+	filters.push("aresample=async=1:first_pts=0", "asetpts=PTS-STARTPTS");
+	filterParts.push(`${inputLabel}${filters.join(",")}[${outputLabel}]`);
 }
 
 function sendWhisperModelDownloadProgress(
-  webContents: Electron.WebContents,
-  payload: { status: 'idle' | 'downloading' | 'downloaded' | 'error'; progress: number; path?: string | null; error?: string },
+	webContents: Electron.WebContents,
+	payload: {
+		status: "idle" | "downloading" | "downloaded" | "error";
+		progress: number;
+		path?: string | null;
+		error?: string;
+	},
 ) {
-  webContents.send('whisper-small-model-download-progress', payload)
+	webContents.send("whisper-small-model-download-progress", payload);
 }
 
 async function getWhisperSmallModelStatus() {
-  try {
-    await fs.access(WHISPER_SMALL_MODEL_PATH, fsConstants.R_OK)
-    return {
-      success: true,
-      exists: true,
-      path: WHISPER_SMALL_MODEL_PATH,
-    }
-  } catch {
-    return {
-      success: true,
-      exists: false,
-      path: null,
-    }
-  }
+	try {
+		await fs.access(WHISPER_SMALL_MODEL_PATH, fsConstants.R_OK);
+		return {
+			success: true,
+			exists: true,
+			path: WHISPER_SMALL_MODEL_PATH,
+		};
+	} catch {
+		return {
+			success: true,
+			exists: false,
+			path: null,
+		};
+	}
 }
 
 function downloadFileWithProgress(
-  url: string,
-  destinationPath: string,
-  onProgress: (progress: number) => void,
+	url: string,
+	destinationPath: string,
+	onProgress: (progress: number) => void,
 ): Promise<void> {
-  const request = (currentUrl: string, redirectCount = 0): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const req = httpsGet(currentUrl, (response) => {
-        const statusCode = response.statusCode ?? 0
-        const location = response.headers.location
+	const request = (currentUrl: string, redirectCount = 0): Promise<void> => {
+		return new Promise((resolve, reject) => {
+			const req = httpsGet(currentUrl, (response) => {
+				const statusCode = response.statusCode ?? 0;
+				const location = response.headers.location;
 
-        if (statusCode >= 300 && statusCode < 400 && location) {
-          response.resume()
-          if (redirectCount >= 5) {
-            reject(new Error('Too many redirects while downloading Whisper model.'))
-            return
-          }
+				if (statusCode >= 300 && statusCode < 400 && location) {
+					response.resume();
+					if (redirectCount >= 5) {
+						reject(new Error("Too many redirects while downloading Whisper model."));
+						return;
+					}
 
-          const nextUrl = new URL(location, currentUrl).toString()
-          void request(nextUrl, redirectCount + 1).then(resolve).catch(reject)
-          return
-        }
+					const nextUrl = new URL(location, currentUrl).toString();
+					void request(nextUrl, redirectCount + 1)
+						.then(resolve)
+						.catch(reject);
+					return;
+				}
 
-        if (statusCode < 200 || statusCode >= 300) {
-          response.resume()
-          reject(new Error(`Whisper model download failed with status ${statusCode}.`))
-          return
-        }
+				if (statusCode < 200 || statusCode >= 300) {
+					response.resume();
+					reject(new Error(`Whisper model download failed with status ${statusCode}.`));
+					return;
+				}
 
-        const totalBytes = Number.parseInt(String(response.headers['content-length'] ?? '0'), 10)
-        let downloadedBytes = 0
-        const fileStream = createWriteStream(destinationPath)
+				const totalBytes = Number.parseInt(
+					String(response.headers["content-length"] ?? "0"),
+					10,
+				);
+				let downloadedBytes = 0;
+				const fileStream = createWriteStream(destinationPath);
 
-        response.on('data', (chunk: Buffer) => {
-          downloadedBytes += chunk.length
-          if (Number.isFinite(totalBytes) && totalBytes > 0) {
-            onProgress(Math.min(100, Math.round((downloadedBytes / totalBytes) * 100)))
-          }
-        })
+				response.on("data", (chunk: Buffer) => {
+					downloadedBytes += chunk.length;
+					if (Number.isFinite(totalBytes) && totalBytes > 0) {
+						onProgress(Math.min(100, Math.round((downloadedBytes / totalBytes) * 100)));
+					}
+				});
 
-        response.on('error', (error) => {
-          fileStream.destroy(error)
-        })
+				response.on("error", (error) => {
+					fileStream.destroy(error);
+				});
 
-        fileStream.on('error', (error) => {
-          response.destroy(error)
-          reject(error)
-        })
+				fileStream.on("error", (error) => {
+					response.destroy(error);
+					reject(error);
+				});
 
-        fileStream.on('finish', () => {
-          onProgress(100)
-          resolve()
-        })
+				fileStream.on("finish", () => {
+					onProgress(100);
+					resolve();
+				});
 
-        response.pipe(fileStream)
-      })
+				response.pipe(fileStream);
+			});
 
-      req.on('error', reject)
-    })
-  }
+			req.on("error", reject);
+		});
+	};
 
-  return request(url)
+	return request(url);
 }
 
 async function downloadWhisperSmallModel(webContents: Electron.WebContents) {
-  await fs.mkdir(WHISPER_MODEL_DIR, { recursive: true })
-  const tempPath = `${WHISPER_SMALL_MODEL_PATH}.download`
+	await fs.mkdir(WHISPER_MODEL_DIR, { recursive: true });
+	const tempPath = `${WHISPER_SMALL_MODEL_PATH}.download`;
 
-  sendWhisperModelDownloadProgress(webContents, {
-    status: 'downloading',
-    progress: 0,
-    path: null,
-  })
+	sendWhisperModelDownloadProgress(webContents, {
+		status: "downloading",
+		progress: 0,
+		path: null,
+	});
 
-  try {
-    await fs.rm(tempPath, { force: true })
-    await downloadFileWithProgress(WHISPER_MODEL_DOWNLOAD_URL, tempPath, (progress) => {
-      sendWhisperModelDownloadProgress(webContents, {
-        status: 'downloading',
-        progress,
-        path: null,
-      })
-    })
-    await fs.rename(tempPath, WHISPER_SMALL_MODEL_PATH)
-    sendWhisperModelDownloadProgress(webContents, {
-      status: 'downloaded',
-      progress: 100,
-      path: WHISPER_SMALL_MODEL_PATH,
-    })
-    return WHISPER_SMALL_MODEL_PATH
-  } catch (error) {
-    await fs.rm(tempPath, { force: true }).catch(() => undefined)
-    sendWhisperModelDownloadProgress(webContents, {
-      status: 'error',
-      progress: 0,
-      path: null,
-      error: String(error),
-    })
-    throw error
-  }
+	try {
+		await fs.rm(tempPath, { force: true });
+		await downloadFileWithProgress(WHISPER_MODEL_DOWNLOAD_URL, tempPath, (progress) => {
+			sendWhisperModelDownloadProgress(webContents, {
+				status: "downloading",
+				progress,
+				path: null,
+			});
+		});
+		await fs.rename(tempPath, WHISPER_SMALL_MODEL_PATH);
+		sendWhisperModelDownloadProgress(webContents, {
+			status: "downloaded",
+			progress: 100,
+			path: WHISPER_SMALL_MODEL_PATH,
+		});
+		return WHISPER_SMALL_MODEL_PATH;
+	} catch (error) {
+		await fs.rm(tempPath, { force: true }).catch(() => undefined);
+		sendWhisperModelDownloadProgress(webContents, {
+			status: "error",
+			progress: 0,
+			path: null,
+			error: String(error),
+		});
+		throw error;
+	}
 }
 
 async function deleteWhisperSmallModel() {
-  await fs.rm(WHISPER_SMALL_MODEL_PATH, { force: true })
+	await fs.rm(WHISPER_SMALL_MODEL_PATH, { force: true });
 }
 
 function parseSrtTimestamp(value: string) {
-  const match = value.trim().match(/^(\d{2}):(\d{2}):(\d{2}),(\d{3})$/)
-  if (!match) {
-    return null
-  }
+	const match = value.trim().match(/^(\d{2}):(\d{2}):(\d{2}),(\d{3})$/);
+	if (!match) {
+		return null;
+	}
 
-  const [, hours, minutes, seconds, milliseconds] = match
-  return (
-    Number(hours) * 60 * 60 * 1000
-    + Number(minutes) * 60 * 1000
-    + Number(seconds) * 1000
-    + Number(milliseconds)
-  )
+	const [, hours, minutes, seconds, milliseconds] = match;
+	return (
+		Number(hours) * 60 * 60 * 1000 +
+		Number(minutes) * 60 * 1000 +
+		Number(seconds) * 1000 +
+		Number(milliseconds)
+	);
 }
 
 type CaptionWordPayload = {
-  text: string
-  startMs: number
-  endMs: number
-  leadingSpace?: boolean
-}
+	text: string;
+	startMs: number;
+	endMs: number;
+	leadingSpace?: boolean;
+};
 
 type CaptionCuePayload = {
-  id: string
-  startMs: number
-  endMs: number
-  text: string
-  words?: CaptionWordPayload[]
-}
+	id: string;
+	startMs: number;
+	endMs: number;
+	text: string;
+	words?: CaptionWordPayload[];
+};
 
 type WhisperJsonToken = {
-  text?: unknown
-  offsets?: {
-    from?: unknown
-    to?: unknown
-  }
-}
+	text?: unknown;
+	offsets?: {
+		from?: unknown;
+		to?: unknown;
+	};
+};
 
 type WhisperJsonSegment = {
-  text?: unknown
-  offsets?: {
-    from?: unknown
-    to?: unknown
-  }
-  tokens?: unknown
-}
+	text?: unknown;
+	offsets?: {
+		from?: unknown;
+		to?: unknown;
+	};
+	tokens?: unknown;
+};
 
 function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
+	return typeof value === "number" && Number.isFinite(value);
 }
 
 function buildCaptionTextFromWords(words: CaptionWordPayload[]) {
-  return words
-    .map((word, index) => `${index > 0 && word.leadingSpace ? ' ' : ''}${word.text}`)
-    .join('')
-    .trim()
+	return words
+		.map((word, index) => `${index > 0 && word.leadingSpace ? " " : ""}${word.text}`)
+		.join("")
+		.trim();
 }
 
 function parseWhisperJsonWords(tokens: unknown) {
-  if (!Array.isArray(tokens)) {
-    return []
-  }
+	if (!Array.isArray(tokens)) {
+		return [];
+	}
 
-  const words: CaptionWordPayload[] = []
-  let nextLeadingSpace = false
+	const words: CaptionWordPayload[] = [];
+	let nextLeadingSpace = false;
 
-  for (const token of tokens) {
-    if (!token || typeof token !== 'object') {
-      continue
-    }
+	for (const token of tokens) {
+		if (!token || typeof token !== "object") {
+			continue;
+		}
 
-    const tokenData = token as WhisperJsonToken
-    const tokenText = typeof tokenData.text === 'string' ? tokenData.text : ''
-    if (!tokenText) {
-      continue
-    }
+		const tokenData = token as WhisperJsonToken;
+		const tokenText = typeof tokenData.text === "string" ? tokenData.text : "";
+		if (!tokenText) {
+			continue;
+		}
 
-    const tokenStartMs = isFiniteNumber(tokenData.offsets?.from) ? Math.round(tokenData.offsets.from) : null
-    const tokenEndMs = isFiniteNumber(tokenData.offsets?.to) ? Math.round(tokenData.offsets.to) : null
-    const parts = tokenText.match(/\s+|[^\s]+/g) ?? []
+		const tokenStartMs = isFiniteNumber(tokenData.offsets?.from)
+			? Math.round(tokenData.offsets.from)
+			: null;
+		const tokenEndMs = isFiniteNumber(tokenData.offsets?.to)
+			? Math.round(tokenData.offsets.to)
+			: null;
+		const parts = tokenText.match(/\s+|[^\s]+/g) ?? [];
 
-    for (const part of parts) {
-      if (/^\s+$/.test(part)) {
-        nextLeadingSpace = words.length > 0
-        continue
-      }
+		for (const part of parts) {
+			if (/^\s+$/.test(part)) {
+				nextLeadingSpace = words.length > 0;
+				continue;
+			}
 
-      if (tokenStartMs == null || tokenEndMs == null || tokenEndMs <= tokenStartMs) {
-        return []
-      }
+			if (tokenStartMs == null || tokenEndMs == null || tokenEndMs <= tokenStartMs) {
+				return [];
+			}
 
-      const previousWord = words.length > 0 ? words[words.length - 1] : null
-      if (!previousWord || nextLeadingSpace) {
-        words.push({
-          text: part,
-          startMs: tokenStartMs,
-          endMs: tokenEndMs,
-          ...(words.length > 0 && nextLeadingSpace ? { leadingSpace: true } : {}),
-        })
-      } else {
-        previousWord.text += part
-        previousWord.endMs = Math.max(previousWord.endMs, tokenEndMs)
-      }
+			const previousWord = words.length > 0 ? words[words.length - 1] : null;
+			if (!previousWord || nextLeadingSpace) {
+				words.push({
+					text: part,
+					startMs: tokenStartMs,
+					endMs: tokenEndMs,
+					...(words.length > 0 && nextLeadingSpace ? { leadingSpace: true } : {}),
+				});
+			} else {
+				previousWord.text += part;
+				previousWord.endMs = Math.max(previousWord.endMs, tokenEndMs);
+			}
 
-      nextLeadingSpace = false
-    }
-  }
+			nextLeadingSpace = false;
+		}
+	}
 
-  return words.filter((word) => word.text.trim().length > 0)
+	return words.filter((word) => word.text.trim().length > 0);
 }
 
 function parseWhisperJsonCues(content: string) {
-  try {
-    const parsed = JSON.parse(content) as {
-      transcription?: unknown
-    }
+	try {
+		const parsed = JSON.parse(content) as {
+			transcription?: unknown;
+		};
 
-    if (!Array.isArray(parsed.transcription)) {
-      return []
-    }
+		if (!Array.isArray(parsed.transcription)) {
+			return [];
+		}
 
-    return parsed.transcription
-      .map((segment, index) => {
-        if (!segment || typeof segment !== 'object') {
-          return null
-        }
+		return parsed.transcription
+			.map((segment, index) => {
+				if (!segment || typeof segment !== "object") {
+					return null;
+				}
 
-        const segmentData = segment as WhisperJsonSegment
-        const startMs = isFiniteNumber(segmentData.offsets?.from) ? Math.round(segmentData.offsets.from) : null
-        const endMs = isFiniteNumber(segmentData.offsets?.to) ? Math.round(segmentData.offsets.to) : null
-        const segmentText = typeof segmentData.text === 'string' ? segmentData.text.trim() : ''
+				const segmentData = segment as WhisperJsonSegment;
+				const startMs = isFiniteNumber(segmentData.offsets?.from)
+					? Math.round(segmentData.offsets.from)
+					: null;
+				const endMs = isFiniteNumber(segmentData.offsets?.to)
+					? Math.round(segmentData.offsets.to)
+					: null;
+				const segmentText =
+					typeof segmentData.text === "string" ? segmentData.text.trim() : "";
 
-        if (startMs == null || endMs == null || endMs <= startMs) {
-          return null
-        }
+				if (startMs == null || endMs == null || endMs <= startMs) {
+					return null;
+				}
 
-        const words = parseWhisperJsonWords(segmentData.tokens)
-        const text = words.length > 0 ? buildCaptionTextFromWords(words) : segmentText
+				const words = parseWhisperJsonWords(segmentData.tokens);
+				const text = words.length > 0 ? buildCaptionTextFromWords(words) : segmentText;
 
-        if (!text) {
-          return null
-        }
+				if (!text) {
+					return null;
+				}
 
-        return {
-          id: `caption-${index + 1}`,
-          startMs,
-          endMs,
-          text,
-          ...(words.length > 0 ? { words } : {}),
-        }
-      })
-      .filter((cue): cue is CaptionCuePayload => cue != null)
-  } catch (error) {
-    console.warn('[auto-captions] Failed to parse Whisper JSON output:', error)
-    return []
-  }
+				return {
+					id: `caption-${index + 1}`,
+					startMs,
+					endMs,
+					text,
+					...(words.length > 0 ? { words } : {}),
+				};
+			})
+			.filter((cue): cue is CaptionCuePayload => cue != null);
+	} catch (error) {
+		console.warn("[auto-captions] Failed to parse Whisper JSON output:", error);
+		return [];
+	}
 }
 
 function parseSrtCues(content: string) {
-  return content
-    .split(/\r?\n\r?\n/)
-    .map((block, index) => {
-      const lines = block.split(/\r?\n/).map((line) => line.trim())
-      const timingLine = lines.find((line) => line.includes('-->'))
-      if (!timingLine) {
-        return null
-      }
+	return content
+		.split(/\r?\n\r?\n/)
+		.map((block, index) => {
+			const lines = block.split(/\r?\n/).map((line) => line.trim());
+			const timingLine = lines.find((line) => line.includes("-->"));
+			if (!timingLine) {
+				return null;
+			}
 
-      const [rawStart, rawEnd] = timingLine.split('-->').map((part) => part.trim())
-      const startMs = parseSrtTimestamp(rawStart)
-      const endMs = parseSrtTimestamp(rawEnd)
-      if (startMs == null || endMs == null || endMs <= startMs) {
-        return null
-      }
+			const [rawStart, rawEnd] = timingLine.split("-->").map((part) => part.trim());
+			const startMs = parseSrtTimestamp(rawStart);
+			const endMs = parseSrtTimestamp(rawEnd);
+			if (startMs == null || endMs == null || endMs <= startMs) {
+				return null;
+			}
 
-      const text = lines
-        .slice(lines.indexOf(timingLine) + 1)
-        .filter((line) => line.length > 0)
-        .join('\n')
-        .trim()
+			const text = lines
+				.slice(lines.indexOf(timingLine) + 1)
+				.filter((line) => line.length > 0)
+				.join("\n")
+				.trim();
 
-      if (!text) {
-        return null
-      }
+			if (!text) {
+				return null;
+			}
 
-      return {
-        id: `caption-${index + 1}`,
-        startMs,
-        endMs,
-        text,
-      }
-    })
-    .filter((cue): cue is CaptionCuePayload => cue != null)
+			return {
+				id: `caption-${index + 1}`,
+				startMs,
+				endMs,
+				text,
+			};
+		})
+		.filter((cue): cue is CaptionCuePayload => cue != null);
 }
 
 function shouldRetryWhisperWithoutJson(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error)
-  return /unknown argument|output-json-full|output-json|ojf|\boj\b/i.test(message)
+	const message = error instanceof Error ? error.message : String(error);
+	return /unknown argument|output-json-full|output-json|ojf|\boj\b/i.test(message);
 }
 
 async function ensureReadableFile(filePath: string, description: string) {
-  await fs.access(filePath, fsConstants.R_OK)
-  if (description === 'whisper executable') {
-    try {
-      await fs.access(filePath, fsConstants.X_OK)
-    } catch {
-      throw new Error('The selected Whisper executable is not marked as executable.')
-    }
-  }
+	await fs.access(filePath, fsConstants.R_OK);
+	if (description === "whisper executable") {
+		try {
+			await fs.access(filePath, fsConstants.X_OK);
+		} catch {
+			throw new Error("The selected Whisper executable is not marked as executable.");
+		}
+	}
 }
 
 async function isExecutableFile(filePath: string) {
-  try {
-    await fs.access(filePath, fsConstants.R_OK | fsConstants.X_OK)
-    return true
-  } catch {
-    return false
-  }
+	try {
+		await fs.access(filePath, fsConstants.R_OK | fsConstants.X_OK);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 async function resolveWhisperExecutablePath(preferredPath?: string | null) {
-  const candidatePaths = [
-    preferredPath?.trim() || null,
-    ...getBundledWhisperExecutableCandidates(),
-    process.env['WHISPER_CPP_PATH']?.trim() || null,
-    process.platform === 'darwin' ? '/opt/homebrew/bin/whisper-cli' : null,
-    process.platform === 'darwin' ? '/usr/local/bin/whisper-cli' : null,
-    process.platform === 'darwin' ? '/opt/homebrew/bin/whisper-cpp' : null,
-    process.platform === 'darwin' ? '/usr/local/bin/whisper-cpp' : null,
-  ].filter((value): value is string => Boolean(value))
+	const candidatePaths = [
+		preferredPath?.trim() || null,
+		...getBundledWhisperExecutableCandidates(),
+		process.env["WHISPER_CPP_PATH"]?.trim() || null,
+		process.platform === "darwin" ? "/opt/homebrew/bin/whisper-cli" : null,
+		process.platform === "darwin" ? "/usr/local/bin/whisper-cli" : null,
+		process.platform === "darwin" ? "/opt/homebrew/bin/whisper-cpp" : null,
+		process.platform === "darwin" ? "/usr/local/bin/whisper-cpp" : null,
+	].filter((value): value is string => Boolean(value));
 
-  for (const candidate of candidatePaths) {
-    const normalized = path.resolve(candidate)
-    if (await isExecutableFile(normalized)) {
-      return normalized
-    }
-  }
+	for (const candidate of candidatePaths) {
+		const normalized = path.resolve(candidate);
+		if (await isExecutableFile(normalized)) {
+			return normalized;
+		}
+	}
 
-  const pathCommand = process.platform === 'win32' ? 'where' : 'which'
-  const binaryNames = process.platform === 'win32'
-    ? ['whisper-cli.exe', 'whisper.exe', 'main.exe']
-    : ['whisper-cli', 'whisper-cpp', 'whisper', 'main']
+	const pathCommand = process.platform === "win32" ? "where" : "which";
+	const binaryNames =
+		process.platform === "win32"
+			? ["whisper-cli.exe", "whisper.exe", "main.exe"]
+			: ["whisper-cli", "whisper-cpp", "whisper", "main"];
 
-  for (const binaryName of binaryNames) {
-    const result = spawnSync(pathCommand, [binaryName], { encoding: 'utf-8' })
-    if (result.status === 0) {
-      const resolvedPath = result.stdout
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .find(Boolean)
+	for (const binaryName of binaryNames) {
+		const result = spawnSync(pathCommand, [binaryName], { encoding: "utf-8" });
+		if (result.status === 0) {
+			const resolvedPath = result.stdout
+				.split(/\r?\n/)
+				.map((line) => line.trim())
+				.find(Boolean);
 
-      if (resolvedPath && await isExecutableFile(resolvedPath)) {
-        return resolvedPath
-      }
-    }
-  }
+			if (resolvedPath && (await isExecutableFile(resolvedPath))) {
+				return resolvedPath;
+			}
+		}
+	}
 
-  throw new Error('No Whisper runtime was found. Recordly looked for a bundled binary first, then checked common system install locations.')
+	throw new Error(
+		"No Whisper runtime was found. Recordly looked for a bundled binary first, then checked common system install locations.",
+	);
 }
 
 async function resolveCaptionAudioCandidates(videoPath: string) {
-  const candidates: Array<{ path: string; label: string }> = []
-  const seenPaths = new Set<string>()
+	const candidates: Array<{ path: string; label: string }> = [];
+	const seenPaths = new Set<string>();
 
-  const pushCandidate = (candidatePath: string | null | undefined, label: string) => {
-    const normalizedCandidatePath = normalizeVideoSourcePath(candidatePath)
-    if (!normalizedCandidatePath || seenPaths.has(normalizedCandidatePath)) {
-      return
-    }
+	const pushCandidate = (candidatePath: string | null | undefined, label: string) => {
+		const normalizedCandidatePath = normalizeVideoSourcePath(candidatePath);
+		if (!normalizedCandidatePath || seenPaths.has(normalizedCandidatePath)) {
+			return;
+		}
 
-    seenPaths.add(normalizedCandidatePath)
-    candidates.push({ path: normalizedCandidatePath, label })
-  }
+		seenPaths.add(normalizedCandidatePath);
+		candidates.push({ path: normalizedCandidatePath, label });
+	};
 
-  pushCandidate(videoPath, 'recording')
+	pushCandidate(videoPath, "recording");
 
-  const requestedRecordingSession = await resolveRecordingSession(videoPath)
-  pushCandidate(requestedRecordingSession?.webcamPath, 'linked webcam recording')
+	const requestedRecordingSession = await resolveRecordingSession(videoPath);
+	pushCandidate(requestedRecordingSession?.webcamPath, "linked webcam recording");
 
-  return candidates
+	return candidates;
 }
 
 async function extractCaptionAudioSource(options: {
-  videoPath: string
-  ffmpegPath: string
-  wavPath: string
+	videoPath: string;
+	ffmpegPath: string;
+	wavPath: string;
 }) {
-  const candidates = await resolveCaptionAudioCandidates(options.videoPath)
-  const attemptedCandidates: Array<{
-    path: string
-    label: string
-    readable: boolean
-    extractedAudio: boolean
-    error?: string
-  }> = []
+	const candidates = await resolveCaptionAudioCandidates(options.videoPath);
+	const attemptedCandidates: Array<{
+		path: string;
+		label: string;
+		readable: boolean;
+		extractedAudio: boolean;
+		error?: string;
+	}> = [];
 
-  for (const candidate of candidates) {
-    try {
-      await ensureReadableFile(candidate.path, 'video file')
-      await execFileAsync(
-        options.ffmpegPath,
-        ['-y', '-i', candidate.path, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', options.wavPath],
-        { timeout: 5 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 },
-      )
-      attemptedCandidates.push({ ...candidate, readable: true, extractedAudio: true })
-      return candidate
-    } catch (error) {
-      attemptedCandidates.push({
-        ...candidate,
-        readable: true,
-        extractedAudio: false,
-        error: error instanceof Error ? error.message : String(error),
-      })
-      // Try the next candidate instead of failing on stale editor state.
-    }
-  }
+	for (const candidate of candidates) {
+		try {
+			await ensureReadableFile(candidate.path, "video file");
+			await execFileAsync(
+				options.ffmpegPath,
+				[
+					"-y",
+					"-i",
+					candidate.path,
+					"-map",
+					"0:a:0",
+					"-vn",
+					"-ac",
+					"1",
+					"-ar",
+					"16000",
+					"-c:a",
+					"pcm_s16le",
+					options.wavPath,
+				],
+				{ timeout: 5 * 60 * 1000, maxBuffer: 20 * 1024 * 1024 },
+			);
+			attemptedCandidates.push({ ...candidate, readable: true, extractedAudio: true });
+			return candidate;
+		} catch (error) {
+			attemptedCandidates.push({
+				...candidate,
+				readable: true,
+				extractedAudio: false,
+				error: error instanceof Error ? error.message : String(error),
+			});
+			// Try the next candidate instead of failing on stale editor state.
+		}
+	}
 
-  console.warn('[auto-captions] No audio source candidate could be extracted:', attemptedCandidates)
+	console.warn(
+		"[auto-captions] No audio source candidate could be extracted:",
+		attemptedCandidates,
+	);
 
-  throw new Error('No audio was found to transcribe in the saved recording file. Captions need an audio track. If this recording should have contained sound, the recording was saved without an audio stream.')
+	throw new Error(
+		"No audio was found to transcribe in the saved recording file. Captions need an audio track. If this recording should have contained sound, the recording was saved without an audio stream.",
+	);
 }
 
 async function generateAutoCaptionsFromVideo(options: {
-  videoPath: string
-  whisperExecutablePath?: string
-  whisperModelPath: string
-  language?: string
+	videoPath: string;
+	whisperExecutablePath?: string;
+	whisperModelPath: string;
+	language?: string;
 }) {
-  const ffmpegPath = getFfmpegBinaryPath()
-  const normalizedVideoPath = normalizeVideoSourcePath(options.videoPath)
-  if (!normalizedVideoPath) {
-    throw new Error('Missing source video path.')
-  }
+	const ffmpegPath = getFfmpegBinaryPath();
+	const normalizedVideoPath = normalizeVideoSourcePath(options.videoPath);
+	if (!normalizedVideoPath) {
+		throw new Error("Missing source video path.");
+	}
 
-  const whisperExecutablePath = await resolveWhisperExecutablePath(options.whisperExecutablePath)
-  const whisperModelPath = path.resolve(options.whisperModelPath)
-  await ensureReadableFile(whisperExecutablePath, 'whisper executable')
-  await ensureReadableFile(whisperModelPath, 'whisper model')
+	const whisperExecutablePath = await resolveWhisperExecutablePath(options.whisperExecutablePath);
+	const whisperModelPath = path.resolve(options.whisperModelPath);
+	await ensureReadableFile(whisperExecutablePath, "whisper executable");
+	await ensureReadableFile(whisperModelPath, "whisper model");
 
-  const tempBase = path.join(app.getPath('temp'), `recordly-captions-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
-  const wavPath = `${tempBase}.wav`
-  const outputBase = `${tempBase}-whisper`
-  const srtPath = `${outputBase}.srt`
-  const jsonPath = `${outputBase}.json`
+	const tempBase = path.join(
+		app.getPath("temp"),
+		`recordly-captions-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+	);
+	const wavPath = `${tempBase}.wav`;
+	const outputBase = `${tempBase}-whisper`;
+	const srtPath = `${outputBase}.srt`;
+	const jsonPath = `${outputBase}.json`;
 
-  try {
-    const audioSource = await extractCaptionAudioSource({
-      videoPath: normalizedVideoPath,
-      ffmpegPath,
-      wavPath,
-    })
+	try {
+		const audioSource = await extractCaptionAudioSource({
+			videoPath: normalizedVideoPath,
+			ffmpegPath,
+			wavPath,
+		});
 
-    const language = options.language && options.language.trim() ? options.language.trim() : 'auto'
-    const whisperBaseArgs = [
-      '-m', whisperModelPath,
-      '-f', wavPath,
-      '-osrt',
-      '-of', outputBase,
-      '-l', language,
-      '-np',
-    ]
+		const language =
+			options.language && options.language.trim() ? options.language.trim() : "auto";
+		const whisperBaseArgs = [
+			"-m",
+			whisperModelPath,
+			"-f",
+			wavPath,
+			"-osrt",
+			"-of",
+			outputBase,
+			"-l",
+			language,
+			"-np",
+		];
 
-    let jsonEnabled = true
-    try {
-      await execFileAsync(whisperExecutablePath, [...whisperBaseArgs, '-ojf'], {
-        timeout: 30 * 60 * 1000,
-        maxBuffer: 20 * 1024 * 1024,
-      })
-    } catch (error) {
-      if (!shouldRetryWhisperWithoutJson(error)) {
-        throw error
-      }
+		let jsonEnabled = true;
+		try {
+			await execFileAsync(whisperExecutablePath, [...whisperBaseArgs, "-ojf"], {
+				timeout: 30 * 60 * 1000,
+				maxBuffer: 20 * 1024 * 1024,
+			});
+		} catch (error) {
+			if (!shouldRetryWhisperWithoutJson(error)) {
+				throw error;
+			}
 
-      jsonEnabled = false
-      console.warn('[auto-captions] Whisper runtime does not support JSON full output, retrying with SRT only:', error)
-      await execFileAsync(whisperExecutablePath, whisperBaseArgs, {
-        timeout: 30 * 60 * 1000,
-        maxBuffer: 20 * 1024 * 1024,
-      })
-    }
+			jsonEnabled = false;
+			console.warn(
+				"[auto-captions] Whisper runtime does not support JSON full output, retrying with SRT only:",
+				error,
+			);
+			await execFileAsync(whisperExecutablePath, whisperBaseArgs, {
+				timeout: 30 * 60 * 1000,
+				maxBuffer: 20 * 1024 * 1024,
+			});
+		}
 
-    const timedCues = jsonEnabled
-      ? parseWhisperJsonCues(await fs.readFile(jsonPath, 'utf-8'))
-      : []
-    const cues = timedCues.length > 0
-      ? timedCues
-      : parseSrtCues(await fs.readFile(srtPath, 'utf-8'))
-    if (cues.length === 0) {
-      throw new Error('Whisper completed, but no caption cues were produced.')
-    }
+		const timedCues = jsonEnabled
+			? parseWhisperJsonCues(await fs.readFile(jsonPath, "utf-8"))
+			: [];
+		const cues =
+			timedCues.length > 0 ? timedCues : parseSrtCues(await fs.readFile(srtPath, "utf-8"));
+		if (cues.length === 0) {
+			throw new Error("Whisper completed, but no caption cues were produced.");
+		}
 
-    return {
-      cues,
-      audioSourceLabel: audioSource.label,
-    }
-  } finally {
-    await Promise.allSettled([
-      fs.rm(wavPath, { force: true }),
-      fs.rm(srtPath, { force: true }),
-      fs.rm(jsonPath, { force: true }),
-    ])
-  }
+		return {
+			cues,
+			audioSourceLabel: audioSource.label,
+		};
+	} finally {
+		await Promise.allSettled([
+			fs.rm(wavPath, { force: true }),
+			fs.rm(srtPath, { force: true }),
+			fs.rm(jsonPath, { force: true }),
+		]);
+	}
 }
 
 function waitForFfmpegCaptureStart(process: ChildProcessWithoutNullStreams) {
-  return new Promise<void>((resolve, reject) => {
-    const onError = (error: Error) => {
-      cleanup()
-      reject(error)
-    }
+	return new Promise<void>((resolve, reject) => {
+		const onError = (error: Error) => {
+			cleanup();
+			reject(error);
+		};
 
-    const onExit = (code: number | null) => {
-      cleanup()
-      reject(new Error(ffmpegCaptureOutputBuffer.trim() || `FFmpeg exited before recording started (code ${code ?? 'unknown'})`))
-    }
+		const onExit = (code: number | null) => {
+			cleanup();
+			reject(
+				new Error(
+					ffmpegCaptureOutputBuffer.trim() ||
+						`FFmpeg exited before recording started (code ${code ?? "unknown"})`,
+				),
+			);
+		};
 
-    const timer = setTimeout(() => {
-      cleanup()
-      resolve()
-    }, 900)
+		const timer = setTimeout(() => {
+			cleanup();
+			resolve();
+		}, 900);
 
-    const cleanup = () => {
-      clearTimeout(timer)
-      process.off('error', onError)
-      process.off('exit', onExit)
-    }
+		const cleanup = () => {
+			clearTimeout(timer);
+			process.off("error", onError);
+			process.off("exit", onExit);
+		};
 
-    process.once('error', onError)
-    process.once('exit', onExit)
-  })
+		process.once("error", onError);
+		process.once("exit", onExit);
+	});
 }
 
 function waitForFfmpegCaptureStop(process: ChildProcessWithoutNullStreams, outputPath: string) {
-  return new Promise<string>((resolve, reject) => {
-    const onClose = async (code: number | null) => {
-      cleanup()
+	return new Promise<string>((resolve, reject) => {
+		const onClose = async (code: number | null) => {
+			cleanup();
 
-      try {
-        await fs.access(outputPath)
-        if (code === 0 || code === null) {
-          resolve(outputPath)
-          return
-        }
+			try {
+				await fs.access(outputPath);
+				if (code === 0 || code === null) {
+					resolve(outputPath);
+					return;
+				}
 
-        if (ffmpegCaptureOutputBuffer.includes('Exiting normally')) {
-          resolve(outputPath)
-          return
-        }
-      } catch {
-        // handled below
-      }
+				if (ffmpegCaptureOutputBuffer.includes("Exiting normally")) {
+					resolve(outputPath);
+					return;
+				}
+			} catch {
+				// handled below
+			}
 
-      reject(new Error(ffmpegCaptureOutputBuffer.trim() || `FFmpeg exited with code ${code ?? 'unknown'}`))
-    }
+			reject(
+				new Error(
+					ffmpegCaptureOutputBuffer.trim() ||
+						`FFmpeg exited with code ${code ?? "unknown"}`,
+				),
+			);
+		};
 
-    const onError = (error: Error) => {
-      cleanup()
-      reject(error)
-    }
+		const onError = (error: Error) => {
+			cleanup();
+			reject(error);
+		};
 
-    const cleanup = () => {
-      process.off('close', onClose)
-      process.off('error', onError)
-    }
+		const cleanup = () => {
+			process.off("close", onClose);
+			process.off("error", onError);
+		};
 
-    process.once('close', onClose)
-    process.once('error', onError)
-  })
+		process.once("close", onClose);
+		process.once("error", onError);
+	});
 }
 
 function getDisplayBoundsForSource(source: SelectedSource) {
-  return resolveWindowsCaptureDisplay(
-    source,
-    getScreen().getAllDisplays(),
-    getScreen().getPrimaryDisplay(),
-  ).bounds
+	return resolveWindowsCaptureDisplay(
+		source,
+		getScreen().getAllDisplays(),
+		getScreen().getPrimaryDisplay(),
+	).bounds;
 }
 
 function parseXwininfoBounds(stdout: string): WindowBounds | null {
-  const absX = stdout.match(/Absolute upper-left X:\s+(-?\d+)/)
-  const absY = stdout.match(/Absolute upper-left Y:\s+(-?\d+)/)
-  const width = stdout.match(/Width:\s+(\d+)/)
-  const height = stdout.match(/Height:\s+(\d+)/)
+	const absX = stdout.match(/Absolute upper-left X:\s+(-?\d+)/);
+	const absY = stdout.match(/Absolute upper-left Y:\s+(-?\d+)/);
+	const width = stdout.match(/Width:\s+(\d+)/);
+	const height = stdout.match(/Height:\s+(\d+)/);
 
-  if (!absX || !absY || !width || !height) {
-    return null
-  }
+	if (!absX || !absY || !width || !height) {
+		return null;
+	}
 
-  return {
-    x: Number.parseInt(absX[1], 10),
-    y: Number.parseInt(absY[1], 10),
-    width: Number.parseInt(width[1], 10),
-    height: Number.parseInt(height[1], 10),
-  }
+	return {
+		x: Number.parseInt(absX[1], 10),
+		y: Number.parseInt(absY[1], 10),
+		width: Number.parseInt(width[1], 10),
+		height: Number.parseInt(height[1], 10),
+	};
 }
 
 async function resolveLinuxWindowBounds(source: SelectedSource): Promise<WindowBounds | null> {
-  const windowId = parseWindowId(source?.id)
+	const windowId = parseWindowId(source?.id);
 
-  if (windowId) {
-    try {
-      const { stdout } = await execFileAsync('xwininfo', ['-id', String(windowId)], { timeout: 1500 })
-      const bounds = parseXwininfoBounds(stdout)
-      if (bounds && bounds.width > 0 && bounds.height > 0) {
-        return bounds
-      }
-    } catch {
-      // fall back to title lookup below
-    }
-  }
+	if (windowId) {
+		try {
+			const { stdout } = await execFileAsync("xwininfo", ["-id", String(windowId)], {
+				timeout: 1500,
+			});
+			const bounds = parseXwininfoBounds(stdout);
+			if (bounds && bounds.width > 0 && bounds.height > 0) {
+				return bounds;
+			}
+		} catch {
+			// fall back to title lookup below
+		}
+	}
 
-  const windowTitle = typeof source.windowTitle === 'string' ? source.windowTitle.trim() : source.name.trim()
-  if (!windowTitle) {
-    return null
-  }
+	const windowTitle =
+		typeof source.windowTitle === "string" ? source.windowTitle.trim() : source.name.trim();
+	if (!windowTitle) {
+		return null;
+	}
 
-  try {
-    const { stdout } = await execFileAsync('xwininfo', ['-name', windowTitle], { timeout: 1500 })
-    const bounds = parseXwininfoBounds(stdout)
-    return bounds && bounds.width > 0 && bounds.height > 0 ? bounds : null
-  } catch {
-    return null
-  }
+	try {
+		const { stdout } = await execFileAsync("xwininfo", ["-name", windowTitle], {
+			timeout: 1500,
+		});
+		const bounds = parseXwininfoBounds(stdout);
+		return bounds && bounds.width > 0 && bounds.height > 0 ? bounds : null;
+	} catch {
+		return null;
+	}
 }
 
 async function resolveWindowsWindowBounds(source: SelectedSource): Promise<WindowBounds | null> {
-  const windowId = parseWindowId(source?.id)
-  const windowTitle = typeof source.windowTitle === 'string' ? source.windowTitle.trim() : source.name.trim()
+	const windowId = parseWindowId(source?.id);
+	const windowTitle =
+		typeof source.windowTitle === "string" ? source.windowTitle.trim() : source.name.trim();
 
-  if (!windowId && !windowTitle) {
-    return null
-  }
+	if (!windowId && !windowTitle) {
+		return null;
+	}
 
-  const script = [
-    'param([string]$windowId, [string]$windowTitle)',
-    'Add-Type -TypeDefinition @"',
-    'using System;',
-    'using System.Runtime.InteropServices;',
-    'public static class RecordlyWindowBounds {',
-    '  [StructLayout(LayoutKind.Sequential)]',
-    '  public struct RECT {',
-    '    public int Left;',
-    '    public int Top;',
-    '    public int Right;',
-    '    public int Bottom;',
-    '  }',
-    '  [DllImport("user32.dll")]',
-    '  [return: MarshalAs(UnmanagedType.Bool)]',
-    '  public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);',
-    '}',
-    '"@',
-    '$handle = [Int64]0',
-    'if ($windowId) {',
-    '  $handle = [Int64]$windowId',
-    '}',
-    'if ($handle -le 0 -and $windowTitle) {',
-    '  $matchingProcess = Get-Process | Where-Object { $_.MainWindowTitle -eq $windowTitle -or $_.MainWindowTitle -like "*$windowTitle*" } | Select-Object -First 1',
-    '  if ($matchingProcess) {',
-    '    $handle = $matchingProcess.MainWindowHandle.ToInt64()',
-    '  }',
-    '}',
-    'if ($handle -le 0) {',
-    '  exit 1',
-    '}',
-    '$rect = New-Object RecordlyWindowBounds+RECT',
-    'if (-not [RecordlyWindowBounds]::GetWindowRect([IntPtr]$handle, [ref]$rect)) {',
-    '  exit 1',
-    '}',
-    '@{ x = $rect.Left; y = $rect.Top; width = $rect.Right - $rect.Left; height = $rect.Bottom - $rect.Top } | ConvertTo-Json -Compress',
-  ].join('\n')
+	const script = [
+		"param([string]$windowId, [string]$windowTitle)",
+		'Add-Type -TypeDefinition @"',
+		"using System;",
+		"using System.Runtime.InteropServices;",
+		"public static class RecordlyWindowBounds {",
+		"  [StructLayout(LayoutKind.Sequential)]",
+		"  public struct RECT {",
+		"    public int Left;",
+		"    public int Top;",
+		"    public int Right;",
+		"    public int Bottom;",
+		"  }",
+		'  [DllImport("user32.dll")]',
+		"  [return: MarshalAs(UnmanagedType.Bool)]",
+		"  public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);",
+		"}",
+		'"@',
+		"$handle = [Int64]0",
+		"if ($windowId) {",
+		"  $handle = [Int64]$windowId",
+		"}",
+		"if ($handle -le 0 -and $windowTitle) {",
+		'  $matchingProcess = Get-Process | Where-Object { $_.MainWindowTitle -eq $windowTitle -or $_.MainWindowTitle -like "*$windowTitle*" } | Select-Object -First 1',
+		"  if ($matchingProcess) {",
+		"    $handle = $matchingProcess.MainWindowHandle.ToInt64()",
+		"  }",
+		"}",
+		"if ($handle -le 0) {",
+		"  exit 1",
+		"}",
+		"$rect = New-Object RecordlyWindowBounds+RECT",
+		"if (-not [RecordlyWindowBounds]::GetWindowRect([IntPtr]$handle, [ref]$rect)) {",
+		"  exit 1",
+		"}",
+		"@{ x = $rect.Left; y = $rect.Top; width = $rect.Right - $rect.Left; height = $rect.Bottom - $rect.Top } | ConvertTo-Json -Compress",
+	].join("\n");
 
-  try {
-    const { stdout } = await execFileAsync(
-      'powershell.exe',
-      ['-NoProfile', '-Command', script, String(windowId ?? ''), windowTitle],
-      { timeout: 1500 },
-    )
-    const bounds = JSON.parse(stdout) as WindowBounds
-    return bounds && bounds.width > 0 && bounds.height > 0 ? bounds : null
-  } catch {
-    return null
-  }
+	try {
+		const { stdout } = await execFileAsync(
+			"powershell.exe",
+			["-NoProfile", "-Command", script, String(windowId ?? ""), windowTitle],
+			{ timeout: 1500 },
+		);
+		const bounds = JSON.parse(stdout) as WindowBounds;
+		return bounds && bounds.width > 0 && bounds.height > 0 ? bounds : null;
+	} catch {
+		return null;
+	}
 }
 
 async function buildFfmpegCaptureArgs(source: SelectedSource, outputPath: string) {
-  const commonOutputArgs = ['-an', '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', outputPath]
+	const commonOutputArgs = [
+		"-an",
+		"-c:v",
+		"libx264",
+		"-preset",
+		"veryfast",
+		"-pix_fmt",
+		"yuv420p",
+		"-movflags",
+		"+faststart",
+		outputPath,
+	];
 
-  if (process.platform === 'win32') {
-    if (source?.id?.startsWith('window:')) {
-      const windowTitle = typeof source.windowTitle === 'string' ? source.windowTitle.trim() : source.name.trim()
-      if (!windowTitle) {
-        throw new Error('Missing window title for FFmpeg window capture')
-      }
+	if (process.platform === "win32") {
+		if (source?.id?.startsWith("window:")) {
+			const windowTitle =
+				typeof source.windowTitle === "string"
+					? source.windowTitle.trim()
+					: source.name.trim();
+			if (!windowTitle) {
+				throw new Error("Missing window title for FFmpeg window capture");
+			}
 
-      return ['-y', '-f', 'gdigrab', '-framerate', '60', '-draw_mouse', '0', '-i', `title=${windowTitle}`, ...commonOutputArgs]
-    }
+			return [
+				"-y",
+				"-f",
+				"gdigrab",
+				"-framerate",
+				"60",
+				"-draw_mouse",
+				"0",
+				"-i",
+				`title=${windowTitle}`,
+				...commonOutputArgs,
+			];
+		}
 
-    return ['-y', '-f', 'gdigrab', '-framerate', '60', '-draw_mouse', '0', '-i', 'desktop', ...commonOutputArgs]
-  }
+		return [
+			"-y",
+			"-f",
+			"gdigrab",
+			"-framerate",
+			"60",
+			"-draw_mouse",
+			"0",
+			"-i",
+			"desktop",
+			...commonOutputArgs,
+		];
+	}
 
-  if (process.platform === 'linux') {
-    const displayEnv = process.env.DISPLAY || ':0.0'
-    if (source?.id?.startsWith('window:')) {
-      const bounds = await resolveLinuxWindowBounds(source)
-      if (!bounds) {
-        throw new Error('Unable to resolve Linux window bounds for FFmpeg capture')
-      }
+	if (process.platform === "linux") {
+		const displayEnv = process.env.DISPLAY || ":0.0";
+		if (source?.id?.startsWith("window:")) {
+			const bounds = await resolveLinuxWindowBounds(source);
+			if (!bounds) {
+				throw new Error("Unable to resolve Linux window bounds for FFmpeg capture");
+			}
 
-      return [
-        '-y',
-        '-f', 'x11grab',
-        '-framerate', '60',
-        '-draw_mouse', '0',
-        '-video_size', `${Math.max(2, bounds.width)}x${Math.max(2, bounds.height)}`,
-        '-i', `${displayEnv}+${Math.round(bounds.x)},${Math.round(bounds.y)}`,
-        ...commonOutputArgs,
-      ]
-    }
+			return [
+				"-y",
+				"-f",
+				"x11grab",
+				"-framerate",
+				"60",
+				"-draw_mouse",
+				"0",
+				"-video_size",
+				`${Math.max(2, bounds.width)}x${Math.max(2, bounds.height)}`,
+				"-i",
+				`${displayEnv}+${Math.round(bounds.x)},${Math.round(bounds.y)}`,
+				...commonOutputArgs,
+			];
+		}
 
-    const bounds = getDisplayBoundsForSource(source)
-    return [
-      '-y',
-      '-f', 'x11grab',
-      '-framerate', '60',
-      '-draw_mouse', '0',
-      '-video_size', `${Math.max(2, bounds.width)}x${Math.max(2, bounds.height)}`,
-      '-i', `${displayEnv}+${Math.round(bounds.x)},${Math.round(bounds.y)}`,
-      ...commonOutputArgs,
-    ]
-  }
+		const bounds = getDisplayBoundsForSource(source);
+		return [
+			"-y",
+			"-f",
+			"x11grab",
+			"-framerate",
+			"60",
+			"-draw_mouse",
+			"0",
+			"-video_size",
+			`${Math.max(2, bounds.width)}x${Math.max(2, bounds.height)}`,
+			"-i",
+			`${displayEnv}+${Math.round(bounds.x)},${Math.round(bounds.y)}`,
+			...commonOutputArgs,
+		];
+	}
 
-  if (process.platform === 'darwin') {
-    return ['-y', '-f', 'avfoundation', '-capture_cursor', '0', '-framerate', '60', '-i', '1:none', ...commonOutputArgs]
-  }
+	if (process.platform === "darwin") {
+		return [
+			"-y",
+			"-f",
+			"avfoundation",
+			"-capture_cursor",
+			"0",
+			"-framerate",
+			"60",
+			"-i",
+			"1:none",
+			...commonOutputArgs,
+		];
+	}
 
-  throw new Error(`FFmpeg capture is not supported on ${process.platform}`)
+	throw new Error(`FFmpeg capture is not supported on ${process.platform}`);
 }
 
 function getWindowsCaptureExePath() {
-  return resolvePreferredWindowsNativeHelperPath('wgc-capture', 'wgc-capture.exe')
+	return resolvePreferredWindowsNativeHelperPath("wgc-capture", "wgc-capture.exe");
 }
 
 function getCursorMonitorExePath() {
-  return resolvePreferredWindowsNativeHelperPath('cursor-monitor', 'cursor-monitor.exe')
+	return resolvePreferredWindowsNativeHelperPath("cursor-monitor", "cursor-monitor.exe");
 }
 
 async function isNativeWindowsCaptureAvailable(): Promise<boolean> {
-  if (process.platform !== 'win32') return false
+	if (process.platform !== "win32") return false;
 
-  const helperPath = getWindowsCaptureExePath()
-  const os = await import('node:os')
-  const [major, , build] = os.release().split('.').map(Number)
-  const supported = major >= 10 && build >= 19041
-  let helperExists = false
+	const helperPath = getWindowsCaptureExePath();
+	const os = await import("node:os");
+	const [major, , build] = os.release().split(".").map(Number);
+	const supported = major >= 10 && build >= 19041;
+	let helperExists = false;
 
-  try {
-    await fs.access(helperPath, fsConstants.X_OK)
-    helperExists = true
-  } catch {
-    recordNativeCaptureDiagnostics({
-      backend: 'windows-wgc',
-      phase: 'availability',
-      helperPath,
-      helperExists,
-      osRelease: os.release(),
-      supported,
-      error: 'Native Windows capture helper is missing or not executable.',
-    })
-    return false
-  }
+	try {
+		await fs.access(helperPath, fsConstants.X_OK);
+		helperExists = true;
+	} catch {
+		recordNativeCaptureDiagnostics({
+			backend: "windows-wgc",
+			phase: "availability",
+			helperPath,
+			helperExists,
+			osRelease: os.release(),
+			supported,
+			error: "Native Windows capture helper is missing or not executable.",
+		});
+		return false;
+	}
 
-  recordNativeCaptureDiagnostics({
-    backend: 'windows-wgc',
-    phase: 'availability',
-    helperPath,
-    helperExists,
-    osRelease: os.release(),
-    supported,
-  })
+	recordNativeCaptureDiagnostics({
+		backend: "windows-wgc",
+		phase: "availability",
+		helperPath,
+		helperExists,
+		osRelease: os.release(),
+		supported,
+	});
 
-  return supported
+	return supported;
 }
 
 function waitForWindowsCaptureStart(proc: ChildProcessWithoutNullStreams) {
-  return new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      cleanup()
-      reject(new Error('Timed out waiting for native Windows capture to start'))
-    }, 12000)
+	return new Promise<void>((resolve, reject) => {
+		const timer = setTimeout(() => {
+			cleanup();
+			reject(new Error("Timed out waiting for native Windows capture to start"));
+		}, 12000);
 
-    const onStdout = (chunk: Buffer) => {
-      const text = chunk.toString()
-      if (text.includes('Recording started')) {
-        cleanup()
-        resolve()
-      }
-    }
+		const onStdout = (chunk: Buffer) => {
+			const text = chunk.toString();
+			if (text.includes("Recording started")) {
+				cleanup();
+				resolve();
+			}
+		};
 
-    const onError = (error: Error) => {
-      cleanup()
-      reject(error)
-    }
+		const onError = (error: Error) => {
+			cleanup();
+			reject(error);
+		};
 
-    const onExit = (code: number | null) => {
-      cleanup()
-      reject(new Error(windowsCaptureOutputBuffer.trim() || `Native Windows capture exited before recording started (code ${code ?? 'unknown'})`))
-    }
+		const onExit = (code: number | null) => {
+			cleanup();
+			reject(
+				new Error(
+					windowsCaptureOutputBuffer.trim() ||
+						`Native Windows capture exited before recording started (code ${code ?? "unknown"})`,
+				),
+			);
+		};
 
-    const cleanup = () => {
-      clearTimeout(timer)
-      proc.stdout.off('data', onStdout)
-      proc.off('error', onError)
-      proc.off('exit', onExit)
-    }
+		const cleanup = () => {
+			clearTimeout(timer);
+			proc.stdout.off("data", onStdout);
+			proc.off("error", onError);
+			proc.off("exit", onExit);
+		};
 
-    proc.stdout.on('data', onStdout)
-    proc.once('error', onError)
-    proc.once('exit', onExit)
-  })
+		proc.stdout.on("data", onStdout);
+		proc.once("error", onError);
+		proc.once("exit", onExit);
+	});
 }
 
 function waitForWindowsCaptureStop(proc: ChildProcessWithoutNullStreams) {
-  return new Promise<string>((resolve, reject) => {
-    const onClose = (code: number | null) => {
-      cleanup()
-      const match = windowsCaptureOutputBuffer.match(/Recording stopped\. Output path: (.+)/)
-      if (match?.[1]) {
-        resolve(match[1].trim())
-        return
-      }
-      if (code === 0 && windowsCaptureTargetPath) {
-        resolve(windowsCaptureTargetPath)
-        return
-      }
-      reject(new Error(windowsCaptureOutputBuffer.trim() || `Native Windows capture exited with code ${code ?? 'unknown'}`))
-    }
+	return new Promise<string>((resolve, reject) => {
+		const onClose = (code: number | null) => {
+			cleanup();
+			const match = windowsCaptureOutputBuffer.match(/Recording stopped\. Output path: (.+)/);
+			if (match?.[1]) {
+				resolve(match[1].trim());
+				return;
+			}
+			if (code === 0 && windowsCaptureTargetPath) {
+				resolve(windowsCaptureTargetPath);
+				return;
+			}
+			reject(
+				new Error(
+					windowsCaptureOutputBuffer.trim() ||
+						`Native Windows capture exited with code ${code ?? "unknown"}`,
+				),
+			);
+		};
 
-    const onError = (error: Error) => {
-      cleanup()
-      reject(error)
-    }
+		const onError = (error: Error) => {
+			cleanup();
+			reject(error);
+		};
 
-    const cleanup = () => {
-      proc.off('close', onClose)
-      proc.off('error', onError)
-    }
+		const cleanup = () => {
+			proc.off("close", onClose);
+			proc.off("error", onError);
+		};
 
-    proc.once('close', onClose)
-    proc.once('error', onError)
-  })
+		proc.once("close", onClose);
+		proc.once("error", onError);
+	});
 }
 
 function attachWindowsCaptureLifecycle(proc: ChildProcessWithoutNullStreams) {
-  proc.once('close', () => {
-    const wasActive = windowsNativeCaptureActive
-    windowsCaptureProcess = null
+	proc.once("close", () => {
+		const wasActive = windowsNativeCaptureActive;
+		windowsCaptureProcess = null;
 
-    if (!wasActive || windowsCaptureStopRequested) {
-      return
-    }
+		if (!wasActive || windowsCaptureStopRequested) {
+			return;
+		}
 
-    windowsNativeCaptureActive = false
-    windowsCaptureTargetPath = null
-    windowsCaptureStopRequested = false
+		windowsNativeCaptureActive = false;
+		windowsCaptureTargetPath = null;
+		windowsCaptureStopRequested = false;
 
-    const sourceName = selectedSource?.name ?? 'Screen'
-    BrowserWindow.getAllWindows().forEach((window) => {
-      if (!window.isDestroyed()) {
-        window.webContents.send('recording-state-changed', {
-          recording: false,
-          sourceName,
-        })
-      }
-    })
+		const sourceName = selectedSource?.name ?? "Screen";
+		BrowserWindow.getAllWindows().forEach((window) => {
+			if (!window.isDestroyed()) {
+				window.webContents.send("recording-state-changed", {
+					recording: false,
+					sourceName,
+				});
+			}
+		});
 
-    emitRecordingInterrupted('capture-stopped', 'Recording stopped unexpectedly.')
-  })
+		emitRecordingInterrupted("capture-stopped", "Recording stopped unexpectedly.");
+	});
 }
 
-async function muxNativeWindowsVideoWithAudio(videoPath: string, systemAudioPath: string | null, micAudioPath: string | null, pauseSegments: PauseSegment[] = []) {
-  const ffmpegPath = getFfmpegBinaryPath()
-  const inputs: string[] = ['-i', videoPath]
-  const audioInputs: string[] = []
-  const audioFilePaths: string[] = []
+async function muxNativeWindowsVideoWithAudio(
+	videoPath: string,
+	systemAudioPath: string | null,
+	micAudioPath: string | null,
+	pauseSegments: PauseSegment[] = [],
+) {
+	const ffmpegPath = getFfmpegBinaryPath();
+	const inputs: string[] = ["-i", videoPath];
+	const audioInputs: string[] = [];
+	const audioFilePaths: string[] = [];
 
-  for (const [label, audioPath] of [['system', systemAudioPath], ['mic', micAudioPath]] as const) {
-    if (!audioPath) continue
-    try {
-      const stat = await fs.stat(audioPath)
-      if (stat.size <= 0) {
-        console.warn(`[mux-win] Skipping ${label} audio: file is empty (${audioPath})`)
-        await fs.rm(audioPath, { force: true }).catch(() => {})
-        continue
-      }
-      inputs.push('-i', audioPath)
-      audioInputs.push(label)
-      audioFilePaths.push(audioPath)
-    } catch {
-      console.warn(`[mux-win] Skipping ${label} audio: file not accessible (${audioPath})`)
-    }
-  }
+	for (const [label, audioPath] of [
+		["system", systemAudioPath],
+		["mic", micAudioPath],
+	] as const) {
+		if (!audioPath) continue;
+		try {
+			const stat = await fs.stat(audioPath);
+			if (stat.size <= 0) {
+				console.warn(`[mux-win] Skipping ${label} audio: file is empty (${audioPath})`);
+				await fs.rm(audioPath, { force: true }).catch(() => undefined);
+				continue;
+			}
+			inputs.push("-i", audioPath);
+			audioInputs.push(label);
+			audioFilePaths.push(audioPath);
+		} catch {
+			console.warn(`[mux-win] Skipping ${label} audio: file not accessible (${audioPath})`);
+		}
+	}
 
-  if (audioInputs.length === 0) return
+	if (audioInputs.length === 0) return;
 
-  // Match each audio track to the captured video duration.
-  // Small duration deltas are more often clock drift than a true late start,
-  // so prefer tempo correction there and reserve leading silence for larger gaps.
-  const videoDuration = await probeMediaDurationSeconds(videoPath)
-  const audioAdjustments: Map<string, AudioSyncAdjustment> = new Map()
+	// Match each audio track to the captured video duration.
+	// Small duration deltas are more often clock drift than a true late start,
+	// so prefer tempo correction there and reserve leading silence for larger gaps.
+	const videoDuration = await probeMediaDurationSeconds(videoPath);
+	const audioAdjustments: Map<string, AudioSyncAdjustment> = new Map();
 
-  if (videoDuration > 0) {
-    for (let i = 0; i < audioFilePaths.length; i++) {
-      const audioDuration = await probeMediaDurationSeconds(audioFilePaths[i])
-      const adjustment = getAudioSyncAdjustment(videoDuration, audioDuration)
-      audioAdjustments.set(audioInputs[i], adjustment)
-      if (adjustment.mode === 'tempo') {
-        console.log(
-          `[mux-win] ${audioInputs[i]} audio differs from video by ${adjustment.durationDeltaMs}ms — applying tempo ratio ${adjustment.tempoRatio.toFixed(6)}`,
-        )
-      } else if (adjustment.mode === 'delay' && adjustment.delayMs > 0) {
-        console.log(
-          `[mux-win] ${audioInputs[i]} audio appears to start late by ${adjustment.delayMs}ms — adding leading silence`,
-        )
-      }
-    }
-  }
+	if (videoDuration > 0) {
+		for (let i = 0; i < audioFilePaths.length; i++) {
+			const audioDuration = await probeMediaDurationSeconds(audioFilePaths[i]);
+			const adjustment = getAudioSyncAdjustment(videoDuration, audioDuration);
+			audioAdjustments.set(audioInputs[i], adjustment);
+			if (adjustment.mode === "tempo") {
+				console.log(
+					`[mux-win] ${audioInputs[i]} audio differs from video by ${adjustment.durationDeltaMs}ms — applying tempo ratio ${adjustment.tempoRatio.toFixed(6)}`,
+				);
+			} else if (adjustment.mode === "delay" && adjustment.delayMs > 0) {
+				console.log(
+					`[mux-win] ${audioInputs[i]} audio appears to start late by ${adjustment.delayMs}ms — adding leading silence`,
+				);
+			}
+		}
+	}
 
-  const mixedOutputPath = `${videoPath}.muxed.mp4`
-  const normalizedPauseSegments = normalizePauseSegments(pauseSegments)
-  const systemAdjustment =
-    audioAdjustments.get('system') ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
-  const micAdjustment =
-    audioAdjustments.get('mic') ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
+	const mixedOutputPath = `${videoPath}.muxed.mp4`;
+	const normalizedPauseSegments = normalizePauseSegments(pauseSegments);
+	const systemAdjustment = audioAdjustments.get("system") ?? {
+		mode: "none",
+		delayMs: 0,
+		tempoRatio: 1,
+		durationDeltaMs: 0,
+	};
+	const micAdjustment = audioAdjustments.get("mic") ?? {
+		mode: "none",
+		delayMs: 0,
+		tempoRatio: 1,
+		durationDeltaMs: 0,
+	};
 
-  if (audioInputs.length === 2) {
-    // Both system + mic audio: mix them
-    const filterParts: string[] = []
-    const systemPauseFilter = buildPausedAudioFilter('1:a', 'system_trimmed', normalizedPauseSegments)
-    const micPauseFilter = buildPausedAudioFilter('2:a', 'mic_trimmed', normalizedPauseSegments)
+	if (audioInputs.length === 2) {
+		// Both system + mic audio: mix them
+		const filterParts: string[] = [];
+		const systemPauseFilter = buildPausedAudioFilter(
+			"1:a",
+			"system_trimmed",
+			normalizedPauseSegments,
+		);
+		const micPauseFilter = buildPausedAudioFilter(
+			"2:a",
+			"mic_trimmed",
+			normalizedPauseSegments,
+		);
 
-    if (systemPauseFilter) {
-      filterParts.push(systemPauseFilter)
-    }
-    if (micPauseFilter) {
-      filterParts.push(micPauseFilter)
-    }
+		if (systemPauseFilter) {
+			filterParts.push(systemPauseFilter);
+		}
+		if (micPauseFilter) {
+			filterParts.push(micPauseFilter);
+		}
 
-    const systemLabel = systemPauseFilter ? '[system_trimmed]' : '[1:a]'
-    const micLabel = micPauseFilter ? '[mic_trimmed]' : '[2:a]'
+		const systemLabel = systemPauseFilter ? "[system_trimmed]" : "[1:a]";
+		const micLabel = micPauseFilter ? "[mic_trimmed]" : "[2:a]";
 
-    appendSyncedAudioFilter(filterParts, systemLabel, 's', systemAdjustment)
-    appendSyncedAudioFilter(filterParts, micLabel, 'm', micAdjustment)
-    filterParts.push('[s][m]amix=inputs=2:duration=longest:normalize=0[aout]')
+		appendSyncedAudioFilter(filterParts, systemLabel, "s", systemAdjustment);
+		appendSyncedAudioFilter(filterParts, micLabel, "m", micAdjustment);
+		filterParts.push("[s][m]amix=inputs=2:duration=longest:normalize=0[aout]");
 
-    await execFileAsync(
-      ffmpegPath,
-      [
-        '-y',
-        ...inputs,
-        '-filter_complex', filterParts.join(';'),
-        '-map', '0:v:0',
-        '-map', '[aout]',
-        '-c:v', 'copy',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-shortest',
-        mixedOutputPath,
-      ],
-      { timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
-    )
-  } else {
-    // Single audio track
-    const pauseFilter = buildPausedAudioFilter('1:a', 'trimmed_audio', normalizedPauseSegments)
-    const singleAdjustment =
-      audioAdjustments.get(audioInputs[0]) ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
+		await execFileAsync(
+			ffmpegPath,
+			[
+				"-y",
+				...inputs,
+				"-filter_complex",
+				filterParts.join(";"),
+				"-map",
+				"0:v:0",
+				"-map",
+				"[aout]",
+				"-c:v",
+				"copy",
+				"-c:a",
+				"aac",
+				"-b:a",
+				"192k",
+				"-shortest",
+				mixedOutputPath,
+			],
+			{ timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
+		);
+	} else {
+		// Single audio track
+		const pauseFilter = buildPausedAudioFilter("1:a", "trimmed_audio", normalizedPauseSegments);
+		const singleAdjustment = audioAdjustments.get(audioInputs[0]) ?? {
+			mode: "none",
+			delayMs: 0,
+			tempoRatio: 1,
+			durationDeltaMs: 0,
+		};
 
-    if (pauseFilter || singleAdjustment.mode !== 'none') {
-      const filterParts: string[] = []
-      if (pauseFilter) {
-        filterParts.push(pauseFilter)
-      }
-      const srcLabel = pauseFilter ? '[trimmed_audio]' : '[1:a]'
-      appendSyncedAudioFilter(filterParts, srcLabel, 'aout', singleAdjustment)
+		if (pauseFilter || singleAdjustment.mode !== "none") {
+			const filterParts: string[] = [];
+			if (pauseFilter) {
+				filterParts.push(pauseFilter);
+			}
+			const srcLabel = pauseFilter ? "[trimmed_audio]" : "[1:a]";
+			appendSyncedAudioFilter(filterParts, srcLabel, "aout", singleAdjustment);
 
-      await execFileAsync(
-        ffmpegPath,
-        [
-          '-y',
-          ...inputs,
-          '-filter_complex', filterParts.join(';'),
-          '-map', '0:v:0',
-          '-map', '[aout]',
-          '-c:v', 'copy',
-          '-c:a', 'aac',
-          '-b:a', '192k',
-          '-shortest',
-          mixedOutputPath,
-        ],
-        { timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
-      )
-    } else {
-      await execFileAsync(
-        ffmpegPath,
-        [
-          '-y',
-          ...inputs,
-          '-map', '0:v:0',
-          '-map', '1:a:0',
-          '-c:v', 'copy',
-          '-c:a', 'aac',
-          '-b:a', '192k',
-          '-shortest',
-          mixedOutputPath,
-        ],
-        { timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
-      )
-    }
-  }
+			await execFileAsync(
+				ffmpegPath,
+				[
+					"-y",
+					...inputs,
+					"-filter_complex",
+					filterParts.join(";"),
+					"-map",
+					"0:v:0",
+					"-map",
+					"[aout]",
+					"-c:v",
+					"copy",
+					"-c:a",
+					"aac",
+					"-b:a",
+					"192k",
+					"-shortest",
+					mixedOutputPath,
+				],
+				{ timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
+			);
+		} else {
+			await execFileAsync(
+				ffmpegPath,
+				[
+					"-y",
+					...inputs,
+					"-map",
+					"0:v:0",
+					"-map",
+					"1:a:0",
+					"-c:v",
+					"copy",
+					"-c:a",
+					"aac",
+					"-b:a",
+					"192k",
+					"-shortest",
+					mixedOutputPath,
+				],
+				{ timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
+			);
+		}
+	}
 
-  await moveFileWithOverwrite(mixedOutputPath, videoPath)
+	await moveFileWithOverwrite(mixedOutputPath, videoPath);
 
-  // Clean up audio files
-  for (const audioPath of [systemAudioPath, micAudioPath]) {
-    if (audioPath) {
-      await fs.rm(audioPath, { force: true }).catch(() => {})
-    }
-  }
+	// Clean up audio files
+	for (const audioPath of [systemAudioPath, micAudioPath]) {
+		if (audioPath) {
+			await fs.rm(audioPath, { force: true }).catch(() => undefined);
+		}
+	}
 }
 
 function normalizePauseSegments(pauseSegments: PauseSegment[] | undefined): PauseSegment[] {
-  if (!Array.isArray(pauseSegments) || pauseSegments.length === 0) {
-    return []
-  }
+	if (!Array.isArray(pauseSegments) || pauseSegments.length === 0) {
+		return [];
+	}
 
-  const normalized = pauseSegments
-    .map((segment) => {
-      const startMs = Number(segment?.startMs)
-      const endMs = Number(segment?.endMs)
+	const normalized = pauseSegments
+		.map((segment) => {
+			const startMs = Number(segment?.startMs);
+			const endMs = Number(segment?.endMs);
 
-      if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
-        return null
-      }
+			if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+				return null;
+			}
 
-      const clampedStart = Math.max(0, Math.round(startMs))
-      const clampedEnd = Math.max(0, Math.round(endMs))
-      if (clampedEnd <= clampedStart) {
-        return null
-      }
+			const clampedStart = Math.max(0, Math.round(startMs));
+			const clampedEnd = Math.max(0, Math.round(endMs));
+			if (clampedEnd <= clampedStart) {
+				return null;
+			}
 
-      return { startMs: clampedStart, endMs: clampedEnd }
-    })
-    .filter((segment): segment is PauseSegment => !!segment)
-    .sort((left, right) => left.startMs - right.startMs)
+			return { startMs: clampedStart, endMs: clampedEnd };
+		})
+		.filter((segment): segment is PauseSegment => !!segment)
+		.sort((left, right) => left.startMs - right.startMs);
 
-  if (normalized.length <= 1) {
-    return normalized
-  }
+	if (normalized.length <= 1) {
+		return normalized;
+	}
 
-  const merged: PauseSegment[] = [{ ...normalized[0] }]
+	const merged: PauseSegment[] = [{ ...normalized[0] }];
 
-  for (const segment of normalized.slice(1)) {
-    const previous = merged[merged.length - 1]
-    if (segment.startMs <= previous.endMs) {
-      previous.endMs = Math.max(previous.endMs, segment.endMs)
-    } else {
-      merged.push({ ...segment })
-    }
-  }
+	for (const segment of normalized.slice(1)) {
+		const previous = merged[merged.length - 1];
+		if (segment.startMs <= previous.endMs) {
+			previous.endMs = Math.max(previous.endMs, segment.endMs);
+		} else {
+			merged.push({ ...segment });
+		}
+	}
 
-  return merged
+	return merged;
 }
 
 function formatFfmpegSeconds(milliseconds: number) {
-  return (milliseconds / 1000).toFixed(3)
+	return (milliseconds / 1000).toFixed(3);
 }
 
-function buildPausedAudioFilter(inputLabel: string, outputLabel: string, pauseSegments: PauseSegment[]) {
-  if (pauseSegments.length === 0) {
-    return null
-  }
+function buildPausedAudioFilter(
+	inputLabel: string,
+	outputLabel: string,
+	pauseSegments: PauseSegment[],
+) {
+	if (pauseSegments.length === 0) {
+		return null;
+	}
 
-  const activeSegments: Array<{ startMs: number, endMs?: number }> = []
-  let cursorMs = 0
+	const activeSegments: Array<{ startMs: number; endMs?: number }> = [];
+	let cursorMs = 0;
 
-  for (const pauseSegment of pauseSegments) {
-    if (pauseSegment.startMs > cursorMs) {
-      activeSegments.push({ startMs: cursorMs, endMs: pauseSegment.startMs })
-    }
-    cursorMs = Math.max(cursorMs, pauseSegment.endMs)
-  }
+	for (const pauseSegment of pauseSegments) {
+		if (pauseSegment.startMs > cursorMs) {
+			activeSegments.push({ startMs: cursorMs, endMs: pauseSegment.startMs });
+		}
+		cursorMs = Math.max(cursorMs, pauseSegment.endMs);
+	}
 
-  activeSegments.push({ startMs: cursorMs })
+	activeSegments.push({ startMs: cursorMs });
 
-  const filterParts: string[] = []
-  const segmentLabels: string[] = []
+	const filterParts: string[] = [];
+	const segmentLabels: string[] = [];
 
-  activeSegments.forEach((segment, index) => {
-    if (typeof segment.endMs === 'number' && segment.endMs <= segment.startMs) {
-      return
-    }
+	activeSegments.forEach((segment, index) => {
+		if (typeof segment.endMs === "number" && segment.endMs <= segment.startMs) {
+			return;
+		}
 
-    const segmentLabel = `${outputLabel}_part${index}`
-    const trimArgs = typeof segment.endMs === 'number'
-      ? `start=${formatFfmpegSeconds(segment.startMs)}:end=${formatFfmpegSeconds(segment.endMs)}`
-      : `start=${formatFfmpegSeconds(segment.startMs)}`
+		const segmentLabel = `${outputLabel}_part${index}`;
+		const trimArgs =
+			typeof segment.endMs === "number"
+				? `start=${formatFfmpegSeconds(segment.startMs)}:end=${formatFfmpegSeconds(segment.endMs)}`
+				: `start=${formatFfmpegSeconds(segment.startMs)}`;
 
-    filterParts.push(`[${inputLabel}]atrim=${trimArgs},asetpts=PTS-STARTPTS[${segmentLabel}]`)
-    segmentLabels.push(`[${segmentLabel}]`)
-  })
+		filterParts.push(`[${inputLabel}]atrim=${trimArgs},asetpts=PTS-STARTPTS[${segmentLabel}]`);
+		segmentLabels.push(`[${segmentLabel}]`);
+	});
 
-  if (segmentLabels.length === 0) {
-    return null
-  }
+	if (segmentLabels.length === 0) {
+		return null;
+	}
 
-  if (segmentLabels.length === 1) {
-    filterParts.push(`${segmentLabels[0]}anull[${outputLabel}]`)
-  } else {
-    filterParts.push(`${segmentLabels.join('')}concat=n=${segmentLabels.length}:v=0:a=1[${outputLabel}]`)
-  }
+	if (segmentLabels.length === 1) {
+		filterParts.push(`${segmentLabels[0]}anull[${outputLabel}]`);
+	} else {
+		filterParts.push(
+			`${segmentLabels.join("")}concat=n=${segmentLabels.length}:v=0:a=1[${outputLabel}]`,
+		);
+	}
 
-  return filterParts.join(';')
+	return filterParts.join(";");
 }
 
 function waitForNativeCaptureStart(process: ChildProcessWithoutNullStreams) {
-  return new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      cleanup()
-      reject(new Error('Timed out waiting for ScreenCaptureKit recorder to start'))
-    }, 12000)
+	return new Promise<void>((resolve, reject) => {
+		const timer = setTimeout(() => {
+			cleanup();
+			reject(new Error("Timed out waiting for ScreenCaptureKit recorder to start"));
+		}, 12000);
 
-    // Only check for the start pattern — the start handler already
-    // appends stdout/stderr to nativeCaptureOutputBuffer
-    const onStdout = (chunk: Buffer) => {
-      const text = chunk.toString()
-      if (text.includes('Recording started')) {
-        cleanup()
-        resolve()
-      }
-    }
+		// Only check for the start pattern — the start handler already
+		// appends stdout/stderr to nativeCaptureOutputBuffer
+		const onStdout = (chunk: Buffer) => {
+			const text = chunk.toString();
+			if (text.includes("Recording started")) {
+				cleanup();
+				resolve();
+			}
+		};
 
-    const onError = (error: Error) => {
-      cleanup()
-      reject(error)
-    }
+		const onError = (error: Error) => {
+			cleanup();
+			reject(error);
+		};
 
-    const onExit = (code: number | null) => {
-      cleanup()
-      reject(new Error(nativeCaptureOutputBuffer.trim() || `Native capture helper exited before recording started (code ${code ?? 'unknown'})`))
-    }
+		const onExit = (code: number | null) => {
+			cleanup();
+			reject(
+				new Error(
+					nativeCaptureOutputBuffer.trim() ||
+						`Native capture helper exited before recording started (code ${code ?? "unknown"})`,
+				),
+			);
+		};
 
-    const cleanup = () => {
-      clearTimeout(timer)
-      process.stdout.off('data', onStdout)
-      process.off('error', onError)
-      process.off('exit', onExit)
-    }
+		const cleanup = () => {
+			clearTimeout(timer);
+			process.stdout.off("data", onStdout);
+			process.off("error", onError);
+			process.off("exit", onExit);
+		};
 
-    process.stdout.on('data', onStdout)
-    process.once('error', onError)
-    process.once('exit', onExit)
-  })
+		process.stdout.on("data", onStdout);
+		process.once("error", onError);
+		process.once("exit", onExit);
+	});
 }
 
 function waitForNativeCaptureStop(process: ChildProcessWithoutNullStreams) {
-  return new Promise<string>((resolve, reject) => {
-    const onClose = (code: number | null) => {
-      cleanup()
-      const match = nativeCaptureOutputBuffer.match(/Recording stopped\. Output path: (.+)/)
-      if (match?.[1]) {
-        resolve(match[1].trim())
-        return
-      }
-      // Fallback: if exit code was 0 and we know the target path, try to use it
-      if (code === 0 && nativeCaptureTargetPath) {
-        resolve(nativeCaptureTargetPath)
-        return
-      }
-      reject(new Error(nativeCaptureOutputBuffer.trim() || `Native capture helper exited with code ${code ?? 'unknown'}`))
-    }
+	return new Promise<string>((resolve, reject) => {
+		const onClose = (code: number | null) => {
+			cleanup();
+			const match = nativeCaptureOutputBuffer.match(/Recording stopped\. Output path: (.+)/);
+			if (match?.[1]) {
+				resolve(match[1].trim());
+				return;
+			}
+			// Fallback: if exit code was 0 and we know the target path, try to use it
+			if (code === 0 && nativeCaptureTargetPath) {
+				resolve(nativeCaptureTargetPath);
+				return;
+			}
+			reject(
+				new Error(
+					nativeCaptureOutputBuffer.trim() ||
+						`Native capture helper exited with code ${code ?? "unknown"}`,
+				),
+			);
+		};
 
-    const onError = (error: Error) => {
-      cleanup()
-      reject(error)
-    }
+		const onError = (error: Error) => {
+			cleanup();
+			reject(error);
+		};
 
-    const cleanup = () => {
-      process.off('close', onClose)
-      process.off('error', onError)
-    }
+		const cleanup = () => {
+			process.off("close", onClose);
+			process.off("error", onError);
+		};
 
-    process.once('close', onClose)
-    process.once('error', onError)
-  })
+		process.once("close", onClose);
+		process.once("error", onError);
+	});
 }
 
 async function muxNativeMacRecordingWithAudio(
-  videoPath: string,
-  systemAudioPath?: string | null,
-  microphonePath?: string | null,
+	videoPath: string,
+	systemAudioPath?: string | null,
+	microphonePath?: string | null,
 ) {
-  const ffmpegPath = getFfmpegBinaryPath()
-  const mixedOutputPath = `${videoPath}.mixed.mp4`
+	const ffmpegPath = getFfmpegBinaryPath();
+	const mixedOutputPath = `${videoPath}.mixed.mp4`;
 
-  const inputs = ['-i', videoPath]
-  const availableAudioInputs: string[] = []
-  const audioFilePaths: string[] = []
+	const inputs = ["-i", videoPath];
+	const availableAudioInputs: string[] = [];
+	const audioFilePaths: string[] = [];
 
-  for (const [label, audioPath] of [['system', systemAudioPath], ['microphone', microphonePath]] as const) {
-    if (!audioPath) continue
-    try {
-      const stat = await fs.stat(audioPath)
-      if (stat.size <= 0) {
-        console.warn(`[mux] Skipping ${label} audio: file is empty (${audioPath})`)
-        await fs.rm(audioPath, { force: true }).catch(() => {})
-        continue
-      }
-      inputs.push('-i', audioPath)
-      availableAudioInputs.push(label)
-      audioFilePaths.push(audioPath)
-    } catch {
-      console.warn(`[mux] Skipping ${label} audio: file not accessible (${audioPath})`)
-    }
-  }
+	for (const [label, audioPath] of [
+		["system", systemAudioPath],
+		["microphone", microphonePath],
+	] as const) {
+		if (!audioPath) continue;
+		try {
+			const stat = await fs.stat(audioPath);
+			if (stat.size <= 0) {
+				console.warn(`[mux] Skipping ${label} audio: file is empty (${audioPath})`);
+				await fs.rm(audioPath, { force: true }).catch(() => undefined);
+				continue;
+			}
+			inputs.push("-i", audioPath);
+			availableAudioInputs.push(label);
+			audioFilePaths.push(audioPath);
+		} catch {
+			console.warn(`[mux] Skipping ${label} audio: file not accessible (${audioPath})`);
+		}
+	}
 
-  if (availableAudioInputs.length === 0) {
-    console.warn('[mux] No valid audio files to mux')
-    return
-  }
+	if (availableAudioInputs.length === 0) {
+		console.warn("[mux] No valid audio files to mux");
+		return;
+	}
 
-  // Match each audio track to the captured video duration.
-  const videoDuration = await probeMediaDurationSeconds(videoPath)
-  const audioAdjustments: Map<string, AudioSyncAdjustment> = new Map()
+	// Match each audio track to the captured video duration.
+	const videoDuration = await probeMediaDurationSeconds(videoPath);
+	const audioAdjustments: Map<string, AudioSyncAdjustment> = new Map();
 
-  if (videoDuration > 0) {
-    for (let i = 0; i < audioFilePaths.length; i++) {
-      const audioDuration = await probeMediaDurationSeconds(audioFilePaths[i])
-      const adjustment = getAudioSyncAdjustment(videoDuration, audioDuration)
-      audioAdjustments.set(availableAudioInputs[i], adjustment)
-      if (adjustment.mode === 'tempo') {
-        console.log(
-          `[mux] ${availableAudioInputs[i]} audio differs from video by ${adjustment.durationDeltaMs}ms — applying tempo ratio ${adjustment.tempoRatio.toFixed(6)}`,
-        )
-      } else if (adjustment.mode === 'delay' && adjustment.delayMs > 0) {
-        console.log(
-          `[mux] ${availableAudioInputs[i]} audio appears to start late by ${adjustment.delayMs}ms — adding leading silence`,
-        )
-      }
-    }
-  }
+	if (videoDuration > 0) {
+		for (let i = 0; i < audioFilePaths.length; i++) {
+			const audioDuration = await probeMediaDurationSeconds(audioFilePaths[i]);
+			const adjustment = getAudioSyncAdjustment(videoDuration, audioDuration);
+			audioAdjustments.set(availableAudioInputs[i], adjustment);
+			if (adjustment.mode === "tempo") {
+				console.log(
+					`[mux] ${availableAudioInputs[i]} audio differs from video by ${adjustment.durationDeltaMs}ms — applying tempo ratio ${adjustment.tempoRatio.toFixed(6)}`,
+				);
+			} else if (adjustment.mode === "delay" && adjustment.delayMs > 0) {
+				console.log(
+					`[mux] ${availableAudioInputs[i]} audio appears to start late by ${adjustment.delayMs}ms — adding leading silence`,
+				);
+			}
+		}
+	}
 
-  const systemAdjustment =
-    audioAdjustments.get('system') ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
-  const micAdjustment =
-    audioAdjustments.get('microphone') ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
-  const needsFilter = systemAdjustment.mode !== 'none' || micAdjustment.mode !== 'none'
+	const systemAdjustment = audioAdjustments.get("system") ?? {
+		mode: "none",
+		delayMs: 0,
+		tempoRatio: 1,
+		durationDeltaMs: 0,
+	};
+	const micAdjustment = audioAdjustments.get("microphone") ?? {
+		mode: "none",
+		delayMs: 0,
+		tempoRatio: 1,
+		durationDeltaMs: 0,
+	};
+	const needsFilter = systemAdjustment.mode !== "none" || micAdjustment.mode !== "none";
 
-  let args: string[]
-  if (availableAudioInputs.length === 2) {
-    if (needsFilter) {
-      const filterParts: string[] = []
-      appendSyncedAudioFilter(filterParts, '[1:a]', 's', systemAdjustment)
-      appendSyncedAudioFilter(filterParts, '[2:a]', 'm', micAdjustment)
-      filterParts.push('[s][m]amix=inputs=2:duration=longest:normalize=0[aout]')
-      args = [
-        '-y',
-        ...inputs,
-        '-filter_complex', filterParts.join(';'),
-        '-map', '0:v:0',
-        '-map', '[aout]',
-        '-c:v', 'copy',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-shortest',
-        mixedOutputPath,
-      ]
-    } else {
-      args = [
-        '-y',
-        ...inputs,
-        '-filter_complex', '[1:a][2:a]amix=inputs=2:duration=longest:normalize=0[aout]',
-        '-map', '0:v:0',
-        '-map', '[aout]',
-        '-c:v', 'copy',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-shortest',
-        mixedOutputPath,
-      ]
-    }
-  } else {
-    const singleAdjustment =
-      audioAdjustments.get(availableAudioInputs[0]) ?? { mode: 'none', delayMs: 0, tempoRatio: 1, durationDeltaMs: 0 }
-    if (singleAdjustment.mode !== 'none') {
-      const filterParts: string[] = []
-      appendSyncedAudioFilter(filterParts, '[1:a]', 'aout', singleAdjustment)
-      args = [
-        '-y',
-        ...inputs,
-        '-filter_complex', filterParts.join(';'),
-        '-map', '0:v:0',
-        '-map', '[aout]',
-        '-c:v', 'copy',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-shortest',
-        mixedOutputPath,
-      ]
-    } else {
-      args = [
-        '-y',
-        ...inputs,
-        '-map', '0:v:0',
-        '-map', '1:a:0',
-        '-c:v', 'copy',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-shortest',
-        mixedOutputPath,
-      ]
-    }
-  }
+	let args: string[];
+	if (availableAudioInputs.length === 2) {
+		if (needsFilter) {
+			const filterParts: string[] = [];
+			appendSyncedAudioFilter(filterParts, "[1:a]", "s", systemAdjustment);
+			appendSyncedAudioFilter(filterParts, "[2:a]", "m", micAdjustment);
+			filterParts.push("[s][m]amix=inputs=2:duration=longest:normalize=0[aout]");
+			args = [
+				"-y",
+				...inputs,
+				"-filter_complex",
+				filterParts.join(";"),
+				"-map",
+				"0:v:0",
+				"-map",
+				"[aout]",
+				"-c:v",
+				"copy",
+				"-c:a",
+				"aac",
+				"-b:a",
+				"192k",
+				"-shortest",
+				mixedOutputPath,
+			];
+		} else {
+			args = [
+				"-y",
+				...inputs,
+				"-filter_complex",
+				"[1:a][2:a]amix=inputs=2:duration=longest:normalize=0[aout]",
+				"-map",
+				"0:v:0",
+				"-map",
+				"[aout]",
+				"-c:v",
+				"copy",
+				"-c:a",
+				"aac",
+				"-b:a",
+				"192k",
+				"-shortest",
+				mixedOutputPath,
+			];
+		}
+	} else {
+		const singleAdjustment = audioAdjustments.get(availableAudioInputs[0]) ?? {
+			mode: "none",
+			delayMs: 0,
+			tempoRatio: 1,
+			durationDeltaMs: 0,
+		};
+		if (singleAdjustment.mode !== "none") {
+			const filterParts: string[] = [];
+			appendSyncedAudioFilter(filterParts, "[1:a]", "aout", singleAdjustment);
+			args = [
+				"-y",
+				...inputs,
+				"-filter_complex",
+				filterParts.join(";"),
+				"-map",
+				"0:v:0",
+				"-map",
+				"[aout]",
+				"-c:v",
+				"copy",
+				"-c:a",
+				"aac",
+				"-b:a",
+				"192k",
+				"-shortest",
+				mixedOutputPath,
+			];
+		} else {
+			args = [
+				"-y",
+				...inputs,
+				"-map",
+				"0:v:0",
+				"-map",
+				"1:a:0",
+				"-c:v",
+				"copy",
+				"-c:a",
+				"aac",
+				"-b:a",
+				"192k",
+				"-shortest",
+				mixedOutputPath,
+			];
+		}
+	}
 
-  console.log('[mux] Running ffmpeg:', ffmpegPath, args.join(' '))
+	console.log("[mux] Running ffmpeg:", ffmpegPath, args.join(" "));
 
-  try {
-    await execFileAsync(
-      ffmpegPath,
-      args,
-      { timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
-    )
-  } catch (error) {
-    const execError = error as NodeJS.ErrnoException & { stderr?: string }
-    console.error('[mux] ffmpeg failed:', execError.stderr || execError.message)
-    throw error
-  }
+	try {
+		await execFileAsync(ffmpegPath, args, { timeout: 120000, maxBuffer: 10 * 1024 * 1024 });
+	} catch (error) {
+		const execError = error as NodeJS.ErrnoException & { stderr?: string };
+		console.error("[mux] ffmpeg failed:", execError.stderr || execError.message);
+		throw error;
+	}
 
-  await moveFileWithOverwrite(mixedOutputPath, videoPath)
-  console.log('[mux] Successfully muxed audio into video:', videoPath)
+	await moveFileWithOverwrite(mixedOutputPath, videoPath);
+	console.log("[mux] Successfully muxed audio into video:", videoPath);
 
-  for (const audioPath of [systemAudioPath, microphonePath]) {
-    if (audioPath) {
-      await fs.rm(audioPath, { force: true }).catch(() => {})
-    }
-  }
+	for (const audioPath of [systemAudioPath, microphonePath]) {
+		if (audioPath) {
+			await fs.rm(audioPath, { force: true }).catch(() => undefined);
+		}
+	}
 }
 
 function emitRecordingInterrupted(reason: string, message: string) {
-  BrowserWindow.getAllWindows().forEach((window) => {
-    if (!window.isDestroyed()) {
-      window.webContents.send('recording-interrupted', { reason, message })
-    }
-  })
+	BrowserWindow.getAllWindows().forEach((window) => {
+		if (!window.isDestroyed()) {
+			window.webContents.send("recording-interrupted", { reason, message });
+		}
+	});
 }
 
 function emitCursorStateChanged(cursorType: CursorVisualType) {
-  BrowserWindow.getAllWindows().forEach((window) => {
-    if (!window.isDestroyed()) {
-      window.webContents.send('cursor-state-changed', { cursorType })
-    }
-  })
+	BrowserWindow.getAllWindows().forEach((window) => {
+		if (!window.isDestroyed()) {
+			window.webContents.send("cursor-state-changed", { cursorType });
+		}
+	});
 }
 
 function sampleCursorStateChange(cursorType: CursorVisualType) {
-  if (!isCursorCaptureActive) {
-    return
-  }
+	if (!isCursorCaptureActive) {
+		return;
+	}
 
-  const point = getNormalizedCursorPoint()
-  if (!point) {
-    return
-  }
+	const point = getNormalizedCursorPoint();
+	if (!point) {
+		return;
+	}
 
-  pushCursorSample(point.cx, point.cy, Date.now() - cursorCaptureStartTimeMs, 'move', cursorType)
+	pushCursorSample(point.cx, point.cy, Date.now() - cursorCaptureStartTimeMs, "move", cursorType);
 }
 
 function attachNativeCaptureLifecycle(process: ChildProcessWithoutNullStreams) {
-  process.once('close', () => {
-    const wasActive = nativeScreenRecordingActive
-    nativeCaptureProcess = null
+	process.once("close", () => {
+		const wasActive = nativeScreenRecordingActive;
+		nativeCaptureProcess = null;
 
-    if (!wasActive || nativeCaptureStopRequested) {
-      return
-    }
+		if (!wasActive || nativeCaptureStopRequested) {
+			return;
+		}
 
-    nativeScreenRecordingActive = false
-    nativeCaptureTargetPath = null
-    nativeCaptureStopRequested = false
-    nativeCaptureSystemAudioPath = null
-    nativeCaptureMicrophonePath = null
+		nativeScreenRecordingActive = false;
+		nativeCaptureTargetPath = null;
+		nativeCaptureStopRequested = false;
+		nativeCaptureSystemAudioPath = null;
+		nativeCaptureMicrophonePath = null;
 
-    const sourceName = selectedSource?.name ?? 'Screen'
-    BrowserWindow.getAllWindows().forEach((window) => {
-      if (!window.isDestroyed()) {
-        window.webContents.send('recording-state-changed', {
-          recording: false,
-          sourceName,
-        })
-      }
-    })
+		const sourceName = selectedSource?.name ?? "Screen";
+		BrowserWindow.getAllWindows().forEach((window) => {
+			if (!window.isDestroyed()) {
+				window.webContents.send("recording-state-changed", {
+					recording: false,
+					sourceName,
+				});
+			}
+		});
 
-    const reason = nativeCaptureOutputBuffer.includes('WINDOW_UNAVAILABLE')
-      ? 'window-unavailable'
-      : 'capture-stopped'
-    const message = reason === 'window-unavailable'
-      ? 'The selected window is no longer capturable. Please reselect a window.'
-      : 'Recording stopped unexpectedly.'
+		const reason = nativeCaptureOutputBuffer.includes("WINDOW_UNAVAILABLE")
+			? "window-unavailable"
+			: "capture-stopped";
+		const message =
+			reason === "window-unavailable"
+				? "The selected window is no longer capturable. Please reselect a window."
+				: "Recording stopped unexpectedly.";
 
-    emitRecordingInterrupted(reason, message)
-  })
+		emitRecordingInterrupted(reason, message);
+	});
 }
 
 async function ensureNativeCursorMonitorBinary() {
-  return ensureSwiftHelperBinary(
-    getNativeCursorMonitorSourcePath(),
-    getNativeCursorMonitorBinaryPath(),
-    'native cursor monitor helper',
-    'openscreen-native-cursor-monitor'
-  )
+	await ensureNativeHelperMigration();
+	return ensureSwiftHelperBinary(
+		getNativeCursorMonitorSourcePath(),
+		getNativeCursorMonitorBinaryPath(),
+		"native cursor monitor helper",
+		"recordly-native-cursor-monitor",
+	);
 }
 
 function handleCursorMonitorStdout(chunk: Buffer) {
-  nativeCursorMonitorOutputBuffer += chunk.toString()
-  const lines = nativeCursorMonitorOutputBuffer.split(/\r?\n/)
-  nativeCursorMonitorOutputBuffer = lines.pop() ?? ''
+	nativeCursorMonitorOutputBuffer += chunk.toString();
+	const lines = nativeCursorMonitorOutputBuffer.split(/\r?\n/);
+	nativeCursorMonitorOutputBuffer = lines.pop() ?? "";
 
-  for (const line of lines) {
-    const match = line.match(/^STATE:(.+)$/)
-    if (!match) continue
-    const next = match[1].trim() as CursorVisualType
-    if (
-      next === 'arrow'
-      || next === 'text'
-      || next === 'pointer'
-      || next === 'crosshair'
-      || next === 'open-hand'
-      || next === 'closed-hand'
-      || next === 'resize-ew'
-      || next === 'resize-ns'
-      || next === 'not-allowed'
-    ) {
-      if (currentCursorVisualType !== next) {
-        currentCursorVisualType = next
-        sampleCursorStateChange(next)
-        emitCursorStateChanged(next)
-      }
-    }
-  }
+	for (const line of lines) {
+		const match = line.match(/^STATE:(.+)$/);
+		if (!match) continue;
+		const next = match[1].trim() as CursorVisualType;
+		if (
+			next === "arrow" ||
+			next === "text" ||
+			next === "pointer" ||
+			next === "crosshair" ||
+			next === "open-hand" ||
+			next === "closed-hand" ||
+			next === "resize-ew" ||
+			next === "resize-ns" ||
+			next === "not-allowed"
+		) {
+			if (currentCursorVisualType !== next) {
+				currentCursorVisualType = next;
+				sampleCursorStateChange(next);
+				emitCursorStateChanged(next);
+			}
+		}
+	}
 }
 
 async function startNativeCursorMonitor() {
-  stopNativeCursorMonitor()
+	stopNativeCursorMonitor();
 
-  if (process.platform !== 'darwin' && process.platform !== 'win32') {
-    currentCursorVisualType = 'arrow'
-    return
-  }
+	if (process.platform !== "darwin" && process.platform !== "win32") {
+		currentCursorVisualType = "arrow";
+		return;
+	}
 
-  try {
-    let helperPath: string
-    if (process.platform === 'win32') {
-      helperPath = getCursorMonitorExePath()
-      try {
-        // Use F_OK on Windows — X_OK is meaningless and can give false positives
-        await fs.access(helperPath, fsConstants.F_OK)
-      } catch {
-        console.warn('Windows cursor monitor helper missing:', helperPath)
-        currentCursorVisualType = 'arrow'
-        return
-      }
-    } else {
-      helperPath = await ensureNativeCursorMonitorBinary()
-    }
+	try {
+		let helperPath: string;
+		if (process.platform === "win32") {
+			helperPath = getCursorMonitorExePath();
+			try {
+				// Use F_OK on Windows — X_OK is meaningless and can give false positives
+				await fs.access(helperPath, fsConstants.F_OK);
+			} catch {
+				console.warn("Windows cursor monitor helper missing:", helperPath);
+				currentCursorVisualType = "arrow";
+				return;
+			}
+		} else {
+			helperPath = await ensureNativeCursorMonitorBinary();
+		}
 
-    nativeCursorMonitorOutputBuffer = ''
-    currentCursorVisualType = 'arrow'
+		nativeCursorMonitorOutputBuffer = "";
+		currentCursorVisualType = "arrow";
 
-    try {
-      nativeCursorMonitorProcess = spawn(helperPath, [], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      })
-    } catch (spawnError) {
-      console.warn('Failed to spawn cursor monitor:', spawnError)
-      nativeCursorMonitorProcess = null
-      currentCursorVisualType = 'arrow'
-      return
-    }
+		try {
+			nativeCursorMonitorProcess = spawn(helperPath, [], {
+				stdio: ["pipe", "pipe", "pipe"],
+			});
+		} catch (spawnError) {
+			console.warn("Failed to spawn cursor monitor:", spawnError);
+			nativeCursorMonitorProcess = null;
+			currentCursorVisualType = "arrow";
+			return;
+		}
 
-    nativeCursorMonitorProcess.once('error', (error) => {
-      console.warn('Native cursor monitor process error:', error)
-      nativeCursorMonitorProcess = null
-      nativeCursorMonitorOutputBuffer = ''
-      currentCursorVisualType = 'arrow'
-    })
+		nativeCursorMonitorProcess.once("error", (error) => {
+			console.warn("Native cursor monitor process error:", error);
+			nativeCursorMonitorProcess = null;
+			nativeCursorMonitorOutputBuffer = "";
+			currentCursorVisualType = "arrow";
+		});
 
-    nativeCursorMonitorProcess.stdout.on('data', handleCursorMonitorStdout)
+		nativeCursorMonitorProcess.stdout.on("data", handleCursorMonitorStdout);
 
-    nativeCursorMonitorProcess.once('close', () => {
-      nativeCursorMonitorProcess = null
-      nativeCursorMonitorOutputBuffer = ''
-      currentCursorVisualType = 'arrow'
-    })
-  } catch (error) {
-    console.warn('Failed to start native cursor monitor:', error)
-    nativeCursorMonitorProcess = null
-    nativeCursorMonitorOutputBuffer = ''
-    currentCursorVisualType = 'arrow'
-  }
+		nativeCursorMonitorProcess.once("close", () => {
+			nativeCursorMonitorProcess = null;
+			nativeCursorMonitorOutputBuffer = "";
+			currentCursorVisualType = "arrow";
+		});
+	} catch (error) {
+		console.warn("Failed to start native cursor monitor:", error);
+		nativeCursorMonitorProcess = null;
+		nativeCursorMonitorOutputBuffer = "";
+		currentCursorVisualType = "arrow";
+	}
 }
 
 function stopNativeCursorMonitor() {
-  currentCursorVisualType = 'arrow'
+	currentCursorVisualType = "arrow";
 
-  if (!nativeCursorMonitorProcess) {
-    return
-  }
+	if (!nativeCursorMonitorProcess) {
+		return;
+	}
 
-  try {
-    nativeCursorMonitorProcess.stdin.write('stop\n')
-  } catch {
-    // ignore stop signal issues
-  }
-  try {
-    nativeCursorMonitorProcess.kill()
-  } catch {
-    // ignore kill issues
-  }
+	try {
+		nativeCursorMonitorProcess.stdin.write("stop\n");
+	} catch {
+		// ignore stop signal issues
+	}
+	try {
+		nativeCursorMonitorProcess.kill();
+	} catch {
+		// ignore kill issues
+	}
 
-  nativeCursorMonitorProcess = null
-  nativeCursorMonitorOutputBuffer = ''
+	nativeCursorMonitorProcess = null;
+	nativeCursorMonitorOutputBuffer = "";
 }
 
 async function moveFileWithOverwrite(sourcePath: string, destinationPath: string) {
-  await fs.mkdir(path.dirname(destinationPath), { recursive: true })
-  await fs.rm(destinationPath, { force: true })
+	await fs.mkdir(path.dirname(destinationPath), { recursive: true });
+	await fs.rm(destinationPath, { force: true });
 
-  try {
-    await fs.rename(sourcePath, destinationPath)
-  } catch (error) {
-    const nodeError = error as NodeJS.ErrnoException
-    if (nodeError.code !== 'EXDEV') {
-      throw error
-    }
+	try {
+		await fs.rename(sourcePath, destinationPath);
+	} catch (error) {
+		const nodeError = error as NodeJS.ErrnoException;
+		if (nodeError.code !== "EXDEV") {
+			throw error;
+		}
 
-    await fs.copyFile(sourcePath, destinationPath)
-    await fs.unlink(sourcePath)
-  }
+		await fs.copyFile(sourcePath, destinationPath);
+		await fs.unlink(sourcePath);
+	}
 }
 
 function isTrustedProjectPath(filePath?: string | null) {
-  if (!filePath || !currentProjectPath) {
-    return false
-  }
-  return normalizePath(filePath) === normalizePath(currentProjectPath)
+	if (!filePath || !currentProjectPath) {
+		return false;
+	}
+	return normalizePath(filePath) === normalizePath(currentProjectPath);
 }
 
-const CURSOR_TELEMETRY_VERSION = 2
-const CURSOR_SAMPLE_INTERVAL_MS = 33
-const MAX_CURSOR_SAMPLES = 60 * 60 * 30 // 1 hour @ 30Hz
+const CURSOR_TELEMETRY_VERSION = 2;
+const CURSOR_SAMPLE_INTERVAL_MS = 33;
+const MAX_CURSOR_SAMPLES = 60 * 60 * 30; // 1 hour @ 30Hz
 
-type CursorInteractionType = 'move' | 'click' | 'double-click' | 'right-click' | 'middle-click' | 'mouseup'
+type CursorInteractionType =
+	| "move"
+	| "click"
+	| "double-click"
+	| "right-click"
+	| "middle-click"
+	| "mouseup";
 
 interface CursorTelemetryPoint {
-  timeMs: number
-  cx: number
-  cy: number
-  interactionType?: CursorInteractionType
-  cursorType?: CursorVisualType
+	timeMs: number;
+	cx: number;
+	cy: number;
+	interactionType?: CursorInteractionType;
+	cursorType?: CursorVisualType;
 }
 
-let cursorCaptureInterval: NodeJS.Timeout | null = null
-let cursorCaptureStartTimeMs = 0
-let activeCursorSamples: CursorTelemetryPoint[] = []
-let pendingCursorSamples: CursorTelemetryPoint[] = []
-let isCursorCaptureActive = false
-let interactionCaptureCleanup: (() => void) | null = null
-let hasLoggedInteractionHookFailure = false
-let lastLeftClick: { timeMs: number; cx: number; cy: number } | null = null
-let linuxCursorScreenPoint: { x: number; y: number; updatedAt: number } | null = null
-let selectedWindowBounds: WindowBounds | null = null
-let windowBoundsCaptureInterval: NodeJS.Timeout | null = null
+let cursorCaptureInterval: NodeJS.Timeout | null = null;
+let cursorCaptureStartTimeMs = 0;
+let activeCursorSamples: CursorTelemetryPoint[] = [];
+let pendingCursorSamples: CursorTelemetryPoint[] = [];
+let isCursorCaptureActive = false;
+let interactionCaptureCleanup: (() => void) | null = null;
+let hasLoggedInteractionHookFailure = false;
+let lastLeftClick: { timeMs: number; cx: number; cy: number } | null = null;
+let linuxCursorScreenPoint: { x: number; y: number; updatedAt: number } | null = null;
+let selectedWindowBounds: WindowBounds | null = null;
+let windowBoundsCaptureInterval: NodeJS.Timeout | null = null;
 
 function normalizeHookMouseButton(rawButton: unknown): 1 | 2 | 3 {
-  if (typeof rawButton !== 'number' || !Number.isFinite(rawButton)) {
-    return 1
-  }
+	if (typeof rawButton !== "number" || !Number.isFinite(rawButton)) {
+		return 1;
+	}
 
-  // uiohook/libuiohook button codes are typically 1/2/3. Some wrappers may
-  // expose alternate constants depending on platform/runtime.
-  if (rawButton === 2 || rawButton === 39) {
-    return 2
-  }
+	// uiohook/libuiohook button codes are typically 1/2/3. Some wrappers may
+	// expose alternate constants depending on platform/runtime.
+	if (rawButton === 2 || rawButton === 39) {
+		return 2;
+	}
 
-  if (rawButton === 3 || rawButton === 38) {
-    return 3
-  }
+	if (rawButton === 3 || rawButton === 38) {
+		return 3;
+	}
 
-  return 1
+	return 1;
 }
 
-function getHookMouseButton(event: any): 1 | 2 | 3 {
-  return normalizeHookMouseButton(
-    event?.button
-    ?? event?.mouseButton
-    ?? event?.data?.button
-    ?? event?.data?.mouseButton
-  )
+function getHookMouseButton(event: HookMouseEvent | null | undefined): 1 | 2 | 3 {
+	return normalizeHookMouseButton(
+		event?.button ?? event?.mouseButton ?? event?.data?.button ?? event?.data?.mouseButton,
+	);
 }
 
 function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value))
+	return Math.min(max, Math.max(min, value));
 }
 
 function stopCursorCapture() {
-  if (cursorCaptureInterval) {
-    clearInterval(cursorCaptureInterval)
-    cursorCaptureInterval = null
-  }
+	if (cursorCaptureInterval) {
+		clearInterval(cursorCaptureInterval);
+		cursorCaptureInterval = null;
+	}
 }
 
 function stopInteractionCapture() {
-  if (interactionCaptureCleanup) {
-    interactionCaptureCleanup()
-    interactionCaptureCleanup = null
-  }
+	if (interactionCaptureCleanup) {
+		interactionCaptureCleanup();
+		interactionCaptureCleanup = null;
+	}
 }
 
 function stopWindowBoundsCapture() {
-  if (windowBoundsCaptureInterval) {
-    clearInterval(windowBoundsCaptureInterval)
-    windowBoundsCaptureInterval = null
-  }
-  selectedWindowBounds = null
+	if (windowBoundsCaptureInterval) {
+		clearInterval(windowBoundsCaptureInterval);
+		windowBoundsCaptureInterval = null;
+	}
+	selectedWindowBounds = null;
 }
 
-function getWindowBoundsFromNativeSource(source?: NativeMacWindowSource | null): WindowBounds | null {
-  if (!source) {
-    return null
-  }
+function getWindowBoundsFromNativeSource(
+	source?: NativeMacWindowSource | null,
+): WindowBounds | null {
+	if (!source) {
+		return null;
+	}
 
-  const { x, y, width, height } = source
-  if (
-    typeof x !== 'number' || !Number.isFinite(x)
-    || typeof y !== 'number' || !Number.isFinite(y)
-    || typeof width !== 'number' || !Number.isFinite(width)
-    || typeof height !== 'number' || !Number.isFinite(height)
-  ) {
-    return null
-  }
+	const { x, y, width, height } = source;
+	if (
+		typeof x !== "number" ||
+		!Number.isFinite(x) ||
+		typeof y !== "number" ||
+		!Number.isFinite(y) ||
+		typeof width !== "number" ||
+		!Number.isFinite(width) ||
+		typeof height !== "number" ||
+		!Number.isFinite(height)
+	) {
+		return null;
+	}
 
-  if (width <= 0 || height <= 0) {
-    return null
-  }
+	if (width <= 0 || height <= 0) {
+		return null;
+	}
 
-  return { x, y, width, height }
+	return { x, y, width, height };
 }
 
 async function resolveMacWindowBounds(source: SelectedSource): Promise<WindowBounds | null> {
-  const windowId = parseWindowId(source.id)
-  if (!windowId) {
-    return null
-  }
+	const windowId = parseWindowId(source.id);
+	if (!windowId) {
+		return null;
+	}
 
-  try {
-    const nativeSources = await getNativeMacWindowSources({ maxAgeMs: 250 })
-    const matchedSource = nativeSources.find((entry) => parseWindowId(entry.id) === windowId)
-    return getWindowBoundsFromNativeSource(matchedSource)
-  } catch {
-    return null
-  }
+	try {
+		const nativeSources = await getNativeMacWindowSources({ maxAgeMs: 250 });
+		const matchedSource = nativeSources.find((entry) => parseWindowId(entry.id) === windowId);
+		return getWindowBoundsFromNativeSource(matchedSource);
+	} catch {
+		return null;
+	}
 }
 
 async function refreshSelectedWindowBounds() {
-  if (!selectedSource?.id?.startsWith('window:')) {
-    selectedWindowBounds = null
-    return
-  }
+	if (!selectedSource?.id?.startsWith("window:")) {
+		selectedWindowBounds = null;
+		return;
+	}
 
-  let bounds: WindowBounds | null = null
+	let bounds: WindowBounds | null = null;
 
-  if (process.platform === 'darwin') {
-    bounds = await resolveMacWindowBounds(selectedSource)
-  } else if (process.platform === 'win32') {
-    bounds = await resolveWindowsWindowBounds(selectedSource)
-  } else if (process.platform === 'linux') {
-    bounds = await resolveLinuxWindowBounds(selectedSource)
-  }
+	if (process.platform === "darwin") {
+		bounds = await resolveMacWindowBounds(selectedSource);
+	} else if (process.platform === "win32") {
+		bounds = await resolveWindowsWindowBounds(selectedSource);
+	} else if (process.platform === "linux") {
+		bounds = await resolveLinuxWindowBounds(selectedSource);
+	}
 
-  selectedWindowBounds = bounds
+	selectedWindowBounds = bounds;
 }
 
 function startWindowBoundsCapture() {
-  stopWindowBoundsCapture()
+	stopWindowBoundsCapture();
 
-  if (!['darwin', 'win32', 'linux'].includes(process.platform) || !selectedSource?.id?.startsWith('window:')) {
-    return
-  }
+	if (
+		!["darwin", "win32", "linux"].includes(process.platform) ||
+		!selectedSource?.id?.startsWith("window:")
+	) {
+		return;
+	}
 
-  void refreshSelectedWindowBounds()
-  windowBoundsCaptureInterval = setInterval(() => {
-    void refreshSelectedWindowBounds()
-  }, 250)
+	void refreshSelectedWindowBounds();
+	windowBoundsCaptureInterval = setInterval(() => {
+		void refreshSelectedWindowBounds();
+	}, 250);
 }
 
 function getNormalizedCursorPoint() {
-  const fallbackCursor = getScreen().getCursorScreenPoint()
-  const linuxCursorCache = process.platform === 'linux' ? linuxCursorScreenPoint : null
-  const isLinuxCacheFresh = !!linuxCursorCache
-    && Date.now() - linuxCursorCache.updatedAt <= 1000
+	const fallbackCursor = getScreen().getCursorScreenPoint();
+	const linuxCursorCache = process.platform === "linux" ? linuxCursorScreenPoint : null;
+	const isLinuxCacheFresh = !!linuxCursorCache && Date.now() - linuxCursorCache.updatedAt <= 1000;
 
-  // On Windows/Linux, platform APIs (iohook, GetWindowRect, xwininfo) return
-  // physical pixel coordinates, while Electron's getCursorScreenPoint() and
-  // display.bounds return DIP (logical) coordinates. Apply a DPI correction
-  // so all values are in the same coordinate space before normalizing.
-  // Use the display containing the window (or cursor) rather than the primary
-  // display so multi-monitor setups with different DPI scales work correctly.
-  const primarySf = process.platform !== 'darwin'
-    ? (getScreen().getPrimaryDisplay().scaleFactor || 1)
-    : 1
+	// On Windows/Linux, platform APIs (iohook, GetWindowRect, xwininfo) return
+	// physical pixel coordinates, while Electron's getCursorScreenPoint() and
+	// display.bounds return DIP (logical) coordinates. Apply a DPI correction
+	// so all values are in the same coordinate space before normalizing.
+	// Use the display containing the window (or cursor) rather than the primary
+	// display so multi-monitor setups with different DPI scales work correctly.
+	const primarySf =
+		process.platform !== "darwin" ? getScreen().getPrimaryDisplay().scaleFactor || 1 : 1;
 
-  const cursor = isLinuxCacheFresh
-    ? { x: linuxCursorCache.x / primarySf, y: linuxCursorCache.y / primarySf }
-    : fallbackCursor
+	const cursor = isLinuxCacheFresh
+		? { x: linuxCursorCache.x / primarySf, y: linuxCursorCache.y / primarySf }
+		: fallbackCursor;
 
-  const windowBounds = selectedSource?.id?.startsWith('window:') ? selectedWindowBounds : null
-  if (windowBounds) {
-    // Resolve the scale factor for the display that contains the target window
-    // centre point, falling back to the primary display scale factor.
-    const sf = process.platform !== 'darwin'
-      ? (getScreen().getDisplayNearestPoint({
-          x: windowBounds.x / primarySf,
-          y: windowBounds.y / primarySf,
-        }).scaleFactor || 1)
-      : 1
-    const width = Math.max(1, windowBounds.width / sf)
-    const height = Math.max(1, windowBounds.height / sf)
+	const windowBounds = selectedSource?.id?.startsWith("window:") ? selectedWindowBounds : null;
+	if (windowBounds) {
+		// Resolve the scale factor for the display that contains the target window
+		// centre point, falling back to the primary display scale factor.
+		const sf =
+			process.platform !== "darwin"
+				? getScreen().getDisplayNearestPoint({
+						x: windowBounds.x / primarySf,
+						y: windowBounds.y / primarySf,
+					}).scaleFactor || 1
+				: 1;
+		const width = Math.max(1, windowBounds.width / sf);
+		const height = Math.max(1, windowBounds.height / sf);
 
-    return {
-      cx: clamp((cursor.x - windowBounds.x / sf) / width, 0, 1),
-      cy: clamp((cursor.y - windowBounds.y / sf) / height, 0, 1),
-    }
-  }
+		return {
+			cx: clamp((cursor.x - windowBounds.x / sf) / width, 0, 1),
+			cy: clamp((cursor.y - windowBounds.y / sf) / height, 0, 1),
+		};
+	}
 
-  const sourceDisplayId = Number(selectedSource?.display_id)
-  const sourceDisplay = Number.isFinite(sourceDisplayId)
-    ? getScreen().getAllDisplays().find((display) => display.id === sourceDisplayId) ?? null
-    : null
-  const display = sourceDisplay ?? getScreen().getDisplayNearestPoint(cursor)
-  const bounds = display.bounds
-  const width = Math.max(1, bounds.width)
-  const height = Math.max(1, bounds.height)
+	const sourceDisplayId = Number(selectedSource?.display_id);
+	const sourceDisplay = Number.isFinite(sourceDisplayId)
+		? (getScreen()
+				.getAllDisplays()
+				.find((display) => display.id === sourceDisplayId) ?? null)
+		: null;
+	const display = sourceDisplay ?? getScreen().getDisplayNearestPoint(cursor);
+	const bounds = display.bounds;
+	const width = Math.max(1, bounds.width);
+	const height = Math.max(1, bounds.height);
 
-  const cx = clamp((cursor.x - bounds.x) / width, 0, 1)
-  const cy = clamp((cursor.y - bounds.y) / height, 0, 1)
-  return { cx, cy }
+	const cx = clamp((cursor.x - bounds.x) / width, 0, 1);
+	const cy = clamp((cursor.y - bounds.y) / height, 0, 1);
+	return { cx, cy };
 }
 
-function getHookCursorScreenPoint(event: any): { x: number; y: number } | null {
-  const rawX = event?.x ?? event?.data?.x ?? event?.screenX ?? event?.data?.screenX
-  const rawY = event?.y ?? event?.data?.y ?? event?.screenY ?? event?.data?.screenY
+function getHookCursorScreenPoint(
+	event: HookMouseEvent | null | undefined,
+): { x: number; y: number } | null {
+	const rawX = event?.x ?? event?.data?.x ?? event?.screenX ?? event?.data?.screenX;
+	const rawY = event?.y ?? event?.data?.y ?? event?.screenY ?? event?.data?.screenY;
 
-  if (typeof rawX !== 'number' || !Number.isFinite(rawX) || typeof rawY !== 'number' || !Number.isFinite(rawY)) {
-    return null
-  }
+	if (
+		typeof rawX !== "number" ||
+		!Number.isFinite(rawX) ||
+		typeof rawY !== "number" ||
+		!Number.isFinite(rawY)
+	) {
+		return null;
+	}
 
-  return { x: rawX, y: rawY }
+	return { x: rawX, y: rawY };
 }
 
 function pushCursorSample(
-  cx: number,
-  cy: number,
-  timeMs: number,
-  interactionType: CursorInteractionType = 'move',
-  cursorType?: CursorVisualType,
+	cx: number,
+	cy: number,
+	timeMs: number,
+	interactionType: CursorInteractionType = "move",
+	cursorType?: CursorVisualType,
 ) {
-  activeCursorSamples.push({
-    timeMs: Math.max(0, timeMs),
-    cx,
-    cy,
-    interactionType,
-    cursorType: cursorType ?? currentCursorVisualType,
-  })
+	activeCursorSamples.push({
+		timeMs: Math.max(0, timeMs),
+		cx,
+		cy,
+		interactionType,
+		cursorType: cursorType ?? currentCursorVisualType,
+	});
 
-  if (activeCursorSamples.length > MAX_CURSOR_SAMPLES) {
-    activeCursorSamples.shift()
-  }
+	if (activeCursorSamples.length > MAX_CURSOR_SAMPLES) {
+		activeCursorSamples.shift();
+	}
 }
 
 function sampleCursorPoint() {
-  const point = getNormalizedCursorPoint()
-  if (!point) {
-    return
-  }
+	const point = getNormalizedCursorPoint();
+	if (!point) {
+		return;
+	}
 
-  pushCursorSample(point.cx, point.cy, Date.now() - cursorCaptureStartTimeMs, 'move')
+	pushCursorSample(point.cx, point.cy, Date.now() - cursorCaptureStartTimeMs, "move");
 }
 
 async function persistPendingCursorTelemetry(videoPath: string) {
-  const telemetryPath = getTelemetryPathForVideo(videoPath)
-  if (pendingCursorSamples.length > 0) {
-    await fs.writeFile(
-      telemetryPath,
-      JSON.stringify({ version: CURSOR_TELEMETRY_VERSION, samples: pendingCursorSamples }, null, 2),
-      'utf-8'
-    )
-  }
-  pendingCursorSamples = []
+	const telemetryPath = getTelemetryPathForVideo(videoPath);
+	if (pendingCursorSamples.length > 0) {
+		await fs.writeFile(
+			telemetryPath,
+			JSON.stringify(
+				{ version: CURSOR_TELEMETRY_VERSION, samples: pendingCursorSamples },
+				null,
+				2,
+			),
+			"utf-8",
+		);
+	}
+	pendingCursorSamples = [];
 }
 
 function snapshotCursorTelemetryForPersistence() {
-  if (activeCursorSamples.length === 0) {
-    return
-  }
+	if (activeCursorSamples.length === 0) {
+		return;
+	}
 
-  if (pendingCursorSamples.length === 0) {
-    pendingCursorSamples = [...activeCursorSamples]
-    return
-  }
+	if (pendingCursorSamples.length === 0) {
+		pendingCursorSamples = [...activeCursorSamples];
+		return;
+	}
 
-  const lastPendingTimeMs = pendingCursorSamples[pendingCursorSamples.length - 1]?.timeMs ?? -1
-  pendingCursorSamples = [
-    ...pendingCursorSamples,
-    ...activeCursorSamples.filter((sample) => sample.timeMs > lastPendingTimeMs),
-  ]
+	const lastPendingTimeMs = pendingCursorSamples[pendingCursorSamples.length - 1]?.timeMs ?? -1;
+	pendingCursorSamples = [
+		...pendingCursorSamples,
+		...activeCursorSamples.filter((sample) => sample.timeMs > lastPendingTimeMs),
+	];
 }
 
 async function finalizeStoredVideo(videoPath: string) {
-  // Safety net: if companion audio files still exist, the mux was skipped — attempt it now
-  if (videoPath.endsWith('.mp4')) {
-    const companionCandidates = await getUsableCompanionAudioCandidates(videoPath)
-    for (const { systemPath, micPath, platform } of companionCandidates) {
-      if (platform === 'mac' || platform === 'win') {
-        console.log(`[finalize] Detected un-muxed ${platform} audio files alongside video — attempting safety-net mux`)
-        try {
-          if (platform === 'win') {
-            await muxNativeWindowsVideoWithAudio(videoPath, systemPath, micPath)
-          } else {
-            await muxNativeMacRecordingWithAudio(videoPath, systemPath, micPath)
-          }
-          console.log('[finalize] Safety-net mux completed successfully')
-        } catch (error) {
-          console.warn('[finalize] Safety-net mux failed:', error)
-        }
-        break
-      }
-    }
-  }
+	// Safety net: if companion audio files still exist, the mux was skipped — attempt it now
+	if (videoPath.endsWith(".mp4")) {
+		const companionCandidates = await getUsableCompanionAudioCandidates(videoPath);
+		for (const { systemPath, micPath, platform } of companionCandidates) {
+			if (platform === "mac" || platform === "win") {
+				console.log(
+					`[finalize] Detected un-muxed ${platform} audio files alongside video — attempting safety-net mux`,
+				);
+				try {
+					if (platform === "win") {
+						await muxNativeWindowsVideoWithAudio(videoPath, systemPath, micPath);
+					} else {
+						await muxNativeMacRecordingWithAudio(videoPath, systemPath, micPath);
+					}
+					console.log("[finalize] Safety-net mux completed successfully");
+				} catch (error) {
+					console.warn("[finalize] Safety-net mux failed:", error);
+				}
+				break;
+			}
+		}
+	}
 
-  let validation: { fileSizeBytes: number; durationSeconds: number | null } | null = null
-  try {
-    validation = await validateRecordedVideo(videoPath)
-  } catch (error) {
-    console.warn('Video validation failed (proceeding anyway):', error)
-  }
+	let validation: { fileSizeBytes: number; durationSeconds: number | null } | null = null;
+	try {
+		validation = await validateRecordedVideo(videoPath);
+	} catch (error) {
+		console.warn("Video validation failed (proceeding anyway):", error);
+	}
 
-  snapshotCursorTelemetryForPersistence()
-  currentVideoPath = videoPath
-  currentProjectPath = null
-  await persistPendingCursorTelemetry(videoPath)
-  if (isAutoRecordingPath(videoPath)) {
-    await pruneAutoRecordings([videoPath])
-  }
+	snapshotCursorTelemetryForPersistence();
+	currentVideoPath = videoPath;
+	currentProjectPath = null;
+	await persistPendingCursorTelemetry(videoPath);
+	if (isAutoRecordingPath(videoPath)) {
+		await pruneAutoRecordings([videoPath]);
+	}
 
-  if (lastNativeCaptureDiagnostics?.backend === 'mac-screencapturekit') {
-    recordNativeCaptureDiagnostics({
-      backend: 'mac-screencapturekit',
-      phase: 'stop',
-      sourceId: lastNativeCaptureDiagnostics.sourceId ?? null,
-      sourceType: lastNativeCaptureDiagnostics.sourceType ?? 'unknown',
-      displayId: lastNativeCaptureDiagnostics.displayId ?? null,
-      displayBounds: lastNativeCaptureDiagnostics.displayBounds ?? null,
-      windowHandle: lastNativeCaptureDiagnostics.windowHandle ?? null,
-      helperPath: lastNativeCaptureDiagnostics.helperPath ?? null,
-      outputPath: videoPath,
-      systemAudioPath: lastNativeCaptureDiagnostics.systemAudioPath ?? null,
-      microphonePath: lastNativeCaptureDiagnostics.microphonePath ?? null,
-      osRelease: lastNativeCaptureDiagnostics.osRelease,
-      supported: lastNativeCaptureDiagnostics.supported,
-      helperExists: lastNativeCaptureDiagnostics.helperExists,
-      processOutput: lastNativeCaptureDiagnostics.processOutput,
-      fileSizeBytes: validation?.fileSizeBytes ?? null,
-    })
-  }
+	if (lastNativeCaptureDiagnostics?.backend === "mac-screencapturekit") {
+		recordNativeCaptureDiagnostics({
+			backend: "mac-screencapturekit",
+			phase: "stop",
+			sourceId: lastNativeCaptureDiagnostics.sourceId ?? null,
+			sourceType: lastNativeCaptureDiagnostics.sourceType ?? "unknown",
+			displayId: lastNativeCaptureDiagnostics.displayId ?? null,
+			displayBounds: lastNativeCaptureDiagnostics.displayBounds ?? null,
+			windowHandle: lastNativeCaptureDiagnostics.windowHandle ?? null,
+			helperPath: lastNativeCaptureDiagnostics.helperPath ?? null,
+			outputPath: videoPath,
+			systemAudioPath: lastNativeCaptureDiagnostics.systemAudioPath ?? null,
+			microphonePath: lastNativeCaptureDiagnostics.microphonePath ?? null,
+			osRelease: lastNativeCaptureDiagnostics.osRelease,
+			supported: lastNativeCaptureDiagnostics.supported,
+			helperExists: lastNativeCaptureDiagnostics.helperExists,
+			processOutput: lastNativeCaptureDiagnostics.processOutput,
+			fileSizeBytes: validation?.fileSizeBytes ?? null,
+		});
+	}
 
-  return {
-    success: true,
-    path: videoPath,
-    message: validation?.durationSeconds !== null && validation !== null
-      ? `Video stored successfully (${validation.fileSizeBytes} bytes, ${validation.durationSeconds.toFixed(2)}s)`
-      : `Video stored successfully`
-  }
+	return {
+		success: true,
+		path: videoPath,
+		message:
+			validation?.durationSeconds !== null && validation !== null
+				? `Video stored successfully (${validation.fileSizeBytes} bytes, ${validation.durationSeconds.toFixed(2)}s)`
+				: `Video stored successfully`,
+	};
 }
 
 async function recoverNativeMacCaptureOutput() {
-  const macDiagnostics =
-    lastNativeCaptureDiagnostics?.backend === 'mac-screencapturekit'
-      ? lastNativeCaptureDiagnostics
-      : null
-  const diagnosticsPath = macDiagnostics?.outputPath ?? null
-  const candidatePath = nativeCaptureTargetPath ?? diagnosticsPath
-  const systemAudioPath = nativeCaptureSystemAudioPath ?? macDiagnostics?.systemAudioPath ?? null
-  const microphonePath = nativeCaptureMicrophonePath ?? macDiagnostics?.microphonePath ?? null
+	const macDiagnostics =
+		lastNativeCaptureDiagnostics?.backend === "mac-screencapturekit"
+			? lastNativeCaptureDiagnostics
+			: null;
+	const diagnosticsPath = macDiagnostics?.outputPath ?? null;
+	const candidatePath = nativeCaptureTargetPath ?? diagnosticsPath;
+	const systemAudioPath = nativeCaptureSystemAudioPath ?? macDiagnostics?.systemAudioPath ?? null;
+	const microphonePath = nativeCaptureMicrophonePath ?? macDiagnostics?.microphonePath ?? null;
 
-  if (!candidatePath) {
-    return null
-  }
+	if (!candidatePath) {
+		return null;
+	}
 
-  try {
-    if (systemAudioPath || microphonePath) {
-      try {
-        await muxNativeMacRecordingWithAudio(candidatePath, systemAudioPath, microphonePath)
-      } catch (muxError) {
-        console.warn('Failed to mux audio during recovery:', muxError)
-      }
-    }
+	try {
+		if (systemAudioPath || microphonePath) {
+			try {
+				await muxNativeMacRecordingWithAudio(
+					candidatePath,
+					systemAudioPath,
+					microphonePath,
+				);
+			} catch (muxError) {
+				console.warn("Failed to mux audio during recovery:", muxError);
+			}
+		}
 
-    return await finalizeStoredVideo(candidatePath)
-  } catch (error) {
-    recordNativeCaptureDiagnostics({
-      backend: 'mac-screencapturekit',
-      phase: 'stop',
-      outputPath: candidatePath,
-      systemAudioPath,
-      microphonePath,
-      processOutput: nativeCaptureOutputBuffer.trim() || undefined,
-      fileSizeBytes: await getFileSizeIfPresent(candidatePath),
-      error: String(error),
-    })
-    return null
-  }
+		return await finalizeStoredVideo(candidatePath);
+	} catch (error) {
+		recordNativeCaptureDiagnostics({
+			backend: "mac-screencapturekit",
+			phase: "stop",
+			outputPath: candidatePath,
+			systemAudioPath,
+			microphonePath,
+			processOutput: nativeCaptureOutputBuffer.trim() || undefined,
+			fileSizeBytes: await getFileSizeIfPresent(candidatePath),
+			error: String(error),
+		});
+		return null;
+	}
 }
 
 async function startInteractionCapture() {
-  if (!isCursorCaptureActive) {
-    return
-  }
+	if (!isCursorCaptureActive) {
+		return;
+	}
 
-  if (!['darwin', 'win32', 'linux'].includes(process.platform)) {
-    return
-  }
+	if (!["darwin", "win32", "linux"].includes(process.platform)) {
+		return;
+	}
 
-  try {
-    const hook = loadUiohookModule()
-    console.log('[CursorTelemetry] hook loaded:', !!hook, 'has.on:', typeof hook?.on, 'has.start:', typeof hook?.start)
-    if (!isCursorCaptureActive) {
-      return
-    }
+	try {
+		const hook = loadUiohookModule();
+		console.log(
+			"[CursorTelemetry] hook loaded:",
+			!!hook,
+			"has.on:",
+			typeof hook?.on,
+			"has.start:",
+			typeof hook?.start,
+		);
+		if (!isCursorCaptureActive) {
+			return;
+		}
 
-    if (!hook || typeof hook.on !== 'function' || typeof hook.start !== 'function') {
-      console.log('[CursorTelemetry] hook unusable — aborting interaction capture')
-      return
-    }
+		if (!hook || typeof hook.on !== "function" || typeof hook.start !== "function") {
+			console.log("[CursorTelemetry] hook unusable — aborting interaction capture");
+			return;
+		}
 
-    const onMouseDown = (event: any) => {
-      if (!isCursorCaptureActive) {
-        return
-      }
+		const onMouseDown = (event: HookMouseEvent) => {
+			if (!isCursorCaptureActive) {
+				return;
+			}
 
-      const point = getNormalizedCursorPoint()
-      if (!point) {
-        return
-      }
+			const point = getNormalizedCursorPoint();
+			if (!point) {
+				return;
+			}
 
-      const timeMs = Date.now() - cursorCaptureStartTimeMs
-      const button = getHookMouseButton(event)
-      let interactionType: CursorInteractionType = 'click'
+			const timeMs = Date.now() - cursorCaptureStartTimeMs;
+			const button = getHookMouseButton(event);
+			let interactionType: CursorInteractionType = "click";
 
-      if (button === 2) {
-        interactionType = 'right-click'
-      } else if (button === 3) {
-        interactionType = 'middle-click'
-      } else {
-        const thresholdMs = 350
-        const distance = lastLeftClick
-          ? Math.hypot(point.cx - lastLeftClick.cx, point.cy - lastLeftClick.cy)
-          : Number.POSITIVE_INFINITY
+			if (button === 2) {
+				interactionType = "right-click";
+			} else if (button === 3) {
+				interactionType = "middle-click";
+			} else {
+				const thresholdMs = 350;
+				const distance = lastLeftClick
+					? Math.hypot(point.cx - lastLeftClick.cx, point.cy - lastLeftClick.cy)
+					: Number.POSITIVE_INFINITY;
 
-        if (lastLeftClick && timeMs - lastLeftClick.timeMs <= thresholdMs && distance <= 0.04) {
-          interactionType = 'double-click'
-        }
+				if (
+					lastLeftClick &&
+					timeMs - lastLeftClick.timeMs <= thresholdMs &&
+					distance <= 0.04
+				) {
+					interactionType = "double-click";
+				}
 
-        lastLeftClick = { timeMs, cx: point.cx, cy: point.cy }
-      }
+				lastLeftClick = { timeMs, cx: point.cx, cy: point.cy };
+			}
 
-      pushCursorSample(point.cx, point.cy, timeMs, interactionType)
-    }
+			pushCursorSample(point.cx, point.cy, timeMs, interactionType);
+		};
 
-    const onMouseUp = (_event: any) => {
-      if (!isCursorCaptureActive) {
-        return
-      }
+		const onMouseUp = () => {
+			if (!isCursorCaptureActive) {
+				return;
+			}
 
-      const point = getNormalizedCursorPoint()
-      if (!point) {
-        return
-      }
+			const point = getNormalizedCursorPoint();
+			if (!point) {
+				return;
+			}
 
-      const timeMs = Date.now() - cursorCaptureStartTimeMs
-      pushCursorSample(point.cx, point.cy, timeMs, 'mouseup')
-    }
+			const timeMs = Date.now() - cursorCaptureStartTimeMs;
+			pushCursorSample(point.cx, point.cy, timeMs, "mouseup");
+		};
 
-    const onMouseMove = (event: any) => {
-      if (process.platform !== 'linux' || !isCursorCaptureActive) {
-        return
-      }
+		const onMouseMove = (event: HookMouseEvent) => {
+			if (process.platform !== "linux" || !isCursorCaptureActive) {
+				return;
+			}
 
-      const point = getHookCursorScreenPoint(event)
-      if (!point) {
-        return
-      }
+			const point = getHookCursorScreenPoint(event);
+			if (!point) {
+				return;
+			}
 
-      linuxCursorScreenPoint = { x: point.x, y: point.y, updatedAt: Date.now() }
-    }
+			linuxCursorScreenPoint = { x: point.x, y: point.y, updatedAt: Date.now() };
+		};
 
-    hook.on('mousedown', onMouseDown)
-    hook.on('mouseup', onMouseUp)
-    hook.on('mousemove', onMouseMove)
+		hook.on("mousedown", onMouseDown);
+		hook.on("mouseup", onMouseUp);
+		hook.on("mousemove", onMouseMove);
 
-    hook.start()
+		hook.start();
 
-    interactionCaptureCleanup = () => {
-      try {
-        if (typeof hook.off === 'function') {
-          hook.off('mousedown', onMouseDown)
-          hook.off('mouseup', onMouseUp)
-          hook.off('mousemove', onMouseMove)
-        } else if (typeof hook.removeListener === 'function') {
-          hook.removeListener('mousedown', onMouseDown)
-          hook.removeListener('mouseup', onMouseUp)
-          hook.removeListener('mousemove', onMouseMove)
-        }
-      } catch {
-        // ignore listener cleanup errors
-      }
+		interactionCaptureCleanup = () => {
+			try {
+				if (typeof hook.off === "function") {
+					hook.off("mousedown", onMouseDown);
+					hook.off("mouseup", onMouseUp);
+					hook.off("mousemove", onMouseMove);
+				} else if (typeof hook.removeListener === "function") {
+					hook.removeListener("mousedown", onMouseDown);
+					hook.removeListener("mouseup", onMouseUp);
+					hook.removeListener("mousemove", onMouseMove);
+				}
+			} catch {
+				// ignore listener cleanup errors
+			}
 
-      try {
-        if (typeof hook.stop === 'function') {
-          hook.stop()
-        }
-      } catch {
-        // ignore hook shutdown errors
-      }
-    }
-  } catch (error) {
-    if (!hasLoggedInteractionHookFailure) {
-      hasLoggedInteractionHookFailure = true
-      console.warn('[CursorTelemetry] Global interaction capture unavailable:', error)
-    }
-  }
+			try {
+				if (typeof hook.stop === "function") {
+					hook.stop();
+				}
+			} catch {
+				// ignore hook shutdown errors
+			}
+		};
+	} catch (error) {
+		if (!hasLoggedInteractionHookFailure) {
+			hasLoggedInteractionHookFailure = true;
+			console.warn("[CursorTelemetry] Global interaction capture unavailable:", error);
+		}
+	}
 }
 
 export function registerIpcHandlers(
-  createEditorWindow: () => void,
-  createSourceSelectorWindow: () => BrowserWindow,
-  _getMainWindow: () => BrowserWindow | null,
-  getSourceSelectorWindow: () => BrowserWindow | null,
-  onRecordingStateChange?: (recording: boolean, sourceName: string) => void
+	createEditorWindow: () => void,
+	createSourceSelectorWindow: () => BrowserWindow,
+	_getMainWindow: () => BrowserWindow | null,
+	getSourceSelectorWindow: () => BrowserWindow | null,
+	onRecordingStateChange?: (recording: boolean, sourceName: string) => void,
 ) {
-  ipcMain.handle('get-sources', async (_, opts) => {
-    const includeScreens = Array.isArray(opts?.types) ? opts.types.includes('screen') : true
-    const includeWindows = Array.isArray(opts?.types) ? opts.types.includes('window') : true
-    const electronTypes = [
-      ...(includeScreens ? ['screen' as const] : []),
-      ...(includeWindows ? ['window' as const] : []),
-    ]
-    const electronSources = electronTypes.length > 0
-      ? await desktopCapturer.getSources({
-          ...opts,
-          types: electronTypes,
-        }).catch((error) => {
-          console.warn('desktopCapturer.getSources failed (screen recording permission may be missing):', error)
-          return []
-        })
-      : []
-    const ownWindowNames = new Set(
-      [
-        app.getName(),
-        'Recordly',
-        ...BrowserWindow.getAllWindows().flatMap((win) => {
-          const title = win.getTitle().trim()
-          return title ? [title] : []
-        }),
-      ]
-        .map((name) => normalizeDesktopSourceName(name))
-        .filter(Boolean)
-    )
-    const ownAppName = normalizeDesktopSourceName(app.getName())
+	ipcMain.handle("get-sources", async (_, opts) => {
+		const includeScreens = Array.isArray(opts?.types) ? opts.types.includes("screen") : true;
+		const includeWindows = Array.isArray(opts?.types) ? opts.types.includes("window") : true;
+		const electronTypes = [
+			...(includeScreens ? ["screen" as const] : []),
+			...(includeWindows ? ["window" as const] : []),
+		];
+		const electronSources =
+			electronTypes.length > 0
+				? await desktopCapturer
+						.getSources({
+							...opts,
+							types: electronTypes,
+						})
+						.catch((error) => {
+							console.warn(
+								"desktopCapturer.getSources failed (screen recording permission may be missing):",
+								error,
+							);
+							return [];
+						})
+				: [];
+		const ownWindowNames = new Set(
+			[
+				app.getName(),
+				"Recordly",
+				...BrowserWindow.getAllWindows().flatMap((win) => {
+					const title = win.getTitle().trim();
+					return title ? [title] : [];
+				}),
+			]
+				.map((name) => normalizeDesktopSourceName(name))
+				.filter(Boolean),
+		);
+		const ownAppName = normalizeDesktopSourceName(app.getName());
 
-    const displays = includeScreens
-      ? [...getScreen().getAllDisplays()].sort((left, right) => (
-          left.bounds.x - right.bounds.x
-          || left.bounds.y - right.bounds.y
-          || left.id - right.id
-        ))
-      : []
-    const primaryDisplayId = includeScreens ? String(getScreen().getPrimaryDisplay().id) : ''
-    const electronScreenSourcesByDisplayId = new Map(
-      electronSources
-        .filter((source) => source.id.startsWith('screen:'))
-        .map((source) => [String(source.display_id ?? ''), source] as const)
-    )
+		const displays = includeScreens
+			? [...getScreen().getAllDisplays()].sort(
+					(left, right) =>
+						left.bounds.x - right.bounds.x ||
+						left.bounds.y - right.bounds.y ||
+						left.id - right.id,
+				)
+			: [];
+		const primaryDisplayId = includeScreens ? String(getScreen().getPrimaryDisplay().id) : "";
+		const electronScreenSourcesByDisplayId = new Map(
+			electronSources
+				.filter((source) => source.id.startsWith("screen:"))
+				.map((source) => [String(source.display_id ?? ""), source] as const),
+		);
 
-    const screenSources = displays.map((display, index) => {
-      const displayId = String(display.id)
-      const matchedSource = electronScreenSourcesByDisplayId.get(displayId)
-      const displayName = displayId === primaryDisplayId
-        ? `Screen ${index + 1} (Primary)`
-        : `Screen ${index + 1}`
+		const screenSources = displays.map((display, index) => {
+			const displayId = String(display.id);
+			const matchedSource = electronScreenSourcesByDisplayId.get(displayId);
+			const displayName =
+				displayId === primaryDisplayId
+					? `Screen ${index + 1} (Primary)`
+					: `Screen ${index + 1}`;
 
-      return {
-        id: matchedSource?.id ?? `screen:fallback:${displayId}`,
-        name: displayName,
-        originalName: matchedSource?.name ?? displayName,
-        display_id: displayId,
-        thumbnail: matchedSource?.thumbnail ? matchedSource.thumbnail.toDataURL() : null,
-        appIcon: matchedSource?.appIcon ? matchedSource.appIcon.toDataURL() : null,
-        sourceType: 'screen' as const,
-      }
-    })
+			return {
+				id: matchedSource?.id ?? `screen:fallback:${displayId}`,
+				name: displayName,
+				originalName: matchedSource?.name ?? displayName,
+				display_id: displayId,
+				thumbnail: matchedSource?.thumbnail ? matchedSource.thumbnail.toDataURL() : null,
+				appIcon: matchedSource?.appIcon ? matchedSource.appIcon.toDataURL() : null,
+				sourceType: "screen" as const,
+			};
+		});
 
-    if (process.platform !== 'darwin' || !includeWindows) {
-      const windowSources = electronSources
-        .filter((source) => source.id.startsWith('window:'))
-        .filter((source) => hasUsableSourceThumbnail(source.thumbnail))
-        .filter((source) => {
-          const normalizedName = normalizeDesktopSourceName(source.name)
-          if (!normalizedName) {
-            return true
-          }
+		if (process.platform !== "darwin" || !includeWindows) {
+			const windowSources = electronSources
+				.filter((source) => source.id.startsWith("window:"))
+				.filter((source) => hasUsableSourceThumbnail(source.thumbnail))
+				.filter((source) => {
+					const normalizedName = normalizeDesktopSourceName(source.name);
+					if (!normalizedName) {
+						return true;
+					}
 
-          if (ALLOW_RECORDLY_WINDOW_CAPTURE && normalizedName.includes('recordly')) {
-            return true
-          }
+					if (ALLOW_RECORDLY_WINDOW_CAPTURE && normalizedName.includes("recordly")) {
+						return true;
+					}
 
-          for (const ownName of ownWindowNames) {
-            if (!ownName) continue
-            if (normalizedName === ownName) {
-              return false
-            }
-          }
+					for (const ownName of ownWindowNames) {
+						if (!ownName) continue;
+						if (normalizedName === ownName) {
+							return false;
+						}
+					}
 
-          return true
-        })
-        .map((source) => ({
-          id: source.id,
-          name: source.name,
-          originalName: source.name,
-          display_id: source.display_id,
-          thumbnail: source.thumbnail ? source.thumbnail.toDataURL() : null,
-          appIcon: source.appIcon ? source.appIcon.toDataURL() : null,
-          sourceType: 'window' as const,
-        }))
+					return true;
+				})
+				.map((source) => ({
+					id: source.id,
+					name: source.name,
+					originalName: source.name,
+					display_id: source.display_id,
+					thumbnail: source.thumbnail ? source.thumbnail.toDataURL() : null,
+					appIcon: source.appIcon ? source.appIcon.toDataURL() : null,
+					sourceType: "window" as const,
+				}));
 
-      return [...screenSources, ...windowSources]
-    }
+			return [...screenSources, ...windowSources];
+		}
 
-    try {
-      const nativeWindowSources = await getNativeMacWindowSources()
-      const electronWindowSourceMap = new Map(
-        electronSources
-          .filter((source) => source.id.startsWith('window:'))
-          .map((source) => [source.id, source] as const)
-      )
+		try {
+			const nativeWindowSources = await getNativeMacWindowSources();
+			const electronWindowSourceMap = new Map(
+				electronSources
+					.filter((source) => source.id.startsWith("window:"))
+					.map((source) => [source.id, source] as const),
+			);
 
-      const mergedWindowSources = nativeWindowSources
-        .filter((source) => {
-          const normalizedWindowName = normalizeDesktopSourceName(source.windowTitle ?? source.name)
-          const normalizedAppName = normalizeDesktopSourceName(source.appName ?? '')
+			const mergedWindowSources = nativeWindowSources
+				.filter((source) => {
+					const normalizedWindowName = normalizeDesktopSourceName(
+						source.windowTitle ?? source.name,
+					);
+					const normalizedAppName = normalizeDesktopSourceName(source.appName ?? "");
 
-          if (!ALLOW_RECORDLY_WINDOW_CAPTURE && normalizedAppName && normalizedAppName === ownAppName) {
-            return false
-          }
+					if (
+						!ALLOW_RECORDLY_WINDOW_CAPTURE &&
+						normalizedAppName &&
+						normalizedAppName === ownAppName
+					) {
+						return false;
+					}
 
-          if (ALLOW_RECORDLY_WINDOW_CAPTURE && (normalizedAppName === 'recordly' || normalizedWindowName?.includes('recordly'))) {
-            return true
-          }
+					if (
+						ALLOW_RECORDLY_WINDOW_CAPTURE &&
+						(normalizedAppName === "recordly" ||
+							normalizedWindowName?.includes("recordly"))
+					) {
+						return true;
+					}
 
-          if (!normalizedWindowName) {
-            return true
-          }
+					if (!normalizedWindowName) {
+						return true;
+					}
 
-          for (const ownName of ownWindowNames) {
-            if (!ownName) continue
-            if (normalizedWindowName === ownName) {
-              return false
-            }
-          }
+					for (const ownName of ownWindowNames) {
+						if (!ownName) continue;
+						if (normalizedWindowName === ownName) {
+							return false;
+						}
+					}
 
-          return true
-        })
-        .map((source) => {
-          const electronWindowSource = electronWindowSourceMap.get(source.id)
-          return {
-            id: source.id,
-            name: source.name,
-            originalName: source.name,
-            display_id: source.display_id ?? electronWindowSource?.display_id ?? '',
-            thumbnail: electronWindowSource?.thumbnail ? electronWindowSource.thumbnail.toDataURL() : null,
-            appIcon: source.appIcon ?? (electronWindowSource?.appIcon ? electronWindowSource.appIcon.toDataURL() : null),
-            appName: source.appName,
-            windowTitle: source.windowTitle,
-            sourceType: 'window' as const,
-          }
-        })
+					return true;
+				})
+				.map((source) => {
+					const electronWindowSource = electronWindowSourceMap.get(source.id);
+					return {
+						id: source.id,
+						name: source.name,
+						originalName: source.name,
+						display_id: source.display_id ?? electronWindowSource?.display_id ?? "",
+						thumbnail: electronWindowSource?.thumbnail
+							? electronWindowSource.thumbnail.toDataURL()
+							: null,
+						appIcon:
+							source.appIcon ??
+							(electronWindowSource?.appIcon
+								? electronWindowSource.appIcon.toDataURL()
+								: null),
+						appName: source.appName,
+						windowTitle: source.windowTitle,
+						sourceType: "window" as const,
+					};
+				});
 
-      return [...screenSources, ...mergedWindowSources]
-    } catch (error) {
-      console.warn('Falling back to Electron window enumeration on macOS:', error)
+			return [...screenSources, ...mergedWindowSources];
+		} catch (error) {
+			console.warn("Falling back to Electron window enumeration on macOS:", error);
 
-      const windowSources = electronSources
-        .filter((source) => source.id.startsWith('window:'))
-        .filter((source) => {
-          const normalizedName = normalizeDesktopSourceName(source.name)
-          if (!normalizedName) {
-            return true
-          }
+			const windowSources = electronSources
+				.filter((source) => source.id.startsWith("window:"))
+				.filter((source) => {
+					const normalizedName = normalizeDesktopSourceName(source.name);
+					if (!normalizedName) {
+						return true;
+					}
 
-          if (ALLOW_RECORDLY_WINDOW_CAPTURE && normalizedName.includes('recordly')) {
-            return true
-          }
+					if (ALLOW_RECORDLY_WINDOW_CAPTURE && normalizedName.includes("recordly")) {
+						return true;
+					}
 
-          for (const ownName of ownWindowNames) {
-            if (!ownName) continue
-            if (normalizedName === ownName || normalizedName.includes(ownName) || ownName.includes(normalizedName)) {
-              return false
-            }
-          }
+					for (const ownName of ownWindowNames) {
+						if (!ownName) continue;
+						if (
+							normalizedName === ownName ||
+							normalizedName.includes(ownName) ||
+							ownName.includes(normalizedName)
+						) {
+							return false;
+						}
+					}
 
-          return true
-        })
-        .map((source) => ({
-          id: source.id,
-          name: source.name,
-          originalName: source.name,
-          display_id: source.display_id,
-          thumbnail: source.thumbnail ? source.thumbnail.toDataURL() : null,
-          appIcon: source.appIcon ? source.appIcon.toDataURL() : null,
-          sourceType: 'window' as const,
-        }))
+					return true;
+				})
+				.map((source) => ({
+					id: source.id,
+					name: source.name,
+					originalName: source.name,
+					display_id: source.display_id,
+					thumbnail: source.thumbnail ? source.thumbnail.toDataURL() : null,
+					appIcon: source.appIcon ? source.appIcon.toDataURL() : null,
+					sourceType: "window" as const,
+				}));
 
-      return [...screenSources, ...windowSources]
-    }
-  })
+			return [...screenSources, ...windowSources];
+		}
+	});
 
-  ipcMain.handle('select-source', (_, source: SelectedSource) => {
-    selectedSource = source
-    broadcastSelectedSourceChange()
-    stopWindowBoundsCapture()
-    const sourceSelectorWin = getSourceSelectorWindow()
-    if (sourceSelectorWin) {
-      sourceSelectorWin.close()
-    }
-    return selectedSource
-  })
+	ipcMain.handle("select-source", (_, source: SelectedSource) => {
+		selectedSource = source;
+		broadcastSelectedSourceChange();
+		stopWindowBoundsCapture();
+		const sourceSelectorWin = getSourceSelectorWindow();
+		if (sourceSelectorWin) {
+			sourceSelectorWin.close();
+		}
+		return selectedSource;
+	});
 
-  ipcMain.handle('show-source-highlight', async (_, source: SelectedSource) => {
-    try {
-      const isWindow = source.id?.startsWith('window:')
-      const windowId = isWindow ? parseWindowId(source.id) : null
+	ipcMain.handle("show-source-highlight", async (_, source: SelectedSource) => {
+		try {
+			const isWindow = source.id?.startsWith("window:");
+			const windowId = isWindow ? parseWindowId(source.id) : null;
 
-      // ── 1. Bring window to front ──
-      if (isWindow && process.platform === 'darwin') {
-        const appName = source.appName || source.name?.split(' — ')[0]?.trim()
-        if (appName) {
-          try {
-            await execFileAsync('osascript', ['-e',
-              `tell application "${appName}" to activate`
-            ], { timeout: 2000 })
-            await new Promise((resolve) => setTimeout(resolve, 350))
-          } catch { /* ignore */ }
-        }
-      } else if (windowId && process.platform === 'linux') {
-        try {
-          await execFileAsync('wmctrl', ['-i', '-a', `0x${windowId.toString(16)}`], { timeout: 1500 })
-        } catch {
-          try {
-            await execFileAsync('xdotool', ['windowactivate', String(windowId)], { timeout: 1500 })
-          } catch { /* not available */ }
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250))
-      }
+			// ── 1. Bring window to front ──
+			if (isWindow && process.platform === "darwin") {
+				const appName = source.appName || source.name?.split(" — ")[0]?.trim();
+				if (appName) {
+					try {
+						await execFileAsync(
+							"osascript",
+							["-e", `tell application "${appName}" to activate`],
+							{ timeout: 2000 },
+						);
+						await new Promise((resolve) => setTimeout(resolve, 350));
+					} catch {
+						/* ignore */
+					}
+				}
+			} else if (windowId && process.platform === "linux") {
+				try {
+					await execFileAsync("wmctrl", ["-i", "-a", `0x${windowId.toString(16)}`], {
+						timeout: 1500,
+					});
+				} catch {
+					try {
+						await execFileAsync("xdotool", ["windowactivate", String(windowId)], {
+							timeout: 1500,
+						});
+					} catch {
+						/* not available */
+					}
+				}
+				await new Promise((resolve) => setTimeout(resolve, 250));
+			}
 
-      // ── 2. Resolve bounds ──
-      let bounds: { x: number; y: number; width: number; height: number } | null = null
+			// ── 2. Resolve bounds ──
+			let bounds: { x: number; y: number; width: number; height: number } | null = null;
 
-      if (source.id?.startsWith('screen:')) {
-        bounds = getDisplayBoundsForSource(source)
-      } else if (isWindow) {
-        if (process.platform === 'darwin') {
-          bounds = await resolveMacWindowBounds(source)
-        } else if (process.platform === 'win32') {
-          bounds = await resolveWindowsWindowBounds(source)
-        } else if (process.platform === 'linux') {
-          bounds = await resolveLinuxWindowBounds(source)
-        }
-      }
+			if (source.id?.startsWith("screen:")) {
+				bounds = getDisplayBoundsForSource(source);
+			} else if (isWindow) {
+				if (process.platform === "darwin") {
+					bounds = await resolveMacWindowBounds(source);
+				} else if (process.platform === "win32") {
+					bounds = await resolveWindowsWindowBounds(source);
+				} else if (process.platform === "linux") {
+					bounds = await resolveLinuxWindowBounds(source);
+				}
+			}
 
-      if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
-        bounds = getDisplayBoundsForSource(source)
-      }
+			if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
+				bounds = getDisplayBoundsForSource(source);
+			}
 
-      // ── 3. Show traveling wave highlight ──
-      const pad = 6
-      const highlightWin = new BrowserWindow({
-        x: bounds.x - pad,
-        y: bounds.y - pad,
-        width: bounds.width + pad * 2,
-        height: bounds.height + pad * 2,
-        frame: false,
-        transparent: true,
-        alwaysOnTop: true,
-        skipTaskbar: true,
-        hasShadow: false,
-        resizable: false,
-        focusable: false,
-        webPreferences: { nodeIntegration: false, contextIsolation: true },
-      })
+			// ── 3. Show traveling wave highlight ──
+			const pad = 6;
+			const highlightWin = new BrowserWindow({
+				x: bounds.x - pad,
+				y: bounds.y - pad,
+				width: bounds.width + pad * 2,
+				height: bounds.height + pad * 2,
+				frame: false,
+				transparent: true,
+				alwaysOnTop: true,
+				skipTaskbar: true,
+				hasShadow: false,
+				resizable: false,
+				focusable: false,
+				webPreferences: { nodeIntegration: false, contextIsolation: true },
+			});
 
-      highlightWin.setIgnoreMouseEvents(true)
+			highlightWin.setIgnoreMouseEvents(true);
 
-      const html = `<!DOCTYPE html>
+			const html = `<!DOCTYPE html>
 <html><head><style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:transparent;overflow:hidden;width:100vw;height:100vh}
@@ -5411,6 +5945,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         frameRate: number
         bitrate: number
         encodingMode: NativeExportEncodingMode
+        inputMode?: 'rawvideo' | 'h264-stream'
       },
     ) => {
       try {
@@ -5419,20 +5954,34 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         }
 
         const ffmpegPath = getFfmpegBinaryPath()
-        const encoderName = await resolveNativeVideoEncoder(ffmpegPath, options.encodingMode)
+        const inputMode = options.inputMode ?? 'rawvideo'
         const sessionId = `recordly-export-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         const outputPath = path.join(app.getPath('temp'), `${sessionId}.mp4`)
-        const ffmpegArgs = buildNativeVideoExportArgs(encoderName, options, outputPath)
+
+        let encoderName: string
+        let ffmpegArgs: string[]
+
+        if (inputMode === 'h264-stream') {
+          // Pre-encoded H.264 Annex B from browser VideoEncoder — just stream-copy into MP4
+          encoderName = 'h264-stream-copy'
+          ffmpegArgs = buildNativeH264StreamExportArgs({ frameRate: options.frameRate, outputPath })
+        } else {
+          encoderName = await resolveNativeVideoEncoder(ffmpegPath, options.encodingMode)
+          ffmpegArgs = buildNativeVideoExportArgs(encoderName, options, outputPath)
+        }
+
         const ffmpegProcess = spawn(ffmpegPath, ffmpegArgs, {
           stdio: ['pipe', 'ignore', 'pipe'],
         }) as ChildProcessByStdio<Writable, null, Readable>
-        const inputByteSize = getNativeVideoInputByteSize(options.width, options.height)
+        // For rawvideo, frames are a fixed RGBA size. For h264-stream, chunks are variable.
+        const inputByteSize = inputMode === 'rawvideo' ? getNativeVideoInputByteSize(options.width, options.height) : 0
 
         const session: NativeVideoExportSession = {
           ffmpegProcess,
           outputPath,
           inputByteSize,
-          maxQueuedWriteBytes: getNativeVideoExportMaxQueuedWriteBytes(inputByteSize),
+          inputMode,
+          maxQueuedWriteBytes: inputMode === 'h264-stream' ? 8 * 1024 * 1024 : getNativeVideoExportMaxQueuedWriteBytes(inputByteSize),
           stderrOutput: '',
           encoderName,
           processError: null,
@@ -5547,7 +6096,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         return
       }
 
-      if (frameData.byteLength !== session.inputByteSize) {
+      if (session.inputMode !== 'h264-stream' && frameData.byteLength !== session.inputByteSize) {
         settleNativeVideoExportWriteFrameRequest(sessionId, session, requestId, {
           success: false,
           error: `Native video export expected ${session.inputByteSize} bytes per frame but received ${frameData.byteLength}`,
@@ -5752,6 +6301,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         return { success: false, canceled: true };
       }
 
+      approveUserPath(result.filePaths[0])
       currentProjectPath = null
       return {
         success: true,
@@ -5782,6 +6332,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         return { success: false, canceled: true };
       }
 
+      approveUserPath(result.filePaths[0])
       return {
         success: true,
         path: result.filePaths[0]
@@ -5811,6 +6362,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         return { success: false, canceled: true }
       }
 
+      approveUserPath(result.filePaths[0])
       return { success: true, path: result.filePaths[0] }
     } catch (error) {
       console.error('Failed to open Whisper executable picker:', error)
@@ -5833,6 +6385,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
         return { success: false, canceled: true }
       }
 
+      approveUserPath(result.filePaths[0])
       return { success: true, path: result.filePaths[0] }
     } catch (error) {
       console.error('Failed to open Whisper model picker:', error)
@@ -6175,6 +6728,7 @@ body{background:transparent;overflow:hidden;width:100vw;height:100vh}
   })
   ipcMain.handle('set-current-video-path', async (_, path: string) => {
     currentVideoPath = normalizeVideoSourcePath(path) ?? path
+    approveUserPath(currentVideoPath)
     const resolvedSession = await resolveRecordingSession(currentVideoPath)
       ?? {
         videoPath: currentVideoPath,

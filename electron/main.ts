@@ -16,13 +16,13 @@ import {
 } from "electron";
 import { RECORDINGS_DIR } from "./appPaths";
 import { showCursor } from "./cursorHider";
+import { registerExtensionIpcHandlers } from "./extensions/extensionIpc";
 import {
 	cleanupNativeVideoExportSessions,
 	getSelectedSourceId,
 	killWindowsCaptureProcess,
 	registerIpcHandlers,
 } from "./ipc/handlers";
-import { registerExtensionIpcHandlers } from "./extensions/extensionIpc";
 import { ensurePackagedRendererServer } from "./rendererServer";
 import type { UpdateToastPayload } from "./updater";
 import {
@@ -226,7 +226,11 @@ function focusOrCreateMainWindow() {
 		// work because they receive an XDG activation token via StatusNotifierItem.ProvideXdgActivationToken;
 		// Electron's tray doesn't handle that yet. Workaround: destroy and recreate the HUD so the new
 		// window gets focus (creation path works). Only for HUD, not editor.
-		if (process.platform === "linux" && !mainWindow.isFocused() && !isEditorWindow(mainWindow)) {
+		if (
+			process.platform === "linux" &&
+			!mainWindow.isFocused() &&
+			!isEditorWindow(mainWindow)
+		) {
 			const win = mainWindow;
 			mainWindow = null;
 			win.once("closed", () => createWindow());
@@ -509,9 +513,11 @@ function sendUpdateToastToWindows(channel: "update-toast-state", payload: unknow
 			return false;
 		}
 
-		const notificationKey = [updatePayload.phase, updatePayload.version, updatePayload.detail].join(
-			":",
-		);
+		const notificationKey = [
+			updatePayload.phase,
+			updatePayload.version,
+			updatePayload.detail,
+		].join(":");
 		if (activeUpdateNotificationKey === notificationKey) {
 			return true;
 		}
@@ -874,7 +880,9 @@ app.whenReady().then(async () => {
 		try {
 			const sources = await desktopCapturer.getSources({ types: ["screen", "window"] });
 			const sourceId = getSelectedSourceId();
-			const source = sourceId ? (sources.find((s) => s.id === sourceId) ?? sources[0]) : sources[0];
+			const source = sourceId
+				? (sources.find((s) => s.id === sourceId) ?? sources[0])
+				: sources[0];
 			if (source) {
 				callback({
 					video: { id: source.id, name: source.name },

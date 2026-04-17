@@ -1,4 +1,9 @@
-import { AlertCircle, Download, LoaderCircle, Rocket } from "lucide-react";
+import {
+	WarningCircle as AlertCircle,
+	DownloadSimple as Download,
+	Spinner as LoaderCircle,
+	Rocket,
+} from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
 type UpdateToastPayload = {
@@ -51,6 +56,9 @@ function getPrimaryActionLabel(payload: UpdateToastPayload) {
 export function UpdateToastWindow() {
 	const [payload, setPayload] = useState<UpdateToastPayload | null>(null);
 	const [dragOffsetX, setDragOffsetX] = useState(0);
+	const dragResetKey = payload
+		? `${payload.phase}:${payload.version}:${payload.progressPercent ?? ""}:${payload.detail}:${payload.delayMs}:${payload.isPreview ? "1" : "0"}:${payload.primaryAction ?? ""}`
+		: "empty";
 	const dragState = useRef<{
 		pointerId: number | null;
 		startX: number;
@@ -95,13 +103,17 @@ export function UpdateToastWindow() {
 	}, []);
 
 	useEffect(() => {
+		if (!dragResetKey) {
+			return;
+		}
+
 		setDragOffsetX(0);
 		dragState.current = {
 			pointerId: null,
 			startX: 0,
 			active: false,
 		};
-	}, [payload?.phase, payload?.version, payload?.progressPercent]);
+	}, [dragResetKey]);
 
 	const cardStyle = {
 		background: "#0d1117",
@@ -251,14 +263,20 @@ export function UpdateToastWindow() {
 					event.currentTarget.setPointerCapture(event.pointerId);
 				}}
 				onPointerMove={(event) => {
-					if (!dragState.current.active || dragState.current.pointerId !== event.pointerId) {
+					if (
+						!dragState.current.active ||
+						dragState.current.pointerId !== event.pointerId
+					) {
 						return;
 					}
 
 					setDragOffsetX(event.clientX - dragState.current.startX);
 				}}
 				onPointerUp={async (event) => {
-					if (!dragState.current.active || dragState.current.pointerId !== event.pointerId) {
+					if (
+						!dragState.current.active ||
+						dragState.current.pointerId !== event.pointerId
+					) {
 						return;
 					}
 
@@ -287,7 +305,9 @@ export function UpdateToastWindow() {
 			>
 				<div style={iconBoxStyle}>
 					{payload.phase === "available" ? <Download size={20} /> : null}
-					{payload.phase === "downloading" ? <LoaderCircle size={20} className="animate-spin" /> : null}
+					{payload.phase === "downloading" ? (
+						<LoaderCircle size={20} className="animate-spin" />
+					) : null}
 					{payload.phase === "ready" ? <Rocket size={20} /> : null}
 					{payload.phase === "error" ? <AlertCircle size={20} /> : null}
 				</div>
@@ -295,7 +315,19 @@ export function UpdateToastWindow() {
 					<div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 						<p style={titleStyle}>{getToastTitle(payload)}</p>
 						{payload.isPreview ? (
-							<span style={{ borderRadius: 999, border: "1px solid rgba(125, 211, 252, 0.2)", background: "rgba(125, 211, 252, 0.1)", padding: "2px 8px", fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "#bae6fd" }}>
+							<span
+								style={{
+									borderRadius: 999,
+									border: "1px solid rgba(125, 211, 252, 0.2)",
+									background: "rgba(125, 211, 252, 0.1)",
+									padding: "2px 8px",
+									fontSize: 10,
+									fontWeight: 700,
+									letterSpacing: "0.18em",
+									textTransform: "uppercase",
+									color: "#bae6fd",
+								}}
+							>
 								Dev
 							</span>
 						) : null}
@@ -304,12 +336,33 @@ export function UpdateToastWindow() {
 
 					{payload.phase === "downloading" ? (
 						<div style={{ marginTop: 12 }}>
-							<div style={{ height: 8, overflow: "hidden", borderRadius: 999, background: "rgba(255, 255, 255, 0.1)" }}>
+							<div
+								style={{
+									height: 8,
+									overflow: "hidden",
+									borderRadius: 999,
+									background: "rgba(255, 255, 255, 0.1)",
+								}}
+							>
 								<div
-									style={{ height: "100%", borderRadius: 999, background: "#7dd3fc", width: `${normalizedProgress}%` }}
+									style={{
+										height: "100%",
+										borderRadius: 999,
+										background: "#7dd3fc",
+										width: `${normalizedProgress}%`,
+									}}
 								/>
 							</div>
-							<p style={{ margin: "8px 0 0 0", color: "rgba(224, 242, 254, 0.9)", fontSize: 12, fontWeight: 600 }}>{normalizedProgress}% downloaded</p>
+							<p
+								style={{
+									margin: "8px 0 0 0",
+									color: "rgba(224, 242, 254, 0.9)",
+									fontSize: 12,
+									fontWeight: 600,
+								}}
+							>
+								{normalizedProgress}% downloaded
+							</p>
 						</div>
 					) : null}
 

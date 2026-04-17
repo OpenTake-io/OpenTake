@@ -1,4 +1,4 @@
-import { Film, Image } from "lucide-react";
+import { FilmSlate as Film, Image } from "@phosphor-icons/react";
 import { useScopedT } from "@/contexts/I18nContext";
 import type { ExportFormat } from "@/lib/exporter/types";
 import { cn } from "@/lib/utils";
@@ -67,7 +67,9 @@ export function FormatSelector({
 						</div>
 						<div className="text-center">
 							<div className="font-medium text-sm">{option.label}</div>
-							<div className="text-xs text-slate-500 mt-0.5">{option.description}</div>
+							<div className="text-xs text-slate-500 mt-0.5">
+								{option.description}
+							</div>
 						</div>
 						{isSelected && (
 							<div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#2563EB]" />

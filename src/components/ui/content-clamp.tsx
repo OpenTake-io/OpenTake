@@ -1,87 +1,112 @@
-"use client"
+"use client";
 
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "@/lib/utils"
-import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from "./popover"
+import { cn } from "@/lib/utils";
+import { Popover, PopoverArrow, PopoverContent, PopoverTrigger } from "./popover";
 
 interface ContentClampProps extends React.HTMLAttributes<HTMLDivElement> {
-  children: React.ReactNode
-  truncateLength?: number
+	children: React.ReactNode;
+	truncateLength?: number;
 }
 
-function ContentClamp({
-  children,
-  className,
-  truncateLength = 50,
-  ...props
-}: ContentClampProps) {
-  const text = typeof children === "string" ? children : String(children ?? "")
-  const isTruncated = text.length > truncateLength
+function ContentClamp({ children, className, truncateLength = 50, ...props }: ContentClampProps) {
+	const text = typeof children === "string" ? children : String(children ?? "");
+	const isTruncated = text.length > truncateLength;
 
-  const [open, setOpen] = React.useState(false)
-  const timeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+	const [open, setOpen] = React.useState(false);
+	const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleMouseEnter = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-      timeoutRef.current = null
-    }
-    setOpen(true)
-  }
+	const clearScheduledClose = () => {
+		if (timeoutRef.current) {
+			clearTimeout(timeoutRef.current);
+			timeoutRef.current = null;
+		}
+	};
 
-  const handleMouseLeave = () => {
-    timeoutRef.current = setTimeout(() => {
-      setOpen(false)
-    }, 100)
-  }
+	const openPopover = () => {
+		clearScheduledClose();
+		setOpen(true);
+	};
 
-  React.useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-    }
-  }, [])
+	const scheduleClose = () => {
+		clearScheduledClose();
+		timeoutRef.current = setTimeout(() => {
+			setOpen(false);
+			timeoutRef.current = null;
+		}, 100);
+	};
 
-  if (!isTruncated) {
-    return (
-      <div className={cn("inline", className)} {...props}>
-        {children}
-      </div>
-    )
-  }
+	const togglePopover = () => {
+		clearScheduledClose();
+		setOpen((currentOpen) => !currentOpen);
+	};
 
-  const truncatedText = text.slice(0, truncateLength) + "..."
+	const handleKeyDown = (event: React.KeyboardEvent<HTMLSpanElement>) => {
+		if (event.key !== "Enter" && event.key !== " ") {
+			return;
+		}
 
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <span
-          className={className}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-          onClick={(e) => e.preventDefault()}
-          {...props}
-        >
-          {truncatedText}
-        </span>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-auto max-w-sm rounded-lg border border-white bg-popover p-3 text-sm text-popover-foreground"
-        sideOffset={8}
-        animated={false}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <PopoverArrow className="fill-white" />
-        {children}
-      </PopoverContent>
-    </Popover>
-  )
+		event.preventDefault();
+		togglePopover();
+	};
+
+	React.useEffect(() => {
+		return () => {
+			if (timeoutRef.current) {
+				clearTimeout(timeoutRef.current);
+				timeoutRef.current = null;
+			}
+		};
+	}, []);
+
+	if (!isTruncated) {
+		return (
+			<div className={cn("inline", className)} {...props}>
+				{children}
+			</div>
+		);
+	}
+
+	const truncatedText = text.slice(0, truncateLength) + "...";
+
+	return (
+		<Popover open={open} onOpenChange={setOpen}>
+			<PopoverTrigger asChild>
+				<span
+					className={cn("cursor-help", className)}
+					onMouseEnter={openPopover}
+					onMouseLeave={scheduleClose}
+					onFocus={openPopover}
+					onBlur={scheduleClose}
+					onClick={(event) => {
+						event.preventDefault();
+						togglePopover();
+					}}
+					onKeyDown={handleKeyDown}
+					role="button"
+					tabIndex={0}
+					aria-haspopup="dialog"
+					aria-expanded={open}
+					{...props}
+				>
+					{truncatedText}
+				</span>
+			</PopoverTrigger>
+			<PopoverContent
+				className="w-auto max-w-sm rounded-lg border border-white bg-popover p-3 text-sm text-popover-foreground"
+				sideOffset={8}
+				animated={false}
+				onMouseEnter={openPopover}
+				onMouseLeave={scheduleClose}
+				onPointerDownOutside={(e) => e.preventDefault()}
+				onClick={(e) => e.stopPropagation()}
+			>
+				<PopoverArrow className="fill-white" />
+				{children}
+			</PopoverContent>
+		</Popover>
+	);
 }
 
-export { ContentClamp }
-
+export { ContentClamp };

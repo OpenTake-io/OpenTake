@@ -108,6 +108,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		frameRate: number;
 		bitrate: number;
 		encodingMode: "fast" | "balanced" | "quality";
+		inputMode?: "rawvideo" | "h264-stream";
 	}) => {
 		return ipcRenderer.invoke("native-video-export-start", options);
 	},
@@ -138,20 +139,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
 			editedAudioMimeType?: string | null;
 		},
 	) => {
-		return ipcRenderer.invoke("native-video-export-finish", sessionId, options).then((result) => {
-			settleNativeVideoExportPendingRequests(sessionId, result?.success
-				? { success: true }
-				: {
-					success: false,
-					error:
-						typeof result?.error === "string"
-							? result.error
-							: "Native video export session finished before all frame writes settled.",
-				},
-			);
+		return ipcRenderer
+			.invoke("native-video-export-finish", sessionId, options)
+			.then((result) => {
+				settleNativeVideoExportPendingRequests(
+					sessionId,
+					result?.success
+						? { success: true }
+						: {
+								success: false,
+								error:
+									typeof result?.error === "string"
+										? result.error
+										: "Native video export session finished before all frame writes settled.",
+							},
+				);
 
-			return result;
-		});
+				return result;
+			});
 	},
 	nativeVideoExportCancel: (sessionId: string) => {
 		return ipcRenderer.invoke("native-video-export-cancel", sessionId).finally(() => {
@@ -185,22 +190,25 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	openSourceSelector: () => {
 		return ipcRenderer.invoke("open-source-selector");
 	},
-	selectSource: (source: any) => {
+	selectSource: (source: ProcessedDesktopSource) => {
 		return ipcRenderer.invoke("select-source", source);
 	},
-	showSourceHighlight: (source: any) => {
+	showSourceHighlight: (source: ProcessedDesktopSource) => {
 		return ipcRenderer.invoke("show-source-highlight", source);
 	},
 	getSelectedSource: () => {
 		return ipcRenderer.invoke("get-selected-source");
 	},
-	onSelectedSourceChanged: (callback: (source: any) => void) => {
-		const listener = (_event: Electron.IpcRendererEvent, payload: any) => callback(payload);
+	onSelectedSourceChanged: (callback: (source: ProcessedDesktopSource | null) => void) => {
+		const listener = (
+			_event: Electron.IpcRendererEvent,
+			payload: ProcessedDesktopSource | null,
+		) => callback(payload);
 		ipcRenderer.on("selected-source-changed", listener);
 		return () => ipcRenderer.removeListener("selected-source-changed", listener);
 	},
 	startNativeScreenRecording: (
-		source: any,
+		source: ProcessedDesktopSource,
 		options?: {
 			capturesSystemAudio?: boolean;
 			capturesMicrophone?: boolean;
@@ -225,7 +233,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	resumeNativeScreenRecording: () => {
 		return ipcRenderer.invoke("resume-native-screen-recording");
 	},
-	startFfmpegRecording: (source: any) => {
+	startFfmpegRecording: (source: ProcessedDesktopSource) => {
 		return ipcRenderer.invoke("start-ffmpeg-recording", source);
 	},
 	stopFfmpegRecording: () => {
@@ -331,11 +339,21 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		return ipcRenderer.invoke("delete-whisper-small-model");
 	},
 	onWhisperSmallModelDownloadProgress: (
-		callback: (state: { status: "idle" | "downloading" | "downloaded" | "error"; progress: number; path?: string | null; error?: string }) => void,
+		callback: (state: {
+			status: "idle" | "downloading" | "downloaded" | "error";
+			progress: number;
+			path?: string | null;
+			error?: string;
+		}) => void,
 	) => {
 		const listener = (
 			_event: Electron.IpcRendererEvent,
-			payload: { status: "idle" | "downloading" | "downloaded" | "error"; progress: number; path?: string | null; error?: string },
+			payload: {
+				status: "idle" | "downloading" | "downloaded" | "error";
+				progress: number;
+				path?: string | null;
+				error?: string;
+			},
 		) => callback(payload);
 		ipcRenderer.on("whisper-small-model-download-progress", listener);
 		return () => ipcRenderer.removeListener("whisper-small-model-download-progress", listener);
@@ -351,7 +369,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	setCurrentVideoPath: (path: string) => {
 		return ipcRenderer.invoke("set-current-video-path", path);
 	},
-	setCurrentRecordingSession: (session: { videoPath: string; webcamPath?: string | null; timeOffsetMs?: number }) => {
+	setCurrentRecordingSession: (session: {
+		videoPath: string;
+		webcamPath?: string | null;
+		timeOffsetMs?: number;
+	}) => {
 		return ipcRenderer.invoke("set-current-recording-session", session);
 	},
 	getCurrentRecordingSession: () => {
@@ -426,29 +448,29 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		return ipcRenderer.invoke("check-for-app-updates");
 	},
 	onUpdateToastStateChanged: (
-		callback: (payload: {
-			version: string;
-			detail: string;
-			phase: "available" | "downloading" | "ready" | "error";
-			delayMs: number;
-			isPreview?: boolean;
-			progressPercent?: number;
-			primaryAction?: "download-update" | "install-update" | "retry-check";
-		} | null) => void,
+		callback: (
+			payload: {
+				version: string;
+				detail: string;
+				phase: "available" | "downloading" | "ready" | "error";
+				delayMs: number;
+				isPreview?: boolean;
+				progressPercent?: number;
+				primaryAction?: "download-update" | "install-update" | "retry-check";
+			} | null,
+		) => void,
 	) => {
 		const listener = (
 			_event: Electron.IpcRendererEvent,
-			payload:
-				| {
-						version: string;
-						detail: string;
-						phase: "available" | "downloading" | "ready" | "error";
-						delayMs: number;
-						isPreview?: boolean;
-						progressPercent?: number;
-						primaryAction?: "download-update" | "install-update" | "retry-check";
-				  }
-				| null,
+			payload: {
+				version: string;
+				detail: string;
+				phase: "available" | "downloading" | "ready" | "error";
+				delayMs: number;
+				isPreview?: boolean;
+				progressPercent?: number;
+				primaryAction?: "download-update" | "install-update" | "retry-check";
+			} | null,
 		) => callback(payload);
 		ipcRenderer.on("update-toast-state", listener);
 		return () => ipcRenderer.removeListener("update-toast-state", listener);
@@ -520,12 +542,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.on("request-save-before-close", listener);
 		return () => ipcRenderer.removeListener("request-save-before-close", listener);
 	},
-	isNativeWindowsCaptureAvailable: () => ipcRenderer.invoke("is-native-windows-capture-available"),
-	muxNativeWindowsRecording: (pauseSegments?: Array<{ startMs: number; endMs: number }>) => ipcRenderer.invoke("mux-native-windows-recording", pauseSegments),
+	isNativeWindowsCaptureAvailable: () =>
+		ipcRenderer.invoke("is-native-windows-capture-available"),
+	muxNativeWindowsRecording: (pauseSegments?: Array<{ startMs: number; endMs: number }>) =>
+		ipcRenderer.invoke("mux-native-windows-recording", pauseSegments),
 	hideOsCursor: () => ipcRenderer.invoke("hide-cursor"),
 	getAppVersion: () => ipcRenderer.invoke("app:getVersion"),
 	getRecordingPreferences: () => ipcRenderer.invoke("get-recording-preferences"),
-	setRecordingPreferences: (prefs: { microphoneEnabled?: boolean; microphoneDeviceId?: string; systemAudioEnabled?: boolean }) => ipcRenderer.invoke("set-recording-preferences", prefs),
+	setRecordingPreferences: (prefs: {
+		microphoneEnabled?: boolean;
+		microphoneDeviceId?: string;
+		systemAudioEnabled?: boolean;
+	}) => ipcRenderer.invoke("set-recording-preferences", prefs),
 	getCountdownDelay: () => ipcRenderer.invoke("get-countdown-delay"),
 	setCountdownDelay: (delay: number) => ipcRenderer.invoke("set-countdown-delay", delay),
 	startCountdown: (seconds: number) => ipcRenderer.invoke("start-countdown", seconds),
