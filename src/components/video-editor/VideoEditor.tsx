@@ -2426,6 +2426,7 @@ export default function VideoEditor() {
 		if (id) {
 			setActiveEffectSection("zoom");
 			setSelectedTrimId(null);
+			setSelectedAnnotationId(null);
 			setSelectedAudioId(null);
 		} else {
 			setActiveEffectSection((s) => (s === "zoom" ? "scene" : s));
