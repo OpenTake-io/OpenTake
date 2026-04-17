@@ -1,7 +1,7 @@
 import type {
-	AutoCaptionSettings,
 	AnnotationRegion,
 	AudioRegion,
+	AutoCaptionSettings,
 	CaptionCue,
 	CropRegion,
 	CursorStyle,
@@ -9,20 +9,18 @@ import type {
 	SpeedRegion,
 	TrimRegion,
 	WebcamOverlaySettings,
-	ZoomTransitionEasing,
 	ZoomRegion,
+	ZoomTransitionEasing,
 } from "@/components/video-editor/types";
 import { AudioProcessor, isAacAudioEncodingSupported } from "./audioEncoder";
 import { FrameRenderer } from "./frameRenderer";
 import type { SupportedMp4EncoderPath } from "./mp4Support";
-import { captureCanvasFrameForNativeExport } from "./nativeFrameCapture";
 import { VideoMuxer } from "./muxer";
 import { type DecodedVideoInfo, StreamingVideoDecoder } from "./streamingDecoder";
 import type { ExportConfig, ExportProgress, ExportResult } from "./types";
 
 const DEFAULT_MAX_ENCODE_QUEUE = 240;
 const PROGRESS_SAMPLE_WINDOW_MS = 1_000;
-let nativeExportDisabledWarningShown = false;
 
 interface VideoExporterConfig extends ExportConfig {
 	videoUrl: string;
@@ -103,6 +101,12 @@ export class VideoExporter {
 	private progressSampleStartFrame = 0;
 	private encoderError: Error | null = null;
 	private nativeExportSessionId: string | null = null;
+	private nativeH264Encoder: VideoEncoder | null = null;
+	private nativePendingWrite: Promise<void> = Promise.resolve();
+	private nativeWritePromises = new Set<Promise<void>>();
+	private nativeWriteError: Error | null = null;
+	private maxNativeWriteInFlight = 1;
+	private nativeEncoderError: Error | null = null;
 
 	constructor(config: VideoExporterConfig) {
 		this.config = config;
@@ -113,6 +117,14 @@ export class VideoExporter {
 			this.cleanup();
 			this.cancelled = false;
 			this.encoderError = null;
+			this.nativeEncoderError = null;
+			this.nativePendingWrite = Promise.resolve();
+			this.nativeWritePromises = new Set();
+			this.nativeWriteError = null;
+			this.maxNativeWriteInFlight = Math.max(
+				1,
+				Math.floor(this.config.maxInFlightNativeWrites ?? 1),
+			);
 			this.exportStartTimeMs = this.getNowMs();
 			this.progressSampleStartTimeMs = this.exportStartTimeMs;
 			this.progressSampleStartFrame = 0;
@@ -142,7 +154,7 @@ export class VideoExporter {
 			this.renderer = new FrameRenderer({
 				width: this.config.width,
 				height: this.config.height,
-				preferredRenderBackend: useNativeEncoder ? "webgl" : undefined,
+				preferredRenderBackend: undefined,
 				wallpaper: this.config.wallpaper,
 				zoomRegions: this.config.zoomRegions,
 				showShadow: this.config.showShadow,
@@ -226,11 +238,15 @@ export class VideoExporter {
 					const timestamp = frameIndex * frameDuration;
 					const sourceTimestampUs = sourceTimestampMs * 1000;
 					const cursorTimestampUs = cursorTimestampMs * 1000;
-					await this.renderer!.renderFrame(videoFrame, sourceTimestampUs, cursorTimestampUs);
+					await this.renderer!.renderFrame(
+						videoFrame,
+						sourceTimestampUs,
+						cursorTimestampUs,
+					);
 					videoFrame.close();
 
 					if (useNativeEncoder) {
-						await this.encodeRenderedFrameNative(timestamp);
+						await this.encodeRenderedFrameNative(timestamp, frameDuration, frameIndex);
 					} else {
 						await this.encodeRenderedFrame(timestamp, frameDuration, frameIndex);
 					}
@@ -251,6 +267,15 @@ export class VideoExporter {
 			this.reportFinalizingProgress(totalFrames, 96);
 
 			if (useNativeEncoder && nativeAudioPlan) {
+				if (this.nativeH264Encoder) {
+					await this.nativeH264Encoder.flush();
+					await this.awaitPendingNativeWrites();
+					if (this.nativeEncoderError) {
+						throw this.nativeEncoderError;
+					}
+					this.nativeH264Encoder.close();
+					this.nativeH264Encoder = null;
+				}
 				this.reportFinalizingProgress(totalFrames, 99, 0);
 				return await this.finishNativeVideoExport(nativeAudioPlan, totalFrames);
 			}
@@ -263,7 +288,10 @@ export class VideoExporter {
 
 			// Wait for queued muxing operations to complete
 			this.reportFinalizingProgress(totalFrames, 98);
-			await this.awaitWithFinalizationTimeout(this.pendingMuxing, "muxing queued video chunks");
+			await this.awaitWithFinalizationTimeout(
+				this.pendingMuxing,
+				"muxing queued video chunks",
+			);
 
 			if (hasAudio && !shouldUseFfmpegAudioFallback && !this.cancelled) {
 				const demuxer = this.streamingDecoder.getDemuxer();
@@ -291,7 +319,10 @@ export class VideoExporter {
 
 			// Finalize muxer and get output blob
 			this.reportFinalizingProgress(totalFrames, 99);
-			const blob = await this.awaitWithFinalizationTimeout(this.muxer!.finalize(), "muxer finalization");
+			const blob = await this.awaitWithFinalizationTimeout(
+				this.muxer!.finalize(),
+				"muxer finalization",
+			);
 
 			if (shouldUseFfmpegAudioFallback) {
 				console.warn(
@@ -310,7 +341,8 @@ export class VideoExporter {
 			console.error("Export error:", error);
 			return {
 				success: false,
-				error: resolvedError instanceof Error ? resolvedError.message : String(resolvedError),
+				error:
+					resolvedError instanceof Error ? resolvedError.message : String(resolvedError),
 			};
 		} finally {
 			this.cleanup();
@@ -318,18 +350,15 @@ export class VideoExporter {
 	}
 
 	private shouldUseExperimentalNativeExport(): boolean {
-		if (this.config.experimentalNativeExport === true) {
-			return true;
-		}
-
-		if (typeof window !== "undefined" && !nativeExportDisabledWarningShown) {
-			nativeExportDisabledWarningShown = true;
-			console.info(
-				"[VideoExporter] Native ffmpeg export is disabled by default until direct GPU readback is restored.",
-			);
-		}
-
-		return false;
+		return (
+			typeof window !== "undefined" &&
+			typeof VideoEncoder !== "undefined" &&
+			typeof VideoEncoder.isConfigSupported === "function" &&
+			typeof window.electronAPI?.nativeVideoExportStart === "function" &&
+			typeof window.electronAPI?.nativeVideoExportWriteFrame === "function" &&
+			typeof window.electronAPI?.nativeVideoExportFinish === "function" &&
+			typeof window.electronAPI?.nativeVideoExportCancel === "function"
+		);
 	}
 
 	private async awaitWithFinalizationTimeout<T>(promise: Promise<T>, stage: string): Promise<T> {
@@ -389,7 +418,9 @@ export class VideoExporter {
 	}
 
 	private buildNativeTrimSegments(durationMs: number): Array<{ startMs: number; endMs: number }> {
-		const trimRegions = [...(this.config.trimRegions ?? [])].sort((a, b) => a.startMs - b.startMs);
+		const trimRegions = [...(this.config.trimRegions ?? [])].sort(
+			(a, b) => a.startMs - b.startMs,
+		);
 		if (trimRegions.length === 0) {
 			return [{ startMs: 0, endMs: Math.max(0, durationMs) }];
 		}
@@ -421,13 +452,23 @@ export class VideoExporter {
 		);
 		const localVideoSourcePath = this.getNativeVideoSourcePath();
 		const primaryAudioSourcePath =
-			(videoInfo.hasAudio ? localVideoSourcePath : null) ?? sourceAudioFallbackPaths[0] ?? null;
+			(videoInfo.hasAudio ? localVideoSourcePath : null) ??
+			sourceAudioFallbackPaths[0] ??
+			null;
 
-		if (!videoInfo.hasAudio && sourceAudioFallbackPaths.length === 0 && audioRegions.length === 0) {
+		if (
+			!videoInfo.hasAudio &&
+			sourceAudioFallbackPaths.length === 0 &&
+			audioRegions.length === 0
+		) {
 			return { audioMode: "none" };
 		}
 
-		if (speedRegions.length > 0 || audioRegions.length > 0 || sourceAudioFallbackPaths.length > 1) {
+		if (
+			speedRegions.length > 0 ||
+			audioRegions.length > 0 ||
+			sourceAudioFallbackPaths.length > 1
+		) {
 			return { audioMode: "edited-track" };
 		}
 
@@ -459,7 +500,7 @@ export class VideoExporter {
 	}
 
 	private async tryStartNativeVideoExport(): Promise<boolean> {
-		if (typeof window === "undefined" || !window.electronAPI?.nativeVideoExportStart) {
+		if (!this.shouldUseExperimentalNativeExport()) {
 			return false;
 		}
 
@@ -470,12 +511,36 @@ export class VideoExporter {
 			return false;
 		}
 
+		const encoderConfig: VideoEncoderConfig = {
+			codec: "avc1.640034",
+			width: this.config.width,
+			height: this.config.height,
+			bitrate: this.config.bitrate,
+			framerate: this.config.frameRate,
+			hardwareAcceleration: "prefer-hardware",
+			avc: { format: "annexb" },
+		};
+
+		try {
+			const support = await VideoEncoder.isConfigSupported(encoderConfig);
+			if (!support.supported) {
+				console.warn(
+					`[VideoExporter] Native H.264 Annex B encoding is unsupported at ${this.config.width}x${this.config.height}`,
+				);
+				return false;
+			}
+		} catch (error) {
+			console.warn("[VideoExporter] Native encoder support check failed:", error);
+			return false;
+		}
+
 		const result = await window.electronAPI.nativeVideoExportStart({
 			width: this.config.width,
 			height: this.config.height,
 			frameRate: this.config.frameRate,
 			bitrate: this.config.bitrate,
 			encodingMode: this.config.encodingMode ?? "balanced",
+			inputMode: "h264-stream",
 		});
 
 		if (!result.success || !result.sessionId) {
@@ -484,40 +549,124 @@ export class VideoExporter {
 		}
 
 		this.nativeExportSessionId = result.sessionId;
+		this.nativePendingWrite = Promise.resolve();
+		this.nativeWritePromises = new Set();
+		this.nativeWriteError = null;
+		this.maxNativeWriteInFlight = Math.max(
+			1,
+			Math.floor(this.config.maxInFlightNativeWrites ?? 1),
+		);
+
+		// Initialize the browser-side H.264 encoder (hardware-accelerated where available).
+		// Encoded Annex B chunks are sent over IPC and FFmpeg stream-copies them into MP4.
+		const sessionId = result.sessionId;
+		const encoder = new VideoEncoder({
+			output: (chunk) => {
+				if (this.cancelled || !this.nativeExportSessionId) return;
+				const buffer = new ArrayBuffer(chunk.byteLength);
+				chunk.copyTo(buffer);
+				const writePromise = this.nativePendingWrite
+					.then(async () => {
+						const writeResult = await window.electronAPI.nativeVideoExportWriteFrame(
+							sessionId,
+							new Uint8Array(buffer),
+						);
+						if (!writeResult.success && !this.cancelled) {
+							throw new Error(
+								writeResult.error || "Failed to write H.264 chunk to native encoder",
+							);
+						}
+					})
+					.catch((error) => {
+						if (!this.cancelled && !this.nativeEncoderError) {
+							this.nativeEncoderError =
+								error instanceof Error ? error : new Error(String(error));
+						}
+						if (!this.cancelled && !this.nativeWriteError) {
+							this.nativeWriteError =
+								error instanceof Error ? error : new Error(String(error));
+						}
+					});
+				this.nativePendingWrite = writePromise;
+				this.trackNativeWritePromise(writePromise);
+			},
+			error: (e) => {
+				this.nativeEncoderError = e;
+			},
+		});
+
+		try {
+			encoder.configure(encoderConfig);
+		} catch (error) {
+			this.nativeEncoderError =
+				error instanceof Error ? error : new Error(String(error));
+			try {
+				encoder.close();
+			} catch (closeError) {
+				console.debug(
+					"[VideoExporter] Ignoring error closing native encoder after startup failure:",
+					closeError,
+				);
+			}
+			this.nativeExportSessionId = null;
+			await window.electronAPI.nativeVideoExportCancel(sessionId);
+			return false;
+		}
+
+		this.nativeH264Encoder = encoder;
 		return true;
 	}
 
-	private async encodeRenderedFrameNative(timestamp: number): Promise<void> {
-		const sessionId = this.nativeExportSessionId;
-		if (!sessionId) {
-			if (this.cancelled) {
-				return;
-			}
-
+	private async encodeRenderedFrameNative(
+		timestamp: number,
+		frameDuration: number,
+		frameIndex: number,
+	): Promise<void> {
+		if (!this.nativeH264Encoder || !this.nativeExportSessionId) {
+			if (this.cancelled) return;
 			throw new Error("Native export session is not active");
 		}
 
-		const frameData = await captureCanvasFrameForNativeExport(
-			this.renderer!.getCanvas(),
+		if (this.nativeEncoderError) throw this.nativeEncoderError;
+		if (this.nativeWriteError) throw this.nativeWriteError;
+
+		while (this.nativeWritePromises.size >= this.maxNativeWriteInFlight && !this.cancelled) {
+			await this.awaitOldestNativeWrite();
+			if (this.nativeEncoderError) throw this.nativeEncoderError;
+			if (this.nativeWriteError) throw this.nativeWriteError;
+		}
+
+		// Apply backpressure: don't queue too far ahead of FFmpeg's stdin pipe
+		while (
+			this.nativeH264Encoder.encodeQueueSize >=
+				Math.max(1, Math.floor(this.config.maxEncodeQueue ?? DEFAULT_MAX_ENCODE_QUEUE))
+		) {
+			await new Promise<void>((r) => setTimeout(r, 2));
+			if (this.cancelled) return;
+			if (this.nativeEncoderError) throw this.nativeEncoderError;
+			if (this.nativeWriteError) throw this.nativeWriteError;
+		}
+
+		const canvas = this.renderer!.getCanvas();
+		// @ts-expect-error - colorSpace not in TypeScript definitions but works at runtime
+		const frame = new VideoFrame(canvas, {
 			timestamp,
-			true,
-		);
-
-		if (this.cancelled) {
-			return;
-		}
-
-		const result = await window.electronAPI.nativeVideoExportWriteFrame(sessionId, frameData);
-		if (!result.success) {
-			if (this.cancelled || result.error === "Native video export session was cancelled") {
-				return;
-			}
-
-			throw new Error(result.error || "Failed to write frame to native encoder");
-		}
+			duration: frameDuration,
+			colorSpace: {
+				primaries: "bt709",
+				transfer: "iec61966-2-1",
+				matrix: "rgb",
+				fullRange: true,
+			},
+		});
+		this.nativeH264Encoder.encode(frame, { keyFrame: frameIndex % 300 === 0 });
+		frame.close();
 	}
 
-	private async finishNativeVideoExport(audioPlan: NativeAudioPlan, totalFrames: number): Promise<ExportResult> {
+	private async finishNativeVideoExport(
+		audioPlan: NativeAudioPlan,
+		totalFrames: number,
+	): Promise<ExportResult> {
 		if (!this.nativeExportSessionId) {
 			return { success: false, error: "Native export session is not active" };
 		}
@@ -554,7 +703,8 @@ export class VideoExporter {
 					audioPlan.audioMode === "copy-source" || audioPlan.audioMode === "trim-source"
 						? audioPlan.audioSourcePath
 						: null,
-				trimSegments: audioPlan.audioMode === "trim-source" ? audioPlan.trimSegments : undefined,
+				trimSegments:
+					audioPlan.audioMode === "trim-source" ? audioPlan.trimSegments : undefined,
 				editedAudioData: editedAudioBuffer,
 				editedAudioMimeType,
 			}),
@@ -641,7 +791,11 @@ export class VideoExporter {
 		};
 	}
 
-	private async encodeRenderedFrame(timestamp: number, frameDuration: number, frameIndex: number) {
+	private async encodeRenderedFrame(
+		timestamp: number,
+		frameDuration: number,
+		frameIndex: number,
+	) {
 		const canvas = this.renderer!.getCanvas();
 
 		// @ts-expect-error - colorSpace not in TypeScript definitions but works at runtime
@@ -675,7 +829,42 @@ export class VideoExporter {
 		exportFrame.close();
 	}
 
-	private reportFinalizingProgress(totalFrames: number, renderProgress: number, audioProgress?: number) {
+	private trackNativeWritePromise(writePromise: Promise<void>): void {
+		this.nativeWritePromises.add(writePromise);
+
+		void writePromise.finally(() => {
+			this.nativeWritePromises.delete(writePromise);
+		});
+	}
+
+	private async awaitOldestNativeWrite(): Promise<void> {
+		const oldestWritePromise = this.nativeWritePromises.values().next().value;
+		if (!oldestWritePromise) {
+			return;
+		}
+
+		await this.awaitWithFinalizationTimeout(oldestWritePromise, "native frame write");
+
+		if (this.nativeWriteError) {
+			throw this.nativeWriteError;
+		}
+	}
+
+	private async awaitPendingNativeWrites(): Promise<void> {
+		while (this.nativeWritePromises.size > 0) {
+			await this.awaitOldestNativeWrite();
+		}
+
+		if (this.nativeWriteError) {
+			throw this.nativeWriteError;
+		}
+	}
+
+	private reportFinalizingProgress(
+		totalFrames: number,
+		renderProgress: number,
+		audioProgress?: number,
+	) {
 		this.reportProgress(totalFrames, totalFrames, "finalizing", renderProgress, audioProgress);
 	}
 
@@ -696,12 +885,10 @@ export class VideoExporter {
 		const estimatedTimeRemaining =
 			averageRenderFps > 0 ? remainingFrames / averageRenderFps : 0;
 		const safeRenderProgress =
-			phase === "finalizing"
-				? Math.max(0, Math.min(renderProgress ?? 99, 99))
-				: undefined;
+			phase === "finalizing" ? Math.max(0, Math.min(renderProgress ?? 99, 99)) : undefined;
 		const percentage =
 			phase === "finalizing"
-				? safeRenderProgress ?? 99
+				? (safeRenderProgress ?? 99)
 				: totalFrames > 0
 					? (currentFrame / totalFrames) * 100
 					: 100;
@@ -720,7 +907,10 @@ export class VideoExporter {
 				renderFps,
 				phase,
 				renderProgress: safeRenderProgress,
-				audioProgress: typeof audioProgress === "number" ? Math.max(0, Math.min(audioProgress, 1)) : undefined,
+				audioProgress:
+					typeof audioProgress === "number"
+						? Math.max(0, Math.min(audioProgress, 1))
+						: undefined,
 			});
 		}
 	}
@@ -821,7 +1011,9 @@ export class VideoExporter {
 			const hwSupport = await VideoEncoder.isConfigSupported(hwConfig);
 			if (hwSupport.supported) {
 				resolvedCodec = candidateCodec;
-				console.log(`[VideoExporter] Using hardware acceleration with codec ${candidateCodec}`);
+				console.log(
+					`[VideoExporter] Using hardware acceleration with codec ${candidateCodec}`,
+				);
 				this.encoder.configure(hwConfig);
 				return;
 			}
@@ -864,6 +1056,17 @@ export class VideoExporter {
 	}
 
 	private cleanup(): void {
+		if (this.nativeH264Encoder) {
+			try {
+				if (this.nativeH264Encoder.state === "configured") {
+					this.nativeH264Encoder.close();
+				}
+			} catch (e) {
+				console.warn("Error closing native H264 encoder:", e);
+			}
+			this.nativeH264Encoder = null;
+		}
+
 		if (this.nativeExportSessionId) {
 			if (typeof window !== "undefined") {
 				void window.electronAPI?.nativeVideoExportCancel?.(this.nativeExportSessionId);
@@ -912,6 +1115,7 @@ export class VideoExporter {
 		this.audioProcessor = null;
 		this.encodeQueue = 0;
 		this.pendingMuxing = Promise.resolve();
+		this.nativePendingWrite = Promise.resolve();
 		this.chunkCount = 0;
 		this.encoderError = null;
 		this.videoDescription = undefined;

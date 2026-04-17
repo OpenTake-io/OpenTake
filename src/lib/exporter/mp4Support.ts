@@ -52,7 +52,11 @@ function buildEncoderSupportCacheKey(options: ResolveMp4EncoderPathOptions): str
 	].join(":");
 }
 
-function scaleDimensions(width: number, height: number, scale: number): { width: number; height: number } {
+function scaleDimensions(
+	width: number,
+	height: number,
+	scale: number,
+): { width: number; height: number } {
 	return {
 		width: normalizeEvenDimension(width * scale),
 		height: normalizeEvenDimension(height * scale),
@@ -85,11 +89,9 @@ export function getOrderedSupportedMp4EncoderCandidates(options: {
 }): SupportedMp4EncoderPath[] {
 	const orderedCodecs = Array.from(
 		new Set(
-			[
-				options.preferredEncoderPath?.codec,
-				options.codec,
-				...MP4_CODEC_FALLBACK_LIST,
-			].filter((value): value is string => typeof value === "string" && value.length > 0),
+			[options.preferredEncoderPath?.codec, options.codec, ...MP4_CODEC_FALLBACK_LIST].filter(
+				(value): value is string => typeof value === "string" && value.length > 0,
+			),
 		),
 	);
 	const candidates: SupportedMp4EncoderPath[] = [];
@@ -165,14 +167,20 @@ export async function probeSupportedMp4Dimensions(
 	const codec = options.codec ?? DEFAULT_MP4_CODEC;
 	const normalizedWidth = normalizeEvenDimension(options.width);
 	const normalizedHeight = normalizeEvenDimension(options.height);
-	const dimensionCacheKey = [codec, normalizedWidth, normalizedHeight, options.frameRate].join(":");
+	const requestedBitrate = options.getBitrate(normalizedWidth, normalizedHeight);
+	const dimensionCacheKey = [
+		codec,
+		normalizedWidth,
+		normalizedHeight,
+		options.frameRate,
+		requestedBitrate,
+	].join(":");
 	const cachedResult = supportedDimensionCache.get(dimensionCacheKey);
 
 	if (cachedResult) {
 		return cachedResult;
 	}
 
-	const requestedBitrate = options.getBitrate(normalizedWidth, normalizedHeight);
 	const directPath = await resolveSupportedMp4EncoderPath({
 		width: normalizedWidth,
 		height: normalizedHeight,
@@ -212,7 +220,9 @@ export async function probeSupportedMp4Dimensions(
 			bestResult = {
 				width: candidateDimensions.width,
 				height: candidateDimensions.height,
-				capped: candidateDimensions.width !== normalizedWidth || candidateDimensions.height !== normalizedHeight,
+				capped:
+					candidateDimensions.width !== normalizedWidth ||
+					candidateDimensions.height !== normalizedHeight,
 				encoderPath: candidatePath,
 			};
 			low = mid + 1;

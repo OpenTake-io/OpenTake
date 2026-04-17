@@ -20,7 +20,7 @@ let targetCaptureFPS = 60
 let maxInlineAudioTailExtension = CMTime(seconds: 2.0, preferredTimescale: 600)
 
 final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
-	private let queue = DispatchQueue(label: "openscreen.screencapturekit.video")
+	private let queue = DispatchQueue(label: "recordly.screencapturekit.video")
 	private var assetWriter: AVAssetWriter?
 	private var videoInput: AVAssetWriterInput?
 	private var systemAudioWriter: AVAssetWriter?
@@ -596,7 +596,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
 final class RecorderService {
 	private let recorder = ScreenCaptureRecorder()
-	private let queue = DispatchQueue(label: "openscreen.screencapturekit.commands")
+	private let queue = DispatchQueue(label: "recordly.screencapturekit.commands")
 	private let completionGroup = DispatchGroup()
 
 	func start(configJSON: String) {
