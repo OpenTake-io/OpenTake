@@ -2,7 +2,11 @@
 	"zoom": {
 		"level": "확대 레벨",
 		"selectRegion": "조정할 확대 구간을 선택하세요",
-		"deleteZoom": "확대 삭제"
+		"deleteZoom": "확대 삭제",
+		"modeAuto": "자동",
+		"modeManual": "수동",
+		"modeManualDescription": "이 확대에 고정 초점을 설정합니다",
+		"modeAutoDescription": "카메라가 커서를 자동으로 따라갑니다"
 	},
 	"trim": {
 		"deleteRegion": "트림 구간 삭제"
@@ -10,7 +14,13 @@
 	"speed": {
 		"playbackSpeed": "재생 속도",
 		"selectRegion": "조정할 속도 구간을 선택하세요",
-		"deleteRegion": "속도 구간 삭제"
+		"deleteRegion": "속도 구간 삭제",
+		"label": "속도"
+	},
+	"clip": {
+		"title": "클립",
+		"muteAudio": "오디오 음소거",
+		"delete": "클립 삭제"
 	},
 	"effects": {
 		"title": "비디오 효과",
@@ -32,6 +42,9 @@
 		"backgroundBlur": "배경 블러",
 		"zoomMotionBlur": "확대 모션 블러",
 		"connectZooms": "확대 구간 연결",
+		"connectZoomsDescription": "연속된 확대 구간을 하나의 부드러운 카메라 이동으로 연결합니다.",
+		"autoApplyFreshRecordingZooms": "새 녹화에 확대 자동 적용",
+		"autoApplyFreshRecordingZoomsDescription": "새 녹화를 열면 커서를 따라가는 확대를 자동으로 제안합니다.",
 		"zoomGeneralTitle": "일반",
 		"zoomGeneralDescription": "모든 확대 전환에 적용되는 전체 모션 설정입니다.",
 		"zoomInTitle": "확대 시작",

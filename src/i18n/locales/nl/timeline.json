@@ -32,6 +32,9 @@
 		"image": "Afbeelding",
 		"addAnnotation": "Annotatie toevoegen (A)"
 	},
+	"audio": {
+		"label": "Audio"
+	},
 	"addSpeed": "Snelheid toevoegen (S)",
 	"resizeLeft": "Links verkleinen",
 	"resizeRight": "Rechts verkleinen"

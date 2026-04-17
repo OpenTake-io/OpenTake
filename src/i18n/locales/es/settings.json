@@ -2,7 +2,11 @@
 	"zoom": {
 		"level": "Nivel de zoom",
 		"selectRegion": "Selecciona una región de zoom para ajustar",
-		"deleteZoom": "Eliminar zoom"
+		"deleteZoom": "Eliminar zoom",
+		"modeAuto": "Auto",
+		"modeManual": "Manual",
+		"modeManualDescription": "Establece un punto de enfoque fijo para este zoom",
+		"modeAutoDescription": "La cámara sigue el cursor automáticamente"
 	},
 	"trim": {
 		"deleteRegion": "Eliminar región de recorte"
@@ -10,7 +14,13 @@
 	"speed": {
 		"playbackSpeed": "Velocidad de reproducción",
 		"selectRegion": "Selecciona una región de velocidad para ajustar",
-		"deleteRegion": "Eliminar región de velocidad"
+		"deleteRegion": "Eliminar región de velocidad",
+		"label": "Velocidad"
+	},
+	"clip": {
+		"title": "Clip",
+		"muteAudio": "Silenciar audio",
+		"delete": "Eliminar clip"
 	},
 	"effects": {
 		"title": "Efectos de video",
@@ -32,6 +42,9 @@
 		"backgroundBlur": "Desenfoque de fondo",
 		"zoomMotionBlur": "Desenfoque de movimiento del zoom",
 		"connectZooms": "Conectar zooms",
+		"connectZoomsDescription": "Suaviza regiones de zoom consecutivas convirtiéndolas en un movimiento continuo de cámara.",
+		"autoApplyFreshRecordingZooms": "Aplicar automáticamente zooms a nuevas grabaciones",
+		"autoApplyFreshRecordingZoomsDescription": "Sugiere automáticamente zooms de seguimiento del cursor al abrir una nueva grabación.",
 		"zoomGeneralTitle": "General",
 		"zoomGeneralDescription": "Ajustes globales de movimiento para todas las transiciones de zoom.",
 		"zoomInTitle": "Entrada",

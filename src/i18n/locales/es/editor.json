@@ -1,7 +1,10 @@
 {
 	"playback": {
 		"play": "Reproducir",
-		"pause": "Pausar"
+		"pause": "Pausar",
+		"skipBack": "Retroceder",
+		"skipForward": "Avanzar",
+		"muteUnmute": "Silenciar/activar sonido"
 	},
 	"annotations": {
 		"settings": "Configuración de anotaciones",
@@ -118,6 +121,14 @@
 		"issue": "Problema de exportación",
 		"complete": "Exportación completada",
 		"savedSuccessfully": "Tu archivo se guardó correctamente."
+	},
+	"toolbar": {
+		"addLayer": "Agregar capa",
+		"splitClip": "Dividir clip (C)"
+	},
+	"timeline": {
+		"expand": "Expandir línea de tiempo",
+		"collapse": "Contraer línea de tiempo"
 	},
 	"openRecordingsFolder": "Abrir carpeta de grabaciones"
 }

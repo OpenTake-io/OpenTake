@@ -32,6 +32,9 @@
 		"image": "이미지",
 		"addAnnotation": "주석 추가 (A)"
 	},
+	"audio": {
+		"label": "오디오"
+	},
 	"addSpeed": "속도 추가 (S)",
 	"resizeLeft": "왼쪽 크기 조절",
 	"resizeRight": "오른쪽 크기 조절"

@@ -32,6 +32,9 @@
 		"image": "Image",
 		"addAnnotation": "Add Annotation (A)"
 	},
+	"audio": {
+		"label": "Audio"
+	},
 	"addSpeed": "Add Speed (S)",
 	"resizeLeft": "Resize left",
 	"resizeRight": "Resize right"

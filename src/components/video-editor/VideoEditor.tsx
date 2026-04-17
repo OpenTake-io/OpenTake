@@ -1,31 +1,47 @@
 import {
-	Camera,
-	Subtitles as Captions,
+	Check,
+	CaretDown as ChevronDown,
+	CaretUp as ChevronUp,
+	ClosedCaptioning,
+	Crop,
+	Cursor,
 	DownloadSimple as Download,
 	FolderOpen,
-	CursorClick as MousePointer2,
-	PuzzlePiece as Puzzle,
+	Gear,
+	Pause,
+	Camera as PhCameraRegular,
+	Play,
+	Plus,
+	PuzzlePiece,
 	ArrowClockwise as Redo2,
 	FloppyDisk as Save,
-	Sparkle as Sparkles,
+	Scissors,
+	SkipBack,
+	SkipForward,
+	Sparkle,
 	ArrowCounterClockwise as Undo2,
+	UserCircle as User,
+	SpeakerLow as Volume1,
+	SpeakerHigh as Volume2,
+	SpeakerX as VolumeX,
+	MagicWand as WandSparkles,
 	X,
+	MagnifyingGlassPlus as ZoomIn,
 } from "@phosphor-icons/react";
 import type { Span } from "dnd-timeline";
-import { AnimatePresence, LayoutGroup, motion } from "motion/react";
+import { motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
+	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Toaster } from "@/components/ui/sonner";
 import { useI18n } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
-import type { AppLocale } from "@/i18n/config";
-import { SUPPORTED_LOCALES } from "@/i18n/config";
 import {
 	calculateOutputDimensions,
 	DEFAULT_MP4_CODEC,
@@ -48,21 +64,45 @@ import {
 	VideoExporter,
 } from "@/lib/exporter";
 import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
-import { extensionHost } from "@/lib/extensions";
 import {
 	clampMediaTimeToDuration,
 	estimateCompanionAudioStartDelaySeconds,
 	getMediaSyncPlaybackRate,
 } from "@/lib/mediaTiming";
 import { matchesShortcut } from "@/lib/shortcuts";
-import { type AspectRatio, getAspectRatioValue } from "@/utils/aspectRatioUtils";
+import {
+	ASPECT_RATIOS,
+	type AspectRatio,
+	getAspectRatioLabel,
+	getAspectRatioValue,
+} from "@/utils/aspectRatioUtils";
+import { ExtensionIcon } from "./ExtensionIcon";
+
+const PhCursorFill = (props: { className?: string; weight?: "fill" | "regular" }) => (
+	<Cursor weight="fill" className={props.className} />
+);
+const PhCamera = (props: { className?: string; weight?: "fill" | "regular" }) => (
+	<PhCameraRegular weight={props.weight ?? "regular"} className={props.className} />
+);
+const PhCaptions = (props: { className?: string; weight?: "fill" | "regular" }) => (
+	<ClosedCaptioning weight={props.weight ?? "regular"} className={props.className} />
+);
+const PhPuzzle = (props: { className?: string; weight?: "fill" | "regular" }) => (
+	<PuzzlePiece weight={props.weight ?? "regular"} className={props.className} />
+);
+const PhSparkle = (props: { className?: string; weight?: "fill" | "regular" }) => (
+	<Sparkle weight={props.weight ?? "regular"} className={props.className} />
+);
+const PhSettings = (props: { className?: string; weight?: "fill" | "regular" }) => (
+	<Gear weight={props.weight ?? "regular"} className={props.className} />
+);
+
+import { extensionHost } from "@/lib/extensions";
 import { resolveAutoCaptionSourcePath } from "./autoCaptionSource";
 import { CropControl } from "./CropControl";
 import { ExportSettingsMenu } from "./ExportSettingsMenu";
-import { ExtensionIcon } from "./ExtensionIcon";
 import ExtensionManager from "./ExtensionManager";
 import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
-import PlaybackControls from "./PlaybackControls";
 import ProjectBrowserDialog, { type ProjectLibraryEntry } from "./ProjectBrowserDialog";
 import {
 	createProjectData,
@@ -73,16 +113,15 @@ import {
 	toFileUrl,
 	validateProjectData,
 } from "./projectPersistence";
-import { type EditorEffectSection, SettingsPanel } from "./SettingsPanel";
+import { SettingsPanel } from "./SettingsPanel";
 import {
 	APP_HEADER_ICON_BUTTON_CLASS,
 	DiscordLinkButton,
 	FeedbackDialog,
-	KeyboardShortcutsDialog,
 	openExternalLink,
 	RECORDLY_ISSUES_URL,
 } from "./TutorialHelp";
-import TimelineEditor from "./timeline/TimelineEditor";
+import TimelineEditor, { type TimelineEditorHandle } from "./timeline/TimelineEditor";
 import { normalizeCursorTelemetry } from "./timeline/zoomSuggestionUtils";
 import {
 	type AnnotationRegion,
@@ -114,7 +153,9 @@ import {
 	DEFAULT_ZOOM_IN_OVERLAP_MS,
 	DEFAULT_ZOOM_OUT_DURATION_MS,
 	DEFAULT_ZOOM_OUT_EASING,
+	type EditorEffectSection,
 	type FigureData,
+	getClipSourceEndMs,
 	type PlaybackSpeed,
 	type SpeedRegion,
 	type TrimRegion,
@@ -428,31 +469,6 @@ function getErrorMessage(error: unknown): string {
 	return "Something went wrong";
 }
 
-function LanguageSwitcher() {
-	const { locale, setLocale, t } = useI18n();
-	const idx = SUPPORTED_LOCALES.indexOf(locale as (typeof SUPPORTED_LOCALES)[number]);
-	const next = SUPPORTED_LOCALES[(idx + 1) % SUPPORTED_LOCALES.length] as AppLocale;
-	const labels: Record<string, string> = {
-		en: "EN",
-		es: "ES",
-		"zh-CN": "中文",
-		ko: "한국어",
-	};
-	return (
-		<Button
-			type="button"
-			variant="ghost"
-			size="sm"
-			onClick={() => setLocale(next)}
-			className="h-7 rounded-[5px] px-2 text-[11px] font-semibold leading-none text-slate-300 hover:bg-white/10 hover:text-white transition-all"
-			title={t("common.app.language", "Language")}
-			aria-label={t("common.app.language", "Language")}
-		>
-			<span className="leading-none">{labels[locale] ?? locale.toUpperCase()}</span>
-		</Button>
-	);
-}
-
 export default function VideoEditor() {
 	const { t } = useI18n();
 	const smokeExportConfig = useMemo(
@@ -479,6 +495,9 @@ export default function VideoEditor() {
 	);
 	const [backgroundBlur, setBackgroundBlur] = useState(initialEditorPreferences.backgroundBlur);
 	const [zoomMotionBlur, setZoomMotionBlur] = useState(initialEditorPreferences.zoomMotionBlur);
+	const [autoApplyFreshRecordingAutoZooms, setAutoApplyFreshRecordingAutoZooms] = useState(
+		initialEditorPreferences.autoApplyFreshRecordingAutoZooms,
+	);
 	const [connectZooms, setConnectZooms] = useState(initialEditorPreferences.connectZooms);
 	const [zoomInDurationMs, setZoomInDurationMs] = useState(
 		initialEditorPreferences.zoomInDurationMs ?? DEFAULT_ZOOM_IN_DURATION_MS,
@@ -634,25 +653,31 @@ export default function VideoEditor() {
 	const mp4SupportRequestRef = useRef(0);
 	const smokeExportStartedRef = useRef(false);
 	const [historyVersion, setHistoryVersion] = useState(0);
+	const timelineRef = useRef<TimelineEditorHandle>(null);
+
+	function formatTime(seconds: number) {
+		if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return "0:00";
+		const mins = Math.floor(seconds / 60);
+		const secs = Math.floor(seconds % 60);
+		return `${mins}:${secs.toString().padStart(2, "0")}`;
+	}
+
+	const [timelineCollapsed, setTimelineCollapsed] = useState(false);
 
 	useEffect(() => {
-		void window.electronAPI.getPlatform().then((platform) => {
+		void window.electronAPI?.getPlatform?.()?.then((platform) => {
 			setAppPlatform(platform);
 		});
 	}, []);
 
 	useEffect(() => {
-		if (videoPath === autoSuggestedVideoPathRef.current) {
-			return;
-		}
-
 		autoSuggestedVideoPathRef.current = null;
 		pendingFreshRecordingAutoSuggestTelemetryCountRef.current = 0;
 		if (pendingFreshRecordingAutoSuggestTimeoutRef.current !== null) {
 			window.clearTimeout(pendingFreshRecordingAutoSuggestTimeoutRef.current);
 			pendingFreshRecordingAutoSuggestTimeoutRef.current = null;
 		}
-	}, [videoPath]);
+	}, []);
 
 	// Auto-activate builtin extensions at editor startup (idempotent)
 	useEffect(() => {
@@ -688,29 +713,6 @@ export default function VideoEditor() {
 			console.warn("Unable to refresh project library:", projectLibraryError);
 		}
 	}, []);
-
-	const effectiveSpeedRegions = useMemo<SpeedRegion[]>(() => {
-		const clipDerived: SpeedRegion[] = clipRegions
-			.filter((clip) => clip.speed !== 1)
-			.map((clip) => ({
-				id: `clip-speed-${clip.id}`,
-				startMs: clip.startMs,
-				endMs: clip.endMs,
-				speed: clip.speed as SpeedRegion["speed"],
-			}));
-		if (clipDerived.length === 0) return speedRegions;
-		// Timeline speed regions take precedence; only fill in clip speed where no overlap exists
-		const result = [...speedRegions];
-		for (const cs of clipDerived) {
-			const overlaps = speedRegions.some(
-				(sr) => sr.endMs > cs.startMs && sr.startMs < cs.endMs,
-			);
-			if (!overlaps) {
-				result.push(cs);
-			}
-		}
-		return result;
-	}, [clipRegions, speedRegions]);
 
 	const captureProjectThumbnail = useCallback(async () => {
 		const previewHandle = videoPlaybackRef.current;
@@ -782,7 +784,27 @@ export default function VideoEditor() {
 					annotationRegions,
 					autoCaptions,
 					autoCaptionSettings,
-					speedRegions: effectiveSpeedRegions,
+					speedRegions: (() => {
+						const clipDerived: SpeedRegion[] = clipRegions
+							.filter((clip) => clip.speed !== 1)
+							.map((clip) => ({
+								id: `clip-speed-${clip.id}`,
+								startMs: clip.startMs,
+								endMs: getClipSourceEndMs(clip),
+								speed: clip.speed as SpeedRegion["speed"],
+							}));
+						if (clipDerived.length === 0) return speedRegions;
+						const result = [...speedRegions];
+						for (const cs of clipDerived) {
+							const overlaps = speedRegions.some(
+								(sr) => sr.endMs > cs.startMs && sr.startMs < cs.endMs,
+							);
+							if (!overlaps) {
+								result.push(cs);
+							}
+						}
+						return result;
+					})(),
 					previewWidth,
 					previewHeight,
 					cursorTelemetry,
@@ -866,14 +888,14 @@ export default function VideoEditor() {
 		cursorSize,
 		cursorSmoothing,
 		zoomSmoothness,
-		zoomClassicMode,
 		cursorStyle,
 		cursorSway,
 		cursorTelemetry,
+		clipRegions,
 		padding,
 		shadowIntensity,
 		showCursor,
-		effectiveSpeedRegions,
+		speedRegions,
 		wallpaper,
 		webcam,
 		zoomInDurationMs,
@@ -883,6 +905,7 @@ export default function VideoEditor() {
 		zoomOutDurationMs,
 		zoomOutEasing,
 		zoomRegions,
+		zoomClassicMode,
 	]);
 
 	const markExportAsSaving = useCallback(() => {
@@ -1054,7 +1077,7 @@ export default function VideoEditor() {
 
 	// Extension-contributed standalone section pages (no parentSection)
 	const [extensionSectionButtons, setExtensionSectionButtons] = useState<
-		{ id: EditorEffectSection; label: string; icon: typeof Puzzle | string }[]
+		{ id: EditorEffectSection; label: string; icon: typeof PhPuzzle | string }[]
 	>([]);
 	useEffect(() => {
 		const update = () => {
@@ -1064,7 +1087,7 @@ export default function VideoEditor() {
 				.map((p) => ({
 					id: `ext:${p.extensionId}/${p.panel.id}` as EditorEffectSection,
 					label: p.panel.label,
-					icon: p.panel.icon || (Puzzle as typeof Puzzle | string),
+					icon: p.panel.icon || (PhPuzzle as typeof PhPuzzle | string),
 				}));
 			setExtensionSectionButtons(standalone);
 		};
@@ -1074,34 +1097,39 @@ export default function VideoEditor() {
 
 	const editorSectionButtons = useMemo(
 		() => [
-			{ id: "scene" as const, label: t("settings.sections.scene", "Scene"), icon: Sparkles },
+			{ id: "scene" as const, label: t("settings.sections.scene", "Scene"), icon: PhSparkle },
 			{
 				id: "cursor" as const,
 				label: t("settings.sections.cursor", "Cursor"),
-				icon: MousePointer2,
+				icon: PhCursorFill,
 			},
-			{ id: "webcam" as const, label: t("settings.sections.webcam", "Webcam"), icon: Camera },
+			{
+				id: "webcam" as const,
+				label: t("settings.sections.webcam", "Webcam"),
+				icon: PhCamera,
+			},
 			{
 				id: "captions" as const,
 				label: t("settings.sections.captions", "Captions"),
-				icon: Captions,
+				icon: PhCaptions,
+			},
+			{
+				id: "settings" as const,
+				label: t("settings.sections.settings", "Settings"),
+				icon: PhSettings,
 			},
 			...extensionSectionButtons,
 			{
 				id: "extensions" as const,
 				label: t("settings.sections.extensions", "Extensions"),
-				icon: Puzzle,
+				icon: PhPuzzle,
 			},
 		],
 		[t, extensionSectionButtons],
 	);
 
 	useEffect(() => {
-		if (
-			activeEffectSection === "zoom" ||
-			activeEffectSection === "frame" ||
-			activeEffectSection === "crop"
-		) {
+		if (activeEffectSection === "frame" || activeEffectSection === "crop") {
 			setActiveEffectSection("scene");
 		}
 	}, [activeEffectSection]);
@@ -1287,7 +1315,6 @@ export default function VideoEditor() {
 			cursorSway,
 			borderRadius,
 			padding,
-			frame,
 			webcam,
 			zoomRegions,
 			trimRegions,
@@ -1307,6 +1334,7 @@ export default function VideoEditor() {
 			gifFrameRate,
 			gifLoop,
 			gifSizePreset,
+			frame,
 		],
 	);
 
@@ -1475,8 +1503,7 @@ export default function VideoEditor() {
 			setZoomRegions(normalizedEditor.zoomRegions);
 			setTrimRegions(normalizedEditor.trimRegions);
 			setClipRegions(normalizedEditor.clipRegions);
-			clipInitializedRef.current =
-				normalizedEditor.clipRegions.length > 0 || normalizedEditor.trimRegions.length > 0;
+			clipInitializedRef.current = normalizedEditor.clipRegions.length > 0;
 			setSpeedRegions(normalizedEditor.speedRegions);
 			setAnnotationRegions(normalizedEditor.annotationRegions);
 			setAudioRegions(normalizedEditor.audioRegions);
@@ -1510,7 +1537,7 @@ export default function VideoEditor() {
 			);
 			nextClipIdRef.current = deriveNextId(
 				"clip",
-				normalizedEditor.clipRegions.map((region) => region.id),
+				normalizedEditor.clipRegions.map((region: ClipRegion) => region.id),
 			);
 			nextSpeedIdRef.current = deriveNextId(
 				"speed",
@@ -1724,7 +1751,9 @@ export default function VideoEditor() {
 					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
 					setLastSavedSnapshot(null);
-					pendingFreshRecordingAutoZoomPathRef.current = sourceVideoUrl;
+					pendingFreshRecordingAutoZoomPathRef.current = autoApplyFreshRecordingAutoZooms
+						? sourceVideoUrl
+						: null;
 					setWebcam((prev) => ({
 						...prev,
 						enabled: Boolean(sessionResult.session?.webcamPath),
@@ -1741,7 +1770,7 @@ export default function VideoEditor() {
 					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
 					setLastSavedSnapshot(null);
-					pendingFreshRecordingAutoZoomPathRef.current = sourceVideoUrl;
+					pendingFreshRecordingAutoZoomPathRef.current = null;
 					setWebcam((prev) => ({
 						...prev,
 						enabled: false,
@@ -1758,7 +1787,22 @@ export default function VideoEditor() {
 		}
 
 		loadInitialData();
-	}, [applyLoadedProject, initialEditorPreferences, smokeExportConfig]);
+	}, [
+		applyLoadedProject,
+		autoApplyFreshRecordingAutoZooms,
+		initialEditorPreferences,
+		smokeExportConfig.enabled,
+		smokeExportConfig.inputPath,
+		smokeExportConfig.webcamInputPath,
+		smokeExportConfig.webcamShadow,
+		smokeExportConfig.webcamSize,
+	]);
+
+	useEffect(() => {
+		if (!autoApplyFreshRecordingAutoZooms) {
+			pendingFreshRecordingAutoZoomPathRef.current = null;
+		}
+	}, [autoApplyFreshRecordingAutoZooms]);
 
 	useEffect(() => {
 		saveEditorPreferences({
@@ -1766,6 +1810,7 @@ export default function VideoEditor() {
 			shadowIntensity,
 			backgroundBlur,
 			zoomMotionBlur,
+			autoApplyFreshRecordingAutoZooms,
 			connectZooms,
 			zoomInDurationMs,
 			zoomInOverlapMs,
@@ -1806,6 +1851,7 @@ export default function VideoEditor() {
 		shadowIntensity,
 		backgroundBlur,
 		zoomMotionBlur,
+		autoApplyFreshRecordingAutoZooms,
 		connectZooms,
 		zoomInDurationMs,
 		zoomInOverlapMs,
@@ -2290,7 +2336,68 @@ export default function VideoEditor() {
 		setTrimRegions(clipsToTrims(clipRegions, totalMs));
 	}, [clipRegions, duration]);
 
-	const effectiveZoomRegions = zoomRegions;
+	const mapTimelineTimeToSourceTime = useCallback(
+		(timeMs: number) => {
+			for (const clip of clipRegions) {
+				if (timeMs < clip.startMs || timeMs > clip.endMs) continue;
+				const speed = Number.isFinite(clip.speed) && clip.speed > 0 ? clip.speed : 1;
+				return Math.round(clip.startMs + (timeMs - clip.startMs) * speed);
+			}
+			return Math.round(timeMs);
+		},
+		[clipRegions],
+	);
+
+	const mapSourceTimeToTimelineTime = useCallback(
+		(timeMs: number) => {
+			for (const clip of clipRegions) {
+				const sourceEndMs = getClipSourceEndMs(clip);
+				if (timeMs < clip.startMs || timeMs > sourceEndMs) continue;
+				const speed = Number.isFinite(clip.speed) && clip.speed > 0 ? clip.speed : 1;
+				return Math.round(clip.startMs + (timeMs - clip.startMs) / speed);
+			}
+			return Math.round(timeMs);
+		},
+		[clipRegions],
+	);
+
+	const effectiveZoomRegions = useMemo<ZoomRegion[]>(
+		() =>
+			zoomRegions.map((region) => ({
+				...region,
+				startMs: mapTimelineTimeToSourceTime(region.startMs),
+				endMs: mapTimelineTimeToSourceTime(region.endMs),
+			})),
+		[zoomRegions, mapTimelineTimeToSourceTime],
+	);
+
+	const timelinePlayheadTime = useMemo(
+		() => mapSourceTimeToTimelineTime(currentTime * 1000) / 1000,
+		[currentTime, mapSourceTimeToTimelineTime],
+	);
+
+	// Merge clip speeds into speed regions so playback + export respect per-clip speed
+	const effectiveSpeedRegions = useMemo<SpeedRegion[]>(() => {
+		const clipDerived: SpeedRegion[] = clipRegions
+			.filter((clip) => clip.speed !== 1)
+			.map((clip) => ({
+				id: `clip-speed-${clip.id}`,
+				startMs: clip.startMs,
+				endMs: getClipSourceEndMs(clip),
+				speed: clip.speed as SpeedRegion["speed"],
+			}));
+		if (clipDerived.length === 0) return speedRegions;
+		const result = [...speedRegions];
+		for (const cs of clipDerived) {
+			const overlaps = speedRegions.some(
+				(sr) => sr.endMs > cs.startMs && sr.startMs < cs.endMs,
+			);
+			if (!overlaps) {
+				result.push(cs);
+			}
+		}
+		return result;
+	}, [clipRegions, speedRegions]);
 
 	function togglePlayPause() {
 		const playback = videoPlaybackRef.current;
@@ -2311,14 +2418,18 @@ export default function VideoEditor() {
 	function handleSeek(time: number) {
 		const video = videoPlaybackRef.current?.video;
 		if (!video) return;
-		video.currentTime = time;
+		video.currentTime = mapTimelineTimeToSourceTime(time * 1000) / 1000;
 	}
 
 	const handleSelectZoom = useCallback((id: string | null) => {
 		setSelectedZoomId(id);
 		if (id) {
+			setActiveEffectSection("zoom");
 			setSelectedTrimId(null);
+			setSelectedAnnotationId(null);
 			setSelectedAudioId(null);
+		} else {
+			setActiveEffectSection((s) => (s === "zoom" ? "scene" : s));
 		}
 	}, []);
 
@@ -2383,9 +2494,7 @@ export default function VideoEditor() {
 				pendingFreshRecordingAutoZoomPathRef.current = null;
 			}
 			setZoomRegions((prev) => [...prev, newRegion]);
-			setSelectedZoomId(id);
-			setSelectedTrimId(null);
-			setSelectedAnnotationId(null);
+			// Don't auto-select suggested zooms — they follow cursor and don't need user interaction
 			extensionHost.emitEvent({
 				type: "timeline:region-added",
 				data: { id, startMs: newRegion.startMs, endMs: newRegion.endMs },
@@ -2559,34 +2668,44 @@ export default function VideoEditor() {
 	const handleSelectClip = useCallback((id: string | null) => {
 		setSelectedClipId(id);
 		if (id) {
+			setActiveEffectSection("clip");
 			setSelectedZoomId(null);
 			setSelectedAnnotationId(null);
 			setSelectedAudioId(null);
+		} else {
+			setActiveEffectSection((s) => (s === "clip" ? "scene" : s));
 		}
 	}, []);
 
-	const handleClipSplit = useCallback((splitMs: number) => {
-		setClipRegions((prev) => {
-			const target = prev.find((c) => splitMs > c.startMs && splitMs < c.endMs);
-			if (!target) return prev;
-			const leftId = `clip-${nextClipIdRef.current++}`;
-			const rightId = `clip-${nextClipIdRef.current++}`;
-			setSelectedClipId(leftId);
-			const left: ClipRegion = {
-				id: leftId,
-				startMs: target.startMs,
-				endMs: Math.round(splitMs),
-				speed: target.speed,
-			};
-			const right: ClipRegion = {
-				id: rightId,
-				startMs: Math.round(splitMs),
-				endMs: target.endMs,
-				speed: target.speed,
-			};
-			return prev.flatMap((c) => (c.id === target.id ? [left, right] : [c]));
-		});
-	}, []);
+	const handleClipSplit = useCallback(
+		(splitMs: number) => {
+			setClipRegions((prev) => {
+				const target = prev.find((c) => splitMs > c.startMs && splitMs < c.endMs);
+				if (!target) return prev;
+				const leftId = `clip-${nextClipIdRef.current++}`;
+				const rightId = `clip-${nextClipIdRef.current++}`;
+				const left: ClipRegion = {
+					id: leftId,
+					startMs: target.startMs,
+					endMs: Math.round(splitMs),
+					speed: target.speed,
+					muted: target.muted,
+				};
+				const right: ClipRegion = {
+					id: rightId,
+					startMs: Math.round(splitMs),
+					endMs: target.endMs,
+					speed: target.speed,
+					muted: target.muted,
+				};
+				if (selectedClipId === target.id) {
+					setSelectedClipId(leftId);
+				}
+				return prev.flatMap((c) => (c.id === target.id ? [left, right] : [c]));
+			});
+		},
+		[selectedClipId],
+	);
 
 	const handleClipSpanChange = useCallback(
 		(id: string, span: Span) => {
@@ -2630,8 +2749,41 @@ export default function VideoEditor() {
 	const handleClipSpeedChange = useCallback(
 		(speed: number) => {
 			if (!selectedClipId) return;
+			if (!Number.isFinite(speed) || speed <= 0) {
+				return;
+			}
+			const clip = clipRegions.find((c) => c.id === selectedClipId);
+			if (!clip) return;
+			const oldSpeed = Number.isFinite(clip.speed) && clip.speed > 0 ? clip.speed : 1;
+			const sourceDurationMs = (clip.endMs - clip.startMs) * oldSpeed;
+			const newEndMs = Math.round(clip.startMs + sourceDurationMs / speed);
+			const scaleFactor = oldSpeed / speed;
+
 			setClipRegions((prev) =>
-				prev.map((clip) => (clip.id === selectedClipId ? { ...clip, speed } : clip)),
+				prev.map((c) => (c.id === selectedClipId ? { ...c, speed, endMs: newEndMs } : c)),
+			);
+			// Scale zoom regions that lie within this clip proportionally
+			setZoomRegions((prev) =>
+				prev.map((zoom) => {
+					if (zoom.startMs < clip.startMs || zoom.startMs >= clip.endMs) return zoom;
+					return {
+						...zoom,
+						startMs: Math.round(
+							clip.startMs + (zoom.startMs - clip.startMs) * scaleFactor,
+						),
+						endMs: Math.round(clip.startMs + (zoom.endMs - clip.startMs) * scaleFactor),
+					};
+				}),
+			);
+		},
+		[selectedClipId, clipRegions],
+	);
+
+	const handleClipMutedChange = useCallback(
+		(muted: boolean) => {
+			if (!selectedClipId) return;
+			setClipRegions((prev) =>
+				prev.map((clip) => (clip.id === selectedClipId ? { ...clip, muted } : clip)),
 			);
 		},
 		[selectedClipId],
@@ -2706,7 +2858,7 @@ export default function VideoEditor() {
 		}
 	}, []);
 
-	const handleAudioAdded = useCallback((span: Span, audioPath: string) => {
+	const handleAudioAdded = useCallback((span: Span, audioPath: string, trackIndex?: number) => {
 		const id = `audio-${nextAudioIdRef.current++}`;
 		const newRegion: AudioRegion = {
 			id,
@@ -2714,6 +2866,7 @@ export default function VideoEditor() {
 			endMs: Math.round(span.end),
 			audioPath,
 			volume: 1,
+			trackIndex,
 		};
 		setAudioRegions((prev) => [...prev, newRegion]);
 		setSelectedAudioId(id);
@@ -2759,7 +2912,7 @@ export default function VideoEditor() {
 		[selectedSpeedId],
 	);
 
-	const handleAnnotationAdded = useCallback((span: Span) => {
+	const handleAnnotationAdded = useCallback((span: Span, trackIndex = 0) => {
 		const id = `annotation-${nextAnnotationIdRef.current++}`;
 		const zIndex = nextAnnotationZIndexRef.current++; // Assign z-index based on creation order
 		const newRegion: AnnotationRegion = {
@@ -2772,6 +2925,7 @@ export default function VideoEditor() {
 			size: { ...DEFAULT_ANNOTATION_SIZE },
 			style: { ...DEFAULT_ANNOTATION_STYLE },
 			zIndex,
+			trackIndex,
 		};
 		setAnnotationRegions((prev) => [...prev, newRegion]);
 		setSelectedAnnotationId(id);
@@ -3729,7 +3883,6 @@ export default function VideoEditor() {
 			videoPath,
 			wallpaper,
 			trimRegions,
-			effectiveSpeedRegions,
 			shadowIntensity,
 			backgroundBlur,
 			zoomMotionBlur,
@@ -3756,8 +3909,8 @@ export default function VideoEditor() {
 			audioRegions,
 			sourceAudioFallbackPaths,
 			exportEncodingMode,
+			exportBackendPreference,
 			exportPipelineModel,
-			mp4FrameRate,
 			borderRadius,
 			padding,
 			cropRegion,
@@ -3765,16 +3918,26 @@ export default function VideoEditor() {
 			annotationRegions,
 			autoCaptions,
 			autoCaptionSettings,
-			frame,
 			isPlaying,
 			exportQuality,
 			effectiveZoomRegions,
 			ensureSupportedMp4SourceDimensions,
 			markExportAsSaving,
+			mp4FrameRate,
 			remountPreview,
 			showExportSuccessToast,
-			smokeExportConfig,
-			exportBackendPreference,
+			smokeExportConfig.backendPreference,
+			smokeExportConfig.enabled,
+			smokeExportConfig.useNativeExport,
+			smokeExportConfig.maxDecodeQueue,
+			smokeExportConfig.maxEncodeQueue,
+			smokeExportConfig.maxPendingFrames,
+			smokeExportConfig.outputPath,
+			smokeExportConfig.pipelineModel,
+			smokeExportConfig.shadowIntensity,
+			effectiveSpeedRegions,
+			frame,
+			smokeExportConfig.encodingMode,
 		],
 	);
 
@@ -4112,7 +4275,6 @@ export default function VideoEditor() {
 					className={`flex items-center gap-1.5 justify-self-start ${headerLeftControlsPaddingClass}`}
 					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
 				>
-					<LanguageSwitcher />
 					<Button
 						type="button"
 						variant="ghost"
@@ -4125,7 +4287,6 @@ export default function VideoEditor() {
 						<FolderOpen className="h-4 w-4" />
 					</Button>
 					<DiscordLinkButton />
-					<KeyboardShortcutsDialog />
 					<FeedbackDialog />
 					<div className="ml-1 h-5 w-px bg-white/10" />
 					<Button
@@ -4188,7 +4349,7 @@ export default function VideoEditor() {
 							<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#2563EB] opacity-75"></span>
 							<span className="relative inline-flex size-2 rounded-full bg-[#2563EB]"></span>
 						</span>
-						<Save className="h-4 w-4" />
+						<Save className="h-4 w-4" weight="fill" />
 						<span className="text-sm font-semibold tracking-tight">
 							{t("common.actions.save")}
 						</span>
@@ -4390,210 +4551,90 @@ export default function VideoEditor() {
 			</div>
 
 			<div className="relative flex min-h-0 flex-1 flex-col gap-3 p-4">
-				{/* Top section: Video Preview + Settings */}
 				<div className="flex min-h-0 flex-1 gap-3">
-					{/* Left Column - Video Preview */}
-					<div className="order-2 flex h-full min-w-0 flex-[7] flex-col">
-						<div className="relative flex h-full flex-col overflow-hidden">
-							{/* Video preview */}
-							<div
-								className="flex w-full min-h-0 flex-1 items-stretch"
-								style={{ flex: "1 1 auto", margin: "6px 0 0" }}
-							>
-								<div className="flex w-11 flex-shrink-0 items-center justify-center pl-1">
-									<LayoutGroup id="preview-icon-rail">
-										<div className="flex flex-col items-center gap-3">
-											{editorSectionButtons.map((section) => {
-												const isActive = activeEffectSection === section.id;
-												return (
-													<motion.button
-														key={section.id}
-														type="button"
-														onClick={() =>
-															setActiveEffectSection(section.id)
-														}
-														title={section.label}
-														className="group relative flex h-8 w-8 items-center justify-center text-white/75 outline-none transition-colors hover:text-white focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-														animate={{
-															scale: isActive ? 1.06 : 1,
-															opacity: isActive ? 1 : 0.82,
-														}}
-														transition={{
-															type: "spring",
-															stiffness: 420,
-															damping: 28,
-														}}
-													>
-														<motion.span
-															animate={{
-																color: isActive
-																	? "#2563EB"
-																	: "rgba(255,255,255,0.75)",
-															}}
-															transition={{ duration: 0.16 }}
-														>
-															{typeof section.icon === "string" ? (
-																<ExtensionIcon
-																	icon={section.icon}
-																	className="h-4 w-4"
-																/>
-															) : (
-																<section.icon className="h-4 w-4" />
-															)}
-														</motion.span>
-														<AnimatePresence initial={false}>
-															{isActive ? (
-																<motion.span
-																	layoutId="preview-active-dot"
-																	className="absolute -left-1 h-1.5 w-1.5 rounded-full bg-[#2563EB]"
-																	initial={{
-																		opacity: 0,
-																		scale: 0.6,
-																	}}
-																	animate={{
-																		opacity: 1,
-																		scale: 1,
-																	}}
-																	exit={{
-																		opacity: 0,
-																		scale: 0.6,
-																	}}
-																	transition={{
-																		type: "spring",
-																		stiffness: 500,
-																		damping: 32,
-																	}}
-																/>
-															) : null}
-														</AnimatePresence>
-													</motion.button>
-												);
-											})}
+					{/* Settings sidebar */}
+					<div className="flex flex-shrink-0 gap-1.5">
+						{/* Icon rail */}
+						<div className="flex flex-shrink-0 flex-col items-center gap-0.5 px-2 py-2">
+							{editorSectionButtons.map((section) => {
+								const isActive = activeEffectSection === section.id;
+								return (
+									<div key={section.id} className="flex items-center">
+										<motion.button
+											type="button"
+											onClick={() => setActiveEffectSection(section.id)}
+											title={section.label}
+											className="group relative flex h-9 w-9 items-center justify-center rounded-lg outline-none focus:outline-none focus-visible:outline-none"
+											animate={{ opacity: isActive ? 1 : 0.55 }}
+											transition={{ duration: 0.14 }}
+										>
+											{isActive && (
+												<motion.span
+													layoutId="rail-active-bg"
+													className="absolute inset-0 rounded-lg bg-white/[0.08]"
+													transition={{
+														type: "spring",
+														stiffness: 450,
+														damping: 35,
+													}}
+												/>
+											)}
+											<motion.span
+												className="relative z-10"
+												animate={{
+													color: isActive
+														? "#2563EB"
+														: "rgba(255,255,255,1)",
+												}}
+												transition={{ duration: 0.14 }}
+											>
+												{typeof section.icon === "string" ? (
+													<ExtensionIcon
+														icon={section.icon}
+														className="h-[27px] w-[27px]"
+													/>
+												) : (
+													<section.icon
+														className="h-[27px] w-[27px]"
+														weight={isActive ? "fill" : "regular"}
+													/>
+												)}
+											</motion.span>
+										</motion.button>
+										<div className="ml-1.5 h-1.5 w-1.5 flex-shrink-0">
+											{isActive && (
+												<motion.span
+													layoutId="rail-active-dot"
+													className="block h-1.5 w-1.5 rounded-full bg-[#2563EB]"
+													initial={{ opacity: 0, scale: 0.5 }}
+													animate={{ opacity: 1, scale: 1 }}
+													exit={{ opacity: 0, scale: 0.5 }}
+													transition={{
+														type: "spring",
+														stiffness: 500,
+														damping: 32,
+													}}
+												/>
+											)}
 										</div>
-									</LayoutGroup>
-								</div>
-								<div className="flex min-w-0 flex-1 items-center justify-center pl-2 pr-1">
-									<div
-										className="relative overflow-hidden rounded-[30px]"
-										style={{
-											width: "auto",
-											height: "100%",
-											aspectRatio: getAspectRatioValue(
-												aspectRatio,
-												(() => {
-													const previewVideo =
-														videoPlaybackRef.current?.video;
-													if (
-														previewVideo &&
-														previewVideo.videoHeight > 0
-													) {
-														return (
-															previewVideo.videoWidth /
-															previewVideo.videoHeight
-														);
-													}
-													return 16 / 9;
-												})(),
-											),
-											maxWidth: "100%",
-											margin: "0 auto",
-											boxSizing: "border-box",
-										}}
-									>
-										<VideoPlayback
-											key={`${videoPath || "no-video"}:${previewVersion}`}
-											aspectRatio={aspectRatio}
-											ref={videoPlaybackRef}
-											videoPath={videoPath || ""}
-											onDurationChange={setDuration}
-											onPreviewReadyChange={setIsPreviewReady}
-											onTimeUpdate={setCurrentTime}
-											currentTime={currentTime}
-											onPlayStateChange={setIsPlaying}
-											onError={setError}
-											wallpaper={wallpaper}
-											zoomRegions={effectiveZoomRegions}
-											selectedZoomId={selectedZoomId}
-											onSelectZoom={handleSelectZoom}
-											onZoomFocusChange={handleZoomFocusChange}
-											isPlaying={isPlaying}
-											showShadow={shadowIntensity > 0}
-											shadowIntensity={shadowIntensity}
-											backgroundBlur={backgroundBlur}
-											zoomMotionBlur={zoomMotionBlur}
-											connectZooms={connectZooms}
-											zoomInDurationMs={zoomInDurationMs}
-											zoomInOverlapMs={zoomInOverlapMs}
-											zoomOutDurationMs={zoomOutDurationMs}
-											connectedZoomGapMs={connectedZoomGapMs}
-											connectedZoomDurationMs={connectedZoomDurationMs}
-											zoomInEasing={zoomInEasing}
-											zoomOutEasing={zoomOutEasing}
-											connectedZoomEasing={connectedZoomEasing}
-											borderRadius={borderRadius}
-											padding={padding}
-											frame={frame}
-											cropRegion={cropRegion}
-											webcam={webcam}
-											webcamVideoPath={
-												webcam.sourcePath
-													? toFileUrl(webcam.sourcePath)
-													: null
-											}
-											trimRegions={trimRegions}
-											speedRegions={effectiveSpeedRegions}
-											annotationRegions={annotationRegions}
-											autoCaptions={autoCaptions}
-											autoCaptionSettings={autoCaptionSettings}
-											selectedAnnotationId={selectedAnnotationId}
-											onSelectAnnotation={handleSelectAnnotation}
-											onAnnotationPositionChange={
-												handleAnnotationPositionChange
-											}
-											onAnnotationSizeChange={handleAnnotationSizeChange}
-											cursorTelemetry={effectiveCursorTelemetry}
-											showCursor={showCursor}
-											cursorStyle={cursorStyle}
-											cursorSize={cursorSize}
-											cursorSmoothing={cursorSmoothing}
-											zoomSmoothness={zoomSmoothness}
-											zoomClassicMode={zoomClassicMode}
-											cursorMotionBlur={cursorMotionBlur}
-											cursorClickBounce={cursorClickBounce}
-											cursorClickBounceDuration={cursorClickBounceDuration}
-											cursorSway={cursorSway}
-											volume={hasSourceAudioFallback ? 0 : previewVolume}
-										/>
 									</div>
-								</div>
-							</div>
-							{/* Playback controls */}
-							<div
-								className="w-full flex justify-center items-center"
-								style={{
-									height: "48px",
-									flexShrink: 0,
-									padding: "6px 12px",
-									margin: "6px 0 6px 0",
-								}}
-							>
-								<div style={{ width: "100%", maxWidth: "700px" }}>
-									<PlaybackControls
-										isPlaying={isPlaying}
-										currentTime={currentTime}
-										duration={duration}
-										onTogglePlayPause={togglePlayPause}
-										onSeek={handleSeek}
-										volume={previewVolume}
-										onVolumeChange={setPreviewVolume}
-									/>
-								</div>
+								);
+							})}
+							<div className="mt-auto pt-3">
+								<motion.button
+									type="button"
+									onClick={() => toast.info("Account coming soon")}
+									title="Account"
+									className="group relative flex h-9 w-9 items-center justify-center rounded-lg text-white/55 outline-none transition hover:text-white focus:outline-none focus-visible:outline-none"
+									whileHover={{ opacity: 1 }}
+									initial={{ opacity: 0.55 }}
+								>
+									<motion.span className="absolute inset-0 rounded-lg bg-white/[0.04] opacity-0 transition group-hover:opacity-100" />
+									<User className="relative z-10 h-[22px] w-[22px]" />
+								</motion.button>
 							</div>
 						</div>
-					</div>
-
-					{/* Left section: settings panel */}
-					<div className="order-1 flex">
+						{/* Panel */}
 						{activeEffectSection === "extensions" ? (
 							<ExtensionManager />
 						) : (
@@ -4630,8 +4671,17 @@ export default function VideoEditor() {
 												?.speed ?? 1)
 										: null
 								}
+								selectedClipMuted={
+									selectedClipId
+										? (clipRegions.find((c) => c.id === selectedClipId)
+												?.muted ?? false)
+										: null
+								}
 								onClipSpeedChange={(speed) =>
 									selectedClipId && handleClipSpeedChange(speed)
+								}
+								onClipMutedChange={(muted) =>
+									selectedClipId && handleClipMutedChange(muted)
 								}
 								onClipDelete={handleClipDelete}
 								shadowIntensity={shadowIntensity}
@@ -4640,6 +4690,10 @@ export default function VideoEditor() {
 								onBackgroundBlurChange={setBackgroundBlur}
 								zoomMotionBlur={zoomMotionBlur}
 								onZoomMotionBlurChange={setZoomMotionBlur}
+								autoApplyFreshRecordingAutoZooms={autoApplyFreshRecordingAutoZooms}
+								onAutoApplyFreshRecordingAutoZoomsChange={
+									setAutoApplyFreshRecordingAutoZooms
+								}
 								connectZooms={connectZooms}
 								onConnectZoomsChange={setConnectZooms}
 								zoomInDurationMs={zoomInDurationMs}
@@ -4731,22 +4785,392 @@ export default function VideoEditor() {
 							/>
 						)}
 					</div>
+					{/* Right column: preview + timeline */}
+					<div className="flex min-h-0 flex-1 flex-col gap-3">
+						{/* Preview */}
+						<div className="flex min-h-0 flex-1 flex-col">
+							<div className="relative flex flex-1 min-h-0 flex-col overflow-hidden">
+								{/* Aspect ratio + crop controls above preview */}
+								<div className="flex items-center justify-center gap-2 py-1.5 flex-shrink-0">
+									<DropdownMenu>
+										<DropdownMenuTrigger asChild>
+											<Button
+												variant="ghost"
+												size="sm"
+												className="h-7 px-2 text-xs text-white hover:text-white hover:bg-white/10 transition-all gap-1"
+											>
+												<span className="font-medium">
+													{getAspectRatioLabel(aspectRatio)}
+												</span>
+												<ChevronDown className="w-3 h-3" />
+											</Button>
+										</DropdownMenuTrigger>
+										<DropdownMenuContent
+											align="center"
+											className="bg-[#1a1a1c] border-white/10"
+										>
+											{ASPECT_RATIOS.map((ratio) => (
+												<DropdownMenuItem
+													key={ratio}
+													onClick={() => setAspectRatio(ratio)}
+													className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer flex items-center justify-between gap-3"
+												>
+													<span>{getAspectRatioLabel(ratio)}</span>
+													{aspectRatio === ratio && (
+														<Check className="w-3 h-3 text-[#2563EB]" />
+													)}
+												</DropdownMenuItem>
+											))}
+										</DropdownMenuContent>
+									</DropdownMenu>
+									<div className="w-[1px] h-4 bg-white/20" />
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={handleOpenCropEditor}
+										className="h-7 px-2 text-xs text-white hover:text-white hover:bg-white/10 transition-all gap-1.5"
+									>
+										<Crop className="w-3.5 h-3.5" />
+										<span className="font-medium">
+											{t("settings.crop.title")}
+										</span>
+										{isCropped ? (
+											<span className="h-1.5 w-1.5 rounded-full bg-[#2563EB]" />
+										) : null}
+									</Button>
+								</div>
+								{/* Video preview */}
+								<div
+									className="flex w-full min-h-0 flex-1 items-stretch"
+									style={{ flex: "1 1 auto", margin: "6px 0 0" }}
+								>
+									<div className="flex min-w-0 flex-1 items-center justify-center px-1">
+										<div
+											className="relative overflow-hidden rounded-[30px]"
+											style={{
+												width: "auto",
+												height: "100%",
+												aspectRatio: getAspectRatioValue(
+													aspectRatio,
+													(() => {
+														const previewVideo =
+															videoPlaybackRef.current?.video;
+														if (
+															previewVideo &&
+															previewVideo.videoHeight > 0
+														) {
+															return (
+																previewVideo.videoWidth /
+																previewVideo.videoHeight
+															);
+														}
+														return 16 / 9;
+													})(),
+												),
+												maxWidth: "100%",
+												margin: "0 auto",
+												boxSizing: "border-box",
+											}}
+										>
+											<VideoPlayback
+												key={`${videoPath || "no-video"}:${previewVersion}`}
+												aspectRatio={aspectRatio}
+												ref={videoPlaybackRef}
+												videoPath={videoPath || ""}
+												onDurationChange={setDuration}
+												onPreviewReadyChange={setIsPreviewReady}
+												onTimeUpdate={setCurrentTime}
+												currentTime={currentTime}
+												onPlayStateChange={setIsPlaying}
+												onError={setError}
+												wallpaper={wallpaper}
+												zoomRegions={effectiveZoomRegions}
+												selectedZoomId={selectedZoomId}
+												onSelectZoom={handleSelectZoom}
+												onZoomFocusChange={handleZoomFocusChange}
+												isPlaying={isPlaying}
+												showShadow={shadowIntensity > 0}
+												shadowIntensity={shadowIntensity}
+												backgroundBlur={backgroundBlur}
+												zoomMotionBlur={zoomMotionBlur}
+												connectZooms={connectZooms}
+												zoomInDurationMs={zoomInDurationMs}
+												zoomInOverlapMs={zoomInOverlapMs}
+												zoomOutDurationMs={zoomOutDurationMs}
+												connectedZoomGapMs={connectedZoomGapMs}
+												connectedZoomDurationMs={connectedZoomDurationMs}
+												zoomInEasing={zoomInEasing}
+												zoomOutEasing={zoomOutEasing}
+												connectedZoomEasing={connectedZoomEasing}
+												borderRadius={borderRadius}
+												padding={padding}
+												frame={frame}
+												cropRegion={cropRegion}
+												webcam={webcam}
+												webcamVideoPath={
+													webcam.sourcePath
+														? toFileUrl(webcam.sourcePath)
+														: null
+												}
+												trimRegions={trimRegions}
+												speedRegions={effectiveSpeedRegions}
+												annotationRegions={annotationRegions}
+												autoCaptions={autoCaptions}
+												autoCaptionSettings={autoCaptionSettings}
+												selectedAnnotationId={selectedAnnotationId}
+												onSelectAnnotation={handleSelectAnnotation}
+												onAnnotationPositionChange={
+													handleAnnotationPositionChange
+												}
+												onAnnotationSizeChange={handleAnnotationSizeChange}
+												cursorTelemetry={effectiveCursorTelemetry}
+												showCursor={showCursor}
+												cursorStyle={cursorStyle}
+												cursorSize={cursorSize}
+												cursorSmoothing={cursorSmoothing}
+												zoomSmoothness={zoomSmoothness}
+												zoomClassicMode={zoomClassicMode}
+												cursorMotionBlur={cursorMotionBlur}
+												cursorClickBounce={cursorClickBounce}
+												cursorClickBounceDuration={
+													cursorClickBounceDuration
+												}
+												cursorSway={cursorSway}
+												volume={hasSourceAudioFallback ? 0 : previewVolume}
+											/>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+						{/* Toolbar - sits at bottom of right column, only spans preview width */}
+						<div className="relative flex flex-shrink-0 items-center px-1 py-1">
+							{/* Left tools */}
+							<div className="z-10 flex min-w-0 flex-1 items-center gap-1.5">
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<Button
+											variant="ghost"
+											size="sm"
+											className="h-7 gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 text-[11px] text-white/65 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-all hover:bg-white/[0.08] hover:text-white"
+										>
+											<Plus className="w-3.5 h-3.5" />
+											<span className="font-medium">
+												{t("editor.toolbar.addLayer")}
+											</span>
+											<ChevronDown className="w-3 h-3" />
+										</Button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent
+										align="start"
+										className="bg-[#1a1a1c] border-white/10"
+									>
+										<DropdownMenuItem
+											onClick={() => {
+												const nextTrackIndex =
+													annotationRegions.length > 0
+														? Math.max(
+																...annotationRegions.map(
+																	(r) => r.trackIndex ?? 0,
+																),
+															) + 1
+														: 0;
+												timelineRef.current?.addAnnotation(nextTrackIndex);
+											}}
+											className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
+										>
+											{t("timeline.annotation.label")}
+										</DropdownMenuItem>
+										<DropdownMenuItem
+											onClick={() => timelineRef.current?.addAudio()}
+											className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
+										>
+											{t("timeline.audio.label")}
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+								<div className="w-[1px] h-4 bg-white/10 mx-1" />
+								<Button
+									onClick={() => timelineRef.current?.addZoom()}
+									variant="ghost"
+									size="icon"
+									className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-[#2563EB]/10 hover:text-[#2563EB]"
+									title={t("timeline.zoom.addZoom")}
+								>
+									<ZoomIn className="w-4 h-4" />
+								</Button>
+								<Button
+									onClick={() => timelineRef.current?.suggestZooms()}
+									variant="ghost"
+									size="icon"
+									className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-[#2563EB]/10 hover:text-[#2563EB]"
+									title={t("timeline.zoom.suggestZooms")}
+								>
+									<WandSparkles className="w-4 h-4" />
+								</Button>
+								<Button
+									onClick={() => timelineRef.current?.splitClip()}
+									variant="ghost"
+									size="icon"
+									className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+									title={t("editor.toolbar.splitClip")}
+								>
+									<Scissors className="w-4 h-4" />
+								</Button>
+							</div>
+							{/* Playback controls - centered */}
+							<div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+								<div className="flex items-center gap-1.5 pointer-events-auto">
+									<span className="mr-1 text-[10px] font-medium tabular-nums text-slate-400">
+										{formatTime(timelinePlayheadTime)}
+									</span>
+									<Button
+										variant="ghost"
+										size="icon"
+										className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+										title={t("editor.playback.skipBack")}
+										onClick={() => {
+											const currentMs = timelinePlayheadTime * 1000;
+											const kfs = timelineRef.current?.keyframes ?? [];
+											const prev = [...kfs]
+												.reverse()
+												.find((k) => k.time < currentMs - 50);
+											handleSeek(
+												prev
+													? prev.time / 1000
+													: Math.max(0, timelinePlayheadTime - 5),
+											);
+										}}
+									>
+										<SkipBack className="w-3.5 h-3.5" weight="fill" />
+									</Button>
+									<Button
+										variant="ghost"
+										size="icon"
+										className={`h-7 w-7 rounded-full border border-white/10 transition-all shadow-[0_8px_18px_rgba(0,0,0,0.18)] ${isPlaying ? "bg-white/10 text-white hover:bg-white/20" : "bg-white text-black hover:bg-white/90"}`}
+										onClick={togglePlayPause}
+										title={isPlaying ? "Pause" : "Play"}
+									>
+										{isPlaying ? (
+											<Pause className="w-3.5 h-3.5" weight="fill" />
+										) : (
+											<Play className="w-3.5 h-3.5" weight="fill" />
+										)}
+									</Button>
+									<Button
+										variant="ghost"
+										size="icon"
+										className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+										title={t("editor.playback.skipForward")}
+										onClick={() => {
+											const currentMs = timelinePlayheadTime * 1000;
+											const kfs = timelineRef.current?.keyframes ?? [];
+											const next = kfs.find((k) => k.time > currentMs + 50);
+											handleSeek(
+												next
+													? next.time / 1000
+													: Math.min(duration, timelinePlayheadTime + 5),
+											);
+										}}
+									>
+										<SkipForward className="w-3.5 h-3.5" weight="fill" />
+									</Button>
+									<span className="text-[10px] font-medium text-slate-500 tabular-nums ml-1">
+										{formatTime(duration)}
+									</span>
+								</div>
+							</div>
+							{/* Right: collapse + volume */}
+							<div className="z-10 ml-auto flex items-center gap-2">
+								<Button
+									variant="ghost"
+									size="icon"
+									title={
+										timelineCollapsed
+											? t("editor.timeline.expand")
+											: t("editor.timeline.collapse")
+									}
+									className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+									onClick={() => {
+										setTimelineCollapsed((p) => !p);
+									}}
+								>
+									{timelineCollapsed ? (
+										<ChevronUp className="w-3.5 h-3.5" />
+									) : (
+										<ChevronDown className="w-3.5 h-3.5" />
+									)}
+								</Button>
+								<div className="flex items-center gap-1.5">
+									<button
+										type="button"
+										className="text-slate-400 hover:text-white transition-colors"
+										title={t("editor.playback.muteUnmute")}
+										onClick={() =>
+											setPreviewVolume(previewVolume <= 0.001 ? 1 : 0)
+										}
+									>
+										{previewVolume <= 0.001 ? (
+											<VolumeX className="w-3.5 h-3.5" />
+										) : previewVolume < 0.5 ? (
+											<Volume1 className="w-3.5 h-3.5" />
+										) : (
+											<Volume2 className="w-3.5 h-3.5" />
+										)}
+									</button>
+									<div className="relative flex h-7 w-24 select-none items-center overflow-hidden rounded-full border border-white/[0.06] bg-black/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+										<div
+											className="absolute inset-y-[3px] left-[3px] right-auto rounded-[10px] bg-white/[0.08]"
+											style={{
+												width:
+													previewVolume > 0
+														? `max(calc(${previewVolume * 100}% - 6px), 1.2rem)`
+														: 0,
+											}}
+										/>
+										<div
+											className="pointer-events-none absolute bottom-[18%] top-[18%] z-10 w-[2px] rounded-full bg-white/95 shadow-[0_0_10px_rgba(37,99,235,0.28)]"
+											style={{ left: `calc(${previewVolume * 100}% - 8px)` }}
+										/>
+										<span className="pointer-events-none relative z-10 pl-2 text-[10px] font-medium text-slate-400">
+											{Math.round(previewVolume * 100)}%
+										</span>
+										<input
+											type="range"
+											min="0"
+											max="1"
+											step="0.01"
+											value={previewVolume}
+											onChange={(e) =>
+												setPreviewVolume(Number(e.target.value))
+											}
+											className="absolute inset-0 h-full w-full cursor-ew-resize opacity-0"
+										/>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
 				</div>
-
-				{/* Timeline section - full width */}
 				<div
-					className="min-h-[200px] flex-shrink-0 bg-[#17171a] rounded-2xl border border-white/10 shadow-lg overflow-auto flex flex-col"
-					style={{ height: "33%" }}
+					className="flex-shrink-0 flex flex-col"
+					style={{
+						height: timelineCollapsed ? undefined : "15%",
+						minHeight: timelineCollapsed ? 0 : 160,
+					}}
 				>
 					<TimelineEditor
+						ref={timelineRef}
+						hideToolbar
 						videoDuration={duration}
 						currentTime={currentTime}
+						playheadTime={timelinePlayheadTime}
 						onSeek={handleSeek}
 						videoPath={videoPath}
 						cursorTelemetry={normalizedCursorTelemetry}
 						autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
 						onAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
-						zoomRegions={effectiveZoomRegions}
+						zoomRegions={zoomRegions}
 						onZoomAdded={handleZoomAdded}
 						onZoomSuggested={handleZoomSuggested}
 						onZoomSpanChange={handleZoomSpanChange}
@@ -4783,9 +5207,6 @@ export default function VideoEditor() {
 						selectedAnnotationId={selectedAnnotationId}
 						onSelectAnnotation={handleSelectAnnotation}
 						aspectRatio={aspectRatio}
-						onAspectRatioChange={setAspectRatio}
-						onOpenCropEditor={handleOpenCropEditor}
-						isCropped={isCropped}
 					/>
 				</div>
 			</div>

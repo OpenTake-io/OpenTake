@@ -5,6 +5,7 @@
  * modules, provides the permission-gated host API, and coordinates render hooks.
  */
 
+import { createExtensionModuleUrl, resolveExtensionRelativeFileUrl } from "./fileUrls";
 import type {
 	ContributedCursorStyle,
 	ContributedFrame,
@@ -23,7 +24,6 @@ import type {
 	RenderHookFn,
 	RenderHookPhase,
 } from "./types";
-import { createExtensionModuleUrl, resolveExtensionRelativeFileUrl } from "./fileUrls";
 
 const EXTENSION_SETTINGS_STORAGE_KEY = "recordly.extension-settings.v1";
 
@@ -156,7 +156,10 @@ export class ExtensionHost {
 	} | null = null;
 	private _zoomState: { scale: number; focusX: number; focusY: number; progress: number } | null =
 		null;
-	private _shadowConfig: { enabled: boolean; intensity: number } = { enabled: false, intensity: 0 };
+	private _shadowConfig: { enabled: boolean; intensity: number } = {
+		enabled: false,
+		intensity: 0,
+	};
 	private _cursorTelemetry: Array<{
 		timeMs: number;
 		cx: number;
@@ -172,8 +175,11 @@ export class ExtensionHost {
 	} | null = null;
 	private _keystrokeEvents: Array<{ timeMs: number; key: string; modifiers: string[] }> = [];
 	private _activeFrame: string | null = null;
-	private _playbackState: { currentTimeMs: number; durationMs: number; isPlaying: boolean } | null =
-		null;
+	private _playbackState: {
+		currentTimeMs: number;
+		durationMs: number;
+		isPlaying: boolean;
+	} | null = null;
 
 	/**
 	 * Activate an extension given its info and resolved module URL.
@@ -288,12 +294,16 @@ export class ExtensionHost {
 	executeRenderHooks(phase: RenderHookPhase, context: RenderHookContext): void {
 		const hooks = this.renderHooks.filter((h) => h.phase === phase);
 		for (const hook of hooks) {
+			context.ctx.save();
 			try {
-				context.ctx.save();
 				hook.hook(context);
-				context.ctx.restore();
 			} catch (err) {
-				console.warn(`[extensions] Render hook error (${hook.extensionId}, ${phase}):`, err);
+				console.warn(
+					`[extensions] Render hook error (${hook.extensionId}, ${phase}):`,
+					err,
+				);
+			} finally {
+				context.ctx.restore();
 			}
 		}
 	}
@@ -304,13 +314,14 @@ export class ExtensionHost {
 	executeCursorEffects(context: CursorEffectContext): boolean {
 		let anyActive = false;
 		for (const effect of this.cursorEffects) {
+			context.ctx.save();
 			try {
-				context.ctx.save();
 				const stillActive = effect.effect(context);
-				context.ctx.restore();
 				if (stillActive) anyActive = true;
 			} catch (err) {
 				console.warn(`[extensions] Cursor effect error (${effect.extensionId}):`, err);
+			} finally {
+				context.ctx.restore();
 			}
 		}
 		return anyActive;
@@ -459,22 +470,20 @@ export class ExtensionHost {
 	}
 
 	setSmoothedCursor(
-		cursor:
-			| {
-				timeMs: number;
-				cx: number;
-				cy: number;
-				trail: Array<{ cx: number; cy: number }>;
-			  }
-			| null,
+		cursor: {
+			timeMs: number;
+			cx: number;
+			cy: number;
+			trail: Array<{ cx: number; cy: number }>;
+		} | null,
 	): void {
 		this._smoothedCursor = cursor
 			? {
-				timeMs: cursor.timeMs,
-				cx: cursor.cx,
-				cy: cursor.cy,
-				trail: cursor.trail.map((point) => ({ ...point })),
-			  }
+					timeMs: cursor.timeMs,
+					cx: cursor.cx,
+					cy: cursor.cy,
+					trail: cursor.trail.map((point) => ({ ...point })),
+				}
 			: null;
 	}
 
@@ -805,7 +814,9 @@ export class ExtensionHost {
 
 			playSound(relativePath: string, options?: { volume?: number }): () => void {
 				requirePermission("audio", "playSound");
-				const audio = new Audio(resolveExtensionRelativeFileUrl(extensionPath, relativePath));
+				const audio = new Audio(
+					resolveExtensionRelativeFileUrl(extensionPath, relativePath),
+				);
 				audio.volume = Math.max(0, Math.min(1, options?.volume ?? 1));
 				audio.play().catch((err) => {
 					console.warn(`[ext:${extensionId}] Failed to play sound:`, err);
@@ -902,7 +913,10 @@ export class ExtensionHost {
 
 			getCanvasDimensions() {
 				if (!host._videoLayout) return null;
-				return { width: host._videoLayout.canvasWidth, height: host._videoLayout.canvasHeight };
+				return {
+					width: host._videoLayout.canvasWidth,
+					height: host._videoLayout.canvasHeight,
+				};
 			},
 
 			onSettingChange(callback: (settingId: string, value: unknown) => void): () => void {
@@ -931,7 +945,9 @@ export class ExtensionHost {
 
 	async syncConfiguredExtensions(discovered: ExtensionInfo[]): Promise<void> {
 		const desired = new Map(
-			discovered.filter((ext) => ext.status === "active").map((ext) => [ext.manifest.id, ext]),
+			discovered
+				.filter((ext) => ext.status === "active")
+				.map((ext) => [ext.manifest.id, ext]),
 		);
 
 		for (const activeId of Array.from(this.activeExtensions.keys())) {

@@ -1,7 +1,10 @@
 {
 	"playback": {
 		"play": "재생",
-		"pause": "일시 정지"
+		"pause": "일시 정지",
+		"skipBack": "뒤로 건너뛰기",
+		"skipForward": "앞으로 건너뛰기",
+		"muteUnmute": "음소거/해제"
 	},
 	"annotations": {
 		"settings": "주석 설정",
@@ -119,6 +122,14 @@
 		"issue": "내보내기 오류",
 		"complete": "내보내기 완료",
 		"savedSuccessfully": "파일이 성공적으로 저장되었습니다."
+	},
+	"toolbar": {
+		"addLayer": "레이어 추가",
+		"splitClip": "클립 분할 (C)"
+	},
+	"timeline": {
+		"expand": "타임라인 펼치기",
+		"collapse": "타임라인 접기"
 	},
 	"openRecordingsFolder": "녹화 폴더 열기"
 }
