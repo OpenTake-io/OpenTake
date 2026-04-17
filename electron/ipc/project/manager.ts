@@ -335,3 +335,9 @@ export async function loadProjectFromPath(projectPath: string) {
 		project,
 	};
 }
+
+export function isTrustedProjectPath(filePath?: string | null): boolean {
+	if (!filePath || !currentProjectPath) return false;
+	return normalizePath(filePath) === normalizePath(currentProjectPath);
+}
+
