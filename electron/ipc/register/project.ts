@@ -355,7 +355,8 @@ export function registerProjectHandlers() {
         return { success: false, error: 'Only auto-generated recordings can be deleted' };
       }
       const resolvedPath = await fs.realpath(filePath).catch(() => path.resolve(filePath));
-      const recordingsDir = await getRecordingsDir();
+			const recordingsDirRaw = await getRecordingsDir();
+			const recordingsDir = await fs.realpath(recordingsDirRaw).catch(() => path.resolve(recordingsDirRaw));
       if (!isPathInsideDirectory(resolvedPath, recordingsDir) || !isAutoRecordingPath(resolvedPath)) {
         return { success: false, error: 'Only auto-generated recordings can be deleted' };
       }
@@ -363,7 +364,10 @@ export function registerProjectHandlers() {
       // Also delete the cursor telemetry sidecar if it exists
       const telemetryPath = getTelemetryPathForVideo(resolvedPath);
       await fs.unlink(telemetryPath).catch(() => {});
-      if (currentVideoPath === resolvedPath) {
+			const currentResolved = currentVideoPath
+				? await fs.realpath(currentVideoPath).catch(() => currentVideoPath)
+				: null;
+			if (currentResolved === resolvedPath) {
         setCurrentVideoPath(null);
         setCurrentRecordingSession(null);
       }

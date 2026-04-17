@@ -994,6 +994,11 @@ export function registerRecordingHandlers(
       return await finalizeStoredVideo(finalVideoPath)
     } catch (error) {
       console.error('Failed to stop FFmpeg recording:', error)
+			try {
+				ffmpegCaptureProcess?.kill()
+			} catch {
+				// ignore cleanup failures
+			}
       setFfmpegCaptureProcess(null)
       setFfmpegCaptureTargetPath(null)
       setFfmpegScreenRecordingActive(false)

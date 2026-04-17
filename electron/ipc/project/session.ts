@@ -70,11 +70,14 @@ export async function resolveRecordingSessionManifest(
 		}
 
 		const webcamPath = path.join(path.dirname(normalizedVideoPath), webcamFileName);
-		await fs.access(webcamPath, fsConstants.F_OK);
+		const webcamExists = await fs
+			.access(webcamPath, fsConstants.F_OK)
+			.then(() => true)
+			.catch(() => false);
 
 		return {
 			videoPath: normalizedVideoPath,
-			webcamPath,
+			webcamPath: webcamExists ? webcamPath : null,
 			timeOffsetMs: normalizeRecordingTimeOffsetMs(parsed.timeOffsetMs),
 		};
 	} catch {

@@ -298,8 +298,17 @@ export async function listProjectLibraryEntries() {
 
 export async function loadProjectFromPath(projectPath: string) {
 	const normalizedPath = normalizePath(projectPath);
-	const content = await fs.readFile(normalizedPath, "utf-8");
-	const project = JSON.parse(content);
+	let project: unknown;
+	try {
+		const content = await fs.readFile(normalizedPath, "utf-8");
+		project = JSON.parse(content);
+	} catch (error) {
+		return {
+			success: false,
+			canceled: false,
+			message: `Failed to read project file: ${error instanceof Error ? error.message : String(error)}`,
+		};
+	}
 	const mediaSources = await resolveProjectMediaSources(project);
 
 	if (!mediaSources.success) {
