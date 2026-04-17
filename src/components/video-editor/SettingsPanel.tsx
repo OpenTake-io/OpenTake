@@ -217,7 +217,10 @@ function ExtensionSettingsSection({
 									className="w-20 h-1 accent-[#2563EB]"
 								/>
 								<span className="text-[10px] text-slate-500 w-8 text-right font-mono">
-									{(typeof value === "number" ? value : 0).toFixed(1)}
+									{(typeof value === "number"
+										? value
+										: (field.defaultValue as number)
+									).toFixed(1)}
 								</span>
 							</div>
 						</div>
@@ -2227,7 +2230,7 @@ export function SettingsPanel({
 				{backgroundSettingsContent}
 				{frameSectionContent}
 				{cropSectionContent}
-				{renderExtensionPanelsForSections("scene", "appearance", "zoom", "frame", "crop")}
+				{renderExtensionPanelsForSections("scene", "appearance", "frame", "crop")}
 			</div>
 		);
 
@@ -2368,6 +2371,7 @@ export function SettingsPanel({
 						{tSettings("zoom.deleteZoom")}
 					</Button>
 				)}
+				{renderExtensionPanelsForSections("zoom", "appearance", "frame", "crop")}
 			</section>
 		);
 

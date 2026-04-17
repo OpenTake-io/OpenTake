@@ -24,7 +24,7 @@ import {
 	Trash2,
 } from "lucide-react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -44,6 +44,19 @@ const TAB_OPTIONS: { value: ExtensionTab; labelKey: string }[] = [
 
 const EXTENSIONS_DOCS_URL = "https://marketplace.recordly.dev/extensions";
 const EXTENSIONS_SUBMIT_URL = "https://marketplace.recordly.dev/extensions/submit";
+
+function toSafeHttpUrl(value?: string): string | null {
+	if (!value) return null;
+
+	try {
+		const parsed = new URL(value);
+		return parsed.protocol === "http:" || parsed.protocol === "https:"
+			? parsed.toString()
+			: null;
+	} catch {
+		return null;
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Installed Extension Card
@@ -65,6 +78,7 @@ function InstalledExtensionCard({
 	const t = useScopedT("extensions");
 	const isError = extension.status === "error";
 	const isBuiltin = extension.builtin;
+	const homepageUrl = toSafeHttpUrl(extension.manifest.homepage);
 
 	return (
 		<div
@@ -96,9 +110,9 @@ function InstalledExtensionCard({
 
 				{extension.manifest.author && (
 					<p className="text-[10px] text-slate-500 mt-0.5">
-						{extension.manifest.homepage ? (
+						{homepageUrl ? (
 							<a
-								href={extension.manifest.homepage}
+								href={homepageUrl}
 								target="_blank"
 								rel="noopener noreferrer"
 								className="hover:text-slate-300 transition-colors"
@@ -175,6 +189,7 @@ function MarketplaceCard({
 	onClick?: () => void;
 }) {
 	const t = useScopedT("extensions");
+	const homepageUrl = toSafeHttpUrl(extension.homepage);
 	return (
 		<div
 			className="flex items-start gap-3 p-3 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors cursor-pointer"
@@ -200,9 +215,9 @@ function MarketplaceCard({
 				</div>
 
 				<p className="text-[10px] text-slate-500 mt-0.5">
-					{extension.homepage ? (
+					{homepageUrl ? (
 						<a
-							href={extension.homepage}
+							href={homepageUrl}
 							target="_blank"
 							rel="noopener noreferrer"
 							className="hover:text-slate-300 transition-colors"
@@ -357,6 +372,7 @@ function ExtensionDetailModal({
 	const author = isInstalled ? detail.ext.manifest.author : detail.ext.author;
 	const permissions = isInstalled ? detail.ext.manifest.permissions : detail.ext.permissions;
 	const homepage = isInstalled ? detail.ext.manifest.homepage : detail.ext.homepage;
+	const homepageUrl = toSafeHttpUrl(homepage);
 	const screenshots = detail.source === "marketplace" ? (detail.ext.screenshots ?? []) : [];
 	const isError = isInstalled ? detail.ext.status === "error" : false;
 
@@ -394,9 +410,9 @@ function ExtensionDetailModal({
 							</div>
 							<p className="text-[11px] text-slate-500 mt-0.5">
 								{author ? (
-									homepage ? (
+									homepageUrl ? (
 										<a
-											href={homepage}
+											href={homepageUrl}
 											target="_blank"
 											rel="noopener noreferrer"
 											className="hover:text-slate-300 transition-colors inline-flex items-center gap-1"
@@ -644,6 +660,7 @@ export default function ExtensionManager() {
 
 	// Extension detail modal state
 	const [detailData, setDetailData] = useState<ExtensionDetailData | null>(null);
+	const hasAutoSearchedBrowseRef = useRef(false);
 
 	const handleInstallFromFolder = useCallback(async () => {
 		const success = await installFromFolder();
@@ -670,6 +687,7 @@ export default function ExtensionManager() {
 
 	// Marketplace search
 	const handleSearch = useCallback(async () => {
+		hasAutoSearchedBrowseRef.current = true;
 		setMarketplaceLoading(true);
 		setMarketplaceError(null);
 		try {
@@ -707,8 +725,17 @@ export default function ExtensionManager() {
 
 	// Auto-search when switching to browse tab
 	useEffect(() => {
-		if (activeTab === "browse" && marketplaceResults.length === 0 && !marketplaceLoading) {
-			handleSearch();
+		if (activeTab !== "browse") {
+			hasAutoSearchedBrowseRef.current = false;
+			return;
+		}
+
+		if (
+			!hasAutoSearchedBrowseRef.current &&
+			marketplaceResults.length === 0 &&
+			!marketplaceLoading
+		) {
+			void handleSearch();
 		}
 	}, [activeTab, handleSearch, marketplaceLoading, marketplaceResults.length]);
 
@@ -723,6 +750,11 @@ export default function ExtensionManager() {
 					// Update the marketplace results to show installed state
 					setMarketplaceResults((prev) =>
 						prev.map((e) => (e.id === ext.id ? { ...e, installed: true } : e)),
+					);
+					setDetailData((prev) =>
+						prev?.source === "marketplace" && prev.ext.id === ext.id
+							? { ...prev, ext: { ...prev.ext, installed: true } }
+							: prev,
 					);
 				} else {
 					toast.error(

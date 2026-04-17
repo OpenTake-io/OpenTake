@@ -63,8 +63,10 @@ import { type AudioPeaksData, useAudioPeaks } from "./useAudioPeaks";
 import { buildInteractionZoomSuggestions } from "./zoomSuggestionUtils";
 
 const ZOOM_ROW_ID = "row-zoom";
+const TRIM_ROW_ID = "row-trim";
 const CLIP_ROW_ID = "row-clip";
 const ANNOTATION_ROW_ID = "row-annotation";
+const SPEED_ROW_ID = "row-speed";
 const AUDIO_ROW_ID = "row-audio";
 const FALLBACK_RANGE_MS = 1000;
 const TARGET_MARKER_COUNT = 12;
@@ -119,10 +121,6 @@ interface TimelineEditorProps {
 	onOpenCropEditor?: () => void;
 	isCropped?: boolean;
 	videoPath?: string | null;
-	isPlaying?: boolean;
-	onTogglePlayPause?: () => void;
-	volume?: number;
-	onVolumeChange?: (volume: number) => void;
 	hideToolbar?: boolean;
 }
 
@@ -593,9 +591,11 @@ function Timeline({
 	);
 
 	const zoomItems = items.filter((item) => item.rowId === ZOOM_ROW_ID);
+	const trimItems = items.filter((item) => item.rowId === TRIM_ROW_ID);
 
 	const clipItems = items.filter((item) => item.rowId === CLIP_ROW_ID);
 	const annotationItems = items.filter((item) => item.rowId === ANNOTATION_ROW_ID);
+	const speedItems = items.filter((item) => item.rowId === SPEED_ROW_ID);
 	const audioItems = items.filter((item) => item.rowId === AUDIO_ROW_ID);
 
 	return (
@@ -633,6 +633,22 @@ function Timeline({
 					))}
 				</Row>
 
+				<Row id={TRIM_ROW_ID} isEmpty={trimItems.length === 0} hint="Press T to add trim">
+					{trimItems.map((item) => (
+						<Item
+							id={item.id}
+							key={item.id}
+							rowId={item.rowId}
+							span={item.span}
+							isSelected={selectAllBlocksActive || item.id === _selectedTrimId}
+							onSelect={() => onSelectTrim?.(item.id)}
+							variant="trim"
+						>
+							{item.label}
+						</Item>
+					))}
+				</Row>
+
 				<Row id={ZOOM_ROW_ID} isEmpty={zoomItems.length === 0} hint="Press Z to add zoom">
 					{zoomItems.map((item) => (
 						<Item
@@ -644,6 +660,27 @@ function Timeline({
 							onSelect={() => onSelectZoom?.(item.id)}
 							zoomDepth={item.zoomDepth}
 							variant="zoom"
+						>
+							{item.label}
+						</Item>
+					))}
+				</Row>
+
+				<Row
+					id={SPEED_ROW_ID}
+					isEmpty={speedItems.length === 0}
+					hint="Press S to add speed"
+				>
+					{speedItems.map((item) => (
+						<Item
+							id={item.id}
+							key={item.id}
+							rowId={item.rowId}
+							span={item.span}
+							isSelected={selectAllBlocksActive || item.id === _selectedSpeedId}
+							onSelect={() => onSelectSpeed?.(item.id)}
+							speedValue={item.speedValue}
+							variant="speed"
 						>
 							{item.label}
 						</Item>
@@ -1480,7 +1517,6 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 
 				// Tab: Cycle through overlapping annotations at current time
 				if (e.key === "Tab" && annotationRegions.length > 0) {
-					const currentTimeMs = Math.round(currentTime * 1000);
 					const overlapping = annotationRegions
 						.filter((a) => currentTimeMs >= a.startMs && currentTimeMs <= a.endMs)
 						.sort((a, b) => a.zIndex - b.zIndex); // Sort by z-index
@@ -1556,7 +1592,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			selectedSpeedId,
 			selectedAudioId,
 			annotationRegions,
-			currentTime,
+			currentTimeMs,
 			hasAnyTimelineBlocks,
 			onSelectAnnotation,
 			keyShortcuts,
@@ -1605,6 +1641,14 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				variant: "zoom",
 			}));
 
+			const trims: TimelineRenderItem[] = trimRegions.map((region, index) => ({
+				id: region.id,
+				rowId: TRIM_ROW_ID,
+				span: { start: region.startMs, end: region.endMs },
+				label: `Trim ${index + 1}`,
+				variant: "trim",
+			}));
+
 			const clips: TimelineRenderItem[] = clipRegions.map((region, index) => ({
 				id: region.id,
 				rowId: CLIP_ROW_ID,
@@ -1635,6 +1679,15 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				};
 			});
 
+			const speeds: TimelineRenderItem[] = speedRegions.map((region, index) => ({
+				id: region.id,
+				rowId: SPEED_ROW_ID,
+				span: { start: region.startMs, end: region.endMs },
+				label: `Speed ${index + 1}`,
+				speedValue: region.speed,
+				variant: "speed",
+			}));
+
 			const audios: TimelineRenderItem[] = audioRegions.map((region) => {
 				const fileName =
 					region.audioPath
@@ -1650,8 +1703,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				};
 			});
 
-			return [...zooms, ...clips, ...annotations, ...audios];
-		}, [zoomRegions, clipRegions, annotationRegions, audioRegions]);
+			return [...zooms, ...trims, ...clips, ...annotations, ...speeds, ...audios];
+		}, [zoomRegions, trimRegions, clipRegions, annotationRegions, speedRegions, audioRegions]);
 
 		// Flat list of draggable row spans for neighbour-clamping during drag/resize.
 		const allRegionSpans = useMemo(() => {
@@ -1661,11 +1714,23 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				end: r.endMs,
 				rowId: ZOOM_ROW_ID,
 			}));
+			const trims = trimRegions.map((r) => ({
+				id: r.id,
+				start: r.startMs,
+				end: r.endMs,
+				rowId: TRIM_ROW_ID,
+			}));
 			const clips = clipRegions.map((r) => ({
 				id: r.id,
 				start: r.startMs,
 				end: r.endMs,
 				rowId: CLIP_ROW_ID,
+			}));
+			const speeds = speedRegions.map((r) => ({
+				id: r.id,
+				start: r.startMs,
+				end: r.endMs,
+				rowId: SPEED_ROW_ID,
 			}));
 			const audios = audioRegions.map((r) => ({
 				id: r.id,
@@ -1673,30 +1738,38 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				end: r.endMs,
 				rowId: AUDIO_ROW_ID,
 			}));
-			return [...zooms, ...clips, ...audios];
-		}, [zoomRegions, clipRegions, audioRegions]);
+			return [...zooms, ...trims, ...clips, ...speeds, ...audios];
+		}, [zoomRegions, trimRegions, clipRegions, speedRegions, audioRegions]);
 
 		const handleItemSpanChange = useCallback(
 			(id: string, span: Span) => {
 				// Check if it's a zoom, trim, clip, speed, or annotation item
 				if (zoomRegions.some((r) => r.id === id)) {
 					onZoomSpanChange(id, span);
+				} else if (trimRegions.some((r) => r.id === id)) {
+					onTrimSpanChange?.(id, span);
 				} else if (clipRegions.some((r) => r.id === id)) {
 					onClipSpanChange?.(id, span);
 				} else if (annotationRegions.some((r) => r.id === id)) {
 					onAnnotationSpanChange?.(id, span);
+				} else if (speedRegions.some((r) => r.id === id)) {
+					onSpeedSpanChange?.(id, span);
 				} else if (audioRegions.some((r) => r.id === id)) {
 					onAudioSpanChange?.(id, span);
 				}
 			},
 			[
 				zoomRegions,
+				trimRegions,
 				clipRegions,
 				annotationRegions,
+				speedRegions,
 				audioRegions,
 				onZoomSpanChange,
+				onTrimSpanChange,
 				onClipSpanChange,
 				onAnnotationSpanChange,
+				onSpeedSpanChange,
 				onAudioSpanChange,
 			],
 		);

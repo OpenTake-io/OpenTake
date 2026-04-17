@@ -2678,29 +2678,35 @@ export default function VideoEditor() {
 		}
 	}, []);
 
-	const handleClipSplit = useCallback((splitMs: number) => {
-		setClipRegions((prev) => {
-			const target = prev.find((c) => splitMs > c.startMs && splitMs < c.endMs);
-			if (!target) return prev;
-			const leftId = `clip-${nextClipIdRef.current++}`;
-			const rightId = `clip-${nextClipIdRef.current++}`;
-			const left: ClipRegion = {
-				id: leftId,
-				startMs: target.startMs,
-				endMs: Math.round(splitMs),
-				speed: target.speed,
-				muted: target.muted,
-			};
-			const right: ClipRegion = {
-				id: rightId,
-				startMs: Math.round(splitMs),
-				endMs: target.endMs,
-				speed: target.speed,
-				muted: target.muted,
-			};
-			return prev.flatMap((c) => (c.id === target.id ? [left, right] : [c]));
-		});
-	}, []);
+	const handleClipSplit = useCallback(
+		(splitMs: number) => {
+			setClipRegions((prev) => {
+				const target = prev.find((c) => splitMs > c.startMs && splitMs < c.endMs);
+				if (!target) return prev;
+				const leftId = `clip-${nextClipIdRef.current++}`;
+				const rightId = `clip-${nextClipIdRef.current++}`;
+				const left: ClipRegion = {
+					id: leftId,
+					startMs: target.startMs,
+					endMs: Math.round(splitMs),
+					speed: target.speed,
+					muted: target.muted,
+				};
+				const right: ClipRegion = {
+					id: rightId,
+					startMs: Math.round(splitMs),
+					endMs: target.endMs,
+					speed: target.speed,
+					muted: target.muted,
+				};
+				if (selectedClipId === target.id) {
+					setSelectedClipId(leftId);
+				}
+				return prev.flatMap((c) => (c.id === target.id ? [left, right] : [c]));
+			});
+		},
+		[selectedClipId],
+	);
 
 	const handleClipSpanChange = useCallback(
 		(id: string, span: Span) => {
@@ -5202,10 +5208,6 @@ export default function VideoEditor() {
 						selectedAnnotationId={selectedAnnotationId}
 						onSelectAnnotation={handleSelectAnnotation}
 						aspectRatio={aspectRatio}
-						isPlaying={isPlaying}
-						onTogglePlayPause={togglePlayPause}
-						volume={previewVolume}
-						onVolumeChange={setPreviewVolume}
 					/>
 				</div>
 			</div>
