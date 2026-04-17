@@ -530,8 +530,16 @@ export async function preloadCursorAssets() {
 							width = rasterized.width;
 							height = rasterized.height;
 							normalizedAnchor = {
-								x: clamp((uploadedAsset.fallbackAnchor.x * trim.width) / width, 0, 1),
-								y: clamp((uploadedAsset.fallbackAnchor.y * trim.height) / height, 0, 1),
+								x: clamp(
+									(uploadedAsset.fallbackAnchor.x * trim.width) / width,
+									0,
+									1,
+								),
+								y: clamp(
+									(uploadedAsset.fallbackAnchor.y * trim.height) / height,
+									0,
+									1,
+								),
 							};
 						} else {
 							finalUrl = assetUrl;
@@ -559,7 +567,10 @@ export async function preloadCursorAssets() {
 							} satisfies LoadedCursorAsset,
 						] as const;
 					} catch (error) {
-						console.warn(`[CursorRenderer] Failed to load cursor image for: ${key}`, error);
+						console.warn(
+							`[CursorRenderer] Failed to load cursor image for: ${key}`,
+							error,
+						);
 						return null;
 					}
 				}),
@@ -570,7 +581,9 @@ export async function preloadCursorAssets() {
 			) as Partial<Record<CursorAssetKey, LoadedCursorAsset>>;
 
 			const invertedEntries = await Promise.all(
-				(Object.entries(loadedCursorAssets) as Array<[CursorAssetKey, LoadedCursorAsset]>).map(
+				(
+					Object.entries(loadedCursorAssets) as Array<[CursorAssetKey, LoadedCursorAsset]>
+				).map(
 					async ([key, asset]) => [key, await createInvertedCursorAsset(asset)] as const,
 				),
 			);
@@ -817,7 +830,8 @@ export class SmoothedCursorState {
 			this.trail.length = this.trailLength;
 		}
 
-		const deltaMs = this.lastTimeMs === null ? 1000 / 60 : Math.max(1, timeMs - this.lastTimeMs);
+		const deltaMs =
+			this.lastTimeMs === null ? 1000 / 60 : Math.max(1, timeMs - this.lastTimeMs);
 		this.lastTimeMs = timeMs;
 
 		const springConfig = getCursorSpringConfig(this.smoothingFactor);
@@ -851,7 +865,6 @@ export class SmoothedCursorState {
 		resetSpringState(this.ySpring, this.y);
 	}
 }
-
 
 export class PixiCursorOverlay {
 	public readonly container: Container;
@@ -1076,19 +1089,22 @@ export class PixiCursorOverlay {
 
 		this.clickRingGraphics.clear();
 
-		const spriteKey = (cursorType in this.cursorSprites ? cursorType : "arrow") as CursorAssetKey;
+		const spriteKey = (
+			cursorType in this.cursorSprites ? cursorType : "arrow"
+		) as CursorAssetKey;
 
 		if (isStatefulCursorStyle(this.config.style)) {
 			this.customCursorShadowSprite.visible = false;
 			this.customCursorSprite.visible = false;
 
 			const asset = getStatefulCursorAsset(this.config.style, spriteKey);
-			const shadowSprite = this.cursorShadowSprites[spriteKey] ?? this.cursorShadowSprites.arrow!;
+			const shadowSprite =
+				this.cursorShadowSprites[spriteKey] ?? this.cursorShadowSprites.arrow!;
 			const sprite = this.cursorSprites[spriteKey] ?? this.cursorSprites.arrow!;
 
-			for (const [key, currentShadowSprite] of Object.entries(this.cursorShadowSprites) as Array<
-				[CursorAssetKey, Sprite]
-			>) {
+			for (const [key, currentShadowSprite] of Object.entries(
+				this.cursorShadowSprites,
+			) as Array<[CursorAssetKey, Sprite]>) {
 				currentShadowSprite.visible = key === spriteKey;
 			}
 

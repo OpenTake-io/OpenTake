@@ -28,7 +28,11 @@ export function computeCursorSwayRotation(dx: number, dy: number, deltaMs: numbe
 
 	const directionalBias = clamp((dx + dy * CURSOR_SWAY_VERTICAL_WEIGHT) / distance, -1, 1);
 	return (
-		directionalBias * speedFactor * CURSOR_SWAY_MAX_ROTATION * sway * CURSOR_SWAY_INTENSITY_SCALE
+		directionalBias *
+		speedFactor *
+		CURSOR_SWAY_MAX_ROTATION *
+		sway *
+		CURSOR_SWAY_INTENSITY_SCALE
 	);
 }
 

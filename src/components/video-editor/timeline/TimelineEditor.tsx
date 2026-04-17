@@ -52,6 +52,7 @@ import type {
 	SpeedRegion,
 	TrimRegion,
 	ZoomFocus,
+	ZoomMode,
 	ZoomRegion,
 } from "../types";
 import AudioWaveform from "./AudioWaveform";
@@ -68,8 +69,45 @@ const CLIP_ROW_ID = "row-clip";
 const ANNOTATION_ROW_ID = "row-annotation";
 const SPEED_ROW_ID = "row-speed";
 const AUDIO_ROW_ID = "row-audio";
+const ANNOTATION_ROW_PREFIX = `${ANNOTATION_ROW_ID}-`;
+const AUDIO_ROW_PREFIX = "row-audio-";
 const FALLBACK_RANGE_MS = 1000;
 const TARGET_MARKER_COUNT = 12;
+
+function getAnnotationTrackRowId(trackIndex: number) {
+	return `${ANNOTATION_ROW_ID}-${Math.max(0, Math.floor(trackIndex))}`;
+}
+
+function isAnnotationTrackRowId(rowId: string) {
+	return rowId === ANNOTATION_ROW_ID || rowId.startsWith(ANNOTATION_ROW_PREFIX);
+}
+
+function getAnnotationTrackIndex(rowId: string) {
+	if (rowId === ANNOTATION_ROW_ID) {
+		return 0;
+	}
+
+	const parsed = Number.parseInt(rowId.slice(ANNOTATION_ROW_PREFIX.length), 10);
+	return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
+function getAudioTrackRowId(trackIndex: number) {
+	return `${AUDIO_ROW_PREFIX}${Math.max(0, Math.floor(trackIndex))}`;
+}
+
+function isAudioTrackRowId(rowId: string) {
+	return rowId === AUDIO_ROW_ID || rowId.startsWith(AUDIO_ROW_PREFIX);
+}
+
+function getAudioTrackIndex(rowId: string) {
+	if (rowId === AUDIO_ROW_ID) {
+		return 0;
+	}
+
+	const parsed = Number.parseInt(rowId.slice(AUDIO_ROW_PREFIX.length), 10);
+	return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
 interface TimelineEditorProps {
 	videoDuration: number;
 	currentTime: number;
@@ -111,7 +149,7 @@ interface TimelineEditorProps {
 	selectedSpeedId?: string | null;
 	onSelectSpeed?: (id: string | null) => void;
 	audioRegions?: AudioRegion[];
-	onAudioAdded?: (span: Span, audioPath: string) => void;
+	onAudioAdded?: (span: Span, audioPath: string, trackIndex?: number) => void;
 	onAudioSpanChange?: (id: string, span: Span) => void;
 	onAudioDelete?: (id: string) => void;
 	selectedAudioId?: string | null;
@@ -145,6 +183,7 @@ interface TimelineRenderItem {
 	span: Span;
 	label: string;
 	zoomDepth?: number;
+	zoomMode?: ZoomMode;
 	speedValue?: number;
 	variant: "zoom" | "trim" | "clip" | "annotation" | "speed" | "audio";
 }
@@ -594,9 +633,29 @@ function Timeline({
 	const trimItems = items.filter((item) => item.rowId === TRIM_ROW_ID);
 
 	const clipItems = items.filter((item) => item.rowId === CLIP_ROW_ID);
-	const annotationItems = items.filter((item) => item.rowId === ANNOTATION_ROW_ID);
+	const annotationItems = items.filter((item) => isAnnotationTrackRowId(item.rowId));
 	const speedItems = items.filter((item) => item.rowId === SPEED_ROW_ID);
-	const audioItems = items.filter((item) => item.rowId === AUDIO_ROW_ID);
+	const audioItems = items.filter((item) => isAudioTrackRowId(item.rowId));
+	const audioRowIds = useMemo(
+		() =>
+			Array.from(
+				new Set(
+					audioItems.map((item) => getAudioTrackRowId(getAudioTrackIndex(item.rowId))),
+				),
+			).sort((left, right) => getAudioTrackIndex(left) - getAudioTrackIndex(right)),
+		[audioItems],
+	);
+	const annotationRowIds = useMemo(
+		() =>
+			Array.from(
+				new Set(
+					annotationItems.map((item) =>
+						getAnnotationTrackRowId(getAnnotationTrackIndex(item.rowId)),
+					),
+				),
+			).sort((left, right) => getAnnotationTrackIndex(left) - getAnnotationTrackIndex(right)),
+		[annotationItems],
+	);
 
 	return (
 		<div
@@ -659,6 +718,7 @@ function Timeline({
 							isSelected={selectAllBlocksActive || item.id === selectedZoomId}
 							onSelect={() => onSelectZoom?.(item.id)}
 							zoomDepth={item.zoomDepth}
+							zoomMode={item.zoomMode}
 							variant="zoom"
 						>
 							{item.label}
@@ -687,45 +747,68 @@ function Timeline({
 					))}
 				</Row>
 
-				<Row
-					id={ANNOTATION_ROW_ID}
-					isEmpty={annotationItems.length === 0}
-					hint="Press A to add annotation"
-				>
-					{annotationItems.map((item) => (
-						<Item
-							id={item.id}
-							key={item.id}
-							rowId={item.rowId}
-							span={item.span}
-							isSelected={selectAllBlocksActive || item.id === selectedAnnotationId}
-							onSelect={() => onSelectAnnotation?.(item.id)}
-							variant="annotation"
-						>
-							{item.label}
-						</Item>
-					))}
-				</Row>
+				{annotationRowIds.map((rowId, index) => {
+					const rowItems = annotationItems.filter(
+						(item) =>
+							getAnnotationTrackRowId(getAnnotationTrackIndex(item.rowId)) === rowId,
+					);
 
-				<Row
-					id={AUDIO_ROW_ID}
-					isEmpty={audioItems.length === 0}
-					hint="Click music icon to add audio"
-				>
-					{audioItems.map((item) => (
-						<Item
-							id={item.id}
-							key={item.id}
-							rowId={item.rowId}
-							span={item.span}
-							isSelected={selectAllBlocksActive || item.id === selectedAudioId}
-							onSelect={() => onSelectAudio?.(item.id)}
-							variant="audio"
+					return (
+						<Row
+							key={rowId}
+							id={rowId}
+							isEmpty={rowItems.length === 0}
+							hint={index === 0 ? "Press A to add annotation" : undefined}
 						>
-							{item.label}
-						</Item>
-					))}
-				</Row>
+							{rowItems.map((item) => (
+								<Item
+									id={item.id}
+									key={item.id}
+									rowId={item.rowId}
+									span={item.span}
+									isSelected={
+										selectAllBlocksActive || item.id === selectedAnnotationId
+									}
+									onSelect={() => onSelectAnnotation?.(item.id)}
+									variant="annotation"
+								>
+									{item.label}
+								</Item>
+							))}
+						</Row>
+					);
+				})}
+
+				{audioRowIds.map((rowId, index) => {
+					const rowItems = audioItems.filter(
+						(item) => getAudioTrackRowId(getAudioTrackIndex(item.rowId)) === rowId,
+					);
+
+					return (
+						<Row
+							key={rowId}
+							id={rowId}
+							isEmpty={rowItems.length === 0}
+							hint={index === 0 ? "Click music icon to add audio" : undefined}
+						>
+							{rowItems.map((item) => (
+								<Item
+									id={item.id}
+									key={item.id}
+									rowId={item.rowId}
+									span={item.span}
+									isSelected={
+										selectAllBlocksActive || item.id === selectedAudioId
+									}
+									onSelect={() => onSelectAudio?.(item.id)}
+									variant="audio"
+								>
+									{item.label}
+								</Item>
+							))}
+						</Row>
+					);
+				})}
 			</div>
 		</div>
 	);
@@ -1639,6 +1722,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				span: { start: region.startMs, end: region.endMs },
 				label: `Zoom ${index + 1}`,
 				zoomDepth: region.depth,
+				zoomMode: region.mode ?? "auto",
 				variant: "zoom",
 			}));
 
@@ -1673,7 +1757,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 
 				return {
 					id: region.id,
-					rowId: ANNOTATION_ROW_ID,
+					rowId: getAnnotationTrackRowId(region.trackIndex ?? 0),
 					span: { start: region.startMs, end: region.endMs },
 					label,
 					variant: "annotation",
@@ -1697,7 +1781,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 						?.replace(/\.[^.]+$/, "") || "Audio";
 				return {
 					id: region.id,
-					rowId: AUDIO_ROW_ID,
+					rowId: getAudioTrackRowId(region.trackIndex ?? 0),
 					span: { start: region.startMs, end: region.endMs },
 					label: fileName,
 					variant: "audio",
@@ -1737,7 +1821,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				id: r.id,
 				start: r.startMs,
 				end: r.endMs,
-				rowId: AUDIO_ROW_ID,
+				rowId: getAudioTrackRowId(r.trackIndex ?? 0),
 			}));
 			return [...zooms, ...trims, ...clips, ...speeds, ...audios];
 		}, [zoomRegions, trimRegions, clipRegions, speedRegions, audioRegions]);
