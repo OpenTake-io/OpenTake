@@ -1,12 +1,15 @@
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { existsSync, constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { app } from "electron";
 import {
 	nativeHelperMigrationPromise,
 	setNativeHelperMigrationPromise,
 } from "../state";
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Resolve a path within the app bundle, handling asar unpacking in production.
@@ -205,13 +208,14 @@ export async function ensureSwiftHelperBinary(
 		return binaryPath;
 	}
 
-	const result = spawnSync("swiftc", ["-O", sourcePath, "-o", binaryPath], {
-		encoding: "utf8",
-		timeout: 120000,
-	});
-
-	if (result.status !== 0) {
-		const details = [result.stderr, result.stdout].filter(Boolean).join("\n").trim();
+	try {
+		await execFileAsync("swiftc", ["-O", sourcePath, "-o", binaryPath], {
+			encoding: "utf8",
+			timeout: 120000,
+		});
+	} catch (error) {
+		const err = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
+		const details = [err.stderr, err.stdout].filter(Boolean).join("\n").trim();
 		throw new Error(details || `Failed to compile ${label}`);
 	}
 

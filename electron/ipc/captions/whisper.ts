@@ -41,7 +41,7 @@ export function downloadFileWithProgress(
 ): Promise<void> {
 	const request = (currentUrl: string, redirectCount = 0): Promise<void> => {
 		return new Promise((resolve, reject) => {
-			const req = httpsGet(currentUrl, (response) => {
+			const req = httpsGet(currentUrl, { timeout: 30_000 }, (response) => {
 				const statusCode = response.statusCode ?? 0;
 				const location = response.headers.location;
 
@@ -97,6 +97,9 @@ export function downloadFileWithProgress(
 			});
 
 			req.on("error", reject);
+			req.on("timeout", () => {
+				req.destroy(new Error("Whisper model download timed out."));
+			});
 		});
 	};
 

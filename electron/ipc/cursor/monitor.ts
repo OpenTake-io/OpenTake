@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
+import { BrowserWindow } from "electron";
 import type { CursorVisualType } from "../types";
 import {
 	currentCursorVisualType,
@@ -13,7 +14,6 @@ import {
 import { getCursorMonitorExePath, ensureNativeCursorMonitorBinary } from "../paths/binaries";
 
 export function emitCursorStateChanged(cursorType: CursorVisualType) {
-	const { BrowserWindow } = require("electron") as typeof import("electron");
 	BrowserWindow.getAllWindows().forEach((window) => {
 		if (!window.isDestroyed()) {
 			window.webContents.send("cursor-state-changed", { cursorType });

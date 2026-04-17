@@ -5,6 +5,7 @@ import {
 	AUTO_RECORDING_MAX_AGE_MS,
 	PROJECT_FILE_EXTENSION,
 	LEGACY_PROJECT_FILE_EXTENSIONS,
+	COMPANION_AUDIO_LAYOUTS,
 } from "../constants";
 import { currentVideoPath } from "../state";
 import { normalizePath, getTelemetryPathForVideo, isAutoRecordingPath, getRecordingsDir } from "../utils";
@@ -31,6 +32,7 @@ export { isAutoRecordingPath };
 
 export async function pruneAutoRecordings(exemptPaths: string[] = []) {
 	const recordingsDir = await getRecordingsDir();
+	await fs.mkdir(recordingsDir, { recursive: true });
 	const exempt = new Set(
 		[currentVideoPath, ...exemptPaths]
 			.filter((value): value is string => Boolean(value))
@@ -74,14 +76,12 @@ export async function pruneAutoRecordings(exemptPaths: string[] = []) {
 			await fs.rm(getTelemetryPathForVideo(entry.filePath), { force: true });
 			// Clean up companion audio files left from recording (macOS .m4a, Windows .wav)
 			const base = entry.filePath.replace(/\.(mp4|mov|webm)$/i, "");
-			for (const suffix of [
-				".system.m4a",
-				".mic.m4a",
-				".system.wav",
-				".mic.wav",
-				".mic.webm",
-				".system.webm",
-			]) {
+			const companionSuffixes = Array.from(
+				new Set(
+					COMPANION_AUDIO_LAYOUTS.flatMap((layout) => [layout.systemSuffix, layout.micSuffix]),
+				),
+			);
+			for (const suffix of companionSuffixes) {
 				await fs.rm(base + suffix, { force: true }).catch(() => undefined);
 			}
 		} catch (error) {
