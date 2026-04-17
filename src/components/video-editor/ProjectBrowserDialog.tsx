@@ -69,9 +69,15 @@ export default function ProjectBrowserDialog({
 				? Math.max(margin, anchorRect.top - Math.min(panelHeight, maxHeight) - gap)
 				: Math.min(
 						anchorRect.bottom + gap,
-						Math.max(margin, viewportHeight - Math.min(panelHeight, maxHeight) - margin),
+						Math.max(
+							margin,
+							viewportHeight - Math.min(panelHeight, maxHeight) - margin,
+						),
 					)
-			: Math.min(56, Math.max(margin, viewportHeight - Math.min(panelHeight, maxHeight) - margin));
+			: Math.min(
+					56,
+					Math.max(margin, viewportHeight - Math.min(panelHeight, maxHeight) - margin),
+				);
 		const alignedLeft = anchorRect
 			? anchorRect.right - panelWidth
 			: viewportWidth - panelWidth - 16;
@@ -175,7 +181,9 @@ export default function ProjectBrowserDialog({
 					{visibleEntries.length > 0 ? (
 						<div className="grid grid-cols-2 gap-2">
 							{visibleEntries.map((entry) => {
-								const thumbnailSrc = entry.thumbnailPath ? toFileUrl(entry.thumbnailPath) : null;
+								const thumbnailSrc = entry.thumbnailPath
+									? toFileUrl(entry.thumbnailPath)
+									: null;
 								return (
 									<button
 										key={entry.path}
@@ -215,7 +223,9 @@ export default function ProjectBrowserDialog({
 						</div>
 					) : (
 						<div className="flex min-h-[140px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/10 bg-[#111215] px-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-							<div className="text-sm font-semibold text-white">No saved projects yet</div>
+							<div className="text-sm font-semibold text-white">
+								No saved projects yet
+							</div>
 						</div>
 					)}
 				</div>
@@ -242,7 +252,9 @@ export default function ProjectBrowserDialog({
 					{visibleEntries.length > 0 ? (
 						<div className="grid grid-cols-2 gap-2">
 							{visibleEntries.map((entry) => {
-								const thumbnailSrc = entry.thumbnailPath ? toFileUrl(entry.thumbnailPath) : null;
+								const thumbnailSrc = entry.thumbnailPath
+									? toFileUrl(entry.thumbnailPath)
+									: null;
 								return (
 									<button
 										key={entry.path}
@@ -282,7 +294,9 @@ export default function ProjectBrowserDialog({
 						</div>
 					) : (
 						<div className="flex min-h-[140px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/10 bg-[#111215] px-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-							<div className="text-sm font-semibold text-white">No saved projects yet</div>
+							<div className="text-sm font-semibold text-white">
+								No saved projects yet
+							</div>
 						</div>
 					)}
 				</div>

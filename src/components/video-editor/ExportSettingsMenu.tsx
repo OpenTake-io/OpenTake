@@ -1,4 +1,4 @@
-import { Download, Film, Image } from "lucide-react";
+import { DownloadSimple as Download, FilmSlate as Film, Image } from "@phosphor-icons/react";
 import { LayoutGroup, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -47,7 +47,7 @@ export function ExportSettingsMenu({
 	onExportEncodingModeChange,
 	mp4FrameRate,
 	onMp4FrameRateChange,
-	exportPipelineModel = "legacy",
+	exportPipelineModel = "modern",
 	onExportPipelineModelChange,
 	mp4OutputDimensions,
 	gifFrameRate,
@@ -64,7 +64,12 @@ export function ExportSettingsMenu({
 	const isLegacyModel = exportPipelineModel === "legacy";
 
 	return (
-		<div className={cn("w-full rounded-2xl border border-white/10 bg-[#17171a] p-3 text-slate-200", className)}>
+		<div
+			className={cn(
+				"w-full rounded-2xl border border-white/10 bg-[#17171a] p-3 text-slate-200",
+				className,
+			)}
+		>
 			<div className="mb-2 flex items-center justify-between">
 				<span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
 					{tSettings("export.title", "Export")}
@@ -73,10 +78,12 @@ export function ExportSettingsMenu({
 
 			<div className="mb-3 flex items-center gap-2">
 				<LayoutGroup id="header-export-format-toggle">
-					{([
-						{ value: "mp4", label: tSettings("export.mp4"), icon: Film },
-						{ value: "gif", label: tSettings("export.gif"), icon: Image },
-					] as const).map((option) => {
+					{(
+						[
+							{ value: "mp4", label: tSettings("export.mp4"), icon: Film },
+							{ value: "gif", label: tSettings("export.gif"), icon: Image },
+						] as const
+					).map((option) => {
 						const Icon = option.icon;
 						const isActive = exportFormat === option.value;
 						return (
@@ -84,6 +91,7 @@ export function ExportSettingsMenu({
 								key={option.value}
 								type="button"
 								onClick={() => onExportFormatChange?.(option.value)}
+								aria-pressed={isActive}
 								className={cn(
 									"relative flex-1 overflow-hidden rounded-xl border py-2 text-xs font-medium transition-colors",
 									isActive
@@ -111,34 +119,53 @@ export function ExportSettingsMenu({
 			{exportFormat === "mp4" ? (
 				<LayoutGroup id="header-export-quality-toggle">
 					<div className="mb-3 grid min-h-12 w-full grid-cols-4 rounded-xl border border-white/5 bg-white/5 p-0.5">
-						{([
-							{ value: "medium", label: tSettings("export.quality.low") },
-							{ value: "good", label: tSettings("export.quality.medium") },
-							{ value: "high", label: tSettings("export.quality.high") },
-							{ value: "source", label: tSettings("export.quality.original") },
-						] as const).map((option) => {
+						{(
+							[
+								{ value: "medium", label: tSettings("export.quality.low") },
+								{ value: "good", label: tSettings("export.quality.medium") },
+								{ value: "high", label: tSettings("export.quality.high") },
+								{ value: "source", label: tSettings("export.quality.original") },
+							] as const
+						).map((option) => {
 							const isActive = exportQuality === option.value;
 							return (
 								<button
 									key={option.value}
 									type="button"
 									onClick={() => onExportQualityChange?.(option.value)}
+									aria-pressed={isActive}
 									className="relative rounded-lg px-1 py-1 text-[11px] font-medium transition-colors"
 								>
 									{isActive ? (
 										<motion.span
 											layoutId="header-export-quality-pill"
 											className="absolute inset-0 rounded-lg bg-white"
-											transition={{ type: "spring", stiffness: 420, damping: 34 }}
+											transition={{
+												type: "spring",
+												stiffness: 420,
+												damping: 34,
+											}}
 										/>
 									) : null}
 									<span className="relative z-10 flex h-full flex-col items-center justify-center leading-tight">
-										<span className={cn(isActive ? "text-black" : "text-slate-400 hover:text-slate-200")}>
+										<span
+											className={cn(
+												isActive
+													? "text-black"
+													: "text-slate-400 hover:text-slate-200",
+											)}
+										>
 											{option.label}
 										</span>
 										{mp4OutputDimensions ? (
-											<span className={cn("mt-0.5 text-[9px]", isActive ? "text-black/75" : "text-slate-500") }>
-												{mp4OutputDimensions[option.value].width} x {mp4OutputDimensions[option.value].height}
+											<span
+												className={cn(
+													"mt-0.5 text-[9px]",
+													isActive ? "text-black/75" : "text-slate-500",
+												)}
+											>
+												{mp4OutputDimensions[option.value].width} x{" "}
+												{mp4OutputDimensions[option.value].height}
 											</span>
 										) : null}
 									</span>
@@ -152,27 +179,47 @@ export function ExportSettingsMenu({
 						</span>
 					</div>
 					<div className="mb-3 grid min-h-10 w-full grid-cols-3 rounded-xl border border-white/5 bg-white/5 p-0.5">
-						{([
-							{ value: "fast", label: tSettings("export.encoding.fast", "Fast") },
-							{ value: "balanced", label: tSettings("export.encoding.balanced", "Balanced") },
-							{ value: "quality", label: tSettings("export.encoding.quality", "Quality") },
-						] as const).map((option) => {
+						{(
+							[
+								{ value: "fast", label: tSettings("export.encoding.fast", "Fast") },
+								{
+									value: "balanced",
+									label: tSettings("export.encoding.balanced", "Balanced"),
+								},
+								{
+									value: "quality",
+									label: tSettings("export.encoding.quality", "Quality"),
+								},
+							] as const
+						).map((option) => {
 							const isActive = exportEncodingMode === option.value;
 							return (
 								<button
 									key={option.value}
 									type="button"
 									onClick={() => onExportEncodingModeChange?.(option.value)}
+									aria-pressed={isActive}
 									className="relative rounded-lg px-1 py-1 text-[11px] font-medium transition-colors"
 								>
 									{isActive ? (
 										<motion.span
 											layoutId="header-export-encoding-pill"
 											className="absolute inset-0 rounded-lg bg-white"
-											transition={{ type: "spring", stiffness: 420, damping: 34 }}
+											transition={{
+												type: "spring",
+												stiffness: 420,
+												damping: 34,
+											}}
 										/>
 									) : null}
-									<span className={cn("relative z-10", isActive ? "text-black" : "text-slate-400 hover:text-slate-200")}>
+									<span
+										className={cn(
+											"relative z-10",
+											isActive
+												? "text-black"
+												: "text-slate-400 hover:text-slate-200",
+										)}
+									>
 										{option.label}
 									</span>
 								</button>
@@ -192,16 +239,28 @@ export function ExportSettingsMenu({
 									key={rate}
 									type="button"
 									onClick={() => onMp4FrameRateChange?.(rate)}
+									aria-pressed={isActive}
 									className="relative rounded-lg px-1 py-1 text-[11px] font-medium transition-colors"
 								>
 									{isActive ? (
 										<motion.span
 											layoutId="header-export-fps-pill"
 											className="absolute inset-0 rounded-lg bg-white"
-											transition={{ type: "spring", stiffness: 420, damping: 34 }}
+											transition={{
+												type: "spring",
+												stiffness: 420,
+												damping: 34,
+											}}
 										/>
 									) : null}
-									<span className={cn("relative z-10", isActive ? "text-black" : "text-slate-400 hover:text-slate-200")}>
+									<span
+										className={cn(
+											"relative z-10",
+											isActive
+												? "text-black"
+												: "text-slate-400 hover:text-slate-200",
+										)}
+									>
 										{rate}
 									</span>
 								</button>
@@ -214,26 +273,46 @@ export function ExportSettingsMenu({
 						</span>
 					</div>
 					<div className="mb-3 grid min-h-10 w-full grid-cols-2 rounded-xl border border-white/5 bg-white/5 p-0.5">
-						{([
-							{ value: "legacy", label: tSettings("export.pipeline.legacy", "Legacy") },
-							{ value: "modern", label: tSettings("export.pipeline.modern", "Lightning (Beta)") },
-						] as const).map((option) => {
+						{(
+							[
+								{
+									value: "legacy",
+									label: tSettings("export.pipeline.legacy", "Legacy"),
+								},
+								{
+									value: "modern",
+									label: tSettings("export.pipeline.modern", "Lightning (Beta)"),
+								},
+							] as const
+						).map((option) => {
 							const isActive = exportPipelineModel === option.value;
 							return (
 								<button
 									key={option.value}
 									type="button"
 									onClick={() => onExportPipelineModelChange?.(option.value)}
+									aria-pressed={isActive}
 									className="relative rounded-lg px-1 py-1 text-[11px] font-medium transition-colors"
 								>
 									{isActive ? (
 										<motion.span
 											layoutId="header-export-pipeline-pill"
 											className="absolute inset-0 rounded-lg bg-white"
-											transition={{ type: "spring", stiffness: 420, damping: 34 }}
+											transition={{
+												type: "spring",
+												stiffness: 420,
+												damping: 34,
+											}}
 										/>
 									) : null}
-									<span className={cn("relative z-10", isActive ? "text-black" : "text-slate-400 hover:text-slate-200")}>
+									<span
+										className={cn(
+											"relative z-10",
+											isActive
+												? "text-black"
+												: "text-slate-400 hover:text-slate-200",
+										)}
+									>
 										{option.label}
 									</span>
 								</button>
@@ -242,11 +321,14 @@ export function ExportSettingsMenu({
 					</div>
 					<p className="mb-3 px-1 text-[10px] text-slate-500">
 						{isLegacyModel
-							? tSettings("export.pipeline.legacyHint", "Legacy uses the current stable WebCodecs export path.")
+							? tSettings(
+									"export.pipeline.legacyHint",
+									"Legacy uses the current stable WebCodecs export path.",
+								)
 							: tSettings(
 									"export.pipeline.lightningHint",
 									"Lightning (Beta) automatically uses the fastest compatible backend and falls back when needed.",
-							  )}
+								)}
 					</p>
 				</LayoutGroup>
 			) : (
@@ -261,12 +343,28 @@ export function ExportSettingsMenu({
 											key={rate.value}
 											type="button"
 											onClick={() => onGifFrameRateChange?.(rate.value)}
+											aria-pressed={isActive}
 											className="relative rounded-lg text-[11px] font-medium transition-colors"
 										>
 											{isActive ? (
-												<motion.span layoutId="header-gif-frame-rate-pill" className="absolute inset-0 rounded-lg bg-white" transition={{ type: "spring", stiffness: 420, damping: 34 }} />
+												<motion.span
+													layoutId="header-gif-frame-rate-pill"
+													className="absolute inset-0 rounded-lg bg-white"
+													transition={{
+														type: "spring",
+														stiffness: 420,
+														damping: 34,
+													}}
+												/>
 											) : null}
-											<span className={cn("relative z-10", isActive ? "text-black" : "text-slate-400 hover:text-slate-200")}>
+											<span
+												className={cn(
+													"relative z-10",
+													isActive
+														? "text-black"
+														: "text-slate-400 hover:text-slate-200",
+												)}
+											>
 												{rate.value}
 											</span>
 										</button>
@@ -282,18 +380,45 @@ export function ExportSettingsMenu({
 										<button
 											key={key}
 											type="button"
-											onClick={() => onGifSizePresetChange?.(key as GifSizePreset)}
+											onClick={() =>
+												onGifSizePresetChange?.(key as GifSizePreset)
+											}
+											aria-pressed={isActive}
 											className="relative rounded-lg text-[11px] font-medium transition-colors"
 										>
 											{isActive ? (
-												<motion.span layoutId="header-gif-size-pill" className="absolute inset-0 rounded-lg bg-white" transition={{ type: "spring", stiffness: 420, damping: 34 }} />
+												<motion.span
+													layoutId="header-gif-size-pill"
+													className="absolute inset-0 rounded-lg bg-white"
+													transition={{
+														type: "spring",
+														stiffness: 420,
+														damping: 34,
+													}}
+												/>
 											) : null}
-											<span className={cn("relative z-10", isActive ? "text-black" : "text-slate-400 hover:text-slate-200")}>
+											<span
+												className={cn(
+													"relative z-10",
+													isActive
+														? "text-black"
+														: "text-slate-400 hover:text-slate-200",
+												)}
+											>
 												{key === "original"
-													? tSettings("export.sizePresetOriginalShort", "Orig")
+													? tSettings(
+															"export.sizePresetOriginalShort",
+															"Orig",
+														)
 													: key === "medium"
-														? tSettings("export.sizePresetMediumShort", "Med")
-														: tSettings("export.sizePresetLargeShort", "Lar")}
+														? tSettings(
+																"export.sizePresetMediumShort",
+																"Med",
+															)
+														: tSettings(
+																"export.sizePresetLargeShort",
+																"Lar",
+															)}
 											</span>
 										</button>
 									);
@@ -306,14 +431,25 @@ export function ExportSettingsMenu({
 							{gifOutputDimensions.width} × {gifOutputDimensions.height}px
 						</span>
 						<div className="flex items-center gap-2">
-							<span className="text-[10px] text-slate-400">{tSettings("export.loop")}</span>
-							<Switch checked={gifLoop} onCheckedChange={onGifLoopChange} className="scale-75 data-[state=checked]:bg-[#2563EB]" />
+							<span className="text-[10px] text-slate-400">
+								{tSettings("export.loop")}
+							</span>
+							<Switch
+								checked={gifLoop}
+								onCheckedChange={onGifLoopChange}
+								className="scale-75 data-[state=checked]:bg-[#2563EB]"
+							/>
 						</div>
 					</div>
 				</div>
 			)}
 
-			<Button type="button" size="lg" onClick={onExport} className="h-11 w-full gap-2 rounded-lg bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-200 hover:bg-[#2563EB]/90">
+			<Button
+				type="button"
+				size="lg"
+				onClick={onExport}
+				className="h-11 w-full gap-2 rounded-lg bg-[#2563EB] text-sm font-semibold text-white transition-colors duration-200 hover:bg-[#2563EB]/90"
+			>
 				<Download className="h-4 w-4" />
 				{tSettings("export.exportVideo", undefined, {
 					format: exportFormat === "gif" ? "GIF" : "Video",

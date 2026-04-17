@@ -56,6 +56,8 @@
 		"loadingSources": "Loading sources...",
 		"screens": "Screens",
 		"windows": "Windows",
+		"noScreensAvailable": "No screens available",
+		"noWindowsAvailable": "No windows available",
 		"windowsNote": "Only visible (non-minimized) windows can be recorded.",
 		"windowPlaceholder": "Window",
 		"cancel": "Cancel",
