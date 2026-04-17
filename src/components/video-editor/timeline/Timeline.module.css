@@ -1,0 +1,28 @@
+.scrollArea {
+	scrollbar-width: thin;
+	scrollbar-color: rgba(107, 107, 107, 0.7) transparent;
+}
+
+.scrollArea::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+	background-color: transparent;
+}
+
+.scrollArea::-webkit-scrollbar-corner {
+	background-color: transparent;
+}
+
+.scrollArea::-webkit-scrollbar-thumb {
+	background-color: rgba(107, 107, 107, 0.7);
+	border-radius: 10px;
+	border: 2px solid #1c1c1e;
+}
+
+.scrollArea::-webkit-scrollbar-thumb:hover {
+	background-color: rgba(140, 140, 140, 0.9);
+}
+
+.scrollArea::-webkit-scrollbar-thumb:active {
+	background-color: rgba(160, 160, 160, 1);
+}

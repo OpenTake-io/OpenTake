@@ -19,49 +19,49 @@ export const SNAP_TO_EDGES_RATIO_MANUAL = 0.25;
 export const SNAP_TO_EDGES_RATIO_AUTO = 0.25;
 
 export interface CursorFollowCameraState {
-  /** Whether the state has been initialized with a starting position */
-  initialized: boolean;
-  /** Time of last update in ms (video time, not wall clock) */
-  lastTimeMs: number;
-  /** Whether the camera was active (zoomed) on the previous frame */
-  wasZoomed: boolean;
-  /** Whether the zoom reached full strength (≈1) — used to detect zoom-out */
-  reachedFullZoom: boolean;
-  /** Frozen focus when zooming out (camera holds position) */
-  frozenFocusX: number;
-  frozenFocusY: number;
+	/** Whether the state has been initialized with a starting position */
+	initialized: boolean;
+	/** Time of last update in ms (video time, not wall clock) */
+	lastTimeMs: number;
+	/** Whether the camera was active (zoomed) on the previous frame */
+	wasZoomed: boolean;
+	/** Whether the zoom reached full strength (≈1) — used to detect zoom-out */
+	reachedFullZoom: boolean;
+	/** Frozen focus when zooming out (camera holds position) */
+	frozenFocusX: number;
+	frozenFocusY: number;
 }
 
 export interface CursorFollowConfig {
-  /**
-   * snapToEdgesRatio — how much of the screen edge pins the camera.
-   * 0.25 for manual zooms, 0.5 for auto/system zooms.
-   */
-  snapToEdgesRatio: number;
+	/**
+	 * snapToEdgesRatio — how much of the screen edge pins the camera.
+	 * 0.25 for manual zooms, 0.5 for auto/system zooms.
+	 */
+	snapToEdgesRatio: number;
 }
 
 export const DEFAULT_CURSOR_FOLLOW_CONFIG: CursorFollowConfig = {
-  snapToEdgesRatio: SNAP_TO_EDGES_RATIO_AUTO,
+	snapToEdgesRatio: SNAP_TO_EDGES_RATIO_AUTO,
 };
 
 export function createCursorFollowCameraState(): CursorFollowCameraState {
-  return {
-    initialized: false,
-    lastTimeMs: 0,
-    wasZoomed: false,
-    reachedFullZoom: false,
-    frozenFocusX: 0.5,
-    frozenFocusY: 0.5,
-  };
+	return {
+		initialized: false,
+		lastTimeMs: 0,
+		wasZoomed: false,
+		reachedFullZoom: false,
+		frozenFocusX: 0.5,
+		frozenFocusY: 0.5,
+	};
 }
 
 export function resetCursorFollowCamera(state: CursorFollowCameraState): void {
-  state.initialized = false;
-  state.lastTimeMs = 0;
-  state.wasZoomed = false;
-  state.reachedFullZoom = false;
-  state.frozenFocusX = 0.5;
-  state.frozenFocusY = 0.5;
+	state.initialized = false;
+	state.lastTimeMs = 0;
+	state.wasZoomed = false;
+	state.reachedFullZoom = false;
+	state.frozenFocusX = 0.5;
+	state.frozenFocusY = 0.5;
 }
 
 /**
@@ -75,60 +75,60 @@ export function resetCursorFollowCamera(state: CursorFollowCameraState): void {
  * @returns The target focus point for this frame (normalized 0-1).
  */
 export function computeCursorFollowFocus(
-  state: CursorFollowCameraState,
-  cursorSamples: CursorTelemetryPoint[],
-  timeMs: number,
-  zoomScale: number,
-  zoomStrength: number,
-  regionFocus: ZoomFocus,
-  config: CursorFollowConfig = DEFAULT_CURSOR_FOLLOW_CONFIG,
+	state: CursorFollowCameraState,
+	cursorSamples: CursorTelemetryPoint[],
+	timeMs: number,
+	zoomScale: number,
+	zoomStrength: number,
+	regionFocus: ZoomFocus,
+	config: CursorFollowConfig = DEFAULT_CURSOR_FOLLOW_CONFIG,
 ): ZoomFocus {
-  // If no cursor data available, fall back to static region focus
-  const cursorPos = interpolateCursorPosition(cursorSamples, timeMs);
-  if (!cursorPos) {
-    return regionFocus;
-  }
+	// If no cursor data available, fall back to static region focus
+	const cursorPos = interpolateCursorPosition(cursorSamples, timeMs);
+	if (!cursorPos) {
+		return regionFocus;
+	}
 
-  // If not zoomed (strength ≈ 0), reset state and return region focus
-  if (zoomStrength < 0.01) {
-    if (state.wasZoomed) {
-      state.wasZoomed = false;
-      state.initialized = false;
-      state.reachedFullZoom = false;
-    }
-    return regionFocus;
-  }
+	// If not zoomed (strength ≈ 0), reset state and return region focus
+	if (zoomStrength < 0.01) {
+		if (state.wasZoomed) {
+			state.wasZoomed = false;
+			state.initialized = false;
+			state.reachedFullZoom = false;
+		}
+		return regionFocus;
+	}
 
-  // Track when zoom reaches full strength
-  if (zoomStrength >= 0.99) {
-    state.reachedFullZoom = true;
-  }
+	// Track when zoom reaches full strength
+	if (zoomStrength >= 0.99) {
+		state.reachedFullZoom = true;
+	}
 
-  // Zooming out: was fully zoomed but strength is now dropping — freeze camera
-  if (state.reachedFullZoom && zoomStrength < 0.99) {
-    return { cx: state.frozenFocusX, cy: state.frozenFocusY };
-  }
+	// Zooming out: was fully zoomed but strength is now dropping — freeze camera
+	if (state.reachedFullZoom && zoomStrength < 0.99) {
+		return { cx: state.frozenFocusX, cy: state.frozenFocusY };
+	}
 
-  // First frame of a zoom: mark initialized
-  if (!state.initialized || !state.wasZoomed) {
-    state.lastTimeMs = timeMs;
-    state.initialized = true;
-    state.wasZoomed = true;
-  }
+	// First frame of a zoom: mark initialized
+	if (!state.initialized || !state.wasZoomed) {
+		state.lastTimeMs = timeMs;
+		state.initialized = true;
+		state.wasZoomed = true;
+	}
 
-  state.lastTimeMs = timeMs;
+	state.lastTimeMs = timeMs;
 
-  // Edge snap: maps cursor through clamped linear remap.
-  // Camera pins to edge when cursor is within snapToEdgesRatio of boundary.
-  const targetFocus = edgeSnapFocus(
-    { cx: cursorPos.cx, cy: cursorPos.cy },
-    zoomScale,
-    config.snapToEdgesRatio,
-  );
+	// Edge snap: maps cursor through clamped linear remap.
+	// Camera pins to edge when cursor is within snapToEdgesRatio of boundary.
+	const targetFocus = edgeSnapFocus(
+		{ cx: cursorPos.cx, cy: cursorPos.cy },
+		zoomScale,
+		config.snapToEdgesRatio,
+	);
 
-  // Save for zoom-out freeze
-  state.frozenFocusX = targetFocus.cx;
-  state.frozenFocusY = targetFocus.cy;
+	// Save for zoom-out freeze
+	state.frozenFocusX = targetFocus.cx;
+	state.frozenFocusY = targetFocus.cy;
 
-  return targetFocus;
+	return targetFocus;
 }

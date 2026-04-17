@@ -1,8 +1,9 @@
 import {
 	FilmSlate as Film,
 	Gauge,
-	ChatCircleText as MessageSquare,
-	MusicNote as Music,
+	ChatCircle as MessageSquare,
+	MusicNotes as Music,
+	MouseLeftClickIcon as PhMouseLeftClick,
 	Scissors,
 	MagnifyingGlassPlus as ZoomIn,
 } from "@phosphor-icons/react";
@@ -20,6 +21,7 @@ interface ItemProps {
 	isSelected?: boolean;
 	onSelect?: () => void;
 	zoomDepth?: number;
+	zoomMode?: "auto" | "manual";
 	speedValue?: number;
 	variant?: "zoom" | "trim" | "clip" | "annotation" | "speed" | "audio";
 }
@@ -51,6 +53,7 @@ export default function Item({
 	isSelected = false,
 	onSelect,
 	zoomDepth = 1,
+	zoomMode = "auto",
 	speedValue,
 	variant = "zoom",
 	children,
@@ -97,7 +100,12 @@ export default function Item({
 	);
 
 	const MIN_ITEM_PX = 6;
-	const safeItemStyle = { ...itemStyle, minWidth: MIN_ITEM_PX, height: "100%" };
+	const safeItemStyle = {
+		...itemStyle,
+		minWidth: MIN_ITEM_PX,
+		height: "100%",
+		overflow: "hidden",
+	};
 
 	return (
 		<div
@@ -108,14 +116,30 @@ export default function Item({
 			onPointerDownCapture={() => onSelect?.()}
 			className="group h-full"
 		>
-			<div className="h-full" style={{ ...itemContentStyle, minWidth: 24, height: "100%" }}>
+			<div
+				className="h-full"
+				style={{
+					...itemContentStyle,
+					minWidth: MIN_ITEM_PX,
+					height: "100%",
+					display: "flex",
+					alignItems: "center",
+				}}
+			>
 				<div
 					className={cn(
 						glassClass,
-						"w-full h-full overflow-hidden flex items-center justify-center gap-1.5 cursor-grab active:cursor-grabbing relative",
+						"w-full overflow-hidden flex items-center justify-center gap-1.5 cursor-grab active:cursor-grabbing relative",
 						isSelected && glassStyles.selected,
 					)}
-					style={{ height: "100%", minHeight: 22, color: "#fff", minWidth: 24 }}
+					style={{
+						height: "85%",
+						minHeight: 22,
+						color: "#fff",
+						minWidth: MIN_ITEM_PX,
+						backgroundImage:
+							"linear-gradient(180deg, transparent 20%, rgba(255,255,255,0.08) 100%)",
+					}}
 					onClick={(event) => {
 						event.stopPropagation();
 						onSelect?.();
@@ -190,13 +214,27 @@ export default function Item({
 								</>
 							)}
 						</div>
-						<span
-							className={`text-[9px] tabular-nums tracking-tight whitespace-nowrap transition-opacity ${
-								isSelected ? "opacity-60" : "opacity-0 group-hover:opacity-40"
-							}`}
-						>
-							{timeLabel}
-						</span>
+						{isZoom ? (
+							<div
+								className={`flex items-center gap-0.5 transition-opacity ${isSelected ? "opacity-70" : "opacity-0 group-hover:opacity-50"}`}
+							>
+								<PhMouseLeftClick
+									className="w-2.5 h-2.5 shrink-0"
+									weight={zoomMode === "manual" ? "regular" : "fill"}
+								/>
+								<span className="text-[9px] font-medium tracking-tight whitespace-nowrap">
+									{zoomMode === "manual" ? "Manual" : "Auto"}
+								</span>
+							</div>
+						) : (
+							<span
+								className={`text-[9px] tabular-nums tracking-tight whitespace-nowrap transition-opacity ${
+									isSelected ? "opacity-60" : "opacity-0 group-hover:opacity-40"
+								}`}
+							>
+								{timeLabel}
+							</span>
+						)}
 					</div>
 				</div>
 			</div>
