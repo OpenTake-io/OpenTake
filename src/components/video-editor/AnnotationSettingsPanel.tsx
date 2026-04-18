@@ -506,7 +506,7 @@ export function AnnotationSettingsPanel({
 						<Button
 							onClick={() => fileInputRef.current?.click()}
 							variant="outline"
-							className="w-full gap-2 bg-foreground/5 text-foreground border-foreground/10 hover:bg-[#2563EB] hover:text-foreground hover:border-[#2563EB] transition-all py-8"
+							className="w-full gap-2 bg-foreground/5 text-foreground border-foreground/10 hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] transition-all py-8"
 						>
 							<Upload className="w-5 h-5" />
 							{t("annotations.uploadImage")}

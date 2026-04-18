@@ -59,9 +59,9 @@
 		--editor-surface-alt: 0 0% 95%;
 		--editor-dialog: 0 0% 100%;
 		--editor-dialog-alt: 0 0% 98%;
-		--editor-timeline: 240 6% 7%;
-		--editor-row: 240 4% 10%;
-		--editor-subrow: 240 7% 15%;
+		--editor-timeline: 220 13% 91%;
+		--editor-row: 220 13% 88%;
+		--editor-subrow: 220 13% 85%;
 
 		/* Slider track colors — light mode */
 		--slider-track: 0 0% 0% / 0.12;

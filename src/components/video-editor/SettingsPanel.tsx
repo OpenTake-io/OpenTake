@@ -662,7 +662,7 @@ function CursorStylePreview({
 
 	if (style === "dot") {
 		return (
-			<span className="h-[14px] w-[14px] rounded-full border-[2.5px] border-foreground bg-white shadow-[0_8px_12px_rgba(15,23,42,0.16)]" />
+			<span className="h-[14px] w-[14px] rounded-full border-[2.5px] border-neutral-800 bg-white shadow-[0_8px_12px_rgba(15,23,42,0.16)]" />
 		);
 	}
 
@@ -1461,7 +1461,7 @@ export function SettingsPanel({
 										className={cn(
 											"relative z-10",
 											isActive
-												? "text-foreground"
+												? "text-white"
 												: "text-muted-foreground hover:text-foreground",
 										)}
 									>
@@ -1494,7 +1494,7 @@ export function SettingsPanel({
 									<Button
 										onClick={() => fileInputRef.current?.click()}
 										variant="outline"
-										className="w-full gap-2 bg-foreground/5 text-foreground border-foreground/10 hover:bg-[#2563EB] hover:text-foreground hover:border-[#2563EB] transition-all h-7 text-[10px]"
+										className="w-full gap-2 bg-foreground/5 text-foreground border-foreground/10 hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] transition-all h-7 text-[10px]"
 									>
 										<Upload className="w-3 h-3" />
 										{tSettings("background.uploadCustom")}
@@ -1523,7 +1523,7 @@ export function SettingsPanel({
 														}
 														className="absolute top-0.5 right-0.5 w-3 h-3 bg-red-500/90 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
 													>
-														<X className="w-2 h-2 text-foreground" />
+														<X className="w-2 h-2 text-white" />
 													</button>
 												),
 											});
@@ -1552,7 +1552,7 @@ export function SettingsPanel({
 									<Button
 										onClick={handleVideoUpload}
 										variant="outline"
-										className="w-full gap-2 bg-foreground/5 text-foreground border-foreground/10 hover:bg-[#2563EB] hover:text-foreground hover:border-[#2563EB] transition-all h-7 text-[10px]"
+										className="w-full gap-2 bg-foreground/5 text-foreground border-foreground/10 hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] transition-all h-7 text-[10px]"
 									>
 										<Upload className="w-3 h-3" />
 										{tSettings("background.uploadCustomVideo", "Upload Video")}
@@ -1583,7 +1583,7 @@ export function SettingsPanel({
 																}
 																className="absolute top-0.5 right-0.5 w-3 h-3 bg-red-500/90 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
 															>
-																<X className="w-2 h-2 text-foreground" />
+																<X className="w-2 h-2 text-white" />
 															</button>
 														),
 													},

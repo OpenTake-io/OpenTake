@@ -200,7 +200,7 @@ export default function ProjectBrowserDialog({
 													draggable={false}
 												/>
 											) : (
-												<div className="flex h-full w-full items-center justify-center bg-[linear-gradient(180deg,_rgba(37,99,235,0.22),_rgba(13,17,23,0.92))] text-[10px] font-medium text-muted-foreground">
+												<div className="flex h-full w-full items-center justify-center bg-[linear-gradient(180deg,_rgba(37,99,235,0.22),_rgba(13,17,23,0.92))] text-[10px] font-medium text-white/60">
 													No preview yet
 												</div>
 											)}
@@ -271,7 +271,7 @@ export default function ProjectBrowserDialog({
 													draggable={false}
 												/>
 											) : (
-												<div className="flex h-full w-full items-center justify-center bg-[linear-gradient(180deg,_rgba(37,99,235,0.22),_rgba(13,17,23,0.92))] text-[10px] font-medium text-muted-foreground">
+												<div className="flex h-full w-full items-center justify-center bg-[linear-gradient(180deg,_rgba(37,99,235,0.22),_rgba(13,17,23,0.92))] text-[10px] font-medium text-white/60">
 													No preview yet
 												</div>
 											)}
