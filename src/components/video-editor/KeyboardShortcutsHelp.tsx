@@ -45,7 +45,7 @@ export function KeyboardShortcutsHelp() {
 					{SHORTCUT_ACTIONS.map((action) => (
 						<div key={action} className="flex items-center justify-between">
 							<span className="text-muted-foreground">{SHORTCUT_LABELS[action]}</span>
-							<kbd className="px-1 py-0.5 bg-white/5 border border-foreground/10 rounded text-[#2563EB] font-mono">
+							<kbd className="px-1 py-0.5 bg-foreground/5 border border-foreground/10 rounded text-[#2563EB] font-mono">
 								{formatBinding(shortcuts[action], isMac)}
 							</kbd>
 						</div>
@@ -56,7 +56,7 @@ export function KeyboardShortcutsHelp() {
 							<span className="text-muted-foreground">
 								{t("keyboardShortcuts.panTimeline")}
 							</span>
-							<kbd className="px-1 py-0.5 bg-white/5 border border-foreground/10 rounded text-[#2563EB] font-mono">
+							<kbd className="px-1 py-0.5 bg-foreground/5 border border-foreground/10 rounded text-[#2563EB] font-mono">
 								{scrollLabels.pan}
 							</kbd>
 						</div>
@@ -64,7 +64,7 @@ export function KeyboardShortcutsHelp() {
 							<span className="text-muted-foreground">
 								{t("keyboardShortcuts.zoomTimeline")}
 							</span>
-							<kbd className="px-1 py-0.5 bg-white/5 border border-foreground/10 rounded text-[#2563EB] font-mono">
+							<kbd className="px-1 py-0.5 bg-foreground/5 border border-foreground/10 rounded text-[#2563EB] font-mono">
 								{scrollLabels.zoom}
 							</kbd>
 						</div>
@@ -72,7 +72,7 @@ export function KeyboardShortcutsHelp() {
 							<span className="text-muted-foreground">
 								{t("keyboardShortcuts.cycleAnnotations")}
 							</span>
-							<kbd className="px-1 py-0.5 bg-white/5 border border-foreground/10 rounded text-[#2563EB] font-mono">
+							<kbd className="px-1 py-0.5 bg-foreground/5 border border-foreground/10 rounded text-[#2563EB] font-mono">
 								{t("keyboardShortcuts.tab")}
 							</kbd>
 						</div>

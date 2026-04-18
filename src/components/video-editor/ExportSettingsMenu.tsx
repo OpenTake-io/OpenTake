@@ -95,7 +95,7 @@ export function ExportSettingsMenu({
 								className={cn(
 									"relative flex-1 overflow-hidden rounded-xl border py-2 text-xs font-medium transition-colors",
 									isActive
-										? "border-[#2563EB]/50 text-white"
+										? "border-[#2563EB]/50 text-[#2563EB] dark:text-white"
 										: "border-foreground/10 bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground",
 								)}
 							>

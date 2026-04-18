@@ -52,7 +52,7 @@ export function FormatSelector({
 							"relative flex flex-col items-center gap-2 p-4 rounded-xl border transition-all duration-200",
 							"focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50 focus:ring-offset-2 focus:ring-offset-editor-dialog",
 							isSelected
-								? "bg-[#2563EB]/10 border-[#2563EB]/50 text-white"
+								? "bg-[#2563EB]/10 border-[#2563EB]/50 text-[#2563EB] dark:text-white"
 								: "bg-foreground/5 border-foreground/10 text-muted-foreground hover:bg-foreground/10 hover:border-foreground/20 hover:text-foreground",
 							disabled && "opacity-50 cursor-not-allowed",
 						)}

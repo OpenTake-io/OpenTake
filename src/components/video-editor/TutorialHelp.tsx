@@ -80,7 +80,7 @@ export function FeedbackDialog() {
 					<MessageSquareMore className="h-3.5 w-3.5" />
 				</Button>
 			</DialogTrigger>
-			<DialogContent className="max-w-lg bg-editor-dialog border-foreground/10 [&>button]:text-muted-foreground [[&>button:hover]:text-white>button:hover]:text-foreground">
+			<DialogContent className="max-w-lg bg-editor-dialog border-foreground/10 [&>button]:text-muted-foreground [&>button:hover]:text-foreground">
 				<DialogHeader>
 					<DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
 						<MessageSquareMore className="h-5 w-5 text-[#2563EB]" /> {t("feedback.title", "Feedback & contact")}
@@ -174,7 +174,7 @@ export function KeyboardShortcutsDialog({
 					{triggerLabel ? <span className="font-medium">{triggerLabel}</span> : null}
 				</Button>
 			</DialogTrigger>
-			<DialogContent className="max-w-lg bg-editor-dialog border-foreground/10 [&>button]:text-muted-foreground [[&>button:hover]:text-white>button:hover]:text-foreground">
+			<DialogContent className="max-w-lg bg-editor-dialog border-foreground/10 [&>button]:text-muted-foreground [&>button:hover]:text-foreground">
 				<DialogHeader>
 					<DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
 						<Keyboard className="h-5 w-5 text-[#2563EB]" /> {t("keyboardShortcuts.title")}
@@ -188,7 +188,7 @@ export function KeyboardShortcutsDialog({
 						{SHORTCUT_ACTIONS.map((action) => (
 							<div key={action} className="flex items-center justify-between gap-3 rounded-lg border border-foreground/5 bg-foreground/5 px-3 py-2.5">
 								<span className="text-muted-foreground">{SHORTCUT_LABELS[action]}</span>
-								<kbd className="rounded border border-foreground/10 bg-black/20 px-2 py-1 font-mono text-[#2563EB]">
+								<kbd className="rounded border border-foreground/10 bg-foreground/10 px-2 py-1 font-mono text-[#2563EB]">
 									{formatBinding(shortcuts[action], isMac)}
 								</kbd>
 							</div>
@@ -196,19 +196,19 @@ export function KeyboardShortcutsDialog({
 						<div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-3">
 							<div className="rounded-lg border border-foreground/5 bg-foreground/5 px-3 py-2.5">
 								<p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70">{t("keyboardShortcuts.panTimeline")}</p>
-								<kbd className="mt-2 inline-flex rounded border border-foreground/10 bg-black/20 px-2 py-1 font-mono text-[#2563EB]">
+								<kbd className="mt-2 inline-flex rounded border border-foreground/10 bg-foreground/10 px-2 py-1 font-mono text-[#2563EB]">
 									{scrollLabels.pan}
 								</kbd>
 							</div>
 							<div className="rounded-lg border border-foreground/5 bg-foreground/5 px-3 py-2.5">
 								<p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70">{t("keyboardShortcuts.zoomTimeline")}</p>
-								<kbd className="mt-2 inline-flex rounded border border-foreground/10 bg-black/20 px-2 py-1 font-mono text-[#2563EB]">
+								<kbd className="mt-2 inline-flex rounded border border-foreground/10 bg-foreground/10 px-2 py-1 font-mono text-[#2563EB]">
 									{scrollLabels.zoom}
 								</kbd>
 							</div>
 							<div className="rounded-lg border border-foreground/5 bg-foreground/5 px-3 py-2.5">
 								<p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70">{t("keyboardShortcuts.cycleAnnotations")}</p>
-								<kbd className="mt-2 inline-flex rounded border border-foreground/10 bg-black/20 px-2 py-1 font-mono text-[#2563EB]">
+								<kbd className="mt-2 inline-flex rounded border border-foreground/10 bg-foreground/10 px-2 py-1 font-mono text-[#2563EB]">
 									{t("keyboardShortcuts.tab")}
 								</kbd>
 							</div>
@@ -246,7 +246,7 @@ export function TutorialHelp() {
 					<span className="font-medium">{t("tutorial.howTrimmingWorks")}</span>
 				</Button>
 			</DialogTrigger>
-			<DialogContent className="max-w-2xl bg-editor-dialog border-foreground/10 [&>button]:text-muted-foreground [[&>button:hover]:text-white>button:hover]:text-foreground">
+			<DialogContent className="max-w-2xl bg-editor-dialog border-foreground/10 [&>button]:text-muted-foreground [&>button:hover]:text-foreground">
 				<DialogHeader>
 					<DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
 						<Scissors className="w-5 h-5 text-[#ef4444]" /> {t("tutorial.title")}

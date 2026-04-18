@@ -613,7 +613,7 @@ function TabSwitcher({
 										className={cn(
 											"text-[8px] px-1 rounded-full font-semibold min-w-[14px] text-center leading-[14px]",
 											isActive
-												? "bg-foreground/20 text-foreground"
+												? "bg-white/20 text-white"
 												: "bg-foreground/5 text-muted-foreground",
 										)}
 									>
