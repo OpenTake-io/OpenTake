@@ -334,6 +334,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			return source;
 		}
 
+		// Linux/Wayland portal sentinel: do NOT call getSources here, because
+		// on Wayland that triggers an additional xdg-desktop-portal dialog.
+		// The sentinel is handled later by routing through getDisplayMedia,
+		// which lets the portal pick the source in a single dialog.
+		if (source.id === "screen:linux-portal") {
+			return source;
+		}
+
 		try {
 			const liveSources = await window.electronAPI.getSources({
 				types: ["screen"],
@@ -827,10 +835,26 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		setStarting(true);
 
 		try {
-			const selectedSource = await window.electronAPI.getSelectedSource();
+			const platform = await window.electronAPI.getPlatform();
+			const existingSource = await window.electronAPI.getSelectedSource();
+			const selectedSource =
+				existingSource ??
+				(platform === "linux"
+					? { id: "screen:linux-portal", name: "Linux Portal" }
+					: null);
 			if (!selectedSource) {
 				alert("Please select a source to record");
 				return;
+			}
+			// Persist the synthetic Linux portal sentinel to main so that the
+			// setDisplayMediaRequestHandler can short-circuit getSources() and
+			// avoid triggering an extra portal dialog.
+			if (!existingSource && selectedSource.id === "screen:linux-portal") {
+				try {
+					await window.electronAPI.selectSource(selectedSource);
+				} catch (err) {
+					console.warn("Failed to persist Linux portal sentinel source:", err);
+				}
 			}
 
 			const permissionsReady = await preparePermissions();
@@ -841,8 +865,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			recordingSessionTimestamp.current = Date.now();
 			resetRecordingClock(recordingSessionTimestamp.current);
 			await prepareWebcamRecorder();
-
-			const platform = await window.electronAPI.getPlatform();
 			const useNativeMacScreenCapture =
 				platform === "darwin" &&
 				(selectedSource.id?.startsWith("screen:") ||
@@ -1018,18 +1040,34 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			if (wantsAudioCapture) {
 				let screenMediaStream: MediaStream;
+				const useLinuxPortal = selectedSource.id === "screen:linux-portal";
+				const acquireLinuxPortalStream = (withAudio: boolean) =>
+					mediaDevices.getDisplayMedia({
+						audio: withAudio,
+						video: {
+							displaySurface: "monitor",
+							width: { ideal: TARGET_WIDTH, max: TARGET_WIDTH },
+							height: { ideal: TARGET_HEIGHT, max: TARGET_HEIGHT },
+							frameRate: { ideal: TARGET_FRAME_RATE, max: TARGET_FRAME_RATE },
+							cursor: "never",
+						},
+						selfBrowserSurface: "exclude",
+						surfaceSwitching: "exclude",
+					});
 
 				if (systemAudioEnabled) {
 					try {
-						screenMediaStream = await mediaDevices.getUserMedia({
-							audio: {
-								mandatory: {
-									chromeMediaSource: CHROME_MEDIA_SOURCE,
-									chromeMediaSourceId: browserCaptureSource.id,
-								},
-							},
-							video: browserScreenVideoConstraints,
-						});
+						screenMediaStream = useLinuxPortal
+							? await acquireLinuxPortalStream(true)
+							: await mediaDevices.getUserMedia({
+									audio: {
+										mandatory: {
+											chromeMediaSource: CHROME_MEDIA_SOURCE,
+											chromeMediaSourceId: browserCaptureSource.id,
+										},
+									},
+									video: browserScreenVideoConstraints,
+								});
 					} catch (audioError) {
 						console.warn(
 							"System audio capture failed, falling back to video-only:",
@@ -1038,16 +1076,20 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						alert(
 							"System audio is not available for this source. Recording will continue without system audio.",
 						);
-						screenMediaStream = await mediaDevices.getUserMedia({
-							audio: false,
-							video: browserScreenVideoConstraints,
-						});
+						screenMediaStream = useLinuxPortal
+							? await acquireLinuxPortalStream(false)
+							: await mediaDevices.getUserMedia({
+									audio: false,
+									video: browserScreenVideoConstraints,
+								});
 					}
 				} else {
-					screenMediaStream = await mediaDevices.getUserMedia({
-						audio: false,
-						video: browserScreenVideoConstraints,
-					});
+					screenMediaStream = useLinuxPortal
+						? await acquireLinuxPortalStream(false)
+						: await mediaDevices.getUserMedia({
+								audio: false,
+								video: browserScreenVideoConstraints,
+							});
 				}
 
 				screenStream.current = screenMediaStream;
