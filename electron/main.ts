@@ -23,6 +23,7 @@ import {
 	killWindowsCaptureProcess,
 	registerIpcHandlers,
 } from "./ipc/handlers";
+import { ensureMediaServer } from "./mediaServer";
 import { ensurePackagedRendererServer } from "./rendererServer";
 import type { UpdateToastPayload } from "./updater";
 import {
@@ -834,6 +835,12 @@ app.whenReady().then(async () => {
 		} catch (error) {
 			console.warn("[renderer-server] Failed to start packaged renderer server:", error);
 		}
+	}
+
+	try {
+		await ensureMediaServer();
+	} catch (error) {
+		console.warn("[media-server] Failed to start media server:", error);
 	}
 
 	registerIpcHandlers(

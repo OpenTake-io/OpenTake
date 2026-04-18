@@ -388,6 +388,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	deleteRecordingFile: (filePath: string) => {
 		return ipcRenderer.invoke("delete-recording-file", filePath);
 	},
+	getLocalMediaUrl: (filePath: string) => {
+		return ipcRenderer.invoke("get-local-media-url", filePath) as Promise<
+			{ success: true; url: string } | { success: false }
+		>;
+	},
 	saveProjectFile: (
 		projectData: unknown,
 		suggestedName?: string,
