@@ -122,6 +122,9 @@
 		"complete": "Exportación completada",
 		"savedSuccessfully": "Tu archivo se guardó correctamente."
 	},
+	"export": {
+		"processingAudioEdits": "Procesando audio con ediciones de velocidad/superposición"
+	},
 	"toolbar": {
 		"addLayer": "Agregar capa",
 		"splitClip": "Dividir clip (C)"

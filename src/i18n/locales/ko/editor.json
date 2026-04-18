@@ -123,6 +123,9 @@
 		"complete": "내보내기 완료",
 		"savedSuccessfully": "파일이 성공적으로 저장되었습니다."
 	},
+	"export": {
+		"processingAudioEdits": "속도/오버레이 편집으로 오디오 처리 중"
+	},
 	"toolbar": {
 		"addLayer": "레이어 추가",
 		"splitClip": "클립 분할 (C)"

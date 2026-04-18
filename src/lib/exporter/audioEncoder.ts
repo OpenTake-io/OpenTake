@@ -611,9 +611,7 @@ export class AudioProcessor {
 		// Extend for audio regions that might exceed the video timeline
 		for (const { region } of regionEntries) {
 			const regionEndOutput = this.sourceTimeToOutputTime(region.endMs, slices);
-			if (regionEndOutput !== null) {
-				outputDurationMs = Math.max(outputDurationMs, regionEndOutput);
-			}
+			outputDurationMs = Math.max(outputDurationMs, regionEndOutput);
 		}
 
 		const numChannels = Math.min(primaryBuffer?.numberOfChannels ?? 2, 2);
@@ -744,7 +742,7 @@ export class AudioProcessor {
 			chunkIndex: number,
 		) => Promise<void>,
 	): Promise<void> {
-		const { slices, outputDurationMs, numChannels } = prepared;
+		const { slices, numChannels } = prepared;
 		let outputOffsetSec = 0;
 		const chunkCount = Math.ceil(totalOutputSec / OFFLINE_CHUNK_DURATION_SEC);
 
@@ -792,7 +790,6 @@ export class AudioProcessor {
 					buffer,
 					region,
 					slices,
-					outputDurationMs,
 					outputOffsetSec,
 					chunkSec,
 				);
@@ -814,13 +811,11 @@ export class AudioProcessor {
 		buffer: AudioBuffer,
 		region: AudioRegion,
 		slices: TimelineSlice[],
-		totalOutputDurationMs: number,
 		chunkOutputStartSec: number,
 		chunkDurationSec: number,
 	): void {
-		const outputStartMs = this.sourceTimeToOutputTime(region.startMs, slices) ?? 0;
-		const outputEndMs =
-			this.sourceTimeToOutputTime(region.endMs, slices) ?? totalOutputDurationMs;
+		const outputStartMs = this.sourceTimeToOutputTime(region.startMs, slices);
+		const outputEndMs = this.sourceTimeToOutputTime(region.endMs, slices);
 
 		let localStartSec = outputStartMs / 1000 - chunkOutputStartSec;
 		let localEndSec = outputEndMs / 1000 - chunkOutputStartSec;
@@ -1240,7 +1235,7 @@ export class AudioProcessor {
 	private sourceTimeToOutputTime(
 		sourceMs: number,
 		slices: TimelineSlice[],
-	): number | null {
+	): number {
 		let outputMs = 0;
 
 		for (const slice of slices) {

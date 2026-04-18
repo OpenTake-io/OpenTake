@@ -4234,7 +4234,7 @@ export default function VideoEditor() {
 					})
 				: isExportFinalizing
 					? t("editor.exportStatus.finalizingPercent", "Finalizing {{percent}}%", {
-							percent: Math.round(exportFinalizingProgress ?? 99),
+							percent: Math.round(exportFinalizingProgress ?? 100),
 						})
 					: t("editor.exportStatus.completePercent", "{{percent}}% complete", {
 							percent: Math.round(exportProgress.percentage),

@@ -122,6 +122,9 @@
 		"complete": "导出完成",
 		"savedSuccessfully": "文件已成功保存。"
 	},
+	"export": {
+		"processingAudioEdits": "正在处理带有速度/叠加编辑的音频"
+	},
 	"toolbar": {
 		"addLayer": "添加图层",
 		"splitClip": "拆分片段 (C)"
