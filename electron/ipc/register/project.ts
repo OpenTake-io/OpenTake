@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { dialog, ipcMain, shell } from "electron";
 import { RECORDINGS_DIR } from "../../appPaths";
+import { buildMediaUrl, getMediaServerBaseUrl } from "../../mediaServer";
 import {
 	PROJECT_FILE_EXTENSION,
 	LEGACY_PROJECT_FILE_EXTENSIONS,
@@ -14,6 +15,7 @@ import {
 	setCurrentVideoPath,
 	currentRecordingSession,
 	setCurrentRecordingSession,
+	approvedLocalReadPaths,
 } from "../state";
 import { normalizeVideoSourcePath } from "../utils";
 import { isPathInsideDirectory, replaceApprovedSessionLocalReadPaths } from "../project/manager";
@@ -375,6 +377,19 @@ export function registerProjectHandlers() {
     } catch (error) {
       return { success: false, error: String(error) };
     }
+  });
+
+  ipcMain.handle('get-local-media-url', (_, filePath: string) => {
+    const baseUrl = getMediaServerBaseUrl();
+    if (!baseUrl || !filePath) {
+      return { success: false as const };
+    }
+    const resolved = path.resolve(filePath);
+    if (!approvedLocalReadPaths.has(resolved)) {
+      console.warn(`[get-local-media-url] Blocked unapproved path: ${resolved}`);
+      return { success: false as const };
+    }
+    return { success: true as const, url: buildMediaUrl(baseUrl, filePath) };
   });
 
 }
