@@ -2336,21 +2336,53 @@ export class FrameRenderer {
 			return null;
 		}
 
-		let closest = telemetry[0];
-		let minDist = Math.abs(telemetry[0].timeMs - timeMs);
-		for (let i = 1; i < telemetry.length; i++) {
-			const dist = Math.abs(telemetry[i].timeMs - timeMs);
-			if (dist < minDist) {
-				minDist = dist;
-				closest = telemetry[i];
-			}
-			if (telemetry[i].timeMs > timeMs) {
-				break;
+		// Clamp to first/last sample when out of range
+		if (timeMs <= telemetry[0].timeMs) {
+			const s = telemetry[0];
+			return mapCursorToCanvasNormalized(
+				{ cx: s.cx, cy: s.cy, interactionType: s.interactionType },
+				{
+					maskRect: this.layoutCache?.maskRect,
+					canvasWidth: this.config.width,
+					canvasHeight: this.config.height,
+				},
+			);
+		}
+		if (timeMs >= telemetry[telemetry.length - 1].timeMs) {
+			const s = telemetry[telemetry.length - 1];
+			return mapCursorToCanvasNormalized(
+				{ cx: s.cx, cy: s.cy, interactionType: s.interactionType },
+				{
+					maskRect: this.layoutCache?.maskRect,
+					canvasWidth: this.config.width,
+					canvasHeight: this.config.height,
+				},
+			);
+		}
+
+		// Binary search for surrounding samples
+		let lo = 0;
+		let hi = telemetry.length - 1;
+		while (lo < hi - 1) {
+			const mid = (lo + hi) >> 1;
+			if (telemetry[mid].timeMs <= timeMs) {
+				lo = mid;
+			} else {
+				hi = mid;
 			}
 		}
 
+		const a = telemetry[lo];
+		const b = telemetry[hi];
+		const span = b.timeMs - a.timeMs;
+
+		// Linear interpolation between samples
+		const t = span > 0 ? (timeMs - a.timeMs) / span : 0;
+		const cx = a.cx + (b.cx - a.cx) * t;
+		const cy = a.cy + (b.cy - a.cy) * t;
+
 		return mapCursorToCanvasNormalized(
-			{ cx: closest.cx, cy: closest.cy, interactionType: closest.interactionType },
+			{ cx, cy, interactionType: a.interactionType },
 			{
 				maskRect: this.layoutCache?.maskRect,
 				canvasWidth: this.config.width,
