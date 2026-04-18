@@ -1806,6 +1806,7 @@ export default function VideoEditor() {
 			setResolvedWebcamVideoUrl(null);
 			return;
 		}
+		setResolvedWebcamVideoUrl(null);
 		void resolveVideoUrl(webcam.sourcePath).then((url) => {
 			if (!cancelled) setResolvedWebcamVideoUrl(url);
 		});
@@ -2232,7 +2233,7 @@ export default function VideoEditor() {
 		let retryAttempts = 0;
 
 		async function loadCursorTelemetry() {
-			if (!videoPath) {
+			if (!videoPath || !videoSourcePath) {
 				if (mounted) {
 					setCursorTelemetry([]);
 				}
@@ -2240,7 +2241,7 @@ export default function VideoEditor() {
 			}
 
 			try {
-				const result = await window.electronAPI.getCursorTelemetry(fromFileUrl(videoPath));
+				const result = await window.electronAPI.getCursorTelemetry(videoSourcePath);
 				if (mounted) {
 					const samples = result.success ? result.samples : [];
 					setCursorTelemetry(samples);
@@ -2295,7 +2296,7 @@ export default function VideoEditor() {
 				pendingTelemetryRetryTimeoutRef.current = null;
 			}
 		};
-	}, [videoPath]);
+	}, [videoPath, videoSourcePath]);
 
 	const normalizedCursorTelemetry = useMemo(() => {
 		if (cursorTelemetry.length === 0) {
