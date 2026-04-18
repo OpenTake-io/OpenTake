@@ -555,7 +555,7 @@ export class AudioProcessor {
 				throw new Error("Export cancelled");
 			}
 
-			audioContext = new AudioContext();
+			audioContext = new AudioContext({ sampleRate: 48000 });
 			const currentDestinationNode = audioContext.createMediaStreamDestination();
 			destinationNode = currentDestinationNode;
 
@@ -721,7 +721,7 @@ export class AudioProcessor {
 							continue;
 						}
 
-						if (Math.abs(audioEl.currentTime - targetTimeSec) > 0.3) {
+						if (Math.abs(audioEl.currentTime - targetTimeSec) > 0.15) {
 							audioEl.currentTime = targetTimeSec;
 						}
 
@@ -729,6 +729,9 @@ export class AudioProcessor {
 							basePlaybackRate: playbackRate,
 							currentTime: audioEl.currentTime,
 							targetTime: targetTimeSec,
+							toleranceSeconds: 0.008,
+							correctionWindowSeconds: 0.5,
+							maxAdjustment: 0.12,
 						});
 						if (Math.abs(audioEl.playbackRate - syncedPlaybackRate) > 0.0001) {
 							audioEl.playbackRate = syncedPlaybackRate;
@@ -748,7 +751,7 @@ export class AudioProcessor {
 
 						if (isInRegion) {
 							const audioOffset = (currentTimeMs - region.startMs) / 1000;
-							if (Math.abs(audioEl.currentTime - audioOffset) > 0.3) {
+							if (Math.abs(audioEl.currentTime - audioOffset) > 0.15) {
 								audioEl.currentTime = audioOffset;
 							}
 
@@ -756,6 +759,9 @@ export class AudioProcessor {
 								basePlaybackRate: playbackRate,
 								currentTime: audioEl.currentTime,
 								targetTime: audioOffset,
+								toleranceSeconds: 0.008,
+								correctionWindowSeconds: 0.5,
+								maxAdjustment: 0.12,
 							});
 							if (Math.abs(audioEl.playbackRate - syncedPlaybackRate) > 0.0001) {
 								audioEl.playbackRate = syncedPlaybackRate;
