@@ -258,6 +258,25 @@ export function deriveNextId(prefix: string, ids: string[]): number {
 	return max + 1;
 }
 
+/**
+ * Resolve a local file path to a URL the `<video>` element can load.
+ *
+ * Prefers the local media HTTP server (works on all platforms regardless of
+ * Chromium's `file://` restrictions).  Falls back to a `file://` URL if the
+ * media server is unavailable.
+ */
+export async function resolveVideoUrl(sourcePath: string): Promise<string> {
+	try {
+		const result = await window.electronAPI.getLocalMediaUrl(sourcePath);
+		if (result.success) {
+			return result.url;
+		}
+	} catch {
+		// Media server unavailable — fall through to file:// URL.
+	}
+	return toFileUrl(sourcePath);
+}
+
 export function validateProjectData(candidate: unknown): candidate is EditorProjectData {
 	if (!candidate || typeof candidate !== "object") return false;
 	const project = candidate as Partial<EditorProjectData>;

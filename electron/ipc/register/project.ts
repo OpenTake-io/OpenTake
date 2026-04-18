@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { dialog, ipcMain, shell } from "electron";
 import { RECORDINGS_DIR } from "../../appPaths";
+import { buildMediaUrl, getMediaServerBaseUrl } from "../../mediaServer";
 import {
 	PROJECT_FILE_EXTENSION,
 	LEGACY_PROJECT_FILE_EXTENSIONS,
@@ -375,6 +376,14 @@ export function registerProjectHandlers() {
     } catch (error) {
       return { success: false, error: String(error) };
     }
+  });
+
+  ipcMain.handle('get-local-media-url', (_, filePath: string) => {
+    const baseUrl = getMediaServerBaseUrl();
+    if (!baseUrl || !filePath) {
+      return { success: false as const };
+    }
+    return { success: true as const, url: buildMediaUrl(baseUrl, filePath) };
   });
 
 }

@@ -110,6 +110,7 @@ import {
 	type EditorProjectData,
 	fromFileUrl,
 	normalizeProjectEditor,
+	resolveVideoUrl,
 	toFileUrl,
 	validateProjectData,
 } from "./projectPersistence";
@@ -551,6 +552,7 @@ export default function VideoEditor() {
 	const [webcam, setWebcam] = useState<WebcamOverlaySettings>(
 		initialEditorPreferences.webcam ?? DEFAULT_WEBCAM_OVERLAY,
 	);
+	const [resolvedWebcamVideoUrl, setResolvedWebcamVideoUrl] = useState<string | null>(null);
 	const [zoomRegions, setZoomRegions] = useState<ZoomRegion[]>([]);
 	const [cursorTelemetry, setCursorTelemetry] = useState<CursorTelemetryPoint[]>([]);
 	const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
@@ -1459,7 +1461,7 @@ export default function VideoEditor() {
 
 			setError(null);
 			setVideoSourcePath(sourcePath);
-			setVideoPath(toFileUrl(sourcePath));
+			setVideoPath(await resolveVideoUrl(sourcePath));
 			setCurrentProjectPath(path ?? null);
 			pendingFreshRecordingAutoZoomPathRef.current = null;
 			if (normalizedEditor.webcam.sourcePath) {
@@ -1687,7 +1689,7 @@ export default function VideoEditor() {
 					}
 
 					const sourcePath = fromFileUrl(smokeExportConfig.inputPath);
-					const sourceVideoUrl = toFileUrl(sourcePath);
+					const sourceVideoUrl = await resolveVideoUrl(sourcePath);
 					const smokeWebcamSourcePath = smokeExportConfig.webcamInputPath
 						? fromFileUrl(smokeExportConfig.webcamInputPath)
 						: null;
@@ -1746,7 +1748,7 @@ export default function VideoEditor() {
 				const sessionResult = await window.electronAPI.getCurrentRecordingSession?.();
 				if (sessionResult?.success && sessionResult.session?.videoPath) {
 					const sourcePath = fromFileUrl(sessionResult.session.videoPath);
-					const sourceVideoUrl = toFileUrl(sourcePath);
+					const sourceVideoUrl = await resolveVideoUrl(sourcePath);
 					setVideoSourcePath(sourcePath);
 					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
@@ -1765,7 +1767,7 @@ export default function VideoEditor() {
 				const result = await window.electronAPI.getCurrentVideoPath();
 				if (result.success && result.path) {
 					const sourcePath = fromFileUrl(result.path);
-					const sourceVideoUrl = toFileUrl(sourcePath);
+					const sourceVideoUrl = await resolveVideoUrl(sourcePath);
 					setVideoSourcePath(sourcePath);
 					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
@@ -1797,6 +1799,20 @@ export default function VideoEditor() {
 		smokeExportConfig.webcamShadow,
 		smokeExportConfig.webcamSize,
 	]);
+
+	useEffect(() => {
+		let cancelled = false;
+		if (!webcam.sourcePath) {
+			setResolvedWebcamVideoUrl(null);
+			return;
+		}
+		void resolveVideoUrl(webcam.sourcePath).then((url) => {
+			if (!cancelled) setResolvedWebcamVideoUrl(url);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [webcam.sourcePath]);
 
 	useEffect(() => {
 		if (!autoApplyFreshRecordingAutoZooms) {
@@ -2016,7 +2032,7 @@ export default function VideoEditor() {
 
 		if (sourcePath !== videoSourcePath) {
 			setVideoSourcePath(sourcePath);
-			setVideoPath(toFileUrl(sourcePath));
+			setVideoPath(await resolveVideoUrl(sourcePath));
 		}
 
 		await syncActiveVideoSource(sourcePath, webcam.sourcePath ?? null);
@@ -4909,7 +4925,7 @@ export default function VideoEditor() {
 												webcam={webcam}
 												webcamVideoPath={
 													webcam.sourcePath
-														? toFileUrl(webcam.sourcePath)
+														? resolvedWebcamVideoUrl
 														: null
 												}
 												trimRegions={trimRegions}
