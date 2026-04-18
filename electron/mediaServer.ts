@@ -25,13 +25,16 @@ function getMediaContentType(filePath: string): string {
 	return MEDIA_MIME_TYPES[path.extname(filePath).toLowerCase()] ?? "application/octet-stream";
 }
 
-function isAllowedMediaPath(filePath: string): boolean {
+async function resolveRealPath(filePath: string): Promise<string | null> {
 	try {
-		const resolved = path.resolve(filePath);
-		return approvedLocalReadPaths.has(resolved);
+		return await fs.realpath(path.resolve(filePath));
 	} catch {
-		return false;
+		return null;
 	}
+}
+
+function isAllowedMediaPath(realPath: string): boolean {
+	return approvedLocalReadPaths.has(realPath);
 }
 
 async function handleMediaRequest(
@@ -54,9 +57,9 @@ async function handleMediaRequest(
 			return;
 		}
 
-		const resolvedPath = path.resolve(rawPath);
-		if (!isAllowedMediaPath(resolvedPath)) {
-			console.warn(`[media-server] Blocked access to unapproved path: ${resolvedPath}`);
+		const resolvedPath = await resolveRealPath(rawPath);
+		if (!resolvedPath || !isAllowedMediaPath(resolvedPath)) {
+			console.warn(`[media-server] Blocked access to unapproved path: ${rawPath}`);
 			response.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
 			response.end("Forbidden");
 			return;
@@ -73,25 +76,63 @@ async function handleMediaRequest(
 		const fileSize = stat.size;
 		const rangeHeader = request.headers.range;
 
+		const corsHeaders = {
+			"Access-Control-Allow-Origin": "*",
+			"Access-Control-Allow-Credentials": "false",
+			"Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges",
+		};
+
+		if (request.method === "OPTIONS") {
+			response.writeHead(204, {
+				...corsHeaders,
+				"Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+				"Access-Control-Allow-Headers": "Range",
+			});
+			response.end();
+			return;
+		}
+
 		if (rangeHeader) {
-			const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
-			if (!match) {
-				response.writeHead(416, { "Content-Range": `bytes */${fileSize}` });
+			const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+			if (!match || (!match[1] && !match[2])) {
+				response.writeHead(416, { ...corsHeaders, "Content-Range": `bytes */${fileSize}` });
 				response.end();
 				return;
 			}
 
-			const start = Number.parseInt(match[1], 10);
-			const end = match[2] ? Number.parseInt(match[2], 10) : fileSize - 1;
+			let start: number;
+			let end: number;
 
-			if (start >= fileSize || end >= fileSize || start > end) {
-				response.writeHead(416, { "Content-Range": `bytes */${fileSize}` });
+			if (!match[1] && match[2]) {
+				// Suffix range: bytes=-500
+				const suffixLength = Number.parseInt(match[2], 10);
+				if (Number.isNaN(suffixLength) || suffixLength <= 0) {
+					response.writeHead(416, { ...corsHeaders, "Content-Range": `bytes */${fileSize}` });
+					response.end();
+					return;
+				}
+				start = Math.max(0, fileSize - suffixLength);
+				end = fileSize - 1;
+			} else {
+				start = Number.parseInt(match[1], 10);
+				end = match[2] ? Number.parseInt(match[2], 10) : fileSize - 1;
+			}
+
+			if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= fileSize || end >= fileSize) {
+				response.writeHead(416, { ...corsHeaders, "Content-Range": `bytes */${fileSize}` });
+				response.end();
+				return;
+			}
+
+			if (fileSize === 0) {
+				response.writeHead(416, { ...corsHeaders, "Content-Range": `bytes */0` });
 				response.end();
 				return;
 			}
 
 			const chunkSize = end - start + 1;
 			response.writeHead(206, {
+				...corsHeaders,
 				"Content-Range": `bytes ${start}-${end}/${fileSize}`,
 				"Accept-Ranges": "bytes",
 				"Content-Length": String(chunkSize),
@@ -114,6 +155,7 @@ async function handleMediaRequest(
 			});
 		} else {
 			response.writeHead(200, {
+				...corsHeaders,
 				"Accept-Ranges": "bytes",
 				"Content-Length": String(fileSize),
 				"Content-Type": contentType,
