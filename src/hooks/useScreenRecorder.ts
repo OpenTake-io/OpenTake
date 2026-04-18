@@ -968,7 +968,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 									micFallbackChunks.current.push(event.data);
 								}
 							};
-							recorder.start(1000);
+							recorder.start(RECORDER_TIMESLICE_MS);
 							micFallbackRecorder.current = recorder;
 						} catch (micError) {
 							console.warn("Browser microphone fallback failed:", micError);

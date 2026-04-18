@@ -1807,7 +1807,6 @@ export default function VideoEditor() {
 			setResolvedWebcamVideoUrl(null);
 			return;
 		}
-		setResolvedWebcamVideoUrl(null);
 		void resolveVideoUrl(webcam.sourcePath).then((url) => {
 			if (!cancelled) setResolvedWebcamVideoUrl(url);
 		});
