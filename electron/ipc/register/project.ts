@@ -394,7 +394,7 @@ export function registerProjectHandlers() {
       console.warn(`[get-local-media-url] Blocked unapproved path: ${resolved}`);
       return { success: false as const };
     }
-    return { success: true as const, url: buildMediaUrl(baseUrl, filePath) };
+    return { success: true as const, url: buildMediaUrl(baseUrl, resolved) };
   });
 
 }
