@@ -46,10 +46,10 @@ export default function PlaybackControls({
 				onClick={onTogglePlayPause}
 				size="icon"
 				className={cn(
-					"w-8 h-8 rounded-full transition-all duration-200 border border-white/10",
+					"w-8 h-8 rounded-full transition-all duration-200 border border-foreground/10",
 					isPlaying
-						? "bg-white/10 text-white hover:bg-white/20"
-						: "bg-white text-black hover:bg-white/90",
+						? "bg-foreground/10 text-foreground hover:bg-foreground/20"
+						: "bg-foreground text-background hover:bg-foreground/90",
 				)}
 				aria-label={isPlaying ? t("playback.pause") : t("playback.play")}
 			>
@@ -60,13 +60,13 @@ export default function PlaybackControls({
 				)}
 			</Button>
 
-			<span className="text-[9px] font-medium text-slate-300 tabular-nums w-[30px] text-right">
+			<span className="text-[9px] font-medium text-muted-foreground tabular-nums w-[30px] text-right">
 				{formatTime(currentTime)}
 			</span>
 
 			<div className="flex-1 relative h-6 flex items-center group">
 				{/* Custom Track Background */}
-				<div className="absolute left-0 right-0 h-0.5 bg-white/10 rounded-full overflow-hidden">
+				<div className="absolute left-0 right-0 h-0.5 bg-foreground/10 rounded-full overflow-hidden">
 					<div
 						className="h-full bg-[#2563EB] rounded-full"
 						style={{ width: `${progress}%` }}
@@ -86,7 +86,7 @@ export default function PlaybackControls({
 
 				{/* Custom Thumb (visual only, follows progress) */}
 				<div
-					className="absolute w-2.5 h-2.5 bg-white rounded-full pointer-events-none group-hover:scale-125 transition-transform duration-100"
+					className="absolute w-2.5 h-2.5 bg-foreground rounded-full pointer-events-none group-hover:scale-125 transition-transform duration-100"
 					style={{
 						left: `${progress}%`,
 						transform: "translateX(-50%)",
@@ -94,20 +94,20 @@ export default function PlaybackControls({
 				/>
 			</div>
 
-			<span className="text-[9px] font-medium text-slate-500 tabular-nums w-[30px]">
+			<span className="text-[9px] font-medium text-muted-foreground tabular-nums w-[30px]">
 				{formatTime(duration)}
 			</span>
 
 			<div className="flex items-center gap-1.5 pl-1">
 				{volume <= 0.001 ? (
-					<VolumeX className="h-3.5 w-3.5 text-slate-400" />
+					<VolumeX className="h-3.5 w-3.5 text-muted-foreground" />
 				) : (
-					<Volume2 className="h-3.5 w-3.5 text-slate-400" />
+					<Volume2 className="h-3.5 w-3.5 text-muted-foreground" />
 				)}
 				<div className="group relative flex h-6 w-20 items-center">
-					<div className="absolute left-0 right-0 h-0.5 rounded-full bg-white/10 overflow-hidden">
+					<div className="absolute left-0 right-0 h-0.5 rounded-full bg-foreground/10 overflow-hidden">
 						<div
-							className="h-full rounded-full bg-white/70"
+							className="h-full rounded-full bg-foreground/70"
 							style={{ width: `${volume * 100}%` }}
 						/>
 					</div>
@@ -121,7 +121,7 @@ export default function PlaybackControls({
 						className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
 					/>
 					<div
-						className="pointer-events-none absolute h-2.5 w-2.5 rounded-full bg-white transition-transform duration-100 group-hover:scale-125"
+						className="pointer-events-none absolute h-2.5 w-2.5 rounded-full bg-foreground transition-transform duration-100 group-hover:scale-125"
 						style={{ left: `${volume * 100}%`, transform: "translateX(-50%)" }}
 					/>
 				</div>

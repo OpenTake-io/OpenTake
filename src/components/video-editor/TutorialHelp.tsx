@@ -19,8 +19,8 @@ export const RECORDLY_ISSUES_URL = "https://github.com/webadderall/Recordly/issu
 const RECORDLY_DISCORD_URL = "https://discord.gg/FcfNN4S9m";
 const RECORDLY_X_URL = "https://x.com/webadderall";
 const CONTACT_EMAIL = "youngchen3442@gmail.com";
-export const APP_HEADER_ACTION_BUTTON_CLASS = "h-7 px-2 text-xs text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all gap-1.5";
-export const APP_HEADER_ICON_BUTTON_CLASS = "h-7 w-7 p-0 text-slate-400 hover:bg-white/10 hover:text-slate-200 transition-all";
+export const APP_HEADER_ACTION_BUTTON_CLASS = "h-7 px-2 text-xs text-muted-foreground hover:bg-foreground/10 hover:text-foreground transition-all gap-1.5";
+export const APP_HEADER_ICON_BUTTON_CLASS = "h-7 w-7 p-0 text-muted-foreground hover:bg-foreground/10 hover:text-foreground transition-all";
 
 interface KeyboardShortcutsDialogProps {
 	triggerLabel?: string;
@@ -80,45 +80,45 @@ export function FeedbackDialog() {
 					<MessageSquareMore className="h-3.5 w-3.5" />
 				</Button>
 			</DialogTrigger>
-			<DialogContent className="max-w-lg bg-[#09090b] border-white/10 [&>button]:text-slate-400 [&>button:hover]:text-white">
+			<DialogContent className="max-w-lg bg-editor-dialog border-foreground/10 [&>button]:text-muted-foreground [&>button:hover]:text-foreground">
 				<DialogHeader>
-					<DialogTitle className="text-xl font-semibold text-slate-200 flex items-center gap-2">
+					<DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
 						<MessageSquareMore className="h-5 w-5 text-[#2563EB]" /> {t("feedback.title", "Feedback & contact")}
 					</DialogTitle>
-					<DialogDescription className="text-slate-400">
+					<DialogDescription className="text-muted-foreground">
 						{t("feedback.description", "Reach out directly or open an issue if something is broken or missing.")}
 					</DialogDescription>
 				</DialogHeader>
 				<div className="mt-4 space-y-4">
-					<div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
-						<div className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/5 px-3 py-3">
+					<div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-4 space-y-3">
+						<div className="flex items-center justify-between gap-3 rounded-lg border border-foreground/5 bg-foreground/5 px-3 py-3">
 							<div>
-								<p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+								<p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70">
 									{t("feedback.emailLabel", "Email")}
 								</p>
-								<p className="mt-1 text-sm font-medium text-slate-100">{CONTACT_EMAIL}</p>
+								<p className="mt-1 text-sm font-medium text-foreground">{CONTACT_EMAIL}</p>
 							</div>
 							<Button
 								type="button"
 								variant="outline"
 								onClick={() => void openExternalLink(`mailto:${CONTACT_EMAIL}`, t("feedback.openFailed", "Failed to open link."))}
-								className="border-white/10 bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white"
+								className="border-foreground/10 bg-foreground/5 text-foreground hover:bg-foreground/10 hover:text-foreground"
 							>
 								<ExternalLink className="h-3.5 w-3.5" />
 							</Button>
 						</div>
-						<div className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/5 px-3 py-3">
+						<div className="flex items-center justify-between gap-3 rounded-lg border border-foreground/5 bg-foreground/5 px-3 py-3">
 							<div>
-								<p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
+								<p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70">
 									{t("feedback.xLabel", "X")}
 								</p>
-								<p className="mt-1 text-sm font-medium text-slate-100">@webadderall</p>
+								<p className="mt-1 text-sm font-medium text-foreground">@webadderall</p>
 							</div>
 							<Button
 								type="button"
 								variant="outline"
 								onClick={() => void openExternalLink(RECORDLY_X_URL, t("feedback.openFailed", "Failed to open link."))}
-								className="border-white/10 bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white"
+								className="border-foreground/10 bg-foreground/5 text-foreground hover:bg-foreground/10 hover:text-foreground"
 							>
 								<Twitter className="h-3.5 w-3.5" />
 							</Button>
@@ -128,13 +128,13 @@ export function FeedbackDialog() {
 						type="button"
 						variant="outline"
 						onClick={() => void openExternalLink(RECORDLY_ISSUES_URL, t("feedback.openFailed", "Failed to open link."))}
-						className="h-10 w-full justify-between border-white/10 bg-white/5 px-4 text-slate-200 hover:bg-white/10 hover:text-white"
+						className="h-10 w-full justify-between border-foreground/10 bg-foreground/5 px-4 text-foreground hover:bg-foreground/10 hover:text-foreground"
 					>
 						<span className="flex items-center gap-2 text-sm font-medium">
 							<MessageSquareMore className="h-4 w-4" />
 							{t("feedback.reportIssue", "Report issue / send feedback")}
 						</span>
-						<ExternalLink className="h-3.5 w-3.5 text-slate-500" />
+						<ExternalLink className="h-3.5 w-3.5 text-muted-foreground/70" />
 					</Button>
 				</div>
 			</DialogContent>
@@ -174,41 +174,41 @@ export function KeyboardShortcutsDialog({
 					{triggerLabel ? <span className="font-medium">{triggerLabel}</span> : null}
 				</Button>
 			</DialogTrigger>
-			<DialogContent className="max-w-lg bg-[#09090b] border-white/10 [&>button]:text-slate-400 [&>button:hover]:text-white">
+			<DialogContent className="max-w-lg bg-editor-dialog border-foreground/10 [&>button]:text-muted-foreground [&>button:hover]:text-foreground">
 				<DialogHeader>
-					<DialogTitle className="text-xl font-semibold text-slate-200 flex items-center gap-2">
+					<DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
 						<Keyboard className="h-5 w-5 text-[#2563EB]" /> {t("keyboardShortcuts.title")}
 					</DialogTitle>
-					<DialogDescription className="text-slate-400">
+					<DialogDescription className="text-muted-foreground">
 						{t("keyboardShortcuts.description", "Quick reference for the timeline and editor controls.")}
 					</DialogDescription>
 				</DialogHeader>
 				<div className="mt-4 space-y-4">
-					<div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-2 text-xs">
+					<div className="rounded-xl border border-foreground/10 bg-foreground/[0.03] p-4 space-y-2 text-xs">
 						{SHORTCUT_ACTIONS.map((action) => (
-							<div key={action} className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/5 px-3 py-2.5">
-								<span className="text-slate-300">{SHORTCUT_LABELS[action]}</span>
-								<kbd className="rounded border border-white/10 bg-black/20 px-2 py-1 font-mono text-[#2563EB]">
+							<div key={action} className="flex items-center justify-between gap-3 rounded-lg border border-foreground/5 bg-foreground/5 px-3 py-2.5">
+								<span className="text-muted-foreground">{SHORTCUT_LABELS[action]}</span>
+								<kbd className="rounded border border-foreground/10 bg-foreground/10 px-2 py-1 font-mono text-[#2563EB]">
 									{formatBinding(shortcuts[action], isMac)}
 								</kbd>
 							</div>
 						))}
 						<div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-3">
-							<div className="rounded-lg border border-white/5 bg-white/5 px-3 py-2.5">
-								<p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{t("keyboardShortcuts.panTimeline")}</p>
-								<kbd className="mt-2 inline-flex rounded border border-white/10 bg-black/20 px-2 py-1 font-mono text-[#2563EB]">
+							<div className="rounded-lg border border-foreground/5 bg-foreground/5 px-3 py-2.5">
+								<p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70">{t("keyboardShortcuts.panTimeline")}</p>
+								<kbd className="mt-2 inline-flex rounded border border-foreground/10 bg-foreground/10 px-2 py-1 font-mono text-[#2563EB]">
 									{scrollLabels.pan}
 								</kbd>
 							</div>
-							<div className="rounded-lg border border-white/5 bg-white/5 px-3 py-2.5">
-								<p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{t("keyboardShortcuts.zoomTimeline")}</p>
-								<kbd className="mt-2 inline-flex rounded border border-white/10 bg-black/20 px-2 py-1 font-mono text-[#2563EB]">
+							<div className="rounded-lg border border-foreground/5 bg-foreground/5 px-3 py-2.5">
+								<p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70">{t("keyboardShortcuts.zoomTimeline")}</p>
+								<kbd className="mt-2 inline-flex rounded border border-foreground/10 bg-foreground/10 px-2 py-1 font-mono text-[#2563EB]">
 									{scrollLabels.zoom}
 								</kbd>
 							</div>
-							<div className="rounded-lg border border-white/5 bg-white/5 px-3 py-2.5">
-								<p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">{t("keyboardShortcuts.cycleAnnotations")}</p>
-								<kbd className="mt-2 inline-flex rounded border border-white/10 bg-black/20 px-2 py-1 font-mono text-[#2563EB]">
+							<div className="rounded-lg border border-foreground/5 bg-foreground/5 px-3 py-2.5">
+								<p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70">{t("keyboardShortcuts.cycleAnnotations")}</p>
+								<kbd className="mt-2 inline-flex rounded border border-foreground/10 bg-foreground/10 px-2 py-1 font-mono text-[#2563EB]">
 									{t("keyboardShortcuts.tab")}
 								</kbd>
 							</div>
@@ -219,7 +219,7 @@ export function KeyboardShortcutsDialog({
 							type="button"
 							variant="outline"
 							onClick={openConfig}
-							className="border-white/10 bg-white/5 text-slate-200 hover:bg-white/10 hover:text-white"
+							className="border-foreground/10 bg-foreground/5 text-foreground hover:bg-foreground/10 hover:text-foreground"
 						>
 							<Settings2 className="h-4 w-4" />
 							{t("keyboardShortcuts.customize")}
@@ -246,19 +246,19 @@ export function TutorialHelp() {
 					<span className="font-medium">{t("tutorial.howTrimmingWorks")}</span>
 				</Button>
 			</DialogTrigger>
-			<DialogContent className="max-w-2xl bg-[#09090b] border-white/10 [&>button]:text-slate-400 [&>button:hover]:text-white">
+			<DialogContent className="max-w-2xl bg-editor-dialog border-foreground/10 [&>button]:text-muted-foreground [&>button:hover]:text-foreground">
 				<DialogHeader>
-					<DialogTitle className="text-xl font-semibold text-slate-200 flex items-center gap-2">
+					<DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
 						<Scissors className="w-5 h-5 text-[#ef4444]" /> {t("tutorial.title")}
 					</DialogTitle>
-					<DialogDescription className="text-slate-400">
+					<DialogDescription className="text-muted-foreground">
 						{t("tutorial.understanding")}
 					</DialogDescription>
 				</DialogHeader>
 				<div className="mt-4 space-y-8">
 					{/* Explanation */}
-					<div className="bg-white/5 rounded-lg p-4 border border-white/5">
-						<p className="text-slate-300 leading-relaxed">
+					<div className="bg-foreground/5 rounded-lg p-4 border border-foreground/5">
+						<p className="text-muted-foreground leading-relaxed">
 							{t("tutorial.descriptionP1")}
 							<span className="text-[#ef4444] font-bold"> {t("tutorial.descriptionRemove")}</span>.{" "}
 							{t("tutorial.descriptionP3")}
@@ -266,10 +266,10 @@ export function TutorialHelp() {
 					</div>
 					{/* Visual Illustration */}
 					<div className="space-y-2">
-						<h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">
+						<h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
 							{t("tutorial.visualExample")}
 						</h3>
-						<div className="relative h-24 bg-[#000] rounded-lg border border-white/10 flex items-center px-4 overflow-hidden select-none">
+						<div className="relative h-24 bg-[#000] rounded-lg border border-foreground/10 flex items-center px-4 overflow-hidden select-none">
 							{/* Background track (Kept parts) */}
 							<div className="absolute inset-x-4 h-2 bg-slate-600 rounded-full overflow-hidden">
 								{/* Solid line representing video */}
@@ -293,21 +293,21 @@ export function TutorialHelp() {
 								</span>
 							</div>
 							{/* Labels for kept parts */}
-							<div className="absolute left-[5%] text-[10px] text-slate-400 font-medium">
+							<div className="absolute left-[5%] text-[10px] text-muted-foreground font-medium">
 								{t("tutorial.kept")}
 							</div>
-							<div className="absolute left-[50%] text-[10px] text-slate-400 font-medium">
+							<div className="absolute left-[50%] text-[10px] text-muted-foreground font-medium">
 								{t("tutorial.kept")}
 							</div>
-							<div className="absolute left-[90%] text-[10px] text-slate-400 font-medium">
+							<div className="absolute left-[90%] text-[10px] text-muted-foreground font-medium">
 								{t("tutorial.kept")}
 							</div>
 						</div>
 						<div className="flex justify-center mt-2">
-							<ArrowRight className="w-4 h-4 text-slate-600 rotate-90" />
+							<ArrowRight className="w-4 h-4 text-muted-foreground rotate-90" />
 						</div>
 						{/* Result */}
-						<div className="relative h-12 bg-[#000] rounded-lg border border-white/10 flex items-center justify-center gap-1 px-4 select-none">
+						<div className="relative h-12 bg-[#000] rounded-lg border border-foreground/10 flex items-center justify-center gap-1 px-4 select-none">
 							<div
 								className="h-8 bg-slate-700 rounded flex items-center justify-center opacity-80"
 								style={{ width: "30%" }}
@@ -332,20 +332,20 @@ export function TutorialHelp() {
 									{t("tutorial.part", undefined, { number: "3" })}
 								</span>
 							</div>
-							<span className="absolute right-4 text-xs text-slate-400">
+							<span className="absolute right-4 text-xs text-muted-foreground">
 								{t("tutorial.finalVideo")}
 							</span>
 						</div>
 					</div>
 					{/* Steps */}
 					<div className="grid grid-cols-2 gap-4">
-						<div className="p-3 rounded bg-white/5 border border-white/5">
+						<div className="p-3 rounded bg-foreground/5 border border-foreground/5">
 							<div className="text-[#ef4444] font-bold mb-1">{t("tutorial.addTrimStep")}</div>
-							<p className="text-xs text-slate-400">{t("tutorial.addTrimDesc")}</p>
+							<p className="text-xs text-muted-foreground">{t("tutorial.addTrimDesc")}</p>
 						</div>
-						<div className="p-3 rounded bg-white/5 border border-white/5">
+						<div className="p-3 rounded bg-foreground/5 border border-foreground/5">
 							<div className="text-[#ef4444] font-bold mb-1">{t("tutorial.adjustStep")}</div>
-							<p className="text-xs text-slate-400">{t("tutorial.adjustDesc")}</p>
+							<p className="text-xs text-muted-foreground">{t("tutorial.adjustDesc")}</p>
 						</div>
 					</div>
 				</div>
