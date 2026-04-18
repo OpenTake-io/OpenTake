@@ -788,6 +788,11 @@ export function createEditorWindow(): BrowserWindow {
 	win.webContents.on("did-finish-load", () => {
 		console.log("[editor-window] did-finish-load", win.webContents.getURL());
 		win?.webContents.send("main-process-message", new Date().toLocaleString());
+		// Fallback for Linux/Wayland where `ready-to-show` may not fire reliably.
+		if (!win.isDestroyed() && !win.isVisible()) {
+			console.log("[editor-window] forcing show after did-finish-load");
+			win.show();
+		}
 	});
 
 	win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {

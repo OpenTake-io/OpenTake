@@ -1144,7 +1144,11 @@ export function LaunchWindow() {
 			<button
 				type="button"
 				className={`${styles.recBtn} ${styles.electronNoDrag}`}
-				onClick={hasSelectedSource ? toggleRecording : () => toggleDropdown("sources")}
+				onClick={
+					hasSelectedSource || platform === "linux"
+						? toggleRecording
+						: () => toggleDropdown("sources")
+				}
 				disabled={countdownActive}
 				title={t("recording.record")}
 			>
