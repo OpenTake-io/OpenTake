@@ -101,10 +101,19 @@ export function registerSourceHandlers({
 				.filter((source) => source.id.startsWith("screen:"))
 				.map((source) => [String(source.display_id ?? ""), source] as const),
 		);
+		// On Linux, desktopCapturer display_id values may not match screen.getAllDisplays() IDs.
+		// Keep an ordered list so we can fall back to position-based matching.
+		const electronScreenSourcesByIndex = electronSources.filter((source) =>
+			source.id.startsWith("screen:"),
+		);
 
 		const screenSources = displays.map((display, index) => {
 			const displayId = String(display.id);
-			const matchedSource = electronScreenSourcesByDisplayId.get(displayId);
+			const matchedSource =
+				electronScreenSourcesByDisplayId.get(displayId) ??
+				(electronScreenSourcesByIndex.length === displays.length
+					? electronScreenSourcesByIndex[index]
+					: undefined);
 			const displayName =
 				displayId === primaryDisplayId
 					? `Screen ${index + 1} (Primary)`
