@@ -122,6 +122,9 @@
 		"complete": "Export complete",
 		"savedSuccessfully": "Your file was saved successfully."
 	},
+	"export": {
+		"processingAudioEdits": "Processing audio with speed/overlay edits"
+	},
 	"toolbar": {
 		"addLayer": "Add Layer",
 		"splitClip": "Split Clip (C)"

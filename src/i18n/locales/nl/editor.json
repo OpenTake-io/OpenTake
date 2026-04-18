@@ -123,6 +123,9 @@
 		"complete": "Export voltooid",
 		"savedSuccessfully": "Je bestand is succesvol opgeslagen."
 	},
+	"export": {
+		"processingAudioEdits": "Audio verwerken met snelheids-/overlay-bewerkingen"
+	},
 	"toolbar": {
 		"addLayer": "Laag toevoegen",
 		"splitClip": "Clip splitsen (C)"

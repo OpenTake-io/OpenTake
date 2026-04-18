@@ -434,6 +434,11 @@ export class ModernVideoExporter {
 				"muxing queued video chunks",
 			);
 
+			// Surface muxing errors before proceeding with finalization
+			if (this.encoderError) {
+				throw this.encoderError;
+			}
+
 			if (nativeAudioPlan.audioMode !== "none" && !shouldUseFfmpegAudioFallback && !this.cancelled) {
 				const demuxer = this.streamingDecoder.getDemuxer();
 				if (
@@ -1152,10 +1157,10 @@ export class ModernVideoExporter {
 		const estimatedTimeRemaining =
 			averageRenderFps > 0 ? remainingFrames / averageRenderFps : 0;
 		const safeRenderProgress =
-			phase === "finalizing" ? Math.max(0, Math.min(renderProgress ?? 99, 99)) : undefined;
+			phase === "finalizing" ? Math.max(0, Math.min(renderProgress ?? 100, 100)) : undefined;
 		const percentage =
 			phase === "finalizing"
-				? (safeRenderProgress ?? 99)
+				? (safeRenderProgress ?? 100)
 				: totalFrames > 0
 					? (currentFrame / totalFrames) * 100
 					: 100;
@@ -1399,6 +1404,11 @@ export class ModernVideoExporter {
 						}
 					} catch (error) {
 						console.error("Muxing error:", error);
+						const muxingError = error instanceof Error ? error : new Error(String(error));
+						if (!this.encoderError) {
+							this.encoderError = muxingError;
+						}
+						this.cancelled = true;
 					}
 				});
 				this.encodeQueue--;
