@@ -2,15 +2,15 @@ import type { Range, Span } from "dnd-timeline";
 import { useTimelineContext } from "dnd-timeline";
 import {
 	Check,
-	ChevronDown,
+	CaretDown as ChevronDown,
 	Crop,
-	MessageSquare,
-	Music,
+	ChatText as MessageSquare,
+	MusicNote as Music,
 	Plus,
 	Scissors,
-	WandSparkles,
-	ZoomIn,
-} from "lucide-react";
+	MagicWand as WandSparkles,
+	MagnifyingGlassPlus as ZoomIn,
+} from "@phosphor-icons/react";
 import {
 	forwardRef,
 	type KeyboardEvent as ReactKeyboardEvent,
