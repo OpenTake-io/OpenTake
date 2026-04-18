@@ -19,7 +19,7 @@ export function estimateCompanionAudioStartDelaySeconds(
 	const safeAudioDuration = Math.max(0, audioDuration ?? 0);
 	const estimatedDelaySeconds = safeTimelineDuration - safeAudioDuration;
 
-	return estimatedDelaySeconds > 0.05 ? estimatedDelaySeconds : 0;
+	return estimatedDelaySeconds > 0.025 ? estimatedDelaySeconds : 0;
 }
 
 export function getMediaSyncPlaybackRate({

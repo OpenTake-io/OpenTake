@@ -854,17 +854,31 @@ export class ExtensionHost {
 				const t = host._cursorTelemetry;
 				if (!t || t.length === 0) return null;
 
-				let closest = t[0];
-				let minDist = Math.abs(t[0].timeMs - timeMs);
-				for (let i = 1; i < t.length; i++) {
-					const dist = Math.abs(t[i].timeMs - timeMs);
-					if (dist < minDist) {
-						minDist = dist;
-						closest = t[i];
+				if (timeMs <= t[0].timeMs) return { ...t[0], timeMs };
+				if (timeMs >= t[t.length - 1].timeMs) return { ...t[t.length - 1], timeMs };
+
+				let lo = 0;
+				let hi = t.length - 1;
+				while (lo < hi - 1) {
+					const mid = (lo + hi) >> 1;
+					if (t[mid].timeMs <= timeMs) {
+						lo = mid;
+					} else {
+						hi = mid;
 					}
-					if (t[i].timeMs > timeMs) break;
 				}
-				return { ...closest };
+
+				const a = t[lo];
+				const b = t[hi];
+				const span = b.timeMs - a.timeMs;
+				const frac = span > 0 ? (timeMs - a.timeMs) / span : 0;
+
+				return {
+					...a,
+					cx: a.cx + (b.cx - a.cx) * frac,
+					cy: a.cy + (b.cy - a.cy) * frac,
+					timeMs,
+				};
 			},
 
 			getSmoothedCursor() {

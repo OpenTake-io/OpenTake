@@ -781,7 +781,7 @@ export default function VideoEditor() {
 					padding,
 					cropRegion,
 					webcam,
-					webcamUrl: webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null,
+					webcamUrl: resolvedWebcamVideoUrl ?? (webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null),
 					videoWidth: previewVideo.videoWidth,
 					videoHeight: previewVideo.videoHeight,
 					annotationRegions,
@@ -1807,7 +1807,6 @@ export default function VideoEditor() {
 			setResolvedWebcamVideoUrl(null);
 			return;
 		}
-		setResolvedWebcamVideoUrl(null);
 		void resolveVideoUrl(webcam.sourcePath).then((url) => {
 			if (!cancelled) setResolvedWebcamVideoUrl(url);
 		});
@@ -3540,7 +3539,7 @@ export default function VideoEditor() {
 						videoPadding: padding,
 						cropRegion,
 						webcam,
-						webcamUrl: webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null,
+						webcamUrl: resolvedWebcamVideoUrl ?? (webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null),
 						annotationRegions,
 						autoCaptions,
 						autoCaptionSettings,
@@ -3709,7 +3708,7 @@ export default function VideoEditor() {
 						padding,
 						cropRegion,
 						webcam,
-						webcamUrl: webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null,
+						webcamUrl: resolvedWebcamVideoUrl ?? (webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null),
 						annotationRegions,
 						autoCaptions,
 						autoCaptionSettings,

@@ -26,7 +26,7 @@ export function clamp(value: number, min: number, max: number) {
 
 export function stopCursorCapture() {
 	if (cursorCaptureInterval) {
-		clearInterval(cursorCaptureInterval);
+		clearTimeout(cursorCaptureInterval);
 		setCursorCaptureInterval(null);
 	}
 }
@@ -155,13 +155,33 @@ export function snapshotCursorTelemetryForPersistence() {
 
 export function startCursorSampling() {
 	stopCursorCapture();
-	setCursorCaptureInterval(
-		setInterval(() => {
-			if (isCursorCaptureActive) {
-				sampleCursorPoint();
-			}
-		}, CURSOR_SAMPLE_INTERVAL_MS),
-	);
+
+	// Use recursive setTimeout with drift compensation instead of setInterval.
+	// Under CPU load setInterval bunches or skips callbacks, creating large gaps
+	// in telemetry data.  This approach measures wall-clock drift each tick and
+	// adjusts the next delay so samples stay close to the target interval.
+	let nextExpectedMs = Date.now() + CURSOR_SAMPLE_INTERVAL_MS;
+
+	const tick = () => {
+		if (isCursorCaptureActive) {
+			sampleCursorPoint();
+		}
+
+		const now = Date.now();
+		const drift = now - nextExpectedMs;
+		nextExpectedMs += CURSOR_SAMPLE_INTERVAL_MS;
+
+		// If we fell behind by more than one full interval, reset the baseline
+		// so we don't try to "catch up" with a burst of rapid samples.
+		if (drift > CURSOR_SAMPLE_INTERVAL_MS) {
+			nextExpectedMs = now + CURSOR_SAMPLE_INTERVAL_MS;
+		}
+
+		const delay = Math.max(1, nextExpectedMs - now);
+		setCursorCaptureInterval(setTimeout(tick, delay));
+	};
+
+	setCursorCaptureInterval(setTimeout(tick, CURSOR_SAMPLE_INTERVAL_MS));
 }
 
 // Re-export for consumers that use it from this module

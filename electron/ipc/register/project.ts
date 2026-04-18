@@ -379,17 +379,23 @@ export function registerProjectHandlers() {
     }
   });
 
-  ipcMain.handle('get-local-media-url', (_, filePath: string) => {
+  ipcMain.handle('get-local-media-url', async (_, filePath: string) => {
     const baseUrl = getMediaServerBaseUrl();
     if (!baseUrl || !filePath) {
       return { success: false as const };
     }
-    const resolved = path.resolve(filePath);
-    if (!approvedLocalReadPaths.has(resolved)) {
+    const normalized = path.resolve(filePath);
+    let resolved: string;
+    try {
+      resolved = await fs.realpath(normalized);
+    } catch {
+      return { success: false as const };
+    }
+    if (!approvedLocalReadPaths.has(resolved) && !approvedLocalReadPaths.has(normalized)) {
       console.warn(`[get-local-media-url] Blocked unapproved path: ${resolved}`);
       return { success: false as const };
     }
-    return { success: true as const, url: buildMediaUrl(baseUrl, filePath) };
+    return { success: true as const, url: buildMediaUrl(baseUrl, resolved) };
   });
 
 }
