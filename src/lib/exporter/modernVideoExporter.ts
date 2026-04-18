@@ -434,6 +434,11 @@ export class ModernVideoExporter {
 				"muxing queued video chunks",
 			);
 
+			// Surface muxing errors before proceeding with finalization
+			if (this.encoderError) {
+				throw this.encoderError;
+			}
+
 			if (nativeAudioPlan.audioMode !== "none" && !shouldUseFfmpegAudioFallback && !this.cancelled) {
 				const demuxer = this.streamingDecoder.getDemuxer();
 				if (
@@ -1399,8 +1404,9 @@ export class ModernVideoExporter {
 						}
 					} catch (error) {
 						console.error("Muxing error:", error);
+						const muxingError = error instanceof Error ? error : new Error(String(error));
 						if (!this.encoderError) {
-							this.encoderError = error instanceof Error ? error : new Error(String(error));
+							this.encoderError = muxingError;
 						}
 						this.cancelled = true;
 					}

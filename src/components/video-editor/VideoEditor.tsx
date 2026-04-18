@@ -4454,7 +4454,7 @@ export default function VideoEditor() {
 									</p>
 									{isRenderingAudio ? (
 										<p className="mt-1 text-[11px] text-muted-foreground/70">
-											Processing audio with speed/overlay edits
+											{t("editor.export.processingAudioEdits", "Processing audio with speed/overlay edits")}
 										</p>
 									) : exportRenderSpeedLabel ? (
 										<p className="mt-1 text-[11px] text-muted-foreground/70">
