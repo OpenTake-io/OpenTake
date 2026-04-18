@@ -1149,17 +1149,8 @@ export class AudioProcessor {
 		const source = await resolveMediaElementSource(url);
 		try {
 			const media = document.createElement("video");
-			media.src = source.src;
 			media.preload = "metadata";
-
-			if (
-				Number.isFinite(media.duration) &&
-				media.readyState >= HTMLMediaElement.HAVE_METADATA
-			) {
-				const duration = media.duration;
-				media.src = "";
-				return duration;
-			}
+			media.src = source.src;
 
 			return await new Promise<number>((resolve, reject) => {
 				const timeout = setTimeout(() => {
