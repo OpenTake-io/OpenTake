@@ -40,7 +40,7 @@ export function getAudioSyncAdjustment(
 
 	const durationDeltaMs = Math.round((videoDuration - audioDuration) * 1000);
 	const absDeltaMs = Math.abs(durationDeltaMs);
-	if (absDeltaMs <= 50) {
+	if (absDeltaMs <= 20) {
 		return { mode: "none", delayMs: 0, tempoRatio: 1, durationDeltaMs };
 	}
 

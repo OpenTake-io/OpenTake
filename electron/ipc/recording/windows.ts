@@ -278,58 +278,38 @@ export async function muxNativeWindowsVideoWithAudio(
 			durationDeltaMs: 0,
 		};
 
-		if (pauseFilter || singleAdjustment.mode !== "none") {
-			const filterParts: string[] = [];
-			if (pauseFilter) {
-				filterParts.push(pauseFilter);
-			}
-			const srcLabel = pauseFilter ? "[trimmed_audio]" : "[1:a]";
-			appendSyncedAudioFilter(filterParts, srcLabel, "aout", singleAdjustment);
-
-			await execFileAsync(
-				ffmpegPath,
-				[
-					"-y",
-					...inputs,
-					"-filter_complex",
-					filterParts.join(";"),
-					"-map",
-					"0:v:0",
-					"-map",
-					"[aout]",
-					"-c:v",
-					"copy",
-					"-c:a",
-					"aac",
-					"-b:a",
-					"192k",
-					"-shortest",
-					mixedOutputPath,
-				],
-				{ timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
-			);
-		} else {
-			await execFileAsync(
-				ffmpegPath,
-				[
-					"-y",
-					...inputs,
-					"-map",
-					"0:v:0",
-					"-map",
-					"1:a:0",
-					"-c:v",
-					"copy",
-					"-c:a",
-					"aac",
-					"-b:a",
-					"192k",
-					"-shortest",
-					mixedOutputPath,
-				],
-				{ timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
-			);
+		// Always route through the filter graph so that aresample=async=1 is
+		// applied.  This corrects progressive clock drift between video and
+		// audio tracks that a simple duration comparison cannot detect.
+		const filterParts: string[] = [];
+		if (pauseFilter) {
+			filterParts.push(pauseFilter);
 		}
+		const srcLabel = pauseFilter ? "[trimmed_audio]" : "[1:a]";
+		appendSyncedAudioFilter(filterParts, srcLabel, "aout", singleAdjustment);
+
+		await execFileAsync(
+			ffmpegPath,
+			[
+				"-y",
+				...inputs,
+				"-filter_complex",
+				filterParts.join(";"),
+				"-map",
+				"0:v:0",
+				"-map",
+				"[aout]",
+				"-c:v",
+				"copy",
+				"-c:a",
+				"aac",
+				"-b:a",
+				"192k",
+				"-shortest",
+				mixedOutputPath,
+			],
+			{ timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
+		);
 	}
 
 	await moveFileWithOverwrite(mixedOutputPath, videoPath);

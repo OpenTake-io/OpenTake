@@ -18,7 +18,7 @@ const HIGH_FRAME_RATE_BOOST = 1.7;
 const DEFAULT_WIDTH = 1920;
 const DEFAULT_HEIGHT = 1080;
 const CODEC_ALIGNMENT = 2;
-const RECORDER_TIMESLICE_MS = 1000;
+const RECORDER_TIMESLICE_MS = 250;
 const BITS_PER_MEGABIT = 1_000_000;
 const MIN_FRAME_RATE = 30;
 const CHROME_MEDIA_SOURCE = "desktop";
@@ -1090,7 +1090,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				const micAudioTrack = microphoneStream.current?.getAudioTracks()[0];
 
 				if (systemAudioTrack && micAudioTrack) {
-					const context = new AudioContext();
+					const context = new AudioContext({ sampleRate: 48000 });
 					mixingContext.current = context;
 					const systemSource = context.createMediaStreamSource(
 						new MediaStream([systemAudioTrack]),
