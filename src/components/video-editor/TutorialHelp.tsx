@@ -1,4 +1,4 @@
-import { ArrowRight, ExternalLink, HelpCircle, Keyboard, MessageSquareMore, Scissors, Settings2, Twitter } from "lucide-react";
+import { ArrowRight, ArrowSquareOut as ExternalLink, Question as HelpCircle, Keyboard, ChatDots as MessageSquareMore, Scissors, GearSix as Settings2, XLogo as Twitter } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
