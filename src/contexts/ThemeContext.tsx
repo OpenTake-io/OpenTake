@@ -25,7 +25,7 @@ function getStoredPreference(): ThemePreference {
 	} catch {
 		// Ignore storage errors
 	}
-	return "dark";
+	return "system";
 }
 
 function resolveTheme(pref: ThemePreference): ResolvedTheme {
@@ -39,6 +39,7 @@ function resolveTheme(pref: ThemePreference): ResolvedTheme {
 
 function applyThemeToDOM(theme: ResolvedTheme) {
 	const root = document.documentElement;
+	root.dataset.theme = theme;
 	if (theme === "dark") {
 		root.classList.add("dark");
 	} else {
