@@ -172,10 +172,10 @@ export default function ProjectBrowserDialog({
 				ref={panelRef}
 				role="dialog"
 				aria-label="Projects"
-				className="pointer-events-auto mb-1.5 w-[300px] max-h-[400px] overflow-hidden rounded-[14px] border border-white/[0.07] bg-[rgba(22,22,30,0.96)] text-slate-200 shadow-[0_12px_32px_rgba(0,0,0,0.22),0_2px_10px_rgba(0,0,0,0.1)] animate-in fade-in-0 duration-150"
+					className="pointer-events-auto mb-1.5 w-[300px] max-h-[400px] overflow-hidden rounded-[14px] border border-foreground/[0.07] bg-editor-panel/[0.96] text-foreground shadow-[0_12px_32px_rgba(0,0,0,0.22),0_2px_10px_rgba(0,0,0,0.1)] animate-in fade-in-0 duration-150"
 			>
-				<div className="border-b border-white/10 px-3 py-2.5">
-					<div className="text-sm font-medium tracking-tight text-white">Projects</div>
+				<div className="border-b border-foreground/10 px-3 py-2.5">
+					<div className="text-sm font-medium tracking-tight text-foreground">Projects</div>
 				</div>
 				<div className="max-h-[360px] overflow-y-auto px-2.5 py-2.5">
 					{visibleEntries.length > 0 ? (
@@ -191,7 +191,7 @@ export default function ProjectBrowserDialog({
 										onClick={() => onOpenProject(entry.path)}
 										className="group flex flex-col gap-1 rounded-lg bg-transparent p-0.5 text-left outline-none transition focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
 									>
-										<div className="relative aspect-[16/10] w-full overflow-hidden rounded-[5px] bg-[#0d0d11] shadow-[0_10px_18px_rgba(0,0,0,0.28)] transition duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_16px_30px_rgba(0,0,0,0.38)]">
+										<div className="relative aspect-[16/10] w-full overflow-hidden rounded-[5px] bg-editor-dialog-alt shadow-[0_10px_18px_rgba(0,0,0,0.28)] transition duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_16px_30px_rgba(0,0,0,0.38)]">
 											{thumbnailSrc ? (
 												<img
 													src={thumbnailSrc}
@@ -200,7 +200,7 @@ export default function ProjectBrowserDialog({
 													draggable={false}
 												/>
 											) : (
-												<div className="flex h-full w-full items-center justify-center bg-[linear-gradient(180deg,_rgba(37,99,235,0.22),_rgba(13,17,23,0.92))] text-[10px] font-medium text-slate-300">
+												<div className="flex h-full w-full items-center justify-center bg-[linear-gradient(180deg,_rgba(37,99,235,0.22),_rgba(13,17,23,0.92))] text-[10px] font-medium text-muted-foreground">
 													No preview yet
 												</div>
 											)}
@@ -213,7 +213,7 @@ export default function ProjectBrowserDialog({
 											) : null}
 										</div>
 										<div className="flex flex-1 flex-col px-0.5 py-0.5">
-											<div className="truncate text-[11px] font-semibold tracking-tight text-white">
+											<div className="truncate text-[11px] font-semibold tracking-tight text-foreground">
 												{entry.name}
 											</div>
 										</div>
@@ -222,8 +222,8 @@ export default function ProjectBrowserDialog({
 							})}
 						</div>
 					) : (
-						<div className="flex min-h-[140px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/10 bg-[#111215] px-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-							<div className="text-sm font-semibold text-white">
+						<div className="flex min-h-[140px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-foreground/10 bg-editor-bg px-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+							<div className="text-sm font-semibold text-foreground">
 								No saved projects yet
 							</div>
 						</div>
@@ -240,10 +240,10 @@ export default function ProjectBrowserDialog({
 				role="dialog"
 				aria-label="Projects"
 				style={{ top: `${position.top}px`, left: `${position.left}px` }}
-				className="pointer-events-auto fixed w-[min(280px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-white/10 bg-[#17171a] text-slate-200 shadow-2xl animate-in fade-in-0 duration-150"
+				className="pointer-events-auto fixed w-[min(280px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-foreground/10 bg-editor-surface text-foreground shadow-2xl animate-in fade-in-0 duration-150"
 			>
-				<div className="border-b border-white/10 px-3 py-2.5">
-					<div className="text-sm font-medium tracking-tight text-white">Projects</div>
+				<div className="border-b border-foreground/10 px-3 py-2.5">
+					<div className="text-sm font-medium tracking-tight text-foreground">Projects</div>
 				</div>
 				<div
 					className="overflow-y-auto px-2.5 py-2.5"
@@ -262,7 +262,7 @@ export default function ProjectBrowserDialog({
 										onClick={() => onOpenProject(entry.path)}
 										className="group flex flex-col gap-1 rounded-lg bg-transparent p-0.5 text-left outline-none transition focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
 									>
-										<div className="relative aspect-[16/10] w-full overflow-hidden rounded-[5px] bg-[#0d0d11] shadow-[0_10px_18px_rgba(0,0,0,0.28)] transition duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_16px_30px_rgba(0,0,0,0.38)]">
+										<div className="relative aspect-[16/10] w-full overflow-hidden rounded-[5px] bg-editor-dialog-alt shadow-[0_10px_18px_rgba(0,0,0,0.28)] transition duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_16px_30px_rgba(0,0,0,0.38)]">
 											{thumbnailSrc ? (
 												<img
 													src={thumbnailSrc}
@@ -271,7 +271,7 @@ export default function ProjectBrowserDialog({
 													draggable={false}
 												/>
 											) : (
-												<div className="flex h-full w-full items-center justify-center bg-[linear-gradient(180deg,_rgba(37,99,235,0.22),_rgba(13,17,23,0.92))] text-[10px] font-medium text-slate-300">
+												<div className="flex h-full w-full items-center justify-center bg-[linear-gradient(180deg,_rgba(37,99,235,0.22),_rgba(13,17,23,0.92))] text-[10px] font-medium text-muted-foreground">
 													No preview yet
 												</div>
 											)}
@@ -284,7 +284,7 @@ export default function ProjectBrowserDialog({
 											) : null}
 										</div>
 										<div className="flex flex-1 flex-col px-0.5 py-0.5">
-											<div className="truncate text-[11px] font-semibold tracking-tight text-white">
+											<div className="truncate text-[11px] font-semibold tracking-tight text-foreground">
 												{entry.name}
 											</div>
 										</div>
@@ -293,8 +293,8 @@ export default function ProjectBrowserDialog({
 							})}
 						</div>
 					) : (
-						<div className="flex min-h-[140px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/10 bg-[#111215] px-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-							<div className="text-sm font-semibold text-white">
+						<div className="flex min-h-[140px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-foreground/10 bg-editor-bg px-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+							<div className="text-sm font-semibold text-foreground">
 								No saved projects yet
 							</div>
 						</div>
