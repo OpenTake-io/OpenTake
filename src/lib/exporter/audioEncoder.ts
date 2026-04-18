@@ -18,6 +18,12 @@ const DECODE_BACKPRESSURE_LIMIT = 20;
 const ENCODE_BACKPRESSURE_LIMIT = 20;
 const MIN_SPEED_REGION_DELTA_MS = 0.0001;
 const MP4_AUDIO_CODEC = "mp4a.40.2";
+const SYNC_SEEK_THRESHOLD_SEC = 0.15;
+const SYNC_PLAYBACK_RATE_OPTIONS = {
+	toleranceSeconds: 0.008,
+	correctionWindowSeconds: 0.5,
+	maxAdjustment: 0.12,
+} as const;
 
 export async function isAacAudioEncodingSupported(
 		sampleRate = 48_000,
@@ -721,7 +727,7 @@ export class AudioProcessor {
 							continue;
 						}
 
-						if (Math.abs(audioEl.currentTime - targetTimeSec) > 0.15) {
+						if (Math.abs(audioEl.currentTime - targetTimeSec) > SYNC_SEEK_THRESHOLD_SEC) {
 							audioEl.currentTime = targetTimeSec;
 						}
 
@@ -729,9 +735,7 @@ export class AudioProcessor {
 							basePlaybackRate: playbackRate,
 							currentTime: audioEl.currentTime,
 							targetTime: targetTimeSec,
-							toleranceSeconds: 0.008,
-							correctionWindowSeconds: 0.5,
-							maxAdjustment: 0.12,
+							...SYNC_PLAYBACK_RATE_OPTIONS,
 						});
 						if (Math.abs(audioEl.playbackRate - syncedPlaybackRate) > 0.0001) {
 							audioEl.playbackRate = syncedPlaybackRate;
@@ -751,7 +755,7 @@ export class AudioProcessor {
 
 						if (isInRegion) {
 							const audioOffset = (currentTimeMs - region.startMs) / 1000;
-							if (Math.abs(audioEl.currentTime - audioOffset) > 0.15) {
+							if (Math.abs(audioEl.currentTime - audioOffset) > SYNC_SEEK_THRESHOLD_SEC) {
 								audioEl.currentTime = audioOffset;
 							}
 
@@ -759,9 +763,7 @@ export class AudioProcessor {
 								basePlaybackRate: playbackRate,
 								currentTime: audioEl.currentTime,
 								targetTime: audioOffset,
-								toleranceSeconds: 0.008,
-								correctionWindowSeconds: 0.5,
-								maxAdjustment: 0.12,
+								...SYNC_PLAYBACK_RATE_OPTIONS,
 							});
 							if (Math.abs(audioEl.playbackRate - syncedPlaybackRate) > 0.0001) {
 								audioEl.playbackRate = syncedPlaybackRate;
