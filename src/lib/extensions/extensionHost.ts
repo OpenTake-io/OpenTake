@@ -854,8 +854,8 @@ export class ExtensionHost {
 				const t = host._cursorTelemetry;
 				if (!t || t.length === 0) return null;
 
-				if (timeMs <= t[0].timeMs) return { ...t[0] };
-				if (timeMs >= t[t.length - 1].timeMs) return { ...t[t.length - 1] };
+				if (timeMs <= t[0].timeMs) return { ...t[0], timeMs };
+				if (timeMs >= t[t.length - 1].timeMs) return { ...t[t.length - 1], timeMs };
 
 				let lo = 0;
 				let hi = t.length - 1;

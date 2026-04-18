@@ -177,7 +177,7 @@ export function startCursorSampling() {
 			nextExpectedMs = now + CURSOR_SAMPLE_INTERVAL_MS;
 		}
 
-		const delay = Math.max(1, CURSOR_SAMPLE_INTERVAL_MS - drift);
+		const delay = Math.max(1, nextExpectedMs - now);
 		setCursorCaptureInterval(setTimeout(tick, delay));
 	};
 
