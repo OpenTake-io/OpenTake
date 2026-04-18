@@ -5,7 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, shell, systemPreferences } from "electron";
 import { showCursor } from "../../cursorHider";
-import { ALLOW_RECORDLY_WINDOW_CAPTURE, CURSOR_SAMPLE_INTERVAL_MS } from "../constants";
+import { ALLOW_RECORDLY_WINDOW_CAPTURE } from "../constants";
 import type { SelectedSource, NativeMacRecordingOptions, PauseSegment, CursorTelemetryPoint } from "../types";
 import {
 	selectedSource,
@@ -53,7 +53,6 @@ import {
 	setCachedSystemCursorAssets,
 	cachedSystemCursorAssetsSourceMtimeMs,
 	setCachedSystemCursorAssetsSourceMtimeMs,
-	setCursorCaptureInterval,
 	setCursorCaptureStartTimeMs,
 	setActiveCursorSamples,
 	setPendingCursorSamples,
@@ -113,6 +112,7 @@ import {
 	clamp,
 	stopCursorCapture,
 	sampleCursorPoint,
+	startCursorSampling,
 	snapshotCursorTelemetryForPersistence,
 } from "../cursor/telemetry";
 import {
@@ -1083,7 +1083,7 @@ export function registerRecordingHandlers(
       setLinuxCursorScreenPoint(null)
       setLastLeftClick(null)
       sampleCursorPoint()
-      setCursorCaptureInterval(setInterval(sampleCursorPoint, CURSOR_SAMPLE_INTERVAL_MS))
+      startCursorSampling()
       void startInteractionCapture()
     } else {
       setIsCursorCaptureActive(false)

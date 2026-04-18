@@ -194,53 +194,35 @@ export async function muxNativeMacRecordingWithAudio(
 		tempoRatio: 1,
 		durationDeltaMs: 0,
 	};
-	const needsFilter = systemAdjustment.mode !== "none" || micAdjustment.mode !== "none";
 
+	// Always route through the filter graph so that aresample=async=1 is
+	// applied to every audio stream.  This corrects progressive clock drift
+	// between the video and audio tracks that a simple duration comparison
+	// cannot detect (e.g. audio gradually falling behind under CPU load).
 	let args: string[];
 	if (availableAudioInputs.length === 2) {
-		if (needsFilter) {
-			const filterParts: string[] = [];
-			appendSyncedAudioFilter(filterParts, "[1:a]", "s", systemAdjustment);
-			appendSyncedAudioFilter(filterParts, "[2:a]", "m", micAdjustment);
-			filterParts.push("[s][m]amix=inputs=2:duration=longest:normalize=0[aout]");
-			args = [
-				"-y",
-				...inputs,
-				"-filter_complex",
-				filterParts.join(";"),
-				"-map",
-				"0:v:0",
-				"-map",
-				"[aout]",
-				"-c:v",
-				"copy",
-				"-c:a",
-				"aac",
-				"-b:a",
-				"192k",
-				"-shortest",
-				mixedOutputPath,
-			];
-		} else {
-			args = [
-				"-y",
-				...inputs,
-				"-filter_complex",
-				"[1:a][2:a]amix=inputs=2:duration=longest:normalize=0[aout]",
-				"-map",
-				"0:v:0",
-				"-map",
-				"[aout]",
-				"-c:v",
-				"copy",
-				"-c:a",
-				"aac",
-				"-b:a",
-				"192k",
-				"-shortest",
-				mixedOutputPath,
-			];
-		}
+		const filterParts: string[] = [];
+		appendSyncedAudioFilter(filterParts, "[1:a]", "s", systemAdjustment);
+		appendSyncedAudioFilter(filterParts, "[2:a]", "m", micAdjustment);
+		filterParts.push("[s][m]amix=inputs=2:duration=longest:normalize=0[aout]");
+		args = [
+			"-y",
+			...inputs,
+			"-filter_complex",
+			filterParts.join(";"),
+			"-map",
+			"0:v:0",
+			"-map",
+			"[aout]",
+			"-c:v",
+			"copy",
+			"-c:a",
+			"aac",
+			"-b:a",
+			"192k",
+			"-shortest",
+			mixedOutputPath,
+		];
 	} else {
 		const singleAdjustment = audioAdjustments.get(availableAudioInputs[0]) ?? {
 			mode: "none",
@@ -248,45 +230,26 @@ export async function muxNativeMacRecordingWithAudio(
 			tempoRatio: 1,
 			durationDeltaMs: 0,
 		};
-		if (singleAdjustment.mode !== "none") {
-			const filterParts: string[] = [];
-			appendSyncedAudioFilter(filterParts, "[1:a]", "aout", singleAdjustment);
-			args = [
-				"-y",
-				...inputs,
-				"-filter_complex",
-				filterParts.join(";"),
-				"-map",
-				"0:v:0",
-				"-map",
-				"[aout]",
-				"-c:v",
-				"copy",
-				"-c:a",
-				"aac",
-				"-b:a",
-				"192k",
-				"-shortest",
-				mixedOutputPath,
-			];
-		} else {
-			args = [
-				"-y",
-				...inputs,
-				"-map",
-				"0:v:0",
-				"-map",
-				"1:a:0",
-				"-c:v",
-				"copy",
-				"-c:a",
-				"aac",
-				"-b:a",
-				"192k",
-				"-shortest",
-				mixedOutputPath,
-			];
-		}
+		const filterParts: string[] = [];
+		appendSyncedAudioFilter(filterParts, "[1:a]", "aout", singleAdjustment);
+		args = [
+			"-y",
+			...inputs,
+			"-filter_complex",
+			filterParts.join(";"),
+			"-map",
+			"0:v:0",
+			"-map",
+			"[aout]",
+			"-c:v",
+			"copy",
+			"-c:a",
+			"aac",
+			"-b:a",
+			"192k",
+			"-shortest",
+			mixedOutputPath,
+		];
 	}
 
 	console.log("[mux] Running ffmpeg:", ffmpegPath, args.join(" "));
