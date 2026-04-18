@@ -9,20 +9,20 @@
 import {
 	BookOpen,
 	Check,
-	ChevronLeft,
-	ChevronRight,
-	Download,
-	ExternalLink,
+	CaretLeft as ChevronLeft,
+	CaretRight as ChevronRight,
+	DownloadSimple as Download,
+	ArrowSquareOut as ExternalLink,
 	FolderOpen,
-	Loader2,
+	SpinnerGap as Loader2,
 	Plus,
-	Puzzle,
-	RefreshCw,
-	Search,
-	ShieldAlert,
+	PuzzlePiece as Puzzle,
+	ArrowsClockwise as RefreshCw,
+	MagnifyingGlass as Search,
+	ShieldWarning as ShieldAlert,
 	Tag,
-	Trash2,
-} from "lucide-react";
+	Trash as Trash2,
+} from "@phosphor-icons/react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";

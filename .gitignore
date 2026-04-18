@@ -28,6 +28,7 @@ release/**
 # npx electron-builder --mac --win
 .tmp/
 .history/
+extension-sources/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
