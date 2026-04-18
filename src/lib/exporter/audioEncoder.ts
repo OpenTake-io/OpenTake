@@ -593,7 +593,7 @@ export class AudioProcessor {
 		let sourceDurationSec: number;
 		if (mainBuffer) {
 			sourceDurationSec = mainBuffer.duration;
-		} else if (hasExternalSources) {
+		} else if (hasExternalSources || regionEntries.length > 0) {
 			sourceDurationSec = await this.getMediaDurationSec(videoUrl);
 		} else {
 			sourceDurationSec = primaryBuffer?.duration ?? 0;
@@ -983,20 +983,23 @@ export class AudioProcessor {
 								);
 							}
 						} else if (format) {
-							// Interleaved format — deinterleave into per-channel arrays
+							// Interleaved format — deinterleave into per-channel arrays.
+							// Use data.numberOfChannels as stride (not capped dataChannels)
+							// since the raw buffer contains all source channels.
+							const srcChannels = data.numberOfChannels;
 							const size = data.allocationSize({ planeIndex: 0 });
 							const bytes = new ArrayBuffer(size);
 							data.copyTo(bytes, { planeIndex: 0 });
 							const interleaved = this.rawToFloat32(
 								bytes,
 								format,
-								frames * dataChannels,
+								frames * srcChannels,
 							);
 							for (let ch = 0; ch < dataChannels; ch++) {
 								const chData = new Float32Array(frames);
 								for (let i = 0; i < frames; i++) {
 									chData[i] =
-										interleaved[i * dataChannels + ch];
+										interleaved[i * srcChannels + ch];
 								}
 								channelChunks[ch].push(chData);
 							}
