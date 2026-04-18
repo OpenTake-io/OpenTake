@@ -1153,6 +1153,8 @@ export class AudioProcessor {
 			return await new Promise<number>((resolve, reject) => {
 				const timeout = setTimeout(() => {
 					cleanup();
+					media.src = "";
+					media.load();
 					reject(new Error("Timed out getting media duration (30s)"));
 				}, 30_000);
 
