@@ -28,6 +28,7 @@ import tahoeCursorUrl from "../../assets/cursors/Cursor=Default.svg";
 import { useI18n, useScopedT } from "../../contexts/I18nContext";
 import type { AppLocale } from "../../i18n/config";
 import { SUPPORTED_LOCALES } from "../../i18n/config";
+import { useTheme } from "@/contexts/ThemeContext";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
 import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
 import { SliderControl } from "./SliderControl";
@@ -134,7 +135,7 @@ function getBackgroundTabForWallpaper(value: string): BackgroundTab {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
 	return (
-		<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+		<p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
 			{children}
 		</p>
 	);
@@ -155,8 +156,8 @@ function ExtensionSettingsSection({
 	const [, forceUpdate] = useState(0);
 
 	return (
-		<div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-white/[0.06]">
-			<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+		<div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-foreground/[0.06]">
+			<p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
 				{label}
 			</p>
 			{fields.map((field) => {
@@ -167,9 +168,9 @@ function ExtensionSettingsSection({
 					return (
 						<div
 							key={field.id}
-							className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5"
+							className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5"
 						>
-							<span className="text-[11px] text-slate-300">{field.label}</span>
+							<span className="text-[11px] text-muted-foreground">{field.label}</span>
 							<Switch
 								checked={Boolean(value)}
 								onCheckedChange={(checked) => {
@@ -190,9 +191,9 @@ function ExtensionSettingsSection({
 					return (
 						<div
 							key={field.id}
-							className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5"
+							className="flex items-center justify-between gap-2 rounded-lg bg-foreground/[0.03] px-2.5 py-1.5"
 						>
-							<span className="text-[11px] text-slate-300 flex-shrink-0">
+							<span className="text-[11px] text-muted-foreground flex-shrink-0">
 								{field.label}
 							</span>
 							<div className="flex items-center gap-1.5">
@@ -216,7 +217,7 @@ function ExtensionSettingsSection({
 									}}
 									className="w-20 h-1 accent-[#2563EB]"
 								/>
-								<span className="text-[10px] text-slate-500 w-8 text-right font-mono">
+								<span className="text-[10px] text-muted-foreground/70 w-8 text-right font-mono">
 									{(typeof value === "number"
 										? value
 										: (field.defaultValue as number)
@@ -231,9 +232,9 @@ function ExtensionSettingsSection({
 					return (
 						<div
 							key={field.id}
-							className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5"
+							className="flex items-center justify-between gap-2 rounded-lg bg-foreground/[0.03] px-2.5 py-1.5"
 						>
-							<span className="text-[11px] text-slate-300 flex-shrink-0">
+							<span className="text-[11px] text-muted-foreground flex-shrink-0">
 								{field.label}
 							</span>
 							<Select
@@ -243,7 +244,7 @@ function ExtensionSettingsSection({
 									forceUpdate((n) => n + 1);
 								}}
 							>
-								<SelectTrigger className="h-6 w-24 text-[10px] border-white/10 bg-white/[0.03]">
+								<SelectTrigger className="h-6 w-24 text-[10px] border-foreground/10 bg-foreground/[0.03]">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
@@ -266,9 +267,9 @@ function ExtensionSettingsSection({
 					return (
 						<div
 							key={field.id}
-							className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5"
+							className="flex items-center justify-between gap-2 rounded-lg bg-foreground/[0.03] px-2.5 py-1.5"
 						>
-							<span className="text-[11px] text-slate-300 flex-shrink-0">
+							<span className="text-[11px] text-muted-foreground flex-shrink-0">
 								{field.label}
 							</span>
 							<input
@@ -282,7 +283,7 @@ function ExtensionSettingsSection({
 									);
 									forceUpdate((n) => n + 1);
 								}}
-								className="w-7 h-5 rounded border border-white/10 cursor-pointer bg-transparent"
+								className="w-7 h-5 rounded border border-foreground/10 cursor-pointer bg-transparent"
 							/>
 						</div>
 					);
@@ -292,9 +293,9 @@ function ExtensionSettingsSection({
 					return (
 						<div
 							key={field.id}
-							className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.03] px-2.5 py-1.5"
+							className="flex items-center justify-between gap-2 rounded-lg bg-foreground/[0.03] px-2.5 py-1.5"
 						>
-							<span className="text-[11px] text-slate-300 flex-shrink-0">
+							<span className="text-[11px] text-muted-foreground flex-shrink-0">
 								{field.label}
 							</span>
 							<input
@@ -308,7 +309,7 @@ function ExtensionSettingsSection({
 									);
 									forceUpdate((n) => n + 1);
 								}}
-								className="w-24 h-6 rounded bg-white/[0.06] border border-white/10 px-1.5 text-[10px] text-slate-200"
+								className="w-24 h-6 rounded bg-foreground/[0.06] border border-foreground/10 px-1.5 text-[10px] text-foreground"
 							/>
 						</div>
 					);
@@ -661,7 +662,7 @@ function CursorStylePreview({
 
 	if (style === "dot") {
 		return (
-			<span className="h-[14px] w-[14px] rounded-full border-[2.5px] border-slate-900 bg-white shadow-[0_8px_12px_rgba(15,23,42,0.16)]" />
+			<span className="h-[14px] w-[14px] rounded-full border-[2.5px] border-foreground bg-white shadow-[0_8px_12px_rgba(15,23,42,0.16)]" />
 		);
 	}
 
@@ -768,6 +769,7 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
 	const tSettings = useScopedT("settings");
 	const { locale, setLocale, t } = useI18n();
+	const { preference: themePreference, setPreference: setThemePreference } = useTheme();
 	const isBackgroundPanel = panelMode === "background";
 	const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
 	const [builtInWallpapers, setBuiltInWallpapers] =
@@ -1157,10 +1159,10 @@ export function SettingsPanel({
 
 	const wallpaperTileClass = (isSelected: boolean) =>
 		cn(
-			"group relative aspect-square w-full overflow-hidden rounded-[10px] border bg-[#101115] transition-colors duration-150",
+			"group relative aspect-square w-full overflow-hidden rounded-[10px] border bg-editor-bg transition-colors duration-150",
 			isSelected
-				? "border-[#2563EB] bg-white/8"
-				: "border-white/10 bg-white/[0.045] hover:border-white/20 hover:bg-white/[0.07]",
+				? "border-[#2563EB] bg-foreground/[0.08]"
+				: "border-foreground/10 bg-foreground/[0.045] hover:border-foreground/20 hover:bg-foreground/[0.07]",
 		);
 
 	const renderWallpaperImageTile = (
@@ -1182,7 +1184,7 @@ export function SettingsPanel({
 			onClick={props?.onClick}
 			role="button"
 		>
-			<div className="absolute inset-[1px] overflow-hidden rounded-[8px] bg-[#0d0e11]">
+			<div className="absolute inset-[1px] overflow-hidden rounded-[8px] bg-editor-dialog">
 				{isVideoWallpaperSource(wallpaperUrl) ? (
 					<video
 						src={wallpaperUrl}
@@ -1427,7 +1429,7 @@ export function SettingsPanel({
 
 			<div className="w-full">
 				<LayoutGroup id="background-picker-switcher">
-					<div className="grid h-8 w-full grid-cols-4 rounded-xl border border-white/10 bg-white/[0.04] p-1">
+					<div className="grid h-8 w-full grid-cols-4 rounded-xl border border-foreground/10 bg-foreground/[0.04] p-1">
 						{(
 							[
 								{ value: "image", label: tSettings("background.image") },
@@ -1459,8 +1461,8 @@ export function SettingsPanel({
 										className={cn(
 											"relative z-10",
 											isActive
-												? "text-white"
-												: "text-slate-400 hover:text-slate-200",
+												? "text-foreground"
+												: "text-muted-foreground hover:text-foreground",
 										)}
 									>
 										{option.label}
@@ -1492,7 +1494,7 @@ export function SettingsPanel({
 									<Button
 										onClick={() => fileInputRef.current?.click()}
 										variant="outline"
-										className="w-full gap-2 bg-white/5 text-slate-200 border-white/10 hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] transition-all h-7 text-[10px]"
+										className="w-full gap-2 bg-foreground/5 text-foreground border-foreground/10 hover:bg-[#2563EB] hover:text-foreground hover:border-[#2563EB] transition-all h-7 text-[10px]"
 									>
 										<Upload className="w-3 h-3" />
 										{tSettings("background.uploadCustom")}
@@ -1521,7 +1523,7 @@ export function SettingsPanel({
 														}
 														className="absolute top-0.5 right-0.5 w-3 h-3 bg-red-500/90 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
 													>
-														<X className="w-2 h-2 text-white" />
+														<X className="w-2 h-2 text-foreground" />
 													</button>
 												),
 											});
@@ -1550,7 +1552,7 @@ export function SettingsPanel({
 									<Button
 										onClick={handleVideoUpload}
 										variant="outline"
-										className="w-full gap-2 bg-white/5 text-slate-200 border-white/10 hover:bg-[#2563EB] hover:text-white hover:border-[#2563EB] transition-all h-7 text-[10px]"
+										className="w-full gap-2 bg-foreground/5 text-foreground border-foreground/10 hover:bg-[#2563EB] hover:text-foreground hover:border-[#2563EB] transition-all h-7 text-[10px]"
 									>
 										<Upload className="w-3 h-3" />
 										{tSettings("background.uploadCustomVideo", "Upload Video")}
@@ -1581,7 +1583,7 @@ export function SettingsPanel({
 																}
 																className="absolute top-0.5 right-0.5 w-3 h-3 bg-red-500/90 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
 															>
-																<X className="w-2 h-2 text-white" />
+																<X className="w-2 h-2 text-foreground" />
 															</button>
 														),
 													},
@@ -1653,7 +1655,7 @@ export function SettingsPanel({
 											}}
 											aria-label="Custom color picker"
 										>
-											<div className="absolute inset-0 flex items-center justify-center text-[9px] font-semibold uppercase tracking-[0.18em] text-white/90">
+											<div className="absolute inset-0 flex items-center justify-center text-[9px] font-semibold uppercase tracking-[0.18em] text-foreground/90">
 												Pick
 											</div>
 										</button>
@@ -1724,14 +1726,14 @@ export function SettingsPanel({
 
 	if (isBackgroundPanel) {
 		return (
-			<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-[#161619] rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
+			<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-editor-panel rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
 				<div
 					className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pb-0"
 					style={{ scrollbarGutter: "stable" }}
 				>
 					<div className="mb-4 flex items-center gap-2">
 						<Palette className="w-4 h-4 text-[#2563EB]" />
-						<span className="text-sm font-medium text-slate-200">
+						<span className="text-sm font-medium text-foreground">
 							{tSettings("background.title")}
 						</span>
 					</div>
@@ -1787,8 +1789,8 @@ export function SettingsPanel({
 					formatValue={(v) => `${v}%`}
 					parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
 				/>
-				<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-					<span className="text-[10px] text-slate-400">
+				<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+					<span className="text-[10px] text-muted-foreground">
 						{tSettings("effects.removeBackground")}
 					</span>
 					<Switch
@@ -1801,7 +1803,7 @@ export function SettingsPanel({
 				{availableFrames.length > 0 && (
 					<div className="flex flex-col gap-1.5 mt-1">
 						<div className="flex items-center justify-between">
-							<span className="text-[10px] text-slate-400">Frame</span>
+							<span className="text-[10px] text-muted-foreground">Frame</span>
 							{frame && (
 								<button
 									type="button"
@@ -1824,10 +1826,10 @@ export function SettingsPanel({
 											"flex flex-col items-center gap-1 p-1.5 rounded-lg border transition-all text-center",
 											isSelected
 												? "border-[#2563EB]/50 bg-[#2563EB]/10 ring-1 ring-[#2563EB]/30"
-												: "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.05]",
+												: "border-foreground/[0.06] bg-white/[0.02] hover:bg-foreground/[0.05]",
 										)}
 									>
-										<div className="w-full aspect-video rounded bg-black/30 overflow-hidden flex items-center justify-center">
+										<div className="w-full aspect-video rounded bg-foreground/10 overflow-hidden flex items-center justify-center">
 											<img
 												src={f.thumbnailPath}
 												alt={f.label}
@@ -1835,7 +1837,7 @@ export function SettingsPanel({
 												draggable={false}
 											/>
 										</div>
-										<span className="text-[8px] text-slate-400 truncate w-full leading-tight">
+										<span className="text-[8px] text-muted-foreground truncate w-full leading-tight">
 											{f.label}
 										</span>
 									</button>
@@ -1924,7 +1926,7 @@ export function SettingsPanel({
 						{t("common.actions.reset", "Reset")}
 					</button>
 				</div>
-				<div className="flex items-center gap-2 text-[10px] text-slate-400">
+				<div className="flex items-center gap-2 text-[10px] text-muted-foreground">
 					<span>{tSettings("captions.enabled", "Show")}</span>
 					<Switch
 						checked={autoCaptionSettings.enabled}
@@ -1934,29 +1936,29 @@ export function SettingsPanel({
 				</div>
 			</div>
 
-			<div className="rounded-lg bg-white/[0.03] px-2.5 py-2 space-y-3">
+			<div className="rounded-lg bg-foreground/[0.03] px-2.5 py-2 space-y-3">
 				<div>
 					<Button
 						type="button"
 						variant="outline"
 						onClick={onPickWhisperModel}
-						className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
+						className="h-10 w-full rounded-xl border-foreground/10 bg-foreground/5 px-4 text-sm text-foreground hover:bg-foreground/10 hover:text-foreground"
 					>
 						{tSettings("captions.selectModel", "Select Model")}
 					</Button>
 				</div>
 				<div className="flex items-center justify-between gap-3">
-					<div className="text-sm font-medium text-slate-200">
+					<div className="text-sm font-medium text-foreground">
 						{tSettings("captions.language", "Language")}
 					</div>
 					<Select
 						value={autoCaptionSettings.language || "auto"}
 						onValueChange={(value) => updateAutoCaptionSettings({ language: value })}
 					>
-						<SelectTrigger className="h-10 w-[180px] rounded-xl border-white/10 bg-white/5 text-sm text-slate-200 hover:bg-white/10">
+						<SelectTrigger className="h-10 w-[180px] rounded-xl border-foreground/10 bg-foreground/5 text-sm text-foreground hover:bg-foreground/10">
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent className="border-white/10 bg-[#1a1a1f] text-slate-200">
+						<SelectContent className="border-foreground/10 bg-editor-surface-alt text-foreground">
 							{CAPTION_LANGUAGE_OPTIONS.map((option) => (
 								<SelectItem key={option.value} value={option.value}>
 									{option.label}
@@ -1971,7 +1973,7 @@ export function SettingsPanel({
 							<Button
 								type="button"
 								disabled
-								className="h-10 w-full rounded-xl bg-white/10 px-4 text-sm font-medium text-slate-200 hover:bg-white/10"
+								className="h-10 w-full rounded-xl bg-foreground/10 px-4 text-sm font-medium text-foreground hover:bg-foreground/10"
 							>
 								{tSettings("captions.downloading", "Downloading...")}{" "}
 								{Math.round(whisperModelDownloadProgress)}%
@@ -1981,7 +1983,7 @@ export function SettingsPanel({
 								type="button"
 								variant="outline"
 								onClick={onDeleteWhisperSmallModel}
-								className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
+								className="h-10 w-full rounded-xl border-foreground/10 bg-foreground/5 px-4 text-sm text-foreground hover:bg-foreground/10 hover:text-foreground"
 							>
 								{tSettings("captions.deleteModel", "Delete Model")}
 							</Button>
@@ -1999,7 +2001,7 @@ export function SettingsPanel({
 							variant="outline"
 							onClick={onClearAutoCaptions}
 							disabled={captionCueCount === 0}
-							className="h-10 w-full rounded-xl border-white/10 bg-white/5 px-4 text-sm text-slate-200 hover:bg-white/10 hover:text-white disabled:opacity-50"
+							className="h-10 w-full rounded-xl border-foreground/10 bg-foreground/5 px-4 text-sm text-foreground hover:bg-foreground/10 hover:text-foreground disabled:opacity-50"
 						>
 							{tSettings("captions.clearFull", "Clear Captions")}
 						</Button>
@@ -2020,18 +2022,18 @@ export function SettingsPanel({
 					</Button>
 					{isGeneratingCaptions ? (
 						<div className="space-y-1">
-							<div className="text-xs text-slate-400">
+							<div className="text-xs text-muted-foreground">
 								{tSettings(
 									"captions.generatingStatus",
 									"Generating captions. This can take a moment.",
 								)}
 							</div>
-							<div className="indeterminate-progress h-2 rounded-full bg-white/5" />
+							<div className="indeterminate-progress h-2 rounded-full bg-foreground/5" />
 						</div>
 					) : null}
 				</div>
 				{whisperModelDownloadStatus === "downloading" ? (
-					<div className="h-2 overflow-hidden rounded-full bg-white/5">
+					<div className="h-2 overflow-hidden rounded-full bg-foreground/5">
 						<div
 							className="h-full rounded-full bg-[#2196f3] transition-all"
 							style={{ width: `${whisperModelDownloadProgress}%` }}
@@ -2041,8 +2043,8 @@ export function SettingsPanel({
 			</div>
 
 			<div className="flex flex-col gap-1.5">
-				<div className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.03] px-2.5 py-2">
-					<div className="text-[10px] text-slate-400">
+				<div className="flex items-center justify-between gap-3 rounded-lg bg-foreground/[0.03] px-2.5 py-2">
+					<div className="text-[10px] text-muted-foreground">
 						{tSettings("captions.animation", "Animation")}
 					</div>
 					<Select
@@ -2053,10 +2055,10 @@ export function SettingsPanel({
 							})
 						}
 					>
-						<SelectTrigger className="h-9 w-[160px] rounded-xl border-white/10 bg-white/5 text-sm text-slate-200 hover:bg-white/10">
+						<SelectTrigger className="h-9 w-[160px] rounded-xl border-foreground/10 bg-foreground/5 text-sm text-foreground hover:bg-foreground/10">
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent className="border-white/10 bg-[#1a1a1f] text-slate-200">
+						<SelectContent className="border-foreground/10 bg-editor-surface-alt text-foreground">
 							{CAPTION_ANIMATION_OPTIONS.map((option) => (
 								<SelectItem key={option.value} value={option.value}>
 									{option.label}
@@ -2065,8 +2067,8 @@ export function SettingsPanel({
 						</SelectContent>
 					</Select>
 				</div>
-				<label className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-2">
-					<span className="text-[10px] text-slate-400">
+				<label className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-2">
+					<span className="text-[10px] text-muted-foreground">
 						{tSettings("captions.textColor", "Text color")}
 					</span>
 					<input
@@ -2075,10 +2077,10 @@ export function SettingsPanel({
 						onChange={(event) =>
 							updateAutoCaptionSettings({ textColor: event.target.value })
 						}
-						className="h-7 w-10 rounded border border-white/10 bg-transparent"
+						className="h-7 w-10 rounded border border-foreground/10 bg-transparent"
 					/>
 				</label>
-				<div className="mb-1 text-sm font-medium text-slate-200">
+				<div className="mb-1 text-sm font-medium text-foreground">
 					{tSettings("captions.fontSettings", "Font Settings")}
 				</div>
 				<SliderControl
@@ -2158,12 +2160,39 @@ export function SettingsPanel({
 		const settingsSectionContent = (
 			<div className="space-y-4">
 				<section className="flex flex-col gap-2">
+					<SectionLabel>{t("editor.theme.appearance", "Appearance")}</SectionLabel>
+					<div className="flex rounded-lg border border-foreground/10 bg-foreground/5 p-0.5">
+						{(
+							[
+								{ value: "light", label: t("editor.theme.light", "Light") },
+								{ value: "dark", label: t("editor.theme.dark", "Dark") },
+								{ value: "system", label: t("editor.theme.system", "System") },
+							] as const
+						).map((option) => (
+							<button
+								key={option.value}
+								type="button"
+								onClick={() => setThemePreference(option.value)}
+								className={cn(
+									"flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
+									themePreference === option.value
+										? "bg-neutral-800 text-white shadow-sm dark:bg-white dark:text-black"
+										: "text-muted-foreground hover:text-foreground",
+								)}
+							>
+								{option.label}
+							</button>
+						))}
+					</div>
+				</section>
+
+				<section className="flex flex-col gap-2">
 					<SectionLabel>{t("common.app.language", "Language")}</SectionLabel>
 					<Select value={locale} onValueChange={(value) => setLocale(value as AppLocale)}>
-						<SelectTrigger className="h-10 w-full rounded-xl border-white/10 bg-white/5 text-sm text-slate-200 hover:bg-white/10">
+						<SelectTrigger className="h-10 w-full rounded-xl border-foreground/10 bg-foreground/5 text-sm text-foreground hover:bg-foreground/10">
 							<SelectValue />
 						</SelectTrigger>
-						<SelectContent className="border-white/10 bg-[#1a1a1f] text-slate-200">
+						<SelectContent className="border-foreground/10 bg-editor-surface-alt text-foreground">
 							{SUPPORTED_LOCALES.map((candidateLocale) => (
 								<SelectItem key={candidateLocale} value={candidateLocale}>
 									{APP_LANGUAGE_LABELS[candidateLocale]}
@@ -2174,15 +2203,15 @@ export function SettingsPanel({
 				</section>
 
 				<section className="flex flex-col gap-1.5">
-					<div className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.03] px-2.5 py-2">
+					<div className="flex items-center justify-between gap-3 rounded-lg bg-foreground/[0.03] px-2.5 py-2">
 						<div>
-							<div className="text-[11px] font-medium text-slate-200">
+							<div className="text-[11px] font-medium text-foreground">
 								{tSettings(
 									"effects.autoApplyFreshRecordingZooms",
 									"Auto-apply fresh recording zooms",
 								)}
 							</div>
-							<div className="mt-0.5 text-[10px] text-slate-500">
+							<div className="mt-0.5 text-[10px] text-muted-foreground/70">
 								{tSettings(
 									"effects.autoApplyFreshRecordingZoomsDescription",
 									"Suggest cursor-follow zooms automatically when you open a new recording.",
@@ -2195,12 +2224,12 @@ export function SettingsPanel({
 							className="data-[state=checked]:bg-[#2563EB] scale-75"
 						/>
 					</div>
-					<div className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.03] px-2.5 py-2">
+					<div className="flex items-center justify-between gap-3 rounded-lg bg-foreground/[0.03] px-2.5 py-2">
 						<div>
-							<div className="text-[11px] font-medium text-slate-200">
+							<div className="text-[11px] font-medium text-foreground">
 								{tSettings("effects.connectZooms", "Connect neighboring zooms")}
 							</div>
-							<div className="mt-0.5 text-[10px] text-slate-500">
+							<div className="mt-0.5 text-[10px] text-muted-foreground/70">
 								{tSettings(
 									"effects.connectZoomsDescription",
 									"Smooth consecutive zoom regions into a continuous camera move.",
@@ -2219,7 +2248,7 @@ export function SettingsPanel({
 					<SectionLabel>{t("editor.keyboardShortcuts.title")}</SectionLabel>
 					<KeyboardShortcutsDialog
 						triggerLabel={t("editor.keyboardShortcuts.customize")}
-						triggerClassName="h-10 w-full justify-start rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-slate-200 hover:bg-white/10 hover:text-white"
+						triggerClassName="h-10 w-full justify-start rounded-xl border border-foreground/10 bg-foreground/5 px-3 text-sm text-foreground hover:bg-foreground/10 hover:text-foreground"
 					/>
 				</section>
 			</div>
@@ -2251,7 +2280,7 @@ export function SettingsPanel({
 							)}
 						</div>
 						<div className="mb-1">
-							<div className="flex rounded-lg border border-white/10 bg-white/5 p-0.5">
+							<div className="flex rounded-lg border border-foreground/10 bg-foreground/5 p-0.5">
 								<button
 									type="button"
 									onClick={() => onZoomModeChange?.("auto")}
@@ -2259,7 +2288,7 @@ export function SettingsPanel({
 										"flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
 										selectedZoomMode === "auto"
 											? "bg-[#2563EB] text-white shadow-sm"
-											: "text-slate-400 hover:text-slate-200",
+											: "text-muted-foreground hover:text-foreground",
 									)}
 								>
 									{tSettings("zoom.modeAuto", "Auto")}
@@ -2271,13 +2300,13 @@ export function SettingsPanel({
 										"flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
 										selectedZoomMode === "manual"
 											? "bg-[#2563EB] text-white shadow-sm"
-											: "text-slate-400 hover:text-slate-200",
+											: "text-muted-foreground hover:text-foreground",
 									)}
 								>
 									{tSettings("zoom.modeManual", "Manual")}
 								</button>
 							</div>
-							<p className="mt-1.5 text-[10px] text-slate-500">
+							<p className="mt-1.5 text-[10px] text-muted-foreground/70">
 								{selectedZoomMode === "manual"
 									? tSettings(
 											"zoom.modeManualDescription",
@@ -2301,7 +2330,7 @@ export function SettingsPanel({
 											"h-auto w-full rounded-lg border px-1 py-2 text-center shadow-sm transition-all duration-200 ease-out cursor-pointer",
 											isActive
 												? "border-[#2563EB] bg-[#2563EB] text-white"
-												: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
+												: "border-foreground/5 bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:border-foreground/10 hover:text-foreground",
 										)}
 									>
 										<span className="text-xs font-semibold">
@@ -2311,7 +2340,7 @@ export function SettingsPanel({
 								);
 							})}
 						</div>
-						<div className="h-px bg-white/[0.06] my-1" />
+						<div className="h-px bg-foreground/[0.06] my-1" />
 					</>
 				)}
 				<div className="flex items-center justify-between gap-3">
@@ -2324,8 +2353,8 @@ export function SettingsPanel({
 						{t("common.actions.reset", "Reset")}
 					</button>
 				</div>
-				<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-					<span className="text-[10px] text-slate-400">
+				<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+					<span className="text-[10px] text-muted-foreground">
 						{tSettings("effects.classicZoom", "Classic Animation")}
 					</span>
 					<Switch
@@ -2385,8 +2414,8 @@ export function SettingsPanel({
 						</span>
 					)}
 				</div>
-				<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-					<span className="text-[10px] text-slate-400">
+				<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+					<span className="text-[10px] text-muted-foreground">
 						{tSettings("clip.muteAudio", "Mute Audio")}
 					</span>
 					<Switch
@@ -2427,7 +2456,7 @@ export function SettingsPanel({
 									"h-auto w-full rounded-lg border px-0.5 py-2 text-center shadow-sm transition-all duration-200 ease-out cursor-pointer",
 									isActive
 										? "border-[#06b6d4] bg-[#06b6d4] text-white"
-										: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
+										: "border-foreground/5 bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:border-foreground/10 hover:text-foreground",
 								)}
 							>
 								<span className="text-[10px] font-semibold">{option.label}</span>
@@ -2483,7 +2512,7 @@ export function SettingsPanel({
 								</button>
 							</div>
 							<div className="flex items-center gap-3">
-								<label className="flex items-center gap-1.5 text-[10px] text-slate-400">
+								<label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
 									<span>{tSettings("effects.showCursor")}</span>
 									<Switch
 										checked={showCursor}
@@ -2491,7 +2520,7 @@ export function SettingsPanel({
 										className="data-[state=checked]:bg-[#2563EB] scale-75"
 									/>
 								</label>
-								<label className="flex items-center gap-1.5 text-[10px] text-slate-400">
+								<label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
 									<span>{tSettings("effects.loopCursor")}</span>
 									<Switch
 										checked={loopCursor}
@@ -2521,8 +2550,8 @@ export function SettingsPanel({
 											title={option.label}
 											aria-label={option.label}
 											className={cn(
-												"group aspect-square h-auto min-w-0 rounded-[10px] border border-white/10 bg-white/[0.03] p-3 text-left text-slate-200 shadow-none transition-all hover:border-white/20 hover:bg-white/[0.06]",
-												"data-[state=on]:border-[#2563EB]/70 data-[state=on]:bg-[#2563EB]/12 data-[state=on]:text-white",
+												"group aspect-square h-auto min-w-0 rounded-[10px] border border-foreground/10 bg-foreground/[0.03] p-3 text-left text-foreground shadow-none transition-all hover:border-foreground/20 hover:bg-foreground/[0.06]",
+												"data-[state=on]:border-[#2563EB]/70 data-[state=on]:bg-[#2563EB]/12 data-[state=on]:text-foreground",
 											)}
 										>
 											<div className="flex h-full flex-col items-center justify-between gap-3">
@@ -2632,8 +2661,8 @@ export function SettingsPanel({
 							</button>
 						</div>
 						<div className="flex flex-col gap-1.5">
-							<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-								<span className="text-[10px] text-slate-400">
+							<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+								<span className="text-[10px] text-muted-foreground">
 									{tSettings("effects.show", "Show")}
 								</span>
 								<Switch
@@ -2642,8 +2671,8 @@ export function SettingsPanel({
 									className="data-[state=checked]:bg-[#2563EB] scale-75"
 								/>
 							</div>
-							<div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-2.5 py-1.5">
-								<span className="text-[10px] text-slate-400">
+							<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+								<span className="text-[10px] text-muted-foreground">
 									{tSettings("effects.webcamReactToZoom")}
 								</span>
 								<Switch
@@ -2663,8 +2692,8 @@ export function SettingsPanel({
 								formatValue={(v) => `${Math.round(v)}%`}
 								parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
 							/>
-							<div className="rounded-lg bg-white/[0.03] px-2.5 py-2">
-								<div className="mb-2 text-[10px] text-slate-400">
+							<div className="rounded-lg bg-foreground/[0.03] px-2.5 py-2">
+								<div className="mb-2 text-[10px] text-muted-foreground">
 									{tSettings("effects.webcamPosition", "Position")}
 								</div>
 								<div className="grid grid-cols-3 gap-1.5">
@@ -2681,7 +2710,7 @@ export function SettingsPanel({
 													"h-8 rounded-lg border px-0 text-sm font-semibold transition-all",
 													isActive
 														? "border-[#2563EB] bg-[#2563EB] text-white"
-														: "border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10",
+														: "border-foreground/10 bg-foreground/5 text-muted-foreground hover:border-foreground/20 hover:bg-foreground/10",
 												)}
 											>
 												{option.label}
@@ -2690,7 +2719,7 @@ export function SettingsPanel({
 									})}
 								</div>
 								<div className="mt-2 flex items-center justify-between rounded-lg bg-black/10 px-2.5 py-1.5">
-									<span className="text-[10px] text-slate-400">
+									<span className="text-[10px] text-muted-foreground">
 										{tSettings(
 											"effects.webcamCustomPosition",
 											"Custom position",
@@ -2776,13 +2805,13 @@ export function SettingsPanel({
 								formatValue={(v) => `${Math.round(v * 100)}%`}
 								parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100}
 							/>
-							<div className="rounded-lg bg-white/[0.03] px-2.5 py-2">
+							<div className="rounded-lg bg-foreground/[0.03] px-2.5 py-2">
 								<div className="flex items-center justify-between gap-2">
 									<div>
-										<div className="text-[10px] text-slate-300">
+										<div className="text-[10px] text-muted-foreground">
 											{tSettings("effects.webcamFootage")}
 										</div>
-										<div className="mt-0.5 text-[10px] text-slate-500">
+										<div className="mt-0.5 text-[10px] text-muted-foreground/70">
 											{webcamFileName ??
 												tSettings("effects.webcamFootageDescription")}
 										</div>
@@ -2792,7 +2821,7 @@ export function SettingsPanel({
 											type="button"
 											variant="outline"
 											onClick={onUploadWebcam}
-											className="h-7 gap-1.5 border-white/10 bg-white/5 px-2 text-[10px] text-slate-200 hover:bg-white/10 hover:text-white"
+											className="h-7 gap-1.5 border-foreground/10 bg-foreground/5 px-2 text-[10px] text-foreground hover:bg-foreground/10 hover:text-foreground"
 										>
 											<Upload className="h-3 w-3" />
 											{webcam?.sourcePath
@@ -2804,7 +2833,7 @@ export function SettingsPanel({
 												type="button"
 												variant="outline"
 												onClick={onClearWebcam}
-												className="h-7 gap-1.5 border-white/10 bg-white/5 px-2 text-[10px] text-slate-200 hover:bg-white/10 hover:text-white"
+												className="h-7 gap-1.5 border-foreground/10 bg-foreground/5 px-2 text-[10px] text-foreground hover:bg-foreground/10 hover:text-foreground"
 											>
 												<Trash2 className="h-3 w-3" />
 												{tSettings("effects.removeWebcamFootage")}
@@ -2845,7 +2874,7 @@ export function SettingsPanel({
 	})();
 
 	return (
-		<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-[#161619] rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
+		<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-editor-panel rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
 			<div
 				className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 pb-0"
 				style={{ scrollbarGutter: "stable" }}
@@ -2865,7 +2894,7 @@ export function SettingsPanel({
 
 			<div
 				className={cn(
-					"flex-shrink-0 border-t border-white/10 bg-[#151518] p-4 pt-3",
+					"flex-shrink-0 border-t border-foreground/10 bg-editor-header p-4 pt-3",
 					!selectedTrimId && !selectedSpeedId && "hidden",
 				)}
 			>
@@ -2886,7 +2915,7 @@ export function SettingsPanel({
 				{selectedSpeedId && (
 					<div>
 						<div className="mb-3 flex items-center justify-between">
-							<span className="text-sm font-medium text-slate-200">
+							<span className="text-sm font-medium text-foreground">
 								{tSettings("speed.playbackSpeed")}
 							</span>
 							{selectedSpeedValue && (
@@ -2908,7 +2937,7 @@ export function SettingsPanel({
 											"h-auto w-full rounded-lg border px-1 py-2 text-center shadow-sm transition-all duration-200 ease-out cursor-pointer",
 											isActive
 												? "border-[#d97706] bg-[#d97706] text-white"
-												: "border-white/5 bg-white/5 text-slate-400 hover:bg-white/10 hover:border-white/10 hover:text-slate-200",
+												: "border-foreground/5 bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:border-foreground/10 hover:text-foreground",
 										)}
 									>
 										<span className="text-xs font-semibold">

@@ -370,7 +370,7 @@ export default function TimelineWrapper({
 				{/* Floating tooltip shown during drag/resize */}
 				<div
 					ref={tooltipRef}
-					className="absolute top-1 pointer-events-none z-[60] px-1.5 py-0.5 rounded bg-black/80 text-[10px] text-white/90 font-medium tabular-nums whitespace-nowrap border border-white/10 shadow-lg"
+					className="absolute top-1 pointer-events-none z-[60] px-1.5 py-0.5 rounded bg-editor-bg/90 text-[10px] text-foreground/90 font-medium tabular-nums whitespace-nowrap border border-foreground/10 shadow-lg"
 					style={{ opacity: 0, transition: "opacity 0.1s" }}
 				/>
 			</div>

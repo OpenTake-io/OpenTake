@@ -66,12 +66,12 @@ export function ExportSettingsMenu({
 	return (
 		<div
 			className={cn(
-				"w-full rounded-2xl border border-white/10 bg-[#17171a] p-3 text-slate-200",
+				"w-full rounded-2xl border border-foreground/10 bg-editor-surface p-3 text-foreground",
 				className,
 			)}
 		>
 			<div className="mb-2 flex items-center justify-between">
-				<span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+				<span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
 					{tSettings("export.title", "Export")}
 				</span>
 			</div>
@@ -96,7 +96,7 @@ export function ExportSettingsMenu({
 									"relative flex-1 overflow-hidden rounded-xl border py-2 text-xs font-medium transition-colors",
 									isActive
 										? "border-[#2563EB]/50 text-white"
-										: "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200",
+										: "border-foreground/10 bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground",
 								)}
 							>
 								{isActive ? (
@@ -118,7 +118,7 @@ export function ExportSettingsMenu({
 
 			{exportFormat === "mp4" ? (
 				<LayoutGroup id="header-export-quality-toggle">
-					<div className="mb-3 grid min-h-12 w-full grid-cols-4 rounded-xl border border-white/5 bg-white/5 p-0.5">
+					<div className="mb-3 grid min-h-12 w-full grid-cols-4 rounded-xl border border-foreground/5 bg-foreground/5 p-0.5">
 						{(
 							[
 								{ value: "medium", label: tSettings("export.quality.low") },
@@ -139,7 +139,7 @@ export function ExportSettingsMenu({
 									{isActive ? (
 										<motion.span
 											layoutId="header-export-quality-pill"
-											className="absolute inset-0 rounded-lg bg-white"
+										className="absolute inset-0 rounded-lg bg-neutral-800 dark:bg-white"
 											transition={{
 												type: "spring",
 												stiffness: 420,
@@ -151,17 +151,17 @@ export function ExportSettingsMenu({
 										<span
 											className={cn(
 												isActive
-													? "text-black"
-													: "text-slate-400 hover:text-slate-200",
-											)}
-										>
-											{option.label}
-										</span>
-										{mp4OutputDimensions ? (
-											<span
-												className={cn(
-													"mt-0.5 text-[9px]",
-													isActive ? "text-black/75" : "text-slate-500",
+												? "text-white dark:text-black"
+												: "text-muted-foreground hover:text-foreground",
+										)}
+									>
+										{option.label}
+									</span>
+									{mp4OutputDimensions ? (
+										<span
+											className={cn(
+												"mt-0.5 text-[9px]",
+												isActive ? "text-white/75 dark:text-black/75" : "text-muted-foreground/70",
 												)}
 											>
 												{mp4OutputDimensions[option.value].width} x{" "}
@@ -174,11 +174,11 @@ export function ExportSettingsMenu({
 						})}
 					</div>
 					<div className="mb-1 flex items-center justify-between px-1">
-						<span className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">
+						<span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground/70">
 							{tSettings("export.encodingTitle", "Encoding")}
 						</span>
 					</div>
-					<div className="mb-3 grid min-h-10 w-full grid-cols-3 rounded-xl border border-white/5 bg-white/5 p-0.5">
+					<div className="mb-3 grid min-h-10 w-full grid-cols-3 rounded-xl border border-foreground/5 bg-foreground/5 p-0.5">
 						{(
 							[
 								{ value: "fast", label: tSettings("export.encoding.fast", "Fast") },
@@ -204,7 +204,7 @@ export function ExportSettingsMenu({
 									{isActive ? (
 										<motion.span
 											layoutId="header-export-encoding-pill"
-											className="absolute inset-0 rounded-lg bg-white"
+										className="absolute inset-0 rounded-lg bg-neutral-800 dark:bg-white"
 											transition={{
 												type: "spring",
 												stiffness: 420,
@@ -216,8 +216,8 @@ export function ExportSettingsMenu({
 										className={cn(
 											"relative z-10",
 											isActive
-												? "text-black"
-												: "text-slate-400 hover:text-slate-200",
+												? "text-white dark:text-black"
+												: "text-muted-foreground hover:text-foreground",
 										)}
 									>
 										{option.label}
@@ -227,11 +227,11 @@ export function ExportSettingsMenu({
 						})}
 					</div>
 					<div className="mb-1 flex items-center justify-between px-1">
-						<span className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">
+						<span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground/70">
 							{tSettings("export.fpsTitle", "FPS")}
 						</span>
 					</div>
-					<div className="mb-3 grid min-h-10 w-full grid-cols-3 rounded-xl border border-white/5 bg-white/5 p-0.5">
+					<div className="mb-3 grid min-h-10 w-full grid-cols-3 rounded-xl border border-foreground/5 bg-foreground/5 p-0.5">
 						{MP4_FRAME_RATES.map((rate) => {
 							const isActive = mp4FrameRate === rate;
 							return (
@@ -245,7 +245,7 @@ export function ExportSettingsMenu({
 									{isActive ? (
 										<motion.span
 											layoutId="header-export-fps-pill"
-											className="absolute inset-0 rounded-lg bg-white"
+										className="absolute inset-0 rounded-lg bg-neutral-800 dark:bg-white"
 											transition={{
 												type: "spring",
 												stiffness: 420,
@@ -257,8 +257,8 @@ export function ExportSettingsMenu({
 										className={cn(
 											"relative z-10",
 											isActive
-												? "text-black"
-												: "text-slate-400 hover:text-slate-200",
+												? "text-white dark:text-black"
+												: "text-muted-foreground hover:text-foreground",
 										)}
 									>
 										{rate}
@@ -268,11 +268,11 @@ export function ExportSettingsMenu({
 						})}
 					</div>
 					<div className="mb-1 flex items-center justify-between px-1">
-						<span className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">
+						<span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground/70">
 							{tSettings("export.pipelineTitle", "Pipeline")}
 						</span>
 					</div>
-					<div className="mb-3 grid min-h-10 w-full grid-cols-2 rounded-xl border border-white/5 bg-white/5 p-0.5">
+					<div className="mb-3 grid min-h-10 w-full grid-cols-2 rounded-xl border border-foreground/5 bg-foreground/5 p-0.5">
 						{(
 							[
 								{
@@ -297,7 +297,7 @@ export function ExportSettingsMenu({
 									{isActive ? (
 										<motion.span
 											layoutId="header-export-pipeline-pill"
-											className="absolute inset-0 rounded-lg bg-white"
+										className="absolute inset-0 rounded-lg bg-neutral-800 dark:bg-white"
 											transition={{
 												type: "spring",
 												stiffness: 420,
@@ -309,8 +309,8 @@ export function ExportSettingsMenu({
 										className={cn(
 											"relative z-10",
 											isActive
-												? "text-black"
-												: "text-slate-400 hover:text-slate-200",
+												? "text-white dark:text-black"
+												: "text-muted-foreground hover:text-foreground",
 										)}
 									>
 										{option.label}
@@ -319,7 +319,7 @@ export function ExportSettingsMenu({
 							);
 						})}
 					</div>
-					<p className="mb-3 px-1 text-[10px] text-slate-500">
+					<p className="mb-3 px-1 text-[10px] text-muted-foreground/70">
 						{isLegacyModel
 							? tSettings(
 									"export.pipeline.legacyHint",
@@ -335,7 +335,7 @@ export function ExportSettingsMenu({
 				<div className="mb-3 space-y-2">
 					<div className="flex items-center gap-2">
 						<LayoutGroup id="header-gif-frame-rate-toggle">
-							<div className="grid h-8 flex-1 grid-cols-4 rounded-xl border border-white/5 bg-white/5 p-0.5">
+							<div className="grid h-8 flex-1 grid-cols-4 rounded-xl border border-foreground/5 bg-foreground/5 p-0.5">
 								{GIF_FRAME_RATES.map((rate) => {
 									const isActive = gifFrameRate === rate.value;
 									return (
@@ -349,7 +349,7 @@ export function ExportSettingsMenu({
 											{isActive ? (
 												<motion.span
 													layoutId="header-gif-frame-rate-pill"
-													className="absolute inset-0 rounded-lg bg-white"
+											className="absolute inset-0 rounded-lg bg-neutral-800 dark:bg-white"
 													transition={{
 														type: "spring",
 														stiffness: 420,
@@ -361,8 +361,8 @@ export function ExportSettingsMenu({
 												className={cn(
 													"relative z-10",
 													isActive
-														? "text-black"
-														: "text-slate-400 hover:text-slate-200",
+														? "text-white dark:text-black"
+														: "text-muted-foreground hover:text-foreground",
 												)}
 											>
 												{rate.value}
@@ -373,7 +373,7 @@ export function ExportSettingsMenu({
 							</div>
 						</LayoutGroup>
 						<LayoutGroup id="header-gif-size-toggle">
-							<div className="grid h-8 flex-1 grid-cols-3 rounded-xl border border-white/5 bg-white/5 p-0.5">
+							<div className="grid h-8 flex-1 grid-cols-3 rounded-xl border border-foreground/5 bg-foreground/5 p-0.5">
 								{Object.entries(GIF_SIZE_PRESETS).map(([key]) => {
 									const isActive = gifSizePreset === key;
 									return (
@@ -389,7 +389,7 @@ export function ExportSettingsMenu({
 											{isActive ? (
 												<motion.span
 													layoutId="header-gif-size-pill"
-													className="absolute inset-0 rounded-lg bg-white"
+											className="absolute inset-0 rounded-lg bg-neutral-800 dark:bg-white"
 													transition={{
 														type: "spring",
 														stiffness: 420,
@@ -401,8 +401,8 @@ export function ExportSettingsMenu({
 												className={cn(
 													"relative z-10",
 													isActive
-														? "text-black"
-														: "text-slate-400 hover:text-slate-200",
+														? "text-white dark:text-black"
+														: "text-muted-foreground hover:text-foreground",
 												)}
 											>
 												{key === "original"
@@ -427,11 +427,11 @@ export function ExportSettingsMenu({
 						</LayoutGroup>
 					</div>
 					<div className="flex items-center justify-between px-1">
-						<span className="text-[10px] text-slate-500">
+						<span className="text-[10px] text-muted-foreground/70">
 							{gifOutputDimensions.width} × {gifOutputDimensions.height}px
 						</span>
 						<div className="flex items-center gap-2">
-							<span className="text-[10px] text-slate-400">
+							<span className="text-[10px] text-muted-foreground">
 								{tSettings("export.loop")}
 							</span>
 							<Switch
