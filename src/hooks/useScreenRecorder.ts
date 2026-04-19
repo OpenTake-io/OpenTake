@@ -2,6 +2,7 @@ import { fixWebmDuration } from "@fix-webm-duration/fix";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getEffectiveRecordingDurationMs } from "@/lib/mediaTiming";
+import { selectRecordingMimeType } from "./recordingMimeType";
 
 const TARGET_FRAME_RATE = 60;
 const TARGET_WIDTH = 3840;
@@ -32,6 +33,14 @@ const WEBCAM_WIDTH = 1280;
 const WEBCAM_HEIGHT = 720;
 const WEBCAM_FRAME_RATE = 30;
 const WEBCAM_SUFFIX = "-webcam";
+const LINUX_PORTAL_SOURCE: ProcessedDesktopSource = {
+	id: "screen:linux-portal",
+	name: "Linux Portal",
+	display_id: "",
+	thumbnail: null,
+	appIcon: null,
+	sourceType: "screen",
+};
 
 type PauseSegment = {
 	startMs: number;
@@ -262,15 +271,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	}, []);
 
 	const selectMimeType = useCallback(() => {
-		const preferred = [
-			"video/webm;codecs=av1",
-			"video/webm;codecs=h264",
-			"video/webm;codecs=vp9",
-			"video/webm;codecs=vp8",
-			"video/webm",
-		];
-
-		return preferred.find((type) => MediaRecorder.isTypeSupported(type)) ?? "video/webm";
+		return selectRecordingMimeType();
 	}, []);
 
 	const computeBitrate = (width: number, height: number) => {
@@ -542,8 +543,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			pendingWebcamPathPromise.current = webcamStopPromise.current;
 
 			const recorder = new MediaRecorder(webcamStream.current, {
-				mimeType,
 				videoBitsPerSecond: WEBCAM_BITRATE,
+				...(mimeType ? { mimeType } : {}),
 			});
 
 			webcamRecorder.current = recorder;
@@ -570,7 +571,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						0,
 						getRecordingDurationMs(Date.now()) - webcamTimeOffsetMs.current,
 					);
-					const webcamBlob = new Blob(webcamChunks.current, { type: mimeType });
+					const webcamBlobType = recorder.mimeType || mimeType;
+					const webcamBlob = new Blob(
+						webcamChunks.current,
+						webcamBlobType ? { type: webcamBlobType } : undefined,
+					);
 					webcamChunks.current = [];
 					const fixedBlob = await fixWebmDuration(webcamBlob, duration);
 					const arrayBuffer = await fixedBlob.arrayBuffer();
@@ -838,10 +843,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			const platform = await window.electronAPI.getPlatform();
 			const existingSource = await window.electronAPI.getSelectedSource();
 			const selectedSource =
-				existingSource ??
-				(platform === "linux"
-					? { id: "screen:linux-portal", name: "Linux Portal" } as ProcessedDesktopSource
-					: null);
+				existingSource ?? (platform === "linux" ? LINUX_PORTAL_SOURCE : null);
 			if (!selectedSource) {
 				alert("Please select a source to record");
 				return;
@@ -1208,7 +1210,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			const mimeType = selectMimeType();
 
 			console.log(
-				`Recording at ${width}x${height} @ ${frameRate ?? TARGET_FRAME_RATE}fps using ${mimeType} / ${Math.round(
+				`Recording at ${width}x${height} @ ${frameRate ?? TARGET_FRAME_RATE}fps using ${mimeType ?? "browser default"} / ${Math.round(
 					videoBitsPerSecond / BITS_PER_MEGABIT,
 				)} Mbps`,
 			);
@@ -1216,8 +1218,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			chunks.current = [];
 			const hasAudio = stream.current.getAudioTracks().length > 0;
 			const recorder = new MediaRecorder(stream.current, {
-				mimeType,
 				videoBitsPerSecond,
+				...(mimeType ? { mimeType } : {}),
 				...(hasAudio
 					? {
 							audioBitsPerSecond: systemAudioIncluded
@@ -1239,7 +1241,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 				const duration = getRecordingDurationMs(Date.now());
 				const recordedChunks = chunks.current;
-				const buggyBlob = new Blob(recordedChunks, { type: mimeType });
+				const recordingBlobType = recorder.mimeType || mimeType;
+				const buggyBlob = new Blob(
+					recordedChunks,
+					recordingBlobType ? { type: recordingBlobType } : undefined,
+				);
 				chunks.current = [];
 				const timestamp = recordingSessionTimestamp.current ?? Date.now();
 				const videoFileName = `${RECORDING_FILE_PREFIX}${timestamp}${VIDEO_FILE_EXTENSION}`;
