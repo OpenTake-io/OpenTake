@@ -13,6 +13,10 @@ import type {
 	ZoomTransitionEasing,
 } from "@/components/video-editor/types";
 import { AudioProcessor, isAacAudioEncodingSupported } from "./audioEncoder";
+import {
+	type FinalizationTimeoutWorkload,
+	getExportFinalizationTimeoutMs,
+} from "./finalizationTimeout";
 import { FrameRenderer } from "./frameRenderer";
 import type { SupportedMp4EncoderPath } from "./mp4Support";
 import { VideoMuxer } from "./muxer";
@@ -95,7 +99,7 @@ export class VideoExporter {
 	private videoColorSpace: VideoColorSpaceInit | undefined;
 	private pendingMuxing: Promise<void> = Promise.resolve();
 	private chunkCount = 0;
-	private readonly FINALIZATION_TIMEOUT_MS = 600_000;
+	private effectiveDurationSec = 0;
 	private exportStartTimeMs = 0;
 	private progressSampleStartTimeMs = 0;
 	private progressSampleStartFrame = 0;
@@ -142,9 +146,9 @@ export class VideoExporter {
 				? await this.tryStartNativeVideoExport()
 				: false;
 			const shouldUseFfmpegAudioFallback =
-				!useNativeEncoder
-				&& audioPlan.audioMode !== "none"
-				&& !(await isAacAudioEncodingSupported());
+				!useNativeEncoder &&
+				audioPlan.audioMode !== "none" &&
+				!(await isAacAudioEncodingSupported());
 
 			if (!useNativeEncoder) {
 				await this.initializeEncoder();
@@ -211,6 +215,7 @@ export class VideoExporter {
 				this.config.trimRegions,
 				this.config.speedRegions,
 			);
+			this.effectiveDurationSec = effectiveDuration;
 			const totalFrames = Math.ceil(effectiveDuration * this.config.frameRate);
 
 			console.log("[VideoExporter] Original duration:", videoInfo.duration, "s");
@@ -318,6 +323,7 @@ export class VideoExporter {
 							this.config.sourceAudioFallbackPaths,
 						),
 						"audio processing",
+						"audio",
 					);
 				}
 			}
@@ -327,6 +333,7 @@ export class VideoExporter {
 			const blob = await this.awaitWithFinalizationTimeout(
 				this.muxer!.finalize(),
 				"muxer finalization",
+				hasAudio && !shouldUseFfmpegAudioFallback ? "audio" : "default",
 			);
 
 			if (shouldUseFfmpegAudioFallback) {
@@ -366,8 +373,16 @@ export class VideoExporter {
 		);
 	}
 
-	private async awaitWithFinalizationTimeout<T>(promise: Promise<T>, stage: string): Promise<T> {
+	private async awaitWithFinalizationTimeout<T>(
+		promise: Promise<T>,
+		stage: string,
+		workload: FinalizationTimeoutWorkload = "default",
+	): Promise<T> {
 		let timeoutId: ReturnType<typeof setTimeout> | null = null;
+		const timeoutMs = getExportFinalizationTimeoutMs({
+			effectiveDurationSec: this.effectiveDurationSec,
+			workload,
+		});
 
 		try {
 			return await Promise.race([
@@ -376,10 +391,10 @@ export class VideoExporter {
 					timeoutId = setTimeout(() => {
 						reject(
 							new Error(
-								`Export timed out during ${stage} after ${Math.round(this.FINALIZATION_TIMEOUT_MS / 60_000)} minutes`,
+								`Export timed out during ${stage} after ${Math.ceil(timeoutMs / 60_000)} minutes`,
 							),
 						);
-					}, this.FINALIZATION_TIMEOUT_MS);
+					}, timeoutMs);
 				}),
 			]);
 		} finally {
@@ -578,7 +593,8 @@ export class VideoExporter {
 						);
 						if (!writeResult.success && !this.cancelled) {
 							throw new Error(
-								writeResult.error || "Failed to write H.264 chunk to native encoder",
+								writeResult.error ||
+									"Failed to write H.264 chunk to native encoder",
 							);
 						}
 					})
@@ -603,8 +619,7 @@ export class VideoExporter {
 		try {
 			encoder.configure(encoderConfig);
 		} catch (error) {
-			this.nativeEncoderError =
-				error instanceof Error ? error : new Error(String(error));
+			this.nativeEncoderError = error instanceof Error ? error : new Error(String(error));
 			try {
 				encoder.close();
 			} catch (closeError) {
@@ -644,7 +659,7 @@ export class VideoExporter {
 		// Apply backpressure: don't queue too far ahead of FFmpeg's stdin pipe
 		while (
 			this.nativeH264Encoder.encodeQueueSize >=
-				Math.max(1, Math.floor(this.config.maxEncodeQueue ?? DEFAULT_MAX_ENCODE_QUEUE))
+			Math.max(1, Math.floor(this.config.maxEncodeQueue ?? DEFAULT_MAX_ENCODE_QUEUE))
 		) {
 			await new Promise<void>((r) => setTimeout(r, 2));
 			if (this.cancelled) return;
@@ -693,6 +708,7 @@ export class VideoExporter {
 					this.config.sourceAudioFallbackPaths,
 				),
 				"native edited audio rendering",
+				"audio",
 			);
 			editedAudioBuffer = await audioBlob.arrayBuffer();
 			editedAudioMimeType = audioBlob.type || null;
@@ -714,6 +730,7 @@ export class VideoExporter {
 				editedAudioMimeType,
 			}),
 			"native export finalization",
+			audioPlan.audioMode === "none" ? "default" : "audio",
 		);
 
 		if (!result.success || !result.data) {
@@ -761,6 +778,7 @@ export class VideoExporter {
 					this.config.sourceAudioFallbackPaths,
 				),
 				"ffmpeg edited audio rendering",
+				"audio",
 			);
 			editedAudioBuffer = await audioBlob.arrayBuffer();
 			editedAudioMimeType = audioBlob.type || null;
@@ -774,11 +792,13 @@ export class VideoExporter {
 					audioPlan.audioMode === "copy-source" || audioPlan.audioMode === "trim-source"
 						? audioPlan.audioSourcePath
 						: null,
-				trimSegments: audioPlan.audioMode === "trim-source" ? audioPlan.trimSegments : undefined,
+				trimSegments:
+					audioPlan.audioMode === "trim-source" ? audioPlan.trimSegments : undefined,
 				editedAudioData: editedAudioBuffer,
 				editedAudioMimeType,
 			}),
 			"ffmpeg audio muxing",
+			"audio",
 		);
 
 		if (!result.success || !result.data) {
@@ -984,7 +1004,8 @@ export class VideoExporter {
 						}
 					} catch (error) {
 						console.error("Muxing error:", error);
-						const muxingError = error instanceof Error ? error : new Error(String(error));
+						const muxingError =
+							error instanceof Error ? error : new Error(String(error));
 						if (!this.encoderError) {
 							this.encoderError = muxingError;
 						}
@@ -1127,6 +1148,7 @@ export class VideoExporter {
 		this.pendingMuxing = Promise.resolve();
 		this.nativePendingWrite = Promise.resolve();
 		this.chunkCount = 0;
+		this.effectiveDurationSec = 0;
 		this.encoderError = null;
 		this.videoDescription = undefined;
 		this.videoColorSpace = undefined;
