@@ -57,7 +57,7 @@ describe("pruneAutoRecordings", () => {
 		await fs.mkdir(projectsDir, { recursive: true });
 
 		const recordingPaths: string[] = [];
-		for (let index = 0; index < 22; index += 1) {
+		for (let index = 0; index < 23; index += 1) {
 			const recordingPath = path.join(recordingsDir, `recording-${index}.mp4`);
 			recordingPaths.push(recordingPath);
 			await fs.writeFile(recordingPath, `video-${index}`);
@@ -65,14 +65,31 @@ describe("pruneAutoRecordings", () => {
 			await fs.utimes(recordingPath, timestamp, timestamp);
 		}
 
-		const protectedRecordingPath = recordingPaths.at(-2);
+		const protectedVideoRecordingPath = recordingPaths.at(-3);
+		const protectedWebcamRecordingPath = recordingPaths.at(-2);
 		const prunableRecordingPath = recordingPaths.at(-1);
 
 		await fs.writeFile(
-			path.join(projectsDir, `saved-project.${PROJECT_FILE_EXTENSION}`),
+			path.join(projectsDir, `saved-project-video.${PROJECT_FILE_EXTENSION}`),
 			JSON.stringify(
 				{
-					videoPath: protectedRecordingPath,
+					videoPath: protectedVideoRecordingPath,
+				},
+				null,
+				2,
+			),
+			"utf-8",
+		);
+
+		await fs.writeFile(
+			path.join(projectsDir, `saved-project-webcam.${PROJECT_FILE_EXTENSION}`),
+			JSON.stringify(
+				{
+					editor: {
+						webcam: {
+							sourcePath: protectedWebcamRecordingPath,
+						},
+					},
 				},
 				null,
 				2,
@@ -82,7 +99,32 @@ describe("pruneAutoRecordings", () => {
 
 		await pruneAutoRecordings();
 
-		await expect(fs.access(protectedRecordingPath!)).resolves.toBeUndefined();
+		await expect(fs.access(protectedVideoRecordingPath!)).resolves.toBeUndefined();
+		await expect(fs.access(protectedWebcamRecordingPath!)).resolves.toBeUndefined();
 		await expect(fs.access(prunableRecordingPath!)).rejects.toThrow();
+	});
+
+	it("aborts pruning when a saved project cannot be parsed", async () => {
+		const { getRecordingsDir } = await import("../utils");
+		const { PROJECTS_DIRECTORY_NAME, PROJECT_FILE_EXTENSION } = await import("../constants");
+		const { pruneAutoRecordings } = await import("./prune");
+
+		const recordingsDir = await getRecordingsDir();
+		const projectsDir = path.join(recordingsDir, PROJECTS_DIRECTORY_NAME);
+		await fs.mkdir(projectsDir, { recursive: true });
+
+		const recordingPath = path.join(recordingsDir, "recording-stale.mp4");
+		await fs.writeFile(recordingPath, "video");
+		const staleTimestamp = new Date(Date.now() - 48 * 60 * 60 * 1_000);
+		await fs.utimes(recordingPath, staleTimestamp, staleTimestamp);
+
+		await fs.writeFile(
+			path.join(projectsDir, `broken-project.${PROJECT_FILE_EXTENSION}`),
+			"{ invalid json",
+			"utf-8",
+		);
+
+		await expect(pruneAutoRecordings()).rejects.toThrow();
+		await expect(fs.access(recordingPath)).resolves.toBeUndefined();
 	});
 });
