@@ -46,7 +46,18 @@ async function loadSavedProjectMediaPaths() {
 		...LEGACY_PROJECT_FILE_EXTENSIONS,
 	]);
 
-	const projectEntries = await fs.readdir(projectsDir, { withFileTypes: true }).catch(() => []);
+	let projectEntries: Array<{ isFile(): boolean; name: string }>;
+	try {
+		projectEntries = await fs.readdir(projectsDir, { withFileTypes: true });
+	} catch (error) {
+		const code =
+			typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+		if (code === "ENOENT") {
+			return protectedPaths;
+		}
+
+		throw error;
+	}
 
 	await Promise.all(
 		projectEntries
@@ -60,37 +71,29 @@ async function loadSavedProjectMediaPaths() {
 			})
 			.map(async (entry) => {
 				const projectPath = path.join(projectsDir, entry.name);
+				const rawProject = JSON.parse(await fs.readFile(projectPath, "utf-8")) as {
+					videoPath?: unknown;
+					editor?: { webcam?: { sourcePath?: unknown } };
+				};
+				const candidatePaths = [
+					rawProject.videoPath,
+					rawProject.editor?.webcam?.sourcePath,
+				];
 
-				try {
-					const rawProject = JSON.parse(await fs.readFile(projectPath, "utf-8")) as {
-						videoPath?: unknown;
-						editor?: { webcam?: { sourcePath?: unknown } };
-					};
-					const candidatePaths = [
-						rawProject.videoPath,
-						rawProject.editor?.webcam?.sourcePath,
-					];
-
-					for (const candidatePath of candidatePaths) {
-						if (
-							typeof candidatePath !== "string" ||
-							candidatePath.trim().length === 0
-						) {
-							continue;
-						}
-
-						const normalizedCandidatePath = normalizePath(
-							normalizeVideoSourcePath(candidatePath) ?? candidatePath,
-						);
-						protectedPaths.add(normalizedCandidatePath);
-						try {
-							protectedPaths.add(await fs.realpath(normalizedCandidatePath));
-						} catch {
-							// Ignore missing project media; project loading already surfaces that error.
-						}
+				for (const candidatePath of candidatePaths) {
+					if (typeof candidatePath !== "string" || candidatePath.trim().length === 0) {
+						continue;
 					}
-				} catch {
-					// Ignore malformed project files during retention pruning.
+
+					const normalizedCandidatePath = normalizePath(
+						normalizeVideoSourcePath(candidatePath) ?? candidatePath,
+					);
+					protectedPaths.add(normalizedCandidatePath);
+					try {
+						protectedPaths.add(await fs.realpath(normalizedCandidatePath));
+					} catch {
+						// Ignore missing project media; project loading already surfaces that error.
+					}
 				}
 			}),
 	);
