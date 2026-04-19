@@ -840,7 +840,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			const selectedSource =
 				existingSource ??
 				(platform === "linux"
-					? { id: "screen:linux-portal", name: "Linux Portal" }
+					? { id: "screen:linux-portal", name: "Linux Portal" } as ProcessedDesktopSource
 					: null);
 			if (!selectedSource) {
 				alert("Please select a source to record");
