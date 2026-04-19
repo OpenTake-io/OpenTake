@@ -52,6 +52,10 @@ describe("editorPreferences", () => {
 		).toEqual(DEFAULT_EDITOR_PREFERENCES);
 	});
 
+	it("defaults MP4 exports to source quality", () => {
+		expect(DEFAULT_EDITOR_PREFERENCES.exportQuality).toBe("source");
+	});
+
 	it("loads stored editor control preferences", () => {
 		vi.stubGlobal(
 			"localStorage",
