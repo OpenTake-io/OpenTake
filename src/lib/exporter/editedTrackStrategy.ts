@@ -26,8 +26,29 @@ function isSafeFiltergraphSpeed(speed: number): boolean {
 	);
 }
 
-function hasSafeFiltergraphSpeedRegions(speedRegions: SpeedRegion[]): boolean {
-	return speedRegions.every((region) => isSafeFiltergraphSpeed(region.speed));
+function hasFiniteTimelineRange(startMs: number, endMs: number, sourceDurationMs: number): boolean {
+	return (
+		Number.isFinite(startMs) &&
+		Number.isFinite(endMs) &&
+		startMs >= 0 &&
+		endMs > startMs &&
+		endMs <= sourceDurationMs
+	);
+}
+
+function hasSafeFiltergraphSpeedRegions(
+	speedRegions: SpeedRegion[],
+	sourceDurationMs: number,
+): boolean {
+	if (!Number.isFinite(sourceDurationMs) || sourceDurationMs <= 0) {
+		return false;
+	}
+
+	return speedRegions.every(
+		(region) =>
+			hasFiniteTimelineRange(region.startMs, region.endMs, sourceDurationMs) &&
+			isSafeFiltergraphSpeed(region.speed),
+	);
 }
 
 function buildKeptRanges(
@@ -64,6 +85,20 @@ export function buildEditedTrackSourceSegments(
 	trimRegions: TrimRegion[],
 	speedRegions: SpeedRegion[],
 ): EditedTrackSourceSegment[] {
+	if (!Number.isFinite(sourceDurationMs) || sourceDurationMs <= 0) {
+		return [];
+	}
+
+	if (
+		speedRegions.some(
+			(region) =>
+				!hasFiniteTimelineRange(region.startMs, region.endMs, sourceDurationMs) ||
+				!isSafeFiltergraphSpeed(region.speed),
+		)
+	) {
+		return [];
+	}
+
 	const segments: EditedTrackSourceSegment[] = [];
 	const keptRanges = buildKeptRanges(sourceDurationMs, trimRegions);
 
@@ -119,7 +154,7 @@ export function classifyEditedTrackStrategy(input: EditedTrackStrategyInput): Ed
 		return "offline-render-fallback";
 	}
 
-	if (!hasSafeFiltergraphSpeedRegions(input.speedRegions)) {
+	if (!hasSafeFiltergraphSpeedRegions(input.speedRegions, input.sourceDurationMs)) {
 		return "offline-render-fallback";
 	}
 
