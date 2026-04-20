@@ -22,6 +22,7 @@ import {
 	windowsCaptureProcess,
 } from "./state";
 
+export { cleanupAllExportStreams } from "./export/exportStream";
 export { cleanupNativeVideoExportSessions } from "./export/native-video";
 
 /** Returns the currently selected source ID for setDisplayMediaRequestHandler */

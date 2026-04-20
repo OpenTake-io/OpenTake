@@ -19,6 +19,7 @@ import { showCursor } from "./cursorHider";
 import { registerExtensionIpcHandlers } from "./extensions/extensionIpc";
 import { getGpuSwitches } from "./gpuSwitches";
 import {
+	cleanupAllExportStreams,
 	cleanupNativeVideoExportSessions,
 	getSelectedSourceId,
 	killWindowsCaptureProcess,
@@ -773,6 +774,7 @@ app.on("before-quit", () => {
 	killWindowsCaptureProcess();
 	showCursor();
 	cleanupNativeVideoExportSessions();
+	void cleanupAllExportStreams();
 });
 
 app.on("window-all-closed", () => {
