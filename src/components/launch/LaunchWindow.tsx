@@ -41,7 +41,10 @@ import { ContentClamp } from "../ui/content-clamp";
 import ProjectBrowserDialog, {
 	type ProjectLibraryEntry,
 } from "../video-editor/ProjectBrowserDialog";
-import { shouldRestoreHudMousePassthroughAfterDrag } from "./hudMousePassthrough";
+import {
+	mergeHudInteractiveBounds,
+	shouldRestoreHudMousePassthroughAfterDrag,
+} from "./hudMousePassthrough";
 import styles from "./LaunchWindow.module.css";
 
 interface DesktopSource {
@@ -466,21 +469,25 @@ export function LaunchWindow() {
 		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
 			event.currentTarget.releasePointerCapture(event.pointerId);
 		}
-		const hudBounds = hudContentRef.current?.getBoundingClientRect();
-		if (
-			wasDragging &&
-			shouldRestoreHudMousePassthroughAfterDrag(
-				hudBounds
+		const hudBounds = mergeHudInteractiveBounds(
+			[
+				dropdownRef.current?.getBoundingClientRect(),
+				hudBarRef.current?.getBoundingClientRect(),
+				recordingWebcamPreviewContainerRef.current?.getBoundingClientRect(),
+			].map((bounds) =>
+				bounds
 					? {
-							left: hudBounds.left,
-							top: hudBounds.top,
-							right: hudBounds.right,
-							bottom: hudBounds.bottom,
+							left: bounds.left,
+							top: bounds.top,
+							right: bounds.right,
+							bottom: bounds.bottom,
 						}
 					: null,
-				event.clientX,
-				event.clientY,
-			)
+			),
+		);
+		if (
+			wasDragging &&
+			shouldRestoreHudMousePassthroughAfterDrag(hudBounds, event.clientX, event.clientY)
 		) {
 			window.electronAPI?.hudOverlaySetIgnoreMouse?.(true);
 		}
