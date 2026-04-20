@@ -341,9 +341,9 @@ interface Window {
 		getCurrentVideoPath: () => Promise<{ success: boolean; path?: string }>;
 		clearCurrentVideoPath: () => Promise<{ success: boolean }>;
 		deleteRecordingFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
-		getLocalMediaUrl: (filePath: string) => Promise<
-			{ success: true; url: string } | { success: false }
-		>;
+		getLocalMediaUrl: (
+			filePath: string,
+		) => Promise<{ success: true; url: string } | { success: false }>;
 		saveProjectFile: (
 			projectData: unknown,
 			suggestedName?: string,

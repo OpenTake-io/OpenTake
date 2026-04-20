@@ -157,7 +157,6 @@ export class ModernVideoExporter {
 	private nativeWriteTimeMs = 0;
 	private finalizationTimeMs = 0;
 	private finalizationStageMs: ExportFinalizationStageMetrics = {};
-	private effectiveDurationSec = 0;
 	private processedFrameCount = 0;
 	private activeFinalizationProgressWatchdog: FinalizationProgressWatchdog | null = null;
 	private lastFinalizationRenderProgress = INITIAL_FINALIZATION_PROGRESS_STATE.lastRenderProgress;
@@ -1667,7 +1666,6 @@ export class ModernVideoExporter {
 		this.lastFinalizationRenderProgress =
 			INITIAL_FINALIZATION_PROGRESS_STATE.lastRenderProgress;
 		this.lastFinalizationAudioProgress = INITIAL_FINALIZATION_PROGRESS_STATE.lastAudioProgress;
-		this.effectiveDurationSec = 0;
 		this.lastProgressSampleTimeMs = 0;
 		this.lastProgressSampleFrame = 0;
 		this.nativeWritePromises = new Set();
