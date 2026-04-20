@@ -54,5 +54,14 @@ describe("buildEditedTrackSourceAudioFilter", () => {
 		expect(
 			buildEditedTrackSourceAudioFilter([{ startMs: 0, endMs: 2_000, speed: 1 }], 0.4),
 		).toBeNull();
+		expect(
+			buildEditedTrackSourceAudioFilter([{ startMs: -100, endMs: 2_000, speed: 1 }], 44_100),
+		).toBeNull();
+		expect(
+			buildEditedTrackSourceAudioFilter(
+				[{ startMs: 0, endMs: 2_000, speed: Number.MAX_SAFE_INTEGER }],
+				44_100,
+			),
+		).toBeNull();
 	});
 });

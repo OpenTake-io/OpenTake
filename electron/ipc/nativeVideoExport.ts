@@ -190,7 +190,12 @@ export function buildEditedTrackSourceAudioFilter(
 	let hasInvalidSegment = false;
 
 	segments.forEach((segment, index) => {
-		if (!Number.isFinite(segment.startMs) || !Number.isFinite(segment.endMs)) {
+		if (
+			!Number.isFinite(segment.startMs) ||
+			!Number.isFinite(segment.endMs) ||
+			segment.startMs < 0 ||
+			segment.endMs < 0
+		) {
 			hasInvalidSegment = true;
 			return;
 		}
@@ -214,7 +219,7 @@ export function buildEditedTrackSourceAudioFilter(
 
 		if (Math.abs(speed - 1) > 0.0001) {
 			const adjustedSampleRate = Math.round(normalizedSourceSampleRate * speed);
-			if (adjustedSampleRate < 1) {
+			if (!Number.isSafeInteger(adjustedSampleRate) || adjustedSampleRate < 1) {
 				hasInvalidSegment = true;
 				return;
 			}
