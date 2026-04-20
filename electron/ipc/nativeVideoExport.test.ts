@@ -40,4 +40,19 @@ describe("buildEditedTrackSourceAudioFilter", () => {
 			),
 		).toBeNull();
 	});
+
+	it("returns null when the edited-track segments are malformed", () => {
+		expect(
+			buildEditedTrackSourceAudioFilter(
+				[{ startMs: Number.NaN, endMs: 2_000, speed: 1.5 }],
+				44_100,
+			),
+		).toBeNull();
+		expect(
+			buildEditedTrackSourceAudioFilter([{ startMs: 0, endMs: 2_000, speed: 0 }], 44_100),
+		).toBeNull();
+		expect(
+			buildEditedTrackSourceAudioFilter([{ startMs: 0, endMs: 2_000, speed: 1 }], 0.4),
+		).toBeNull();
+	});
 });

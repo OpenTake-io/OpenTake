@@ -181,24 +181,46 @@ export function buildEditedTrackSourceAudioFilter(
 	}
 
 	const normalizedSourceSampleRate = Math.round(sourceSampleRate);
+	if (normalizedSourceSampleRate < 1) {
+		return null;
+	}
+
 	const filterParts: string[] = [];
 	const segmentLabels: string[] = [];
+	let hasInvalidSegment = false;
 
 	segments.forEach((segment, index) => {
+		if (!Number.isFinite(segment.startMs) || !Number.isFinite(segment.endMs)) {
+			hasInvalidSegment = true;
+			return;
+		}
+
 		if (segment.endMs - segment.startMs <= 0.5) {
+			hasInvalidSegment = true;
 			return;
 		}
 
 		const label = `edited_audio_${index}`;
-		const speed = Number.isFinite(segment.speed) && segment.speed > 0 ? segment.speed : 1;
+		const speed = segment.speed;
+		if (!Number.isFinite(speed) || speed <= 0) {
+			hasInvalidSegment = true;
+			return;
+		}
+
 		const segmentFilter = [
 			`[1:a]atrim=start=${formatFfmpegSeconds(segment.startMs)}:end=${formatFfmpegSeconds(segment.endMs)}`,
 			"asetpts=PTS-STARTPTS",
 		];
 
 		if (Math.abs(speed - 1) > 0.0001) {
+			const adjustedSampleRate = Math.round(normalizedSourceSampleRate * speed);
+			if (adjustedSampleRate < 1) {
+				hasInvalidSegment = true;
+				return;
+			}
+
 			segmentFilter.push(
-				`asetrate=${Math.max(1, Math.round(normalizedSourceSampleRate * speed))}`,
+				`asetrate=${adjustedSampleRate}`,
 				`aresample=${normalizedSourceSampleRate}`,
 			);
 		}
@@ -207,7 +229,7 @@ export function buildEditedTrackSourceAudioFilter(
 		segmentLabels.push(`[${label}]`);
 	});
 
-	if (segmentLabels.length === 0) {
+	if (hasInvalidSegment || segmentLabels.length === 0) {
 		return null;
 	}
 

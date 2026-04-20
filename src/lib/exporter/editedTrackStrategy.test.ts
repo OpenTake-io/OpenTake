@@ -100,6 +100,23 @@ describe("editedTrackStrategy", () => {
 		).toBe("offline-render-fallback");
 	});
 
+	it("falls back when source duration or speed-region bounds are invalid", () => {
+		const invalidBounds: SpeedRegion[] = [
+			{ id: "speed-1", startMs: Number.NaN, endMs: 10_000, speed: 1.5 },
+		];
+
+		expect(
+			classifyEditedTrackStrategy({
+				primaryAudioSourcePath: "recording.mp4",
+				sourceDurationMs: Number.POSITIVE_INFINITY,
+				trimRegions: EMPTY_TRIMS,
+				speedRegions: invalidBounds,
+				audioRegions: [],
+				sourceAudioFallbackPaths: [],
+			}),
+		).toBe("offline-render-fallback");
+	});
+
 	it("builds source segments that preserve trims and speed boundaries", () => {
 		const trimRegions: TrimRegion[] = [{ id: "trim-1", startMs: 10_000, endMs: 12_000 }];
 		const speedRegions: SpeedRegion[] = [
@@ -117,5 +134,13 @@ describe("editedTrackStrategy", () => {
 			{ startMs: 14_000, endMs: 18_000, speed: 0.75 },
 			{ startMs: 18_000, endMs: 20_000, speed: 1 },
 		]);
+	});
+
+	it("returns no source segments when speed-region bounds are invalid", () => {
+		expect(
+			buildEditedTrackSourceSegments(SOURCE_DURATION_MS, EMPTY_TRIMS, [
+				{ id: "speed-1", startMs: 15_000, endMs: 10_000, speed: 1.5 },
+			]),
+		).toEqual([]);
 	});
 });
