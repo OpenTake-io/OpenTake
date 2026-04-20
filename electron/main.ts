@@ -882,9 +882,11 @@ app.whenReady().then(async () => {
 
 	if (IS_SMOKE_EXPORT) {
 		await logSmokeExportGpuDiagnostics();
-		console.log(
-			`[smoke-export] Starting editor smoke export for ${process.env.RECORDLY_SMOKE_EXPORT_INPUT ?? "<missing input>"}`,
-		);
+		const smokeSource =
+			process.env.RECORDLY_SMOKE_EXPORT_PROJECT ??
+			process.env.RECORDLY_SMOKE_EXPORT_INPUT ??
+			"<missing input>";
+		console.log(`[smoke-export] Starting editor smoke export for ${smokeSource}`);
 		createEditorWindowWrapper();
 		return;
 	}

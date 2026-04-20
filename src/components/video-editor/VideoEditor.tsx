@@ -57,6 +57,7 @@ import {
 	GifExporter,
 	type GifFrameRate,
 	type GifSizePreset,
+	isValidMp4FrameRate,
 	ModernVideoExporter,
 	probeSupportedMp4Dimensions,
 	type SupportedMp4Dimensions,
@@ -219,6 +220,9 @@ type SmokeExportConfig = {
 	maxEncodeQueue?: number;
 	maxDecodeQueue?: number;
 	maxPendingFrames?: number;
+	projectPath?: string | null;
+	quality?: ExportQuality;
+	fps?: ExportMp4FrameRate;
 };
 
 async function writeSmokeExportReport(
@@ -290,6 +294,19 @@ function parseSmokeExportNonNegativeNumber(value: string | null): number | undef
 	return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
+function parseSmokeExportQuality(value: string | null): ExportQuality | undefined {
+	if (value === "medium" || value === "good" || value === "high" || value === "source") {
+		return value;
+	}
+	return undefined;
+}
+
+function parseSmokeExportFps(value: string | null): ExportMp4FrameRate | undefined {
+	if (value === null) return undefined;
+	const parsed = Number.parseInt(value, 10);
+	return isValidMp4FrameRate(parsed) ? parsed : undefined;
+}
+
 function getSmokeExportConfig(search: string): SmokeExportConfig {
 	const params = new URLSearchParams(search);
 	const enabled = params.get("smokeExport") === "1";
@@ -340,6 +357,9 @@ function getSmokeExportConfig(search: string): SmokeExportConfig {
 		maxPendingFrames: enabled
 			? parseSmokeExportNumber(params.get("smokeMaxPendingFrames"))
 			: undefined,
+		projectPath: enabled ? params.get("smokeProject") : null,
+		quality: enabled ? parseSmokeExportQuality(params.get("smokeQuality")) : undefined,
+		fps: enabled ? parseSmokeExportFps(params.get("smokeFps")) : undefined,
 	};
 }
 
@@ -1771,6 +1791,32 @@ export default function VideoEditor() {
 	useEffect(() => {
 		async function loadInitialData() {
 			try {
+				if (smokeExportConfig.enabled && smokeExportConfig.projectPath) {
+					const projectResult = await window.electronAPI.openProjectFileAtPath(
+						smokeExportConfig.projectPath,
+					);
+					if (!projectResult.success || !projectResult.project) {
+						setError(
+							`Smoke export failed to load project ${smokeExportConfig.projectPath}: ${
+								projectResult.error || projectResult.message || "unknown error"
+							}`,
+						);
+						return;
+					}
+					const restored = await applyLoadedProject(
+						projectResult.project,
+						projectResult.path ?? smokeExportConfig.projectPath,
+					);
+					if (!restored) {
+						setError(
+							`Smoke export could not apply project ${smokeExportConfig.projectPath}`,
+						);
+						return;
+					}
+					setError(null);
+					return;
+				}
+
 				if (smokeExportConfig.enabled) {
 					if (!smokeExportConfig.inputPath) {
 						setError("Smoke export input path is missing.");
@@ -1884,6 +1930,7 @@ export default function VideoEditor() {
 		initialEditorPreferences,
 		smokeExportConfig.enabled,
 		smokeExportConfig.inputPath,
+		smokeExportConfig.projectPath,
 		smokeExportConfig.webcamInputPath,
 		smokeExportConfig.webcamShadow,
 		smokeExportConfig.webcamSize,
@@ -3949,13 +3996,17 @@ export default function VideoEditor() {
 					}
 				} else {
 					// MP4 Export
-					const quality = settings.quality ?? exportQuality;
+					const quality = smokeExportConfig.enabled
+						? (smokeExportConfig.quality ?? settings.quality ?? exportQuality)
+						: (settings.quality ?? exportQuality);
 					const encodingMode = smokeExportConfig.enabled
 						? (smokeExportConfig.encodingMode ??
 							settings.encodingMode ??
 							exportEncodingMode)
 						: (settings.encodingMode ?? exportEncodingMode);
-					const selectedMp4FrameRate = settings.mp4FrameRate ?? mp4FrameRate;
+					const selectedMp4FrameRate = smokeExportConfig.enabled
+						? (smokeExportConfig.fps ?? settings.mp4FrameRate ?? mp4FrameRate)
+						: (settings.mp4FrameRate ?? mp4FrameRate);
 					const pipelineModel = smokeExportConfig.enabled
 						? (smokeExportConfig.pipelineModel ??
 							(smokeExportConfig.useNativeExport ? "modern" : "legacy"))
