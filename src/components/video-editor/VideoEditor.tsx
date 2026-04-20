@@ -155,6 +155,7 @@ import {
 	DEFAULT_ZOOM_OUT_DURATION_MS,
 	DEFAULT_ZOOM_OUT_EASING,
 	type EditorEffectSection,
+	extendAutoFullTrackClip,
 	type FigureData,
 	getClipSourceEndMs,
 	type PlaybackSpeed,
@@ -1507,6 +1508,8 @@ export default function VideoEditor() {
 			setTrimRegions(normalizedEditor.trimRegions);
 			setClipRegions(normalizedEditor.clipRegions);
 			clipInitializedRef.current = normalizedEditor.clipRegions.length > 0;
+			autoFullTrackClipIdRef.current = null;
+			autoFullTrackClipEndMsRef.current = null;
 			setSpeedRegions(normalizedEditor.speedRegions);
 			setAnnotationRegions(normalizedEditor.annotationRegions);
 			setAudioRegions(normalizedEditor.audioRegions);
@@ -2336,15 +2339,33 @@ export default function VideoEditor() {
 
 	// Initialize a full-track clip when duration is first known
 	const clipInitializedRef = useRef(false);
+	const autoFullTrackClipIdRef = useRef<string | null>(null);
+	const autoFullTrackClipEndMsRef = useRef<number | null>(null);
 	useEffect(() => {
 		const totalMs = Math.round(duration * 1000);
-		if (totalMs <= 0 || clipInitializedRef.current) return;
-		if (clipRegions.length === 0) {
-			const id = `clip-${nextClipIdRef.current++}`;
-			setClipRegions([{ id, startMs: 0, endMs: totalMs, speed: 1 }]);
+		if (totalMs <= 0) return;
+		if (!clipInitializedRef.current) {
+			if (clipRegions.length === 0) {
+				const id = `clip-${nextClipIdRef.current++}`;
+				autoFullTrackClipIdRef.current = id;
+				autoFullTrackClipEndMsRef.current = totalMs;
+				setClipRegions([{ id, startMs: 0, endMs: totalMs, speed: 1 }]);
+			}
+			clipInitializedRef.current = true;
+			return;
 		}
-		clipInitializedRef.current = true;
-	}, [duration, clipRegions.length]);
+
+		const extendedClipRegions = extendAutoFullTrackClip(
+			clipRegions,
+			autoFullTrackClipIdRef.current,
+			autoFullTrackClipEndMsRef.current,
+			totalMs,
+		);
+		if (!extendedClipRegions) return;
+
+		autoFullTrackClipEndMsRef.current = totalMs;
+		setClipRegions(extendedClipRegions);
+	}, [duration, clipRegions]);
 
 	// Derive trimRegions from clipRegions so export/playback pipelines stay unchanged
 	useEffect(() => {
