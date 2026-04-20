@@ -1,4 +1,7 @@
 export type FinalizationTimeoutWorkload = "default" | "audio";
+export type FinalizationProgressWatchdog = {
+	refreshProgress: () => void;
+};
 
 const BASE_FINALIZATION_TIMEOUT_MS = 10 * 60_000;
 const AUDIO_TIMEOUT_HEADROOM_PER_OUTPUT_SECOND_MS = 500;
@@ -52,4 +55,78 @@ export function getExportFinalizationIdleTimeoutMs({
 		),
 		MAX_PROGRESS_IDLE_TIMEOUT_MS,
 	);
+}
+
+export async function withFinalizationTimeout<T>({
+	promise,
+	stage,
+	effectiveDurationSec,
+	workload = "default",
+	progressAware = false,
+	onWatchdogChanged,
+}: {
+	promise: Promise<T>;
+	stage: string;
+	effectiveDurationSec?: number | null;
+	workload?: FinalizationTimeoutWorkload;
+	progressAware?: boolean;
+	onWatchdogChanged?: (watchdog: FinalizationProgressWatchdog | null) => void;
+}): Promise<T> {
+	let timeoutId: ReturnType<typeof setTimeout> | null = null;
+	let idleTimeoutId: ReturnType<typeof setTimeout> | null = null;
+	const timeoutMs = getExportFinalizationTimeoutMs({
+		effectiveDurationSec,
+		workload,
+	});
+	const idleTimeoutMs = progressAware
+		? getExportFinalizationIdleTimeoutMs({
+				effectiveDurationSec,
+				workload,
+			})
+		: null;
+	const watchdog: FinalizationProgressWatchdog | null =
+		progressAware && idleTimeoutMs !== null && idleTimeoutMs !== undefined
+			? {
+					refreshProgress: () => undefined,
+				}
+			: null;
+
+	try {
+		return await Promise.race([
+			promise,
+			new Promise<T>((_, reject) => {
+				const rejectWithMessage = (message: string) => {
+					reject(new Error(message));
+				};
+				if (watchdog && idleTimeoutMs !== null) {
+					const refreshProgress = () => {
+						if (idleTimeoutId) {
+							clearTimeout(idleTimeoutId);
+						}
+						idleTimeoutId = setTimeout(() => {
+							rejectWithMessage(
+								`Export timed out during ${stage} after ${Math.ceil(idleTimeoutMs / 1000)} seconds without observable progress`,
+							);
+						}, idleTimeoutMs);
+					};
+					watchdog.refreshProgress = refreshProgress;
+					onWatchdogChanged?.(watchdog);
+					refreshProgress();
+				}
+				timeoutId = setTimeout(() => {
+					rejectWithMessage(
+						`Export timed out during ${stage} after ${Math.ceil(timeoutMs / 60_000)} minutes`,
+					);
+				}, timeoutMs);
+			}),
+		]);
+	} finally {
+		if (timeoutId) {
+			clearTimeout(timeoutId);
+		}
+		if (idleTimeoutId) {
+			clearTimeout(idleTimeoutId);
+		}
+		onWatchdogChanged?.(null);
+	}
 }

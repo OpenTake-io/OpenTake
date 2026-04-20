@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+	type FinalizationProgressWatchdog,
 	getExportFinalizationIdleTimeoutMs,
 	getExportFinalizationTimeoutMs,
+	withFinalizationTimeout,
 } from "./finalizationTimeout";
 
 describe("finalizationTimeout", () => {
@@ -73,5 +75,89 @@ describe("finalizationTimeout", () => {
 				effectiveDurationSec: 2_700,
 			}),
 		).toBe(300_000);
+		expect(
+			getExportFinalizationIdleTimeoutMs({
+				workload: "audio",
+				effectiveDurationSec: 0,
+			}),
+		).toBe(150_000);
+		expect(
+			getExportFinalizationIdleTimeoutMs({
+				workload: "audio",
+				effectiveDurationSec: Number.NaN,
+			}),
+		).toBe(150_000);
+	});
+
+	it("rejects when a progress-aware finalization stage stops reporting progress", async () => {
+		vi.useFakeTimers();
+
+		try {
+			const idleTimeoutMs = getExportFinalizationIdleTimeoutMs({
+				workload: "audio",
+				effectiveDurationSec: 1_200,
+			});
+
+			const pendingStage = withFinalizationTimeout({
+				promise: new Promise<never>(() => {}),
+				stage: "audio processing",
+				workload: "audio",
+				effectiveDurationSec: 1_200,
+				progressAware: true,
+			});
+
+			const rejection = pendingStage.then(
+				() => null,
+				(error) => (error instanceof Error ? error.message : String(error)),
+			);
+
+			await vi.advanceTimersByTimeAsync(idleTimeoutMs + 1);
+
+			await expect(rejection).resolves.toContain("without observable progress");
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("resets the idle watchdog when finalization progress continues", async () => {
+		vi.useFakeTimers();
+
+		try {
+			const idleTimeoutMs = getExportFinalizationIdleTimeoutMs({
+				workload: "audio",
+				effectiveDurationSec: 1_200,
+			});
+			let watchdog: FinalizationProgressWatchdog | null = null;
+			const pendingStage = withFinalizationTimeout({
+				promise: new Promise<never>(() => {}),
+				stage: "audio processing",
+				workload: "audio",
+				effectiveDurationSec: 1_200,
+				progressAware: true,
+				onWatchdogChanged: (nextWatchdog) => {
+					watchdog = nextWatchdog;
+				},
+			});
+			const rejection = pendingStage.then(
+				() => null,
+				(error) => (error instanceof Error ? error.message : String(error)),
+			);
+
+			await vi.advanceTimersByTimeAsync(idleTimeoutMs - 1_000);
+			expect(watchdog).not.toBeNull();
+
+			watchdog?.refreshProgress();
+			await vi.advanceTimersByTimeAsync(idleTimeoutMs - 1_000);
+
+			const pendingSentinel = Symbol("pending");
+			await expect(Promise.race([rejection, Promise.resolve(pendingSentinel)])).resolves.toBe(
+				pendingSentinel,
+			);
+
+			await vi.advanceTimersByTimeAsync(1_001);
+			await expect(rejection).resolves.toContain("without observable progress");
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });
