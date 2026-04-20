@@ -11,7 +11,7 @@
 		"tryRecording": "Essayez un enregistrement avec des pauses ou des clics autour des actions importantes.",
 		"noAutoZoomSlots": "Aucun emplacement de zoom automatique disponible",
 		"dwellPointsOverlap": "Des points d’arrêt détectés se chevauchent avec des zones de zoom existantes.",
-		"addedSuggestions": "{{count}} suggestion(s) de zoom basée(s) sur l’interaction ajoutée(s)",
+		"addedSuggestions": "Suggestions de zoom basées sur l'interaction ajoutées : {{count}}",
 		"label": "Zoom {{index}}",
 		"addZoom": "Ajouter un zoom (Z)",
 		"suggestZooms": "Suggérer des zooms à partir du curseur"
