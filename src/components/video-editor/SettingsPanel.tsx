@@ -487,6 +487,7 @@ const CAPTION_LANGUAGE_OPTIONS = [
 const APP_LANGUAGE_LABELS: Record<AppLocale, string> = {
 	en: "English",
 	es: "Español",
+	fr: "Français",
 	nl: "Nederlands",
 	ko: "한국어",
 	"zh-CN": "中文",
@@ -1353,8 +1354,8 @@ export function SettingsPanel({
 		};
 
 		reader.onerror = () => {
-			toast.error(t("common.failedToUploadImage"), {
-				description: t("common.errorReadingFile"),
+			toast.error(t("common.errors.failedToUploadImage"), {
+				description: t("common.errors.fileReadError"),
 			});
 		};
 
