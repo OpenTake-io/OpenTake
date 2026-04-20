@@ -75,12 +75,18 @@ export function advanceFinalizationProgress({
 	audioProgress?: number;
 	state: FinalizationProgressState;
 }): FinalizationProgressState & { progressed: boolean } {
-	const normalizedRenderProgress = Math.max(0, Math.min(renderProgress, 100));
+	const normalizedRenderProgress =
+		typeof renderProgress === "number" && Number.isFinite(renderProgress)
+			? Math.max(0, Math.min(renderProgress, 100))
+			: null;
 	const normalizedAudioProgress =
 		typeof audioProgress === "number" && Number.isFinite(audioProgress)
 			? Math.max(0, Math.min(audioProgress, 1))
 			: null;
-	const nextRenderProgress = Math.max(state.lastRenderProgress, normalizedRenderProgress);
+	const nextRenderProgress =
+		normalizedRenderProgress === null
+			? state.lastRenderProgress
+			: Math.max(state.lastRenderProgress, normalizedRenderProgress);
 	const nextAudioProgress =
 		normalizedAudioProgress === null
 			? state.lastAudioProgress
@@ -122,12 +128,17 @@ export async function withFinalizationTimeout<T>({
 				workload,
 			})
 		: null;
-	const watchdog: FinalizationProgressWatchdog | null =
-		progressAware && idleTimeoutMs !== null && idleTimeoutMs !== undefined
-			? {
-					refreshProgress: () => undefined,
-				}
-			: null;
+	const hasIdleWatchdog =
+		progressAware &&
+		typeof idleTimeoutMs === "number" &&
+		Number.isFinite(idleTimeoutMs) &&
+		idleTimeoutMs >= 0;
+	const resolvedIdleTimeoutMs = hasIdleWatchdog ? idleTimeoutMs : null;
+	const watchdog: FinalizationProgressWatchdog | null = hasIdleWatchdog
+		? {
+				refreshProgress: () => undefined,
+			}
+		: null;
 
 	try {
 		return await Promise.race([
@@ -136,16 +147,16 @@ export async function withFinalizationTimeout<T>({
 				const rejectWithMessage = (message: string) => {
 					reject(new Error(message));
 				};
-				if (watchdog && idleTimeoutMs !== null) {
+				if (watchdog && resolvedIdleTimeoutMs !== null) {
 					const refreshProgress = () => {
 						if (idleTimeoutId) {
 							clearTimeout(idleTimeoutId);
 						}
 						idleTimeoutId = setTimeout(() => {
 							rejectWithMessage(
-								`Export timed out during ${stage} after ${Math.ceil(idleTimeoutMs / 1000)} seconds without observable progress`,
+								`Export timed out during ${stage} after ${Math.ceil(resolvedIdleTimeoutMs / 1000)} seconds without observable progress`,
 							);
-						}, idleTimeoutMs);
+						}, resolvedIdleTimeoutMs);
 					};
 					watchdog.refreshProgress = refreshProgress;
 					onWatchdogChanged?.(watchdog);

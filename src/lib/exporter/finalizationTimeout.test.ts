@@ -189,4 +189,24 @@ describe("finalizationTimeout", () => {
 		expect(advanced.lastRenderProgress).toBe(100);
 		expect(advanced.lastAudioProgress).toBe(0.5);
 	});
+
+	it("ignores non-finite render progress without poisoning later updates", () => {
+		const invalid = advanceFinalizationProgress({
+			renderProgress: Number.NaN,
+			audioProgress: 0.25,
+			state: INITIAL_FINALIZATION_PROGRESS_STATE,
+		});
+		expect(invalid.progressed).toBe(true);
+		expect(invalid.lastRenderProgress).toBe(-1);
+		expect(invalid.lastAudioProgress).toBe(0.25);
+
+		const recovered = advanceFinalizationProgress({
+			renderProgress: 99,
+			audioProgress: 0.25,
+			state: invalid,
+		});
+		expect(recovered.progressed).toBe(true);
+		expect(recovered.lastRenderProgress).toBe(99);
+		expect(recovered.lastAudioProgress).toBe(0.25);
+	});
 });
