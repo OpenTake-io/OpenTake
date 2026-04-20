@@ -1458,7 +1458,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			blurFilter.resolution = app.renderer.resolution;
 			blurFilter.blur = 0;
 			const motionBlurFilter = new MotionBlurFilter([0, 0], 5, 0);
-			videoContainer.filters = [blurFilter, motionBlurFilter];
+			// Don't attach filters by default — the filter pipeline forces the video
+			// through an intermediate RenderTexture at renderer resolution, downsampling
+			// the native video and destroying detail. Filters are attached conditionally
+			// in the ticker only when zoom motion blur is actually active.
+			videoContainer.filters = null;
 			blurFilterRef.current = blurFilter;
 			motionBlurFilterRef.current = motionBlurFilter;
 
@@ -1543,6 +1547,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				const appliedTransform = applyZoomTransform({
 					cameraContainer,
 					blurFilter: blurFilterRef.current,
+					motionBlurFilter: motionBlurFilterRef.current,
 					stageSize: stageSizeRef.current,
 					baseMask: baseMaskRef.current,
 					zoomScale: state.scale,
@@ -1553,7 +1558,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					motionVector,
 					isPlaying: isPlayingRef.current,
 					motionBlurAmount: zoomMotionBlurRef.current,
-					motionBlurFilter: motionBlurFilterRef.current,
 					transformOverride: transform,
 					motionBlurState: motionBlurStateRef.current,
 					frameTimeMs: performance.now(),
@@ -1738,6 +1742,21 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					motionIntensity,
 					motionVector,
 				);
+
+				// Conditionally attach motion blur filter only when the camera is
+				// actually moving. When filters are attached, PixiJS routes the video
+				// through an intermediate RenderTexture at renderer resolution, which
+				// downsamples the native video and degrades preview quality.
+				// Hysteresis prevents flickering when motionIntensity oscillates near threshold.
+				const filtersActive = Array.isArray(videoContainer.filters) && videoContainer.filters.length > 0;
+				const cameraIsMoving = filtersActive ? motionIntensity > 0.002 : motionIntensity > 0.008;
+				const needsFilters = zoomMotionBlurRef.current > 0 && isPlayingRef.current && cameraIsMoving;
+				if (needsFilters && !filtersActive && motionBlurFilterRef.current) {
+					videoContainer.filters = [motionBlurFilterRef.current];
+				} else if (!needsFilters && filtersActive) {
+					videoContainer.filters = null;
+				}
+
 				applyWebcamBubbleLayout(animationStateRef.current.appliedScale || 1);
 
 				const timeMs = currentTimeRef.current;
