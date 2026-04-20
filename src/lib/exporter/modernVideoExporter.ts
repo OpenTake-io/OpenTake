@@ -23,8 +23,10 @@ import {
 	getWebCodecsKeyFrameInterval,
 } from "./exportTuning";
 import {
+	advanceFinalizationProgress,
 	type FinalizationProgressWatchdog,
 	type FinalizationTimeoutWorkload,
+	INITIAL_FINALIZATION_PROGRESS_STATE,
 	withFinalizationTimeout,
 } from "./finalizationTimeout";
 import { FrameRenderer as ModernFrameRenderer } from "./modernFrameRenderer";
@@ -155,6 +157,8 @@ export class ModernVideoExporter {
 	private finalizationTimeMs = 0;
 	private processedFrameCount = 0;
 	private activeFinalizationProgressWatchdog: FinalizationProgressWatchdog | null = null;
+	private lastFinalizationRenderProgress = INITIAL_FINALIZATION_PROGRESS_STATE.lastRenderProgress;
+	private lastFinalizationAudioProgress = INITIAL_FINALIZATION_PROGRESS_STATE.lastAudioProgress;
 	private lastProgressSampleTimeMs = 0;
 	private lastProgressSampleFrame = 0;
 
@@ -1156,7 +1160,19 @@ export class ModernVideoExporter {
 		renderProgress: number,
 		audioProgress?: number,
 	) {
-		this.activeFinalizationProgressWatchdog?.refreshProgress();
+		const nextProgress = advanceFinalizationProgress({
+			renderProgress,
+			audioProgress,
+			state: {
+				lastRenderProgress: this.lastFinalizationRenderProgress,
+				lastAudioProgress: this.lastFinalizationAudioProgress,
+			},
+		});
+		if (nextProgress.progressed) {
+			this.activeFinalizationProgressWatchdog?.refreshProgress();
+		}
+		this.lastFinalizationRenderProgress = nextProgress.lastRenderProgress;
+		this.lastFinalizationAudioProgress = nextProgress.lastAudioProgress;
 		this.reportProgress(totalFrames, totalFrames, "finalizing", renderProgress, audioProgress);
 	}
 
@@ -1600,6 +1616,9 @@ export class ModernVideoExporter {
 		this.finalizationTimeMs = 0;
 		this.processedFrameCount = 0;
 		this.activeFinalizationProgressWatchdog = null;
+		this.lastFinalizationRenderProgress =
+			INITIAL_FINALIZATION_PROGRESS_STATE.lastRenderProgress;
+		this.lastFinalizationAudioProgress = INITIAL_FINALIZATION_PROGRESS_STATE.lastAudioProgress;
 		this.effectiveDurationSec = 0;
 		this.lastProgressSampleTimeMs = 0;
 		this.lastProgressSampleFrame = 0;

@@ -14,8 +14,10 @@ import type {
 } from "@/components/video-editor/types";
 import { AudioProcessor, isAacAudioEncodingSupported } from "./audioEncoder";
 import {
+	advanceFinalizationProgress,
 	type FinalizationProgressWatchdog,
 	type FinalizationTimeoutWorkload,
+	INITIAL_FINALIZATION_PROGRESS_STATE,
 	withFinalizationTimeout,
 } from "./finalizationTimeout";
 import { FrameRenderer } from "./frameRenderer";
@@ -113,6 +115,8 @@ export class VideoExporter {
 	private maxNativeWriteInFlight = 1;
 	private nativeEncoderError: Error | null = null;
 	private activeFinalizationProgressWatchdog: FinalizationProgressWatchdog | null = null;
+	private lastFinalizationRenderProgress = INITIAL_FINALIZATION_PROGRESS_STATE.lastRenderProgress;
+	private lastFinalizationAudioProgress = INITIAL_FINALIZATION_PROGRESS_STATE.lastAudioProgress;
 
 	constructor(config: VideoExporterConfig) {
 		this.config = config;
@@ -882,7 +886,19 @@ export class VideoExporter {
 		renderProgress: number,
 		audioProgress?: number,
 	) {
-		this.activeFinalizationProgressWatchdog?.refreshProgress();
+		const nextProgress = advanceFinalizationProgress({
+			renderProgress,
+			audioProgress,
+			state: {
+				lastRenderProgress: this.lastFinalizationRenderProgress,
+				lastAudioProgress: this.lastFinalizationAudioProgress,
+			},
+		});
+		if (nextProgress.progressed) {
+			this.activeFinalizationProgressWatchdog?.refreshProgress();
+		}
+		this.lastFinalizationRenderProgress = nextProgress.lastRenderProgress;
+		this.lastFinalizationAudioProgress = nextProgress.lastAudioProgress;
 		this.reportProgress(totalFrames, totalFrames, "finalizing", renderProgress, audioProgress);
 	}
 
@@ -1138,6 +1154,9 @@ export class VideoExporter {
 		this.muxer = null;
 		this.audioProcessor = null;
 		this.activeFinalizationProgressWatchdog = null;
+		this.lastFinalizationRenderProgress =
+			INITIAL_FINALIZATION_PROGRESS_STATE.lastRenderProgress;
+		this.lastFinalizationAudioProgress = INITIAL_FINALIZATION_PROGRESS_STATE.lastAudioProgress;
 		this.encodeQueue = 0;
 		this.pendingMuxing = Promise.resolve();
 		this.nativePendingWrite = Promise.resolve();

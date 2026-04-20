@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+	advanceFinalizationProgress,
 	type FinalizationProgressWatchdog,
 	getExportFinalizationIdleTimeoutMs,
 	getExportFinalizationTimeoutMs,
+	INITIAL_FINALIZATION_PROGRESS_STATE,
 	withFinalizationTimeout,
 } from "./finalizationTimeout";
 
@@ -159,5 +161,32 @@ describe("finalizationTimeout", () => {
 		} finally {
 			vi.useRealTimers();
 		}
+	});
+
+	it("only marks finalization as progressed when normalized progress increases", () => {
+		const initial = advanceFinalizationProgress({
+			renderProgress: 99,
+			audioProgress: 0.5,
+			state: INITIAL_FINALIZATION_PROGRESS_STATE,
+		});
+		expect(initial.progressed).toBe(true);
+		expect(initial.lastRenderProgress).toBe(99);
+		expect(initial.lastAudioProgress).toBe(0.5);
+
+		const repeated = advanceFinalizationProgress({
+			renderProgress: 99,
+			audioProgress: 0.5,
+			state: initial,
+		});
+		expect(repeated.progressed).toBe(false);
+
+		const advanced = advanceFinalizationProgress({
+			renderProgress: 100,
+			audioProgress: 0.5,
+			state: repeated,
+		});
+		expect(advanced.progressed).toBe(true);
+		expect(advanced.lastRenderProgress).toBe(100);
+		expect(advanced.lastAudioProgress).toBe(0.5);
 	});
 });

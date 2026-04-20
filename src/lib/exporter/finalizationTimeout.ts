@@ -2,6 +2,10 @@ export type FinalizationTimeoutWorkload = "default" | "audio";
 export type FinalizationProgressWatchdog = {
 	refreshProgress: () => void;
 };
+export type FinalizationProgressState = {
+	lastRenderProgress: number;
+	lastAudioProgress: number;
+};
 
 const BASE_FINALIZATION_TIMEOUT_MS = 10 * 60_000;
 const AUDIO_TIMEOUT_HEADROOM_PER_OUTPUT_SECOND_MS = 500;
@@ -9,6 +13,11 @@ const MAX_AUDIO_FINALIZATION_TIMEOUT_MS = 45 * 60_000;
 const MIN_PROGRESS_IDLE_TIMEOUT_MS = 90_000;
 const MAX_PROGRESS_IDLE_TIMEOUT_MS = 5 * 60_000;
 const PROGRESS_IDLE_TIMEOUT_FRACTION = 0.25;
+
+export const INITIAL_FINALIZATION_PROGRESS_STATE: FinalizationProgressState = {
+	lastRenderProgress: -1,
+	lastAudioProgress: -1,
+};
 
 export function getExportFinalizationTimeoutMs({
 	effectiveDurationSec,
@@ -55,6 +64,35 @@ export function getExportFinalizationIdleTimeoutMs({
 		),
 		MAX_PROGRESS_IDLE_TIMEOUT_MS,
 	);
+}
+
+export function advanceFinalizationProgress({
+	renderProgress,
+	audioProgress,
+	state,
+}: {
+	renderProgress: number;
+	audioProgress?: number;
+	state: FinalizationProgressState;
+}): FinalizationProgressState & { progressed: boolean } {
+	const normalizedRenderProgress = Math.max(0, Math.min(renderProgress, 100));
+	const normalizedAudioProgress =
+		typeof audioProgress === "number" && Number.isFinite(audioProgress)
+			? Math.max(0, Math.min(audioProgress, 1))
+			: null;
+	const nextRenderProgress = Math.max(state.lastRenderProgress, normalizedRenderProgress);
+	const nextAudioProgress =
+		normalizedAudioProgress === null
+			? state.lastAudioProgress
+			: Math.max(state.lastAudioProgress, normalizedAudioProgress);
+
+	return {
+		progressed:
+			nextRenderProgress > state.lastRenderProgress ||
+			nextAudioProgress > state.lastAudioProgress,
+		lastRenderProgress: nextRenderProgress,
+		lastAudioProgress: nextAudioProgress,
+	};
 }
 
 export async function withFinalizationTimeout<T>({
