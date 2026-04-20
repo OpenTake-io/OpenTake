@@ -60,6 +60,13 @@ export function isAllowedLocalReadPath(candidatePath: string) {
 	);
 }
 
+// Keep media-server access rules aligned with read-local-file so exported videos
+// saved outside the active recording session can still be reopened in the editor.
+export async function isAllowedLocalMediaPath(candidatePath: string) {
+	const normalizedCandidatePath = normalizePath(candidatePath);
+	return isAllowedLocalReadPath(normalizedCandidatePath);
+}
+
 export async function rememberApprovedLocalReadPath(filePath?: string | null) {
 	const normalizedPath = normalizeVideoSourcePath(filePath);
 	if (!normalizedPath) {

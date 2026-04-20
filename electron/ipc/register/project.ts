@@ -15,25 +15,26 @@ import {
 	setCurrentVideoPath,
 	currentRecordingSession,
 	setCurrentRecordingSession,
-	approvedLocalReadPaths,
 } from "../state";
-import { normalizeVideoSourcePath } from "../utils";
-import { isPathInsideDirectory, replaceApprovedSessionLocalReadPaths } from "../project/manager";
+import {
+	getProjectsDir,
+	isAllowedLocalMediaPath,
+	isPathInsideDirectory,
+	isTrustedProjectPath,
+	listProjectLibraryEntries,
+	loadProjectFromPath,
+	persistRecordingsDirectorySetting,
+	replaceApprovedSessionLocalReadPaths,
+	rememberRecentProject,
+	saveProjectThumbnail,
+} from "../project/manager";
 import {
 	getTelemetryPathForVideo,
 	isAutoRecordingPath,
 	getRecordingsDir,
 	approveUserPath,
+	normalizeVideoSourcePath,
 } from "../utils";
-import {
-	getProjectsDir,
-	persistRecordingsDirectorySetting,
-	saveProjectThumbnail,
-	rememberRecentProject,
-	listProjectLibraryEntries,
-	loadProjectFromPath,
-	isTrustedProjectPath,
-} from "../project/manager";
 import { persistRecordingSessionManifest, resolveRecordingSession } from "../project/session";
 
 function normalizeRecordingTimeOffsetMs(value: unknown): number {
@@ -391,8 +392,8 @@ export function registerProjectHandlers() {
     } catch {
       return { success: false as const };
     }
-    if (!approvedLocalReadPaths.has(resolved) && !approvedLocalReadPaths.has(normalized)) {
-      console.warn(`[get-local-media-url] Blocked unapproved path: ${resolved}`);
+    if (!(await isAllowedLocalMediaPath(resolved))) {
+      console.warn(`[get-local-media-url] Blocked disallowed path: ${resolved}`);
       return { success: false as const };
     }
     return { success: true as const, url: buildMediaUrl(baseUrl, resolved) };
