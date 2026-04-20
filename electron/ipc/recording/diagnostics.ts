@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import { promisify } from "node:util";
-import { getFfmpegBinaryPath } from "../ffmpeg/binary";
 import { COMPANION_AUDIO_LAYOUTS } from "../constants";
-import type { NativeCaptureDiagnostics, CompanionAudioCandidate } from "../types";
+import { getFfmpegBinaryPath } from "../ffmpeg/binary";
 import { lastNativeCaptureDiagnostics, setLastNativeCaptureDiagnostics } from "../state";
+import type { CompanionAudioCandidate, NativeCaptureDiagnostics } from "../types";
 
 const execFileAsync = promisify(execFile);
 
@@ -123,10 +123,23 @@ export async function getCompanionAudioFallbackPaths(videoPath: string) {
 	}
 
 	if (await hasEmbeddedAudioStream(videoPath)) {
-		return [];
+		const microphoneCompanionPaths = Array.from(
+			new Set(
+				companionCandidates.flatMap((candidate) =>
+					candidate.usablePaths.filter(
+						(companionPath) => companionPath === candidate.micPath,
+					),
+				),
+			),
+		);
+		if (microphoneCompanionPaths.length === 0) {
+			return [];
+		}
+
+		return [videoPath, ...microphoneCompanionPaths];
 	}
 
-	return companionCandidates.flatMap((candidate) => candidate.usablePaths);
+	return Array.from(new Set(companionCandidates.flatMap((candidate) => candidate.usablePaths)));
 }
 
 export async function validateRecordedVideo(videoPath: string) {
