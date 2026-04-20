@@ -5,6 +5,22 @@ export interface HudInteractiveBounds {
 	bottom: number;
 }
 
+export function mergeHudInteractiveBounds(
+	bounds: Array<HudInteractiveBounds | null | undefined>,
+): HudInteractiveBounds | null {
+	const presentBounds = bounds.filter((value): value is HudInteractiveBounds => Boolean(value));
+	if (presentBounds.length === 0) {
+		return null;
+	}
+
+	return presentBounds.reduce((merged, current) => ({
+		left: Math.min(merged.left, current.left),
+		top: Math.min(merged.top, current.top),
+		right: Math.max(merged.right, current.right),
+		bottom: Math.max(merged.bottom, current.bottom),
+	}));
+}
+
 export function shouldRestoreHudMousePassthroughAfterDrag(
 	bounds: HudInteractiveBounds | null,
 	clientX: number,
