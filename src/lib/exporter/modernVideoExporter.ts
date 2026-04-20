@@ -1028,6 +1028,9 @@ export class ModernVideoExporter {
 				audioPlan.audioMode === "none" ? "default" : "audio",
 			),
 		);
+		if (result.metrics) {
+			this.finalizationStageMs.ffmpegAudioMuxBreakdown = result.metrics;
+		}
 		this.nativeExportSessionId = null;
 
 		if (!result.success) {
@@ -1109,6 +1112,9 @@ export class ModernVideoExporter {
 				"audio",
 			),
 		);
+		if (result.metrics) {
+			this.finalizationStageMs.ffmpegAudioMuxBreakdown = result.metrics;
+		}
 
 		if (!result.success || !result.data) {
 			return {

@@ -2,6 +2,7 @@ import type { ChildProcessByStdio } from "node:child_process";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import type { Readable, Writable } from "node:stream";
 import type { SaveDialogOptions } from "electron";
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
@@ -235,15 +236,21 @@ export function registerExportHandlers() {
         }
         await session.completionPromise
 
-        const finalizedPath = await muxNativeVideoExportAudio(session.outputPath, options ?? {})
-        const data = await fs.readFile(finalizedPath)
+        const finalized = await muxNativeVideoExportAudio(session.outputPath, options ?? {})
+        const muxedVideoReadStartedAt = performance.now()
+        const data = await fs.readFile(finalized.outputPath)
         nativeVideoExportSessions.delete(sessionId)
-        await removeTemporaryExportFile(finalizedPath)
+        await removeTemporaryExportFile(finalized.outputPath)
 
         return {
           success: true,
           data: new Uint8Array(data),
           encoderName: session.encoderName,
+          metrics: {
+            ...finalized.metrics,
+            muxedVideoReadMs: performance.now() - muxedVideoReadStartedAt,
+            muxedVideoBytes: data.byteLength,
+          },
         }
       } catch (error) {
         flushNativeVideoExportPendingWriteRequests(
@@ -267,10 +274,11 @@ export function registerExportHandlers() {
     'mux-exported-video-audio',
     async (_, videoData: ArrayBuffer, options?: NativeVideoExportFinishOptions) => {
       try {
-        const data = await muxExportedVideoAudioBuffer(videoData, options ?? {})
+        const result = await muxExportedVideoAudioBuffer(videoData, options ?? {})
         return {
           success: true,
-          data,
+          data: result.data,
+          metrics: result.metrics,
         }
       } catch (error) {
         return {
