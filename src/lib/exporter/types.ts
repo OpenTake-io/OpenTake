@@ -86,6 +86,18 @@ export interface ExportMetrics {
 
 export interface ExportResult {
 	success: boolean;
+	/**
+	 * Absolute path to a main-process temp file containing the finished export.
+	 * Preferred for MP4 output because it avoids loading multi-gigabyte files
+	 * into the renderer's ArrayBuffer heap. The renderer should move the temp
+	 * file to its final destination via `finalize-exported-video`.
+	 */
+	tempFilePath?: string;
+	/**
+	 * In-renderer Blob for exports that fit in memory (GIF, smoke tests, legacy
+	 * fallback). Mutually exclusive with `tempFilePath` — consumers should
+	 * prefer the temp path when both are set.
+	 */
 	blob?: Blob;
 	filePath?: string;
 	error?: string;

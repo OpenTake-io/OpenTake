@@ -204,6 +204,37 @@ contextBridge.exposeInMainWorld("electronAPI", {
 			metrics?: NativeVideoAudioMuxMetrics;
 		}>;
 	},
+	muxExportedVideoAudioFromPath: (
+		videoPath: string,
+		options?: {
+			audioMode?: "none" | "copy-source" | "trim-source" | "edited-track";
+			audioSourcePath?: string | null;
+			trimSegments?: Array<{ startMs: number; endMs: number }>;
+			editedAudioData?: ArrayBuffer;
+			editedAudioMimeType?: string | null;
+		},
+	) => {
+		return ipcRenderer.invoke("mux-exported-video-audio-from-path", videoPath, options);
+	},
+	openExportStream: (options?: { extension?: string }) => {
+		return ipcRenderer.invoke("export-stream-open", options);
+	},
+	writeExportStreamChunk: (streamId: string, position: number, chunk: Uint8Array) => {
+		return ipcRenderer.invoke("export-stream-write", streamId, position, chunk);
+	},
+	closeExportStream: (streamId: string, options?: { abort?: boolean }) => {
+		return ipcRenderer.invoke("export-stream-close", streamId, options);
+	},
+	finalizeExportedVideo: (payload: {
+		tempPath: string;
+		fileName: string;
+		outputPath?: string | null;
+	}) => {
+		return ipcRenderer.invoke("finalize-exported-video", payload);
+	},
+	discardExportedTemp: (tempPath: string) => {
+		return ipcRenderer.invoke("discard-exported-temp", tempPath);
+	},
 	getVideoAudioFallbackPaths: (videoPath: string) => {
 		return ipcRenderer.invoke("get-video-audio-fallback-paths", videoPath);
 	},
