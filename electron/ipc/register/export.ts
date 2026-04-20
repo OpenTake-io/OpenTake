@@ -29,6 +29,7 @@ import {
 	muxExportedVideoAudioBuffer,
 	type NativeVideoExportSession,
 } from "../export/native-video";
+import { approveUserPath } from "../utils";
 
 export function registerExportHandlers() {
   ipcMain.handle(
@@ -341,6 +342,7 @@ export function registerExportHandlers() {
       }
 
       await fs.writeFile(result.filePath, Buffer.from(videoData));
+      approveUserPath(result.filePath);
 
       return {
         success: true,
@@ -362,10 +364,11 @@ export function registerExportHandlers() {
       const resolvedPath = path.resolve(outputPath)
       await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
       await fs.writeFile(resolvedPath, Buffer.from(videoData));
+      approveUserPath(resolvedPath);
 
       return {
         success: true,
-        path: outputPath,
+        path: resolvedPath,
         message: 'Video exported successfully',
         canceled: false,
       };
