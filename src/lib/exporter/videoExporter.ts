@@ -14,9 +14,9 @@ import type {
 } from "@/components/video-editor/types";
 import { AudioProcessor, isAacAudioEncodingSupported } from "./audioEncoder";
 import {
+	type FinalizationProgressWatchdog,
 	type FinalizationTimeoutWorkload,
-	getExportFinalizationIdleTimeoutMs,
-	getExportFinalizationTimeoutMs,
+	withFinalizationTimeout,
 } from "./finalizationTimeout";
 import { FrameRenderer } from "./frameRenderer";
 import type { SupportedMp4EncoderPath } from "./mp4Support";
@@ -112,7 +112,7 @@ export class VideoExporter {
 	private nativeWriteError: Error | null = null;
 	private maxNativeWriteInFlight = 1;
 	private nativeEncoderError: Error | null = null;
-	private activeFinalizationProgressWatchdog: { refreshProgress: () => void } | null = null;
+	private activeFinalizationProgressWatchdog: FinalizationProgressWatchdog | null = null;
 
 	constructor(config: VideoExporterConfig) {
 		this.config = config;
@@ -382,65 +382,16 @@ export class VideoExporter {
 		workload: FinalizationTimeoutWorkload = "default",
 		progressAware = false,
 	): Promise<T> {
-		let timeoutId: ReturnType<typeof setTimeout> | null = null;
-		let idleTimeoutId: ReturnType<typeof setTimeout> | null = null;
-		const timeoutMs = getExportFinalizationTimeoutMs({
+		return withFinalizationTimeout({
+			promise,
+			stage,
 			effectiveDurationSec: this.effectiveDurationSec,
 			workload,
+			progressAware,
+			onWatchdogChanged: (watchdog) => {
+				this.activeFinalizationProgressWatchdog = watchdog;
+			},
 		});
-		const idleTimeoutMs = progressAware
-			? getExportFinalizationIdleTimeoutMs({
-					effectiveDurationSec: this.effectiveDurationSec,
-					workload,
-				})
-			: null;
-		const watchdog: { refreshProgress: () => void } | null =
-			progressAware && idleTimeoutMs
-				? {
-						refreshProgress: () => undefined,
-					}
-				: null;
-
-		try {
-			return await Promise.race([
-				promise,
-				new Promise<T>((_, reject) => {
-					const rejectWithMessage = (message: string) => {
-						reject(new Error(message));
-					};
-					if (watchdog) {
-						this.activeFinalizationProgressWatchdog = watchdog;
-						const refreshProgress = () => {
-							if (idleTimeoutId) {
-								clearTimeout(idleTimeoutId);
-							}
-							idleTimeoutId = setTimeout(() => {
-								rejectWithMessage(
-									`Export timed out during ${stage} after ${Math.ceil(idleTimeoutMs! / 1000)} seconds without observable progress`,
-								);
-							}, idleTimeoutMs!);
-						};
-						watchdog.refreshProgress = refreshProgress;
-						refreshProgress();
-					}
-					timeoutId = setTimeout(() => {
-						rejectWithMessage(
-							`Export timed out during ${stage} after ${Math.ceil(timeoutMs / 60_000)} minutes`,
-						);
-					}, timeoutMs);
-				}),
-			]);
-		} finally {
-			if (timeoutId) {
-				clearTimeout(timeoutId);
-			}
-			if (idleTimeoutId) {
-				clearTimeout(idleTimeoutId);
-			}
-			if (this.activeFinalizationProgressWatchdog === watchdog) {
-				this.activeFinalizationProgressWatchdog = null;
-			}
-		}
 	}
 
 	private getNativeVideoSourcePath(): string | null {
