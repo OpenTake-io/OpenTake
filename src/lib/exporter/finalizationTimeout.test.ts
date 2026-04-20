@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { getExportFinalizationTimeoutMs } from "./finalizationTimeout";
+import {
+	getExportFinalizationIdleTimeoutMs,
+	getExportFinalizationTimeoutMs,
+} from "./finalizationTimeout";
 
 describe("finalizationTimeout", () => {
 	it("keeps non-audio finalization on the existing 10 minute timeout", () => {
@@ -50,5 +53,25 @@ describe("finalizationTimeout", () => {
 				effectiveDurationSec: Number.NaN,
 			}),
 		).toBe(600_000);
+	});
+
+	it("derives a bounded idle watchdog window from the total timeout", () => {
+		expect(
+			getExportFinalizationIdleTimeoutMs({
+				workload: "default",
+			}),
+		).toBe(150_000);
+		expect(
+			getExportFinalizationIdleTimeoutMs({
+				workload: "audio",
+				effectiveDurationSec: 1_200,
+			}),
+		).toBe(300_000);
+		expect(
+			getExportFinalizationIdleTimeoutMs({
+				workload: "audio",
+				effectiveDurationSec: 2_700,
+			}),
+		).toBe(300_000);
 	});
 });

@@ -15,6 +15,7 @@ import type {
 import { AudioProcessor, isAacAudioEncodingSupported } from "./audioEncoder";
 import {
 	type FinalizationTimeoutWorkload,
+	getExportFinalizationIdleTimeoutMs,
 	getExportFinalizationTimeoutMs,
 } from "./finalizationTimeout";
 import { FrameRenderer } from "./frameRenderer";
@@ -111,6 +112,7 @@ export class VideoExporter {
 	private nativeWriteError: Error | null = null;
 	private maxNativeWriteInFlight = 1;
 	private nativeEncoderError: Error | null = null;
+	private activeFinalizationProgressWatchdog: { refreshProgress: () => void } | null = null;
 
 	constructor(config: VideoExporterConfig) {
 		this.config = config;
@@ -324,6 +326,7 @@ export class VideoExporter {
 						),
 						"audio processing",
 						"audio",
+						true,
 					);
 				}
 			}
@@ -377,22 +380,52 @@ export class VideoExporter {
 		promise: Promise<T>,
 		stage: string,
 		workload: FinalizationTimeoutWorkload = "default",
+		progressAware = false,
 	): Promise<T> {
 		let timeoutId: ReturnType<typeof setTimeout> | null = null;
+		let idleTimeoutId: ReturnType<typeof setTimeout> | null = null;
 		const timeoutMs = getExportFinalizationTimeoutMs({
 			effectiveDurationSec: this.effectiveDurationSec,
 			workload,
 		});
+		const idleTimeoutMs = progressAware
+			? getExportFinalizationIdleTimeoutMs({
+					effectiveDurationSec: this.effectiveDurationSec,
+					workload,
+				})
+			: null;
+		const watchdog: { refreshProgress: () => void } | null =
+			progressAware && idleTimeoutMs
+				? {
+						refreshProgress: () => undefined,
+					}
+				: null;
 
 		try {
 			return await Promise.race([
 				promise,
 				new Promise<T>((_, reject) => {
+					const rejectWithMessage = (message: string) => {
+						reject(new Error(message));
+					};
+					if (watchdog) {
+						this.activeFinalizationProgressWatchdog = watchdog;
+						const refreshProgress = () => {
+							if (idleTimeoutId) {
+								clearTimeout(idleTimeoutId);
+							}
+							idleTimeoutId = setTimeout(() => {
+								rejectWithMessage(
+									`Export timed out during ${stage} after ${Math.ceil(idleTimeoutMs! / 1000)} seconds without observable progress`,
+								);
+							}, idleTimeoutMs!);
+						};
+						watchdog.refreshProgress = refreshProgress;
+						refreshProgress();
+					}
 					timeoutId = setTimeout(() => {
-						reject(
-							new Error(
-								`Export timed out during ${stage} after ${Math.ceil(timeoutMs / 60_000)} minutes`,
-							),
+						rejectWithMessage(
+							`Export timed out during ${stage} after ${Math.ceil(timeoutMs / 60_000)} minutes`,
 						);
 					}, timeoutMs);
 				}),
@@ -400,6 +433,12 @@ export class VideoExporter {
 		} finally {
 			if (timeoutId) {
 				clearTimeout(timeoutId);
+			}
+			if (idleTimeoutId) {
+				clearTimeout(idleTimeoutId);
+			}
+			if (this.activeFinalizationProgressWatchdog === watchdog) {
+				this.activeFinalizationProgressWatchdog = null;
 			}
 		}
 	}
@@ -709,6 +748,7 @@ export class VideoExporter {
 				),
 				"native edited audio rendering",
 				"audio",
+				true,
 			);
 			editedAudioBuffer = await audioBlob.arrayBuffer();
 			editedAudioMimeType = audioBlob.type || null;
@@ -779,6 +819,7 @@ export class VideoExporter {
 				),
 				"ffmpeg edited audio rendering",
 				"audio",
+				true,
 			);
 			editedAudioBuffer = await audioBlob.arrayBuffer();
 			editedAudioMimeType = audioBlob.type || null;
@@ -890,6 +931,7 @@ export class VideoExporter {
 		renderProgress: number,
 		audioProgress?: number,
 	) {
+		this.activeFinalizationProgressWatchdog?.refreshProgress();
 		this.reportProgress(totalFrames, totalFrames, "finalizing", renderProgress, audioProgress);
 	}
 
@@ -1144,6 +1186,7 @@ export class VideoExporter {
 
 		this.muxer = null;
 		this.audioProcessor = null;
+		this.activeFinalizationProgressWatchdog = null;
 		this.encodeQueue = 0;
 		this.pendingMuxing = Promise.resolve();
 		this.nativePendingWrite = Promise.resolve();
