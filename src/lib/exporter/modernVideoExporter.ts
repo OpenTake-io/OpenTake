@@ -985,7 +985,6 @@ export class ModernVideoExporter {
 		}
 
 		const sessionId = this.nativeExportSessionId;
-		this.nativeExportSessionId = null;
 		console.log(`[VideoExporter] Finalizing ${NATIVE_EXPORT_ENGINE_NAME} export`, {
 			sessionId,
 			audioMode: audioPlan.audioMode,
@@ -1009,6 +1008,7 @@ export class ModernVideoExporter {
 			`${NATIVE_EXPORT_ENGINE_NAME} export finalization`,
 			audioPlan.audioMode === "none" ? "default" : "audio",
 		);
+		this.nativeExportSessionId = null;
 
 		if (!result.success) {
 			return {

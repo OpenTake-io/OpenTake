@@ -710,8 +710,6 @@ export class VideoExporter {
 		}
 
 		const sessionId = this.nativeExportSessionId;
-		this.nativeExportSessionId = null;
-
 		const result = await this.awaitWithFinalizationTimeout(
 			window.electronAPI.nativeVideoExportFinish(sessionId, {
 				audioMode: audioPlan.audioMode,
@@ -727,6 +725,7 @@ export class VideoExporter {
 			"native export finalization",
 			audioPlan.audioMode === "none" ? "default" : "audio",
 		);
+		this.nativeExportSessionId = null;
 
 		if (!result.success || !result.data) {
 			return {
@@ -1152,6 +1151,7 @@ export class VideoExporter {
 		}
 
 		this.muxer = null;
+		this.audioProcessor?.cancel();
 		this.audioProcessor = null;
 		this.activeFinalizationProgressWatchdog = null;
 		this.lastFinalizationRenderProgress =
