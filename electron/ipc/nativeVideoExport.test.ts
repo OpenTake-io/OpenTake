@@ -11,7 +11,11 @@ describe("buildTrimmedSourceAudioFilter", () => {
 				{ startMs: 0, endMs: 2_000 },
 				{ startMs: 4_000, endMs: 6_000 },
 			]),
-		).toContain("concat=n=2:v=0:a=1[aout]");
+		).toBe(
+			"[1:a]atrim=start=0.000:end=2.000,asetpts=PTS-STARTPTS[trimmed_audio_0];" +
+				"[1:a]atrim=start=4.000:end=6.000,asetpts=PTS-STARTPTS[trimmed_audio_1];" +
+				"[trimmed_audio_0][trimmed_audio_1]concat=n=2:v=0:a=1[aout]",
+		);
 	});
 });
 
@@ -25,10 +29,11 @@ describe("buildEditedTrackSourceAudioFilter", () => {
 			44_100,
 		);
 
-		expect(filter).toContain(
-			"[1:a]atrim=start=2.000:end=6.000,asetpts=PTS-STARTPTS,asetrate=66150,aresample=44100[edited_audio_1]",
+		expect(filter).toBe(
+			"[1:a]atrim=start=0.000:end=2.000,asetpts=PTS-STARTPTS[edited_audio_0];" +
+				"[1:a]atrim=start=2.000:end=6.000,asetpts=PTS-STARTPTS,asetrate=66150,aresample=44100[edited_audio_1];" +
+				"[edited_audio_0][edited_audio_1]concat=n=2:v=0:a=1[aout]",
 		);
-		expect(filter).toContain("concat=n=2:v=0:a=1[aout]");
 	});
 
 	it("returns null when the edited-track filtergraph inputs are incomplete", () => {
