@@ -781,6 +781,9 @@ export class VideoExporter {
 				audioPlan.audioMode === "none" ? "default" : "audio",
 			),
 		);
+		if (result.metrics) {
+			this.finalizationStageMs.ffmpegAudioMuxBreakdown = result.metrics;
+		}
 
 		if (!result.success || !result.data) {
 			return {
@@ -857,6 +860,9 @@ export class VideoExporter {
 				"audio",
 			),
 		);
+		if (result.metrics) {
+			this.finalizationStageMs.ffmpegAudioMuxBreakdown = result.metrics;
+		}
 
 		if (!result.success || !result.data) {
 			return {

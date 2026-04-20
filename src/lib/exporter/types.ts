@@ -41,6 +41,17 @@ export interface ExportFinalizationStageMetrics {
 	ffmpegAudioMuxMs?: number;
 	nativeExportFinalizeMs?: number;
 	nativeEncoderFlushMs?: number;
+	ffmpegAudioMuxBreakdown?: ExportFfmpegAudioMuxBreakdown;
+}
+
+export interface ExportFfmpegAudioMuxBreakdown {
+	tempVideoWriteMs?: number;
+	tempEditedAudioWriteMs?: number;
+	ffmpegExecMs?: number;
+	muxedVideoReadMs?: number;
+	tempVideoBytes?: number;
+	tempEditedAudioBytes?: number;
+	muxedVideoBytes?: number;
 }
 
 export interface ExportMetrics {
