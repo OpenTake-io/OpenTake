@@ -22,6 +22,13 @@ import {
 	getWebCodecsEncodeQueueLimit,
 	getWebCodecsKeyFrameInterval,
 } from "./exportTuning";
+import {
+	advanceFinalizationProgress,
+	type FinalizationProgressWatchdog,
+	type FinalizationTimeoutWorkload,
+	INITIAL_FINALIZATION_PROGRESS_STATE,
+	withFinalizationTimeout,
+} from "./finalizationTimeout";
 import { FrameRenderer as ModernFrameRenderer } from "./modernFrameRenderer";
 import {
 	getOrderedSupportedMp4EncoderCandidates,
@@ -132,7 +139,7 @@ export class ModernVideoExporter {
 	private lastNativeExportError: string | null = null;
 	private nativeH264Encoder: VideoEncoder | null = null;
 	private nativeEncoderError: Error | null = null;
-	private readonly FINALIZATION_TIMEOUT_MS = 600_000;
+	private effectiveDurationSec = 0;
 	private totalExportStartTimeMs = 0;
 	private metadataLoadTimeMs = 0;
 	private rendererInitTimeMs = 0;
@@ -149,6 +156,9 @@ export class ModernVideoExporter {
 	private nativeWriteTimeMs = 0;
 	private finalizationTimeMs = 0;
 	private processedFrameCount = 0;
+	private activeFinalizationProgressWatchdog: FinalizationProgressWatchdog | null = null;
+	private lastFinalizationRenderProgress = INITIAL_FINALIZATION_PROGRESS_STATE.lastRenderProgress;
+	private lastFinalizationAudioProgress = INITIAL_FINALIZATION_PROGRESS_STATE.lastAudioProgress;
 	private lastProgressSampleTimeMs = 0;
 	private lastProgressSampleFrame = 0;
 
@@ -161,7 +171,7 @@ export class ModernVideoExporter {
 			this.cleanup();
 			this.cancelled = false;
 			this.encoderError = null;
-                        this.nativeEncoderError = null;
+			this.nativeEncoderError = null;
 			const backendPreference = this.config.backendPreference ?? "auto";
 			let useNativeEncoder = false;
 			this.lastNativeExportError = null;
@@ -256,13 +266,14 @@ export class ModernVideoExporter {
 			this.metadataLoadTimeMs = this.getNowMs() - stageStartedAt;
 			const nativeAudioPlan = this.buildNativeAudioPlan(videoInfo);
 			const shouldUseFfmpegAudioFallback =
-				!useNativeEncoder
-				&& nativeAudioPlan.audioMode !== "none"
-				&& !(await isAacAudioEncodingSupported());
+				!useNativeEncoder &&
+				nativeAudioPlan.audioMode !== "none" &&
+				!(await isAacAudioEncodingSupported());
 			const effectiveDuration = this.streamingDecoder.getEffectiveDuration(
 				this.config.trimRegions,
 				this.config.speedRegions,
 			);
+			this.effectiveDurationSec = effectiveDuration;
 			const totalFrames = Math.ceil(effectiveDuration * this.config.frameRate);
 
 			stageStartedAt = this.getNowMs();
@@ -439,7 +450,11 @@ export class ModernVideoExporter {
 				throw this.encoderError;
 			}
 
-			if (nativeAudioPlan.audioMode !== "none" && !shouldUseFfmpegAudioFallback && !this.cancelled) {
+			if (
+				nativeAudioPlan.audioMode !== "none" &&
+				!shouldUseFfmpegAudioFallback &&
+				!this.cancelled
+			) {
 				const demuxer = this.streamingDecoder.getDemuxer();
 				if (
 					demuxer ||
@@ -463,6 +478,8 @@ export class ModernVideoExporter {
 							this.config.sourceAudioFallbackPaths,
 						),
 						"audio processing",
+						"audio",
+						true,
 					);
 				}
 			}
@@ -471,6 +488,9 @@ export class ModernVideoExporter {
 			const blob = await this.awaitWithFinalizationTimeout(
 				this.muxer!.finalize(),
 				"muxer finalization",
+				nativeAudioPlan.audioMode !== "none" && !shouldUseFfmpegAudioFallback
+					? "audio"
+					: "default",
 			);
 			this.finalizationTimeMs = this.getNowMs() - stageStartedAt;
 
@@ -628,27 +648,22 @@ export class ModernVideoExporter {
 		return lines.join("\n");
 	}
 
-	private async awaitWithFinalizationTimeout<T>(promise: Promise<T>, stage: string): Promise<T> {
-		let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-		try {
-			return await Promise.race([
-				promise,
-				new Promise<T>((_, reject) => {
-					timeoutId = setTimeout(() => {
-						reject(
-							new Error(
-								`Export timed out during ${stage} after ${Math.round(this.FINALIZATION_TIMEOUT_MS / 60_000)} minutes`,
-							),
-						);
-					}, this.FINALIZATION_TIMEOUT_MS);
-				}),
-			]);
-		} finally {
-			if (timeoutId) {
-				clearTimeout(timeoutId);
-			}
-		}
+	private async awaitWithFinalizationTimeout<T>(
+		promise: Promise<T>,
+		stage: string,
+		workload: FinalizationTimeoutWorkload = "default",
+		progressAware = false,
+	): Promise<T> {
+		return withFinalizationTimeout({
+			promise,
+			stage,
+			effectiveDurationSec: this.effectiveDurationSec,
+			workload,
+			progressAware,
+			onWatchdogChanged: (watchdog) => {
+				this.activeFinalizationProgressWatchdog = watchdog;
+			},
+		});
 	}
 
 	private getNativeVideoSourcePath(): string | null {
@@ -782,7 +797,10 @@ export class ModernVideoExporter {
 			return false;
 		}
 
-		if (typeof VideoEncoder === "undefined" || typeof VideoEncoder.isConfigSupported !== "function") {
+		if (
+			typeof VideoEncoder === "undefined" ||
+			typeof VideoEncoder.isConfigSupported !== "function"
+		) {
 			this.lastNativeExportError = `${NATIVE_EXPORT_ENGINE_NAME} export requires WebCodecs VideoEncoder support.`;
 			return false;
 		}
@@ -804,8 +822,7 @@ export class ModernVideoExporter {
 				return false;
 			}
 		} catch (error) {
-			this.lastNativeExportError =
-				error instanceof Error ? error.message : String(error);
+			this.lastNativeExportError = error instanceof Error ? error.message : String(error);
 			console.warn(
 				`[VideoExporter] ${NATIVE_EXPORT_ENGINE_NAME} encoder support check failed`,
 				error,
@@ -852,7 +869,8 @@ export class ModernVideoExporter {
 					.then((writeResult) => {
 						if (!writeResult.success && !this.cancelled) {
 							throw new Error(
-								writeResult.error || "Failed to write H.264 chunk to native encoder",
+								writeResult.error ||
+									"Failed to write H.264 chunk to native encoder",
 							);
 						}
 					})
@@ -880,8 +898,7 @@ export class ModernVideoExporter {
 		try {
 			encoder.configure(encoderConfig);
 		} catch (error) {
-			this.lastNativeExportError =
-				error instanceof Error ? error.message : String(error);
+			this.lastNativeExportError = error instanceof Error ? error.message : String(error);
 			try {
 				encoder.close();
 			} catch (closeError) {
@@ -923,8 +940,7 @@ export class ModernVideoExporter {
 			if (this.nativeEncoderError) throw this.nativeEncoderError;
 		}
 		while (
-			this.nativeH264Encoder.encodeQueueSize >=
-			ModernVideoExporter.NATIVE_ENCODER_QUEUE_LIMIT
+			this.nativeH264Encoder.encodeQueueSize >= ModernVideoExporter.NATIVE_ENCODER_QUEUE_LIMIT
 		) {
 			await new Promise<void>((r) => setTimeout(r, 2));
 			if (this.cancelled) return;
@@ -961,13 +977,14 @@ export class ModernVideoExporter {
 					this.config.sourceAudioFallbackPaths,
 				),
 				`${NATIVE_EXPORT_ENGINE_NAME} edited audio rendering`,
+				"audio",
+				true,
 			);
 			editedAudioBuffer = await audioBlob.arrayBuffer();
 			editedAudioMimeType = audioBlob.type || null;
 		}
 
 		const sessionId = this.nativeExportSessionId;
-		this.nativeExportSessionId = null;
 		console.log(`[VideoExporter] Finalizing ${NATIVE_EXPORT_ENGINE_NAME} export`, {
 			sessionId,
 			audioMode: audioPlan.audioMode,
@@ -989,7 +1006,9 @@ export class ModernVideoExporter {
 				editedAudioMimeType,
 			}),
 			`${NATIVE_EXPORT_ENGINE_NAME} export finalization`,
+			audioPlan.audioMode === "none" ? "default" : "audio",
 		);
+		this.nativeExportSessionId = null;
 
 		if (!result.success) {
 			return {
@@ -1042,6 +1061,8 @@ export class ModernVideoExporter {
 					this.config.sourceAudioFallbackPaths,
 				),
 				"FFmpeg edited audio rendering",
+				"audio",
+				true,
 			);
 			editedAudioBuffer = await audioBlob.arrayBuffer();
 			editedAudioMimeType = audioBlob.type || null;
@@ -1055,11 +1076,13 @@ export class ModernVideoExporter {
 					audioPlan.audioMode === "copy-source" || audioPlan.audioMode === "trim-source"
 						? audioPlan.audioSourcePath
 						: null,
-				trimSegments: audioPlan.audioMode === "trim-source" ? audioPlan.trimSegments : undefined,
+				trimSegments:
+					audioPlan.audioMode === "trim-source" ? audioPlan.trimSegments : undefined,
 				editedAudioData: editedAudioBuffer,
 				editedAudioMimeType,
 			}),
 			"FFmpeg audio muxing",
+			"audio",
 		);
 
 		if (!result.success || !result.data) {
@@ -1137,6 +1160,19 @@ export class ModernVideoExporter {
 		renderProgress: number,
 		audioProgress?: number,
 	) {
+		const nextProgress = advanceFinalizationProgress({
+			renderProgress,
+			audioProgress,
+			state: {
+				lastRenderProgress: this.lastFinalizationRenderProgress,
+				lastAudioProgress: this.lastFinalizationAudioProgress,
+			},
+		});
+		if (nextProgress.progressed) {
+			this.activeFinalizationProgressWatchdog?.refreshProgress();
+		}
+		this.lastFinalizationRenderProgress = nextProgress.lastRenderProgress;
+		this.lastFinalizationAudioProgress = nextProgress.lastAudioProgress;
 		this.reportProgress(totalFrames, totalFrames, "finalizing", renderProgress, audioProgress);
 	}
 
@@ -1404,7 +1440,8 @@ export class ModernVideoExporter {
 						}
 					} catch (error) {
 						console.error("Muxing error:", error);
-						const muxingError = error instanceof Error ? error : new Error(String(error));
+						const muxingError =
+							error instanceof Error ? error : new Error(String(error));
 						if (!this.encoderError) {
 							this.encoderError = muxingError;
 						}
@@ -1578,6 +1615,11 @@ export class ModernVideoExporter {
 		this.nativeWriteTimeMs = 0;
 		this.finalizationTimeMs = 0;
 		this.processedFrameCount = 0;
+		this.activeFinalizationProgressWatchdog = null;
+		this.lastFinalizationRenderProgress =
+			INITIAL_FINALIZATION_PROGRESS_STATE.lastRenderProgress;
+		this.lastFinalizationAudioProgress = INITIAL_FINALIZATION_PROGRESS_STATE.lastAudioProgress;
+		this.effectiveDurationSec = 0;
 		this.lastProgressSampleTimeMs = 0;
 		this.lastProgressSampleFrame = 0;
 		this.nativeWritePromises = new Set();
