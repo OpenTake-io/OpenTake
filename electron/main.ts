@@ -17,6 +17,7 @@ import {
 import { RECORDINGS_DIR } from "./appPaths";
 import { showCursor } from "./cursorHider";
 import { registerExtensionIpcHandlers } from "./extensions/extensionIpc";
+import { getGpuSwitches } from "./gpuSwitches";
 import {
 	cleanupNativeVideoExportSessions,
 	getSelectedSourceId,
@@ -58,22 +59,16 @@ app.commandLine.appendSwitch("enable-unsafe-webgpu");
 app.commandLine.appendSwitch("enable-gpu-rasterization");
 
 function configureGpuAccelerationSwitches() {
-	if (process.platform === "darwin") {
-		app.commandLine.appendSwitch("use-angle", "metal");
-		app.commandLine.appendSwitch("disable-features", "MacCatapLoopbackAudioForScreenShare");
-		return;
+	const { useAngle, useGl, disableFeatures } = getGpuSwitches(process.platform, process.env);
+	if (useAngle) {
+		app.commandLine.appendSwitch("use-angle", useAngle);
 	}
-
-	if (process.platform === "win32") {
-		app.commandLine.appendSwitch("use-angle", "d3d11");
-		return;
+	if (useGl) {
+		app.commandLine.appendSwitch("use-gl", useGl);
 	}
-
-	// Linux (and other Unix): prefer EGL over GLX for better Wayland compatibility.
-	// Disable VAAPI — many distros ship broken drivers that cause
-	// "vaInitialize failed" and prevent the renderer from loading.
-	app.commandLine.appendSwitch("use-gl", "egl");
-	app.commandLine.appendSwitch("disable-features", "VaapiVideoDecoder,VaapiVideoEncoder");
+	if (disableFeatures && disableFeatures.length > 0) {
+		app.commandLine.appendSwitch("disable-features", disableFeatures.join(","));
+	}
 }
 
 async function logSmokeExportGpuDiagnostics() {
@@ -905,8 +900,7 @@ app.whenReady().then(async () => {
 			// source picker entirely). This avoids calling getSources() which
 			// would itself trigger an extra portal dialog.
 			const isLinuxPortalSentinel =
-				process.platform === "linux" &&
-				(sourceId === "screen:linux-portal" || !sourceId);
+				process.platform === "linux" && (sourceId === "screen:linux-portal" || !sourceId);
 			if (isLinuxPortalSentinel) {
 				callback({ video: { id: "screen:0:0", name: "Entire screen" } });
 				return;
