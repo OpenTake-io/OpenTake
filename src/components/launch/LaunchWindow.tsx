@@ -1,27 +1,27 @@
 import {
 	AppWindow,
 	ArrowCircleUp as ArrowUpCircle,
-	ArrowClockwise as RefreshCw,
-	CaretUp as ChevronUp,
 	CheckCircle as CheckCircle2,
-	DotsThreeVertical as MoreVertical,
+	CaretUp as ChevronUp,
 	Eye,
 	EyeSlash as EyeOff,
 	FolderOpen,
+	Translate as Languages,
 	Microphone as Mic,
 	MicrophoneSlash as MicOff,
 	Minus,
 	Monitor,
+	DotsThreeVertical as MoreVertical,
 	Pause,
 	Play,
-	SpeakerHigh as Volume2,
-	SpeakerX as VolumeX,
+	ArrowClockwise as RefreshCw,
 	Stop as Square,
 	Timer,
-	Translate as Languages,
 	VideoCamera as Video,
 	VideoCamera as VideoIcon,
 	VideoCameraSlash as VideoOff,
+	SpeakerHigh as Volume2,
+	SpeakerX as VolumeX,
 	X,
 } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "motion/react";
@@ -41,6 +41,7 @@ import { ContentClamp } from "../ui/content-clamp";
 import ProjectBrowserDialog, {
 	type ProjectLibraryEntry,
 } from "../video-editor/ProjectBrowserDialog";
+import { shouldRestoreHudMousePassthroughAfterDrag } from "./hudMousePassthrough";
 import styles from "./LaunchWindow.module.css";
 
 interface DesktopSource {
@@ -465,7 +466,22 @@ export function LaunchWindow() {
 		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
 			event.currentTarget.releasePointerCapture(event.pointerId);
 		}
-		if (wasDragging) {
+		const hudBounds = hudContentRef.current?.getBoundingClientRect();
+		if (
+			wasDragging &&
+			shouldRestoreHudMousePassthroughAfterDrag(
+				hudBounds
+					? {
+							left: hudBounds.left,
+							top: hudBounds.top,
+							right: hudBounds.right,
+							bottom: hudBounds.bottom,
+						}
+					: null,
+				event.clientX,
+				event.clientY,
+			)
+		) {
 			window.electronAPI?.hudOverlaySetIgnoreMouse?.(true);
 		}
 	};
