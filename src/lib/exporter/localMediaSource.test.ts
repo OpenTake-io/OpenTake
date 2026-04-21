@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resolveMediaElementSource } from "./localMediaSource";
 
+const NativeURL = URL;
+
 describe("resolveMediaElementSource", () => {
 	beforeEach(() => {
 		vi.restoreAllMocks();
@@ -12,10 +14,12 @@ describe("resolveMediaElementSource", () => {
 				},
 			},
 		});
-		vi.stubGlobal("URL", {
+		class MockURL extends NativeURL {}
+		Object.assign(MockURL, {
 			createObjectURL: vi.fn(() => "blob:mock-local-media"),
 			revokeObjectURL: vi.fn(),
 		});
+		vi.stubGlobal("URL", MockURL);
 	});
 
 	it("reads file URLs through Electron IPC and returns an object URL", async () => {
@@ -45,6 +49,21 @@ describe("resolveMediaElementSource", () => {
 		const result = await resolveMediaElementSource("/tmp/example.wav");
 
 		expect(readLocalFile).toHaveBeenCalledWith("/tmp/example.wav");
+		expect(result.src).toBe("blob:mock-local-media");
+	});
+
+	it("reads loopback media-server URLs through Electron IPC", async () => {
+		const readLocalFile = vi.fn(async () => ({
+			success: true,
+			data: new Uint8Array([7, 8, 9]),
+		}));
+		(window as any).electronAPI.readLocalFile = readLocalFile;
+
+		const result = await resolveMediaElementSource(
+			"http://127.0.0.1:43123/video?path=%2Ftmp%2Fexample%20clip.mp4",
+		);
+
+		expect(readLocalFile).toHaveBeenCalledWith("/tmp/example clip.mp4");
 		expect(result.src).toBe("blob:mock-local-media");
 	});
 
