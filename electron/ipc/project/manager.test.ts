@@ -87,4 +87,17 @@ describe("local media path policy", () => {
 		await expect(resolveApprovedLocalMediaPath(videoPath)).resolves.toBe(videoPath);
 		expect(isAllowedMediaPath(videoPath)).toBe(true);
 	});
+
+	it("rejects existing non-media files when resolving local media URLs", async () => {
+		const downloadsPath = path.join(tempRoot, "Downloads");
+		const textPath = path.join(downloadsPath, "notes.txt");
+		await fs.mkdir(downloadsPath, { recursive: true });
+		await fs.writeFile(textPath, "not media");
+
+		const { resolveApprovedLocalMediaPath } = await import("./manager");
+		const { isAllowedMediaPath } = await import("../../mediaServer");
+
+		await expect(resolveApprovedLocalMediaPath(textPath)).resolves.toBeNull();
+		expect(isAllowedMediaPath(textPath)).toBe(false);
+	});
 });
