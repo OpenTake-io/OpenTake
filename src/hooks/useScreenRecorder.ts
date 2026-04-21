@@ -1300,6 +1300,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					: "Failed to start recording",
 			);
 			setRecording(false);
+			await window.electronAPI?.setRecordingState(false);
 			cleanupCapturedMedia();
 			await stopWebcamRecorder();
 		} finally {
