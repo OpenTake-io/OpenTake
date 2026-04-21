@@ -26,6 +26,16 @@ export interface NativeVideoExportFinishOptions {
 	editedAudioMimeType?: string | null;
 }
 
+export interface NativeVideoAudioMuxMetrics {
+	tempVideoWriteMs?: number;
+	tempEditedAudioWriteMs?: number;
+	ffmpegExecMs?: number;
+	muxedVideoReadMs?: number;
+	tempVideoBytes?: number;
+	tempEditedAudioBytes?: number;
+	muxedVideoBytes?: number;
+}
+
 export function getNativeVideoInputByteSize(width: number, height: number): number {
 	return width * height * NATIVE_EXPORT_INPUT_BYTES_PER_PIXEL;
 }
@@ -159,23 +169,28 @@ export function buildTrimmedSourceAudioFilter(
  * — no re-encoding step, no raw pixel IPC traffic.
  */
 export function buildNativeH264StreamExportArgs(config: {
-        frameRate: number
-        outputPath: string
+	frameRate: number;
+	outputPath: string;
 }): string[] {
-        return [
-                '-y',
-                '-hide_banner',
-                '-loglevel',
-                'error',
-                // Input 0: pre-encoded H.264 Annex B stream from browser VideoEncoder via stdin
-                '-f', 'h264',
-                '-r', String(config.frameRate),
-                '-i', 'pipe:0',
-                '-an', // audio handled separately by muxNativeVideoExportAudio
-                '-c:v', 'copy',
-                '-movflags', '+faststart',
-                config.outputPath,
-        ]
+	return [
+		"-y",
+		"-hide_banner",
+		"-loglevel",
+		"error",
+		// Input 0: pre-encoded H.264 Annex B stream from browser VideoEncoder via stdin
+		"-f",
+		"h264",
+		"-r",
+		String(config.frameRate),
+		"-i",
+		"pipe:0",
+		"-an", // audio handled separately by muxNativeVideoExportAudio
+		"-c:v",
+		"copy",
+		"-movflags",
+		"+faststart",
+		config.outputPath,
+	];
 }
 
 export function getEditedAudioExtension(mimeType?: string | null): string {
