@@ -19,14 +19,17 @@ import {
 } from "../state";
 import {
 	getProjectsDir,
+  getProjectThumbnailPath,
 	isAllowedLocalMediaPath,
 	isPathInsideDirectory,
 	isTrustedProjectPath,
 	listProjectLibraryEntries,
+  loadRecentProjectPaths,
 	loadProjectFromPath,
 	persistRecordingsDirectorySetting,
 	replaceApprovedSessionLocalReadPaths,
 	rememberRecentProject,
+  saveRecentProjectPaths,
 	saveProjectThumbnail,
 } from "../project/manager";
 import {
@@ -354,6 +357,9 @@ export function registerProjectHandlers() {
 
         const projectsDir = await getProjectsDir()
         const preparedProject = ensureProjectDataHasProjectId(projectData)
+        const activeProjectPath = isTrustedProjectPath(currentProjectPath)
+          ? currentProjectPath
+          : null
         const targetProjectPath = path.join(
           projectsDir,
           `${normalizedProjectName}.${PROJECT_FILE_EXTENSION}`,
@@ -362,16 +368,43 @@ export function registerProjectHandlers() {
         const overwriteCheck = await ensureNamedProjectSaveDoesNotOverwriteDifferentProject(
           targetProjectPath,
           preparedProject.projectData,
-          currentProjectPath,
+          activeProjectPath,
         )
         if (!overwriteCheck.success) {
           return overwriteCheck
         }
 
         await fs.writeFile(targetProjectPath, JSON.stringify(preparedProject.projectData, null, 2), 'utf-8')
-        setCurrentProjectPath(targetProjectPath)
         await saveProjectThumbnail(targetProjectPath, thumbnailDataUrl)
         await rememberRecentProject(targetProjectPath)
+
+        if (activeProjectPath) {
+          const [activeResolvedPath, targetResolvedPath] = await Promise.all([
+            resolveComparablePath(activeProjectPath),
+            resolveComparablePath(targetProjectPath),
+          ])
+
+          if (activeResolvedPath !== targetResolvedPath) {
+            await fs.unlink(activeProjectPath).catch((unlinkError: NodeJS.ErrnoException) => {
+              if (unlinkError.code !== 'ENOENT') {
+                throw unlinkError
+              }
+            })
+            await fs.rm(getProjectThumbnailPath(activeProjectPath), { force: true }).catch(() => undefined)
+
+            const recentProjectPaths = await loadRecentProjectPaths()
+            const filteredRecentProjectPaths: string[] = []
+            for (const recentProjectPath of recentProjectPaths) {
+              const recentResolvedPath = await resolveComparablePath(recentProjectPath)
+              if (recentResolvedPath !== activeResolvedPath) {
+                filteredRecentProjectPaths.push(recentProjectPath)
+              }
+            }
+            await saveRecentProjectPaths(filteredRecentProjectPaths)
+          }
+        }
+
+        setCurrentProjectPath(targetProjectPath)
 
         return {
           success: true,
