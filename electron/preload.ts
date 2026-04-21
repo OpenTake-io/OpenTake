@@ -407,6 +407,18 @@ contextBridge.exposeInMainWorld("electronAPI", {
 			thumbnailDataUrl,
 		);
 	},
+	saveProjectFileNamed: (
+		projectData: unknown,
+		projectName: string,
+		thumbnailDataUrl?: string | null,
+	) => {
+		return ipcRenderer.invoke(
+			"save-project-file-named",
+			projectData,
+			projectName,
+			thumbnailDataUrl,
+		);
+	},
 	loadProjectFile: () => {
 		return ipcRenderer.invoke("load-project-file");
 	},

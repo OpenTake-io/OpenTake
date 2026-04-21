@@ -1,4 +1,5 @@
 import { constants as fsConstants } from "node:fs";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { dialog, ipcMain, shell } from "electron";
@@ -18,14 +19,17 @@ import {
 } from "../state";
 import {
 	getProjectsDir,
+  getProjectThumbnailPath,
 	isAllowedLocalMediaPath,
 	isPathInsideDirectory,
 	isTrustedProjectPath,
 	listProjectLibraryEntries,
+  loadRecentProjectPaths,
 	loadProjectFromPath,
 	persistRecordingsDirectorySetting,
 	replaceApprovedSessionLocalReadPaths,
 	rememberRecentProject,
+  saveRecentProjectPaths,
 	saveProjectThumbnail,
 } from "../project/manager";
 import {
@@ -39,6 +43,161 @@ import { persistRecordingSessionManifest, resolveRecordingSession } from "../pro
 
 function normalizeRecordingTimeOffsetMs(value: unknown): number {
 	return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : 0;
+}
+
+/**
+ * Produces a filesystem-safe project base name without the project extension.
+ */
+function normalizeProjectSaveName(projectName?: string | null) {
+  if (typeof projectName !== "string") {
+    return null;
+  }
+
+  const trimmedName = projectName.trim();
+  if (!trimmedName) {
+    return null;
+  }
+
+  const withoutExtension = trimmedName.replace(
+    new RegExp(`\\.${PROJECT_FILE_EXTENSION}$`, "i"),
+    "",
+  );
+  const withoutInvalidFilesystemChars = withoutExtension.replace(/[<>:"/\\|?*]/g, "");
+  const withoutControlChars = Array.from(withoutInvalidFilesystemChars)
+    .filter((character) => character.charCodeAt(0) > 31)
+    .join("");
+  const sanitizedName = withoutControlChars
+    .replace(/\s+/g, " ")
+    .replace(/[. ]+$/g, "")
+    .trim();
+
+  return sanitizedName || null;
+}
+
+/**
+ * Extracts the persisted source video path from a saved project payload.
+ */
+function getProjectVideoPath(projectData: unknown) {
+  if (!projectData || typeof projectData !== "object") {
+    return null;
+  }
+
+  const candidate = projectData as { videoPath?: unknown };
+  return typeof candidate.videoPath === "string" ? candidate.videoPath : null;
+}
+
+function getProjectId(projectData: unknown) {
+  if (!projectData || typeof projectData !== "object") {
+    return null;
+  }
+
+  const candidate = projectData as { projectId?: unknown };
+  return typeof candidate.projectId === "string" && candidate.projectId.trim().length > 0
+    ? candidate.projectId
+    : null;
+}
+
+function withProjectId(projectData: unknown, projectId: string) {
+  if (!projectData || typeof projectData !== "object" || Array.isArray(projectData)) {
+    return projectData;
+  }
+
+  return {
+    ...projectData,
+    projectId,
+  };
+}
+
+function ensureProjectDataHasProjectId(projectData: unknown) {
+  const existingProjectId = getProjectId(projectData);
+  if (existingProjectId) {
+    return {
+      projectId: existingProjectId,
+      projectData,
+    };
+  }
+
+  const projectId = randomUUID();
+  return {
+    projectId,
+    projectData: withProjectId(projectData, projectId),
+  };
+}
+
+async function resolveComparablePath(filePath: string) {
+  return fs.realpath(filePath).catch(() => path.resolve(filePath));
+}
+
+/**
+ * Prevents a named save from silently overwriting a different project file.
+ */
+async function ensureNamedProjectSaveDoesNotOverwriteDifferentProject(
+  targetProjectPath: string,
+  projectData: unknown,
+  activeProjectPath?: string | null,
+) {
+  try {
+    await fs.stat(targetProjectPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+      return { success: true };
+    }
+    throw error;
+  }
+
+  const targetResolvedPath = await resolveComparablePath(targetProjectPath);
+  if (activeProjectPath) {
+    const activeResolvedPath = await resolveComparablePath(activeProjectPath);
+    if (activeResolvedPath === targetResolvedPath) {
+      return { success: true };
+    }
+  }
+
+  const incomingProjectId = getProjectId(projectData);
+  const incomingVideoPath = getProjectVideoPath(projectData);
+
+  try {
+    const existingProjectRaw = await fs.readFile(targetProjectPath, "utf-8");
+    const existingProjectData = JSON.parse(existingProjectRaw) as unknown;
+    const existingProjectId = getProjectId(existingProjectData);
+    const existingVideoPath = getProjectVideoPath(existingProjectData);
+
+    if (existingProjectId && incomingProjectId) {
+      if (existingProjectId === incomingProjectId) {
+        return { success: true };
+      }
+
+      return {
+        success: false,
+        message: "A different project already uses this name",
+      };
+    }
+
+    if (existingVideoPath && incomingVideoPath && existingVideoPath !== incomingVideoPath) {
+      return {
+        success: false,
+        message: "A different project already uses this name",
+      };
+    }
+
+    if (!existingProjectId && !incomingProjectId && existingVideoPath && incomingVideoPath) {
+      return {
+        success: false,
+        message: "Unable to verify project identity for the chosen name",
+      };
+    }
+
+    return {
+      success: false,
+      message: "Unable to verify project identity for the chosen name",
+    };
+  } catch (error) {
+    console.error("Failed to verify existing named project before overwrite:", error);
+    return {
+      success: false,
+      message: "Unable to verify project identity for the chosen name",
+    };
+  }
 }
 
 export function registerProjectHandlers() {
@@ -126,26 +285,26 @@ export function registerProjectHandlers() {
   ipcMain.handle('save-project-file', async (_, projectData: unknown, suggestedName?: string, existingProjectPath?: string, thumbnailDataUrl?: string | null) => {
     try {
       const projectsDir = await getProjectsDir()
+      const preparedProject = ensureProjectDataHasProjectId(projectData)
       const trustedExistingProjectPath = isTrustedProjectPath(existingProjectPath)
         ? existingProjectPath
         : null
 
       if (trustedExistingProjectPath) {
-        await fs.writeFile(trustedExistingProjectPath, JSON.stringify(projectData, null, 2), 'utf-8')
+        await fs.writeFile(trustedExistingProjectPath, JSON.stringify(preparedProject.projectData, null, 2), 'utf-8')
         setCurrentProjectPath(trustedExistingProjectPath)
         await saveProjectThumbnail(trustedExistingProjectPath, thumbnailDataUrl)
         await rememberRecentProject(trustedExistingProjectPath)
         return {
           success: true,
           path: trustedExistingProjectPath,
+          projectId: preparedProject.projectId,
           message: 'Project saved successfully'
         }
       }
 
-      const safeName = (suggestedName || `project-${Date.now()}`).replace(/[^a-zA-Z0-9-_]/g, '_')
-      const defaultName = safeName.endsWith(`.${PROJECT_FILE_EXTENSION}`)
-        ? safeName
-        : `${safeName}.${PROJECT_FILE_EXTENSION}`
+      const safeName = normalizeProjectSaveName(suggestedName) || `project-${Date.now()}`
+      const defaultName = `${safeName}.${PROJECT_FILE_EXTENSION}`
 
       const result = await dialog.showSaveDialog({
         title: 'Save Recordly Project',
@@ -165,7 +324,7 @@ export function registerProjectHandlers() {
         }
       }
 
-      await fs.writeFile(result.filePath, JSON.stringify(projectData, null, 2), 'utf-8')
+      await fs.writeFile(result.filePath, JSON.stringify(preparedProject.projectData, null, 2), 'utf-8')
       setCurrentProjectPath(result.filePath)
       await saveProjectThumbnail(result.filePath, thumbnailDataUrl)
       await rememberRecentProject(result.filePath)
@@ -173,6 +332,7 @@ export function registerProjectHandlers() {
       return {
         success: true,
         path: result.filePath,
+        projectId: preparedProject.projectId,
         message: 'Project saved successfully'
       }
     } catch (error) {
@@ -184,6 +344,83 @@ export function registerProjectHandlers() {
       }
     }
   })
+
+    ipcMain.handle('save-project-file-named', async (_, projectData: unknown, projectName: string, thumbnailDataUrl?: string | null) => {
+      try {
+        const normalizedProjectName = normalizeProjectSaveName(projectName)
+        if (!normalizedProjectName) {
+          return {
+            success: false,
+            message: 'Project name is required',
+          }
+        }
+
+        const projectsDir = await getProjectsDir()
+        const preparedProject = ensureProjectDataHasProjectId(projectData)
+        const activeProjectPath = isTrustedProjectPath(currentProjectPath)
+          ? currentProjectPath
+          : null
+        const targetProjectPath = path.join(
+          projectsDir,
+          `${normalizedProjectName}.${PROJECT_FILE_EXTENSION}`,
+        )
+
+        const overwriteCheck = await ensureNamedProjectSaveDoesNotOverwriteDifferentProject(
+          targetProjectPath,
+          preparedProject.projectData,
+          activeProjectPath,
+        )
+        if (!overwriteCheck.success) {
+          return overwriteCheck
+        }
+
+        await fs.writeFile(targetProjectPath, JSON.stringify(preparedProject.projectData, null, 2), 'utf-8')
+        await saveProjectThumbnail(targetProjectPath, thumbnailDataUrl)
+        await rememberRecentProject(targetProjectPath)
+
+        if (activeProjectPath) {
+          const [activeResolvedPath, targetResolvedPath] = await Promise.all([
+            resolveComparablePath(activeProjectPath),
+            resolveComparablePath(targetProjectPath),
+          ])
+
+          if (activeResolvedPath !== targetResolvedPath) {
+            await fs.unlink(activeProjectPath).catch((unlinkError: NodeJS.ErrnoException) => {
+              if (unlinkError.code !== 'ENOENT') {
+                throw unlinkError
+              }
+            })
+            await fs.rm(getProjectThumbnailPath(activeProjectPath), { force: true }).catch(() => undefined)
+
+            const recentProjectPaths = await loadRecentProjectPaths()
+            const filteredRecentProjectPaths: string[] = []
+            for (const recentProjectPath of recentProjectPaths) {
+              const recentResolvedPath = await resolveComparablePath(recentProjectPath)
+              if (recentResolvedPath !== activeResolvedPath) {
+                filteredRecentProjectPaths.push(recentProjectPath)
+              }
+            }
+            await saveRecentProjectPaths(filteredRecentProjectPaths)
+          }
+        }
+
+        setCurrentProjectPath(targetProjectPath)
+
+        return {
+          success: true,
+          path: targetProjectPath,
+          projectId: preparedProject.projectId,
+          message: 'Project saved successfully'
+        }
+      } catch (error) {
+        console.error('Failed to save named project file:', error)
+        return {
+          success: false,
+          message: 'Failed to save project file',
+          error: String(error)
+        }
+      }
+    })
 
   ipcMain.handle('load-project-file', async () => {
     try {
