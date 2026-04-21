@@ -2202,6 +2202,9 @@ export default function VideoEditor() {
 		}
 	}, [saveProject]);
 
+	/**
+	 * Saves the current project directly into the projects library under a chosen name.
+	 */
 	const saveProjectWithName = useCallback(
 		async (projectName: string) => {
 			const trimmedProjectName = projectName.trim();
@@ -2258,11 +2261,17 @@ export default function VideoEditor() {
 		],
 	);
 
+	/**
+	 * Resets the inline project-name editor back to the current saved display name.
+	 */
 	const closeProjectNameEditor = useCallback(() => {
 		setProjectNameDraft(projectDisplayName);
 		setIsEditingProjectName(false);
 	}, [projectDisplayName]);
 
+	/**
+	 * Commits the inline project-name editor and persists the project under that name.
+	 */
 	const handleProjectNameSubmit = useCallback(
 		async (event?: React.FormEvent<HTMLFormElement>) => {
 			event?.preventDefault();
@@ -2273,8 +2282,12 @@ export default function VideoEditor() {
 			}
 
 			setIsSavingProjectName(true);
-			const saved = await saveProjectWithName(trimmedProjectName);
-			setIsSavingProjectName(false);
+			let saved = false;
+			try {
+				saved = await saveProjectWithName(trimmedProjectName);
+			} finally {
+				setIsSavingProjectName(false);
+			}
 
 			if (saved) {
 				setIsEditingProjectName(false);
@@ -2922,19 +2935,19 @@ export default function VideoEditor() {
 			if (deletedClip) {
 				const { startMs, endMs } = deletedClip;
 				setZoomRegions((prev) =>
-					prev.filter((region) => region.startMs < startMs || region.endMs > endMs),
+					prev.filter((region) => region.endMs <= startMs || region.startMs >= endMs),
 				);
 				setAnnotationRegions((prev) =>
-					prev.filter((region) => region.startMs < startMs || region.endMs > endMs),
+					prev.filter((region) => region.endMs <= startMs || region.startMs >= endMs),
 				);
 				setTrimRegions((prev) =>
-					prev.filter((region) => region.startMs < startMs || region.endMs > endMs),
+					prev.filter((region) => region.endMs <= startMs || region.startMs >= endMs),
 				);
 				setSpeedRegions((prev) =>
-					prev.filter((region) => region.startMs < startMs || region.endMs > endMs),
+					prev.filter((region) => region.endMs <= startMs || region.startMs >= endMs),
 				);
 				setAudioRegions((prev) =>
-					prev.filter((region) => region.startMs < startMs || region.endMs > endMs),
+					prev.filter((region) => region.endMs <= startMs || region.startMs >= endMs),
 				);
 			}
 			if (selectedClipId === id) {

@@ -41,6 +41,9 @@ function normalizeRecordingTimeOffsetMs(value: unknown): number {
 	return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : 0;
 }
 
+/**
+ * Produces a filesystem-safe project base name without the project extension.
+ */
 function normalizeProjectSaveName(projectName?: string | null) {
   if (typeof projectName !== "string") {
     return null;
@@ -55,13 +58,74 @@ function normalizeProjectSaveName(projectName?: string | null) {
     new RegExp(`\\.${PROJECT_FILE_EXTENSION}$`, "i"),
     "",
   );
-  const sanitizedName = withoutExtension
-    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "")
+  const withoutInvalidFilesystemChars = withoutExtension.replace(/[<>:"/\\|?*]/g, "");
+  const withoutControlChars = Array.from(withoutInvalidFilesystemChars)
+    .filter((character) => character.charCodeAt(0) > 31)
+    .join("");
+  const sanitizedName = withoutControlChars
     .replace(/\s+/g, " ")
     .replace(/[. ]+$/g, "")
     .trim();
 
   return sanitizedName || null;
+}
+
+/**
+ * Extracts the persisted source video path from a saved project payload.
+ */
+function getProjectVideoPath(projectData: unknown) {
+  if (!projectData || typeof projectData !== "object") {
+    return null;
+  }
+
+  const candidate = projectData as { videoPath?: unknown };
+  return typeof candidate.videoPath === "string" ? candidate.videoPath : null;
+}
+
+/**
+ * Prevents a named save from silently overwriting a different project file.
+ */
+async function ensureNamedProjectSaveDoesNotOverwriteDifferentProject(
+  targetProjectPath: string,
+  projectData: unknown,
+) {
+  try {
+    await fs.stat(targetProjectPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+      return { success: true };
+    }
+    throw error;
+  }
+
+  const incomingVideoPath = getProjectVideoPath(projectData);
+  if (!incomingVideoPath) {
+    return {
+      success: false,
+      message: "Unable to verify project identity for the chosen name",
+    };
+  }
+
+  try {
+    const existingProjectRaw = await fs.readFile(targetProjectPath, "utf-8");
+    const existingProjectData = JSON.parse(existingProjectRaw) as unknown;
+    const existingVideoPath = getProjectVideoPath(existingProjectData);
+
+    if (existingVideoPath === incomingVideoPath) {
+      return { success: true };
+    }
+  } catch (error) {
+    console.error("Failed to verify existing named project before overwrite:", error);
+    return {
+      success: false,
+      message: "A different project already uses this name",
+    };
+  }
+
+  return {
+    success: false,
+    message: "A different project already uses this name",
+  };
 }
 
 export function registerProjectHandlers() {
@@ -221,6 +285,14 @@ export function registerProjectHandlers() {
           projectsDir,
           `${normalizedProjectName}.${PROJECT_FILE_EXTENSION}`,
         )
+
+        const overwriteCheck = await ensureNamedProjectSaveDoesNotOverwriteDifferentProject(
+          targetProjectPath,
+          projectData,
+        )
+        if (!overwriteCheck.success) {
+          return overwriteCheck
+        }
 
         await fs.writeFile(targetProjectPath, JSON.stringify(projectData, null, 2), 'utf-8')
         setCurrentProjectPath(targetProjectPath)
