@@ -29,6 +29,7 @@ import {
 	INITIAL_FINALIZATION_PROGRESS_STATE,
 	withFinalizationTimeout,
 } from "./finalizationTimeout";
+import { getLocalFilePath } from "./localMediaSource";
 import { FrameRenderer as ModernFrameRenderer } from "./modernFrameRenderer";
 import {
 	getOrderedSupportedMp4EncoderCandidates,
@@ -681,36 +682,7 @@ export class ModernVideoExporter {
 	}
 
 	private getNativeVideoSourcePath(): string | null {
-		const resource = this.config.videoUrl;
-		if (!resource) {
-			return null;
-		}
-
-		if (/^file:\/\//i.test(resource)) {
-			try {
-				const url = new URL(resource);
-				const pathname = decodeURIComponent(url.pathname);
-				if (url.host && url.host !== "localhost") {
-					return `//${url.host}${pathname}`;
-				}
-				if (/^\/[A-Za-z]:/.test(pathname)) {
-					return pathname.slice(1);
-				}
-				return pathname;
-			} catch {
-				return resource.replace(/^file:\/\//i, "");
-			}
-		}
-
-		if (
-			resource.startsWith("/") ||
-			/^[A-Za-z]:[\\/]/.test(resource) ||
-			/^\\\\[^\\]+\\[^\\]+/.test(resource)
-		) {
-			return resource;
-		}
-
-		return null;
+		return this.config.videoUrl ? getLocalFilePath(this.config.videoUrl) : null;
 	}
 
 	private buildNativeTrimSegments(durationMs: number): Array<{ startMs: number; endMs: number }> {

@@ -2,8 +2,9 @@ import { fromFileUrl, toFileUrl } from "@/components/video-editor/projectPersist
 
 const NOOP = () => undefined;
 const REMOTE_MEDIA_URL_PATTERN = /^(https?:|blob:|data:)/i;
+const LOOPBACK_MEDIA_HOSTS = new Set(["127.0.0.1", "localhost"]);
 
-function isAbsoluteLocalPath(resource: string) {
+export function isAbsoluteLocalPath(resource: string) {
 	return (
 		resource.startsWith("/") ||
 		/^[A-Za-z]:[\\/]/.test(resource) ||
@@ -11,7 +12,34 @@ function isAbsoluteLocalPath(resource: string) {
 	);
 }
 
-function getLocalFilePath(resource: string) {
+function getLocalMediaServerPath(resource: string) {
+	if (!/^https?:\/\//i.test(resource)) {
+		return null;
+	}
+
+	try {
+		const url = new URL(resource);
+		if (!LOOPBACK_MEDIA_HOSTS.has(url.hostname) || url.pathname !== "/video") {
+			return null;
+		}
+
+		const mediaPath = url.searchParams.get("path");
+		return mediaPath && mediaPath.trim().length > 0 ? mediaPath : null;
+	} catch {
+		return null;
+	}
+}
+
+export function isLocalMediaServerUrl(resource: string) {
+	return getLocalMediaServerPath(resource) !== null;
+}
+
+export function getLocalFilePath(resource: string) {
+	const localMediaServerPath = getLocalMediaServerPath(resource);
+	if (localMediaServerPath) {
+		return localMediaServerPath;
+	}
+
 	if (/^file:\/\//i.test(resource)) {
 		return fromFileUrl(resource);
 	}
@@ -19,9 +47,17 @@ function getLocalFilePath(resource: string) {
 	return isAbsoluteLocalPath(resource) ? resource : null;
 }
 
+function isRemoteMediaResource(resource: string) {
+	return REMOTE_MEDIA_URL_PATTERN.test(resource) && !isLocalMediaServerUrl(resource);
+}
+
 function getNormalizedResourceUrl(resource: string) {
 	const localFilePath = getLocalFilePath(resource);
 	if (!localFilePath) {
+		return resource;
+	}
+
+	if (isLocalMediaServerUrl(resource)) {
 		return resource;
 	}
 
@@ -51,7 +87,7 @@ export async function resolveMediaElementSource(resource: string): Promise<{
 	src: string;
 	revoke: () => void;
 }> {
-	if (!resource || REMOTE_MEDIA_URL_PATTERN.test(resource)) {
+	if (!resource || isRemoteMediaResource(resource)) {
 		return { src: resource, revoke: NOOP };
 	}
 
