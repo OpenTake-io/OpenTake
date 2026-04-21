@@ -1704,12 +1704,11 @@ export default function VideoEditor() {
 	const hasUnsavedChanges = useMemo(
 		() =>
 			Boolean(
-				currentProjectPath &&
-					currentProjectSnapshot &&
-					lastSavedSnapshot &&
-					!areDeepEqual(currentProjectSnapshot, lastSavedSnapshot),
+				currentProjectSnapshot &&
+					(!lastSavedSnapshot ||
+						!areDeepEqual(currentProjectSnapshot, lastSavedSnapshot)),
 			),
-		[currentProjectPath, currentProjectSnapshot, lastSavedSnapshot],
+		[currentProjectSnapshot, lastSavedSnapshot],
 	);
 
 	useEffect(() => {
@@ -2319,6 +2318,8 @@ export default function VideoEditor() {
 			let saved = false;
 			try {
 				saved = await saveProjectWithName(trimmedProjectName);
+			} catch (error) {
+				toast.error(getErrorMessage(error));
 			} finally {
 				setIsSavingProjectName(false);
 			}
