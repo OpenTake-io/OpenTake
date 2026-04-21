@@ -7,6 +7,7 @@ import { lastNativeCaptureDiagnostics, setLastNativeCaptureDiagnostics } from ".
 import type { CompanionAudioCandidate, NativeCaptureDiagnostics } from "../types";
 
 const execFileAsync = promisify(execFile);
+export const MIN_VALID_RECORDED_VIDEO_BYTES = 1024;
 
 export function recordNativeCaptureDiagnostics(
 	diagnostics: Omit<NativeCaptureDiagnostics, "timestamp">,
@@ -152,6 +153,12 @@ export async function validateRecordedVideo(videoPath: string) {
 		throw new Error(`Recorded output is empty: ${videoPath}`);
 	}
 
+	if (stat.size < MIN_VALID_RECORDED_VIDEO_BYTES) {
+		throw new Error(
+			`Recorded output is too small to contain playable video (${stat.size} bytes): ${videoPath}`,
+		);
+	}
+
 	const ffmpegPath = getFfmpegBinaryPath();
 	let stderr = "";
 
@@ -173,7 +180,7 @@ export async function validateRecordedVideo(videoPath: string) {
 	}
 
 	const durationSeconds = parseFfmpegDurationSeconds(stderr);
-	if (durationSeconds !== null && durationSeconds <= 0) {
+	if (durationSeconds === null || durationSeconds <= 0) {
 		throw new Error(`Recorded output has an invalid duration: ${videoPath}`);
 	}
 
