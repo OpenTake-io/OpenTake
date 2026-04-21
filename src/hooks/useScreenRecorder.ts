@@ -1300,9 +1300,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					: "Failed to start recording",
 			);
 			setRecording(false);
-			await window.electronAPI?.setRecordingState(false);
-			cleanupCapturedMedia();
-			await stopWebcamRecorder();
+			try {
+				await window.electronAPI?.setRecordingState(false);
+			} catch (stateError) {
+				console.warn("Failed to reset main-process recording state:", stateError);
+			} finally {
+				cleanupCapturedMedia();
+				await stopWebcamRecorder();
+			}
 		} finally {
 			startInFlight.current = false;
 			setStarting(false);
