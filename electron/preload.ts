@@ -1,6 +1,15 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 type NativeVideoExportWriteResult = { success: boolean; error?: string };
+type NativeVideoAudioMuxMetrics = {
+	tempVideoWriteMs?: number;
+	tempEditedAudioWriteMs?: number;
+	ffmpegExecMs?: number;
+	muxedVideoReadMs?: number;
+	tempVideoBytes?: number;
+	tempEditedAudioBytes?: number;
+	muxedVideoBytes?: number;
+};
 
 const nativeVideoExportWriteRequests = new Map<
 	number,
@@ -156,7 +165,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
 				);
 
 				return result;
-			});
+			}) as Promise<{
+			success: boolean;
+			data?: Uint8Array;
+			encoderName?: string;
+			error?: string;
+			metrics?: NativeVideoAudioMuxMetrics;
+		}>;
 	},
 	nativeVideoExportCancel: (sessionId: string) => {
 		return ipcRenderer.invoke("native-video-export-cancel", sessionId).finally(() => {
@@ -176,7 +191,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 			editedAudioMimeType?: string | null;
 		},
 	) => {
-		return ipcRenderer.invoke("mux-exported-video-audio", videoData, options);
+		return ipcRenderer.invoke("mux-exported-video-audio", videoData, options) as Promise<{
+			success: boolean;
+			data?: Uint8Array;
+			error?: string;
+			metrics?: NativeVideoAudioMuxMetrics;
+		}>;
 	},
 	getVideoAudioFallbackPaths: (videoPath: string) => {
 		return ipcRenderer.invoke("get-video-audio-fallback-paths", videoPath);

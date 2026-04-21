@@ -2,16 +2,29 @@ import type { ChildProcessByStdio } from "node:child_process";
 import { execFile, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
+import { performance } from "node:perf_hooks";
 import type { Readable, Writable } from "node:stream";
-import { app } from "electron";
+import { promisify } from "node:util";
 import type { WebContents } from "electron";
+import { app } from "electron";
 import { getFfmpegBinaryPath } from "../ffmpeg/binary";
-import { buildTrimmedSourceAudioFilter, getEditedAudioExtension, getNativeVideoInputByteSize, getPreferredNativeVideoEncoders, buildNativeVideoExportArgs, parseAvailableFfmpegEncoders } from "../nativeVideoExport";
-import type { NativeExportEncodingMode, NativeVideoExportFinishOptions } from "../nativeVideoExport";
+import type {
+	NativeExportEncodingMode,
+	NativeVideoAudioMuxMetrics,
+	NativeVideoExportFinishOptions,
+} from "../nativeVideoExport";
+import {
+	buildNativeVideoExportArgs,
+	buildTrimmedSourceAudioFilter,
+	getEditedAudioExtension,
+	getNativeVideoInputByteSize,
+	getPreferredNativeVideoEncoders,
+	parseAvailableFfmpegEncoders,
+} from "../nativeVideoExport";
 import { cachedNativeVideoEncoder, setCachedNativeVideoEncoder } from "../state";
 
 const execFileAsync = promisify(execFile);
+const getNowMs = () => performance.now();
 
 export type NativeVideoExportSession = {
 	ffmpegProcess: ChildProcessByStdio<Writable, null, Readable>;
@@ -72,7 +85,10 @@ export async function removeTemporaryExportFile(filePath: string | null | undefi
 	}
 }
 
-export function getNativeVideoExportSessionError(session: NativeVideoExportSession, fallback: string) {
+export function getNativeVideoExportSessionError(
+	session: NativeVideoExportSession,
+	fallback: string,
+) {
 	return (
 		session.stdinError?.message ||
 		session.processError?.message ||
@@ -199,7 +215,10 @@ export async function writeNativeVideoExportFrame(
 	session: NativeVideoExportSession,
 	frameData: Uint8Array | ArrayBuffer,
 ) {
-	if (session.inputMode !== "h264-stream" && getNativeVideoExportFrameLength(frameData) !== session.inputByteSize) {
+	if (
+		session.inputMode !== "h264-stream" &&
+		getNativeVideoExportFrameLength(frameData) !== session.inputByteSize
+	) {
 		throw new Error(
 			`Native video export expected ${session.inputByteSize} bytes per frame but received ${getNativeVideoExportFrameLength(frameData)}`,
 		);
@@ -358,10 +377,14 @@ export async function muxNativeVideoExportAudio(
 ) {
 	const audioMode = options.audioMode ?? "none";
 	if (audioMode === "none") {
-		return videoPath;
+		return {
+			outputPath: videoPath,
+			metrics: {} as NativeVideoAudioMuxMetrics,
+		};
 	}
 
 	const ffmpegPath = getFfmpegBinaryPath();
+	const metrics: NativeVideoAudioMuxMetrics = {};
 	const tempArtifacts: string[] = [];
 	let audioInputPath = options.audioSourcePath ?? null;
 
@@ -375,12 +398,18 @@ export async function muxNativeVideoExportAudio(
 			app.getPath("temp"),
 			`recordly-export-audio-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${extension}`,
 		);
+		const tempAudioWriteStartedAt = getNowMs();
 		await fs.writeFile(audioInputPath, Buffer.from(options.editedAudioData));
+		metrics.tempEditedAudioWriteMs = getNowMs() - tempAudioWriteStartedAt;
+		metrics.tempEditedAudioBytes = options.editedAudioData.byteLength;
 		tempArtifacts.push(audioInputPath);
 	}
 
 	if (!audioInputPath) {
-		return videoPath;
+		return {
+			outputPath: videoPath,
+			metrics,
+		};
 	}
 
 	const outputPath = path.join(
@@ -424,12 +453,17 @@ export async function muxNativeVideoExportAudio(
 	);
 
 	try {
+		const ffmpegExecStartedAt = getNowMs();
 		await execFileAsync(ffmpegPath, args, {
 			timeout: 15 * 60 * 1000,
 			maxBuffer: 20 * 1024 * 1024,
 		});
+		metrics.ffmpegExecMs = getNowMs() - ffmpegExecStartedAt;
 		await removeTemporaryExportFile(videoPath);
-		return outputPath;
+		return {
+			outputPath,
+			metrics,
+		};
 	} finally {
 		await Promise.allSettled(
 			tempArtifacts.map((artifactPath) => removeTemporaryExportFile(artifactPath)),
@@ -445,12 +479,23 @@ export async function muxExportedVideoAudioBuffer(
 		app.getPath("temp"),
 		`recordly-export-video-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`,
 	);
+	const metrics: NativeVideoAudioMuxMetrics = {};
 
 	try {
+		const tempVideoWriteStartedAt = getNowMs();
 		await fs.writeFile(tempVideoPath, Buffer.from(videoData));
-		const finalizedPath = await muxNativeVideoExportAudio(tempVideoPath, options);
-		const muxedData = await fs.readFile(finalizedPath);
-		return new Uint8Array(muxedData);
+		metrics.tempVideoWriteMs = getNowMs() - tempVideoWriteStartedAt;
+		metrics.tempVideoBytes = videoData.byteLength;
+		const finalized = await muxNativeVideoExportAudio(tempVideoPath, options);
+		Object.assign(metrics, finalized.metrics);
+		const muxedVideoReadStartedAt = getNowMs();
+		const muxedData = await fs.readFile(finalized.outputPath);
+		metrics.muxedVideoReadMs = getNowMs() - muxedVideoReadStartedAt;
+		metrics.muxedVideoBytes = muxedData.byteLength;
+		return {
+			data: new Uint8Array(muxedData),
+			metrics,
+		};
 	} finally {
 		await Promise.allSettled([
 			removeTemporaryExportFile(tempVideoPath),
