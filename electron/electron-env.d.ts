@@ -341,6 +341,19 @@ interface Window {
 		) => Promise<{
 			success: boolean;
 			path?: string;
+			projectId?: string;
+			message?: string;
+			canceled?: boolean;
+			error?: string;
+		}>;
+		saveProjectFileNamed: (
+			projectData: unknown,
+			projectName: string,
+			thumbnailDataUrl?: string | null,
+		) => Promise<{
+			success: boolean;
+			path?: string;
+			projectId?: string;
 			message?: string;
 			canceled?: boolean;
 			error?: string;

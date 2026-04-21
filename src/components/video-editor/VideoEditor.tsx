@@ -14,7 +14,6 @@ import {
 	Plus,
 	PuzzlePiece,
 	ArrowClockwise as Redo2,
-	FloppyDisk as Save,
 	Scissors,
 	SkipBack,
 	SkipForward,
@@ -485,6 +484,9 @@ export default function VideoEditor() {
 	const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(null);
 	const [projectLibraryEntries, setProjectLibraryEntries] = useState<ProjectLibraryEntry[]>([]);
 	const [projectBrowserOpen, setProjectBrowserOpen] = useState(false);
+	const [isEditingProjectName, setIsEditingProjectName] = useState(false);
+	const [projectNameDraft, setProjectNameDraft] = useState("");
+	const [isSavingProjectName, setIsSavingProjectName] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
@@ -631,6 +633,7 @@ export default function VideoEditor() {
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
 	const projectBrowserTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const projectBrowserFallbackTriggerRef = useRef<HTMLButtonElement | null>(null);
+	const projectNameInputRef = useRef<HTMLInputElement | null>(null);
 	const nextZoomIdRef = useRef(1);
 	const nextTrimIdRef = useRef(1);
 	const nextClipIdRef = useRef(1);
@@ -1240,6 +1243,27 @@ export default function VideoEditor() {
 		return withoutExtension || t("editor.project.untitled", "Untitled");
 	}, [currentProjectPath, currentSourcePath, t]);
 
+	useEffect(() => {
+		if (!isEditingProjectName) {
+			setProjectNameDraft(projectDisplayName);
+		}
+	}, [isEditingProjectName, projectDisplayName]);
+
+	useEffect(() => {
+		if (!isEditingProjectName) {
+			return;
+		}
+
+		const frameId = window.requestAnimationFrame(() => {
+			projectNameInputRef.current?.focus();
+			projectNameInputRef.current?.select();
+		});
+
+		return () => {
+			window.cancelAnimationFrame(frameId);
+		};
+	}, [isEditingProjectName]);
+
 	const currentPersistedEditorState = useMemo(
 		() =>
 			buildPersistedEditorState({
@@ -1568,7 +1592,11 @@ export default function VideoEditor() {
 
 			setLastSavedSnapshot(
 				cloneStructured(
-					createProjectData(sourcePath, buildPersistedEditorState(normalizedEditor)),
+					createProjectData(
+						sourcePath,
+						buildPersistedEditorState(normalizedEditor),
+						project.projectId ?? null,
+					),
 				),
 			);
 			await refreshProjectLibrary();
@@ -1581,8 +1609,12 @@ export default function VideoEditor() {
 		if (!currentSourcePath) {
 			return null;
 		}
-		return createProjectData(currentSourcePath, currentPersistedEditorState);
-	}, [currentPersistedEditorState, currentSourcePath]);
+		return createProjectData(
+			currentSourcePath,
+			currentPersistedEditorState,
+			lastSavedSnapshot?.projectId ?? null,
+		);
+	}, [currentPersistedEditorState, currentSourcePath, lastSavedSnapshot?.projectId]);
 
 	const syncRecordingSessionWebcam = useCallback(
 		async (webcamPath: string | null) => {
@@ -1672,12 +1704,11 @@ export default function VideoEditor() {
 	const hasUnsavedChanges = useMemo(
 		() =>
 			Boolean(
-				currentProjectPath &&
-					currentProjectSnapshot &&
-					lastSavedSnapshot &&
-					!areDeepEqual(currentProjectSnapshot, lastSavedSnapshot),
+				currentProjectSnapshot &&
+					(!lastSavedSnapshot ||
+						!areDeepEqual(currentProjectSnapshot, lastSavedSnapshot)),
 			),
-		[currentProjectPath, currentProjectSnapshot, lastSavedSnapshot],
+		[currentProjectSnapshot, lastSavedSnapshot],
 	);
 
 	useEffect(() => {
@@ -2096,7 +2127,11 @@ export default function VideoEditor() {
 				const projectData =
 					currentProjectSnapshot?.videoPath === currentSourcePath
 						? currentProjectSnapshot
-						: createProjectData(currentSourcePath, currentPersistedEditorState);
+						: createProjectData(
+								currentSourcePath,
+								currentPersistedEditorState,
+								lastSavedSnapshot?.projectId ?? null,
+						  );
 
 				const fileNameBase =
 					currentSourcePath
@@ -2135,7 +2170,15 @@ export default function VideoEditor() {
 				if (result.path) {
 					setCurrentProjectPath(result.path);
 				}
-				setLastSavedSnapshot(cloneStructured(projectData));
+				setLastSavedSnapshot(
+					cloneStructured(
+						createProjectData(
+							projectData.videoPath,
+							projectData.editor,
+							result.projectId ?? projectData.projectId ?? null,
+						),
+					),
+				);
 				await refreshProjectLibrary();
 
 				toast.success(`Project saved to ${result.path}`);
@@ -2150,6 +2193,7 @@ export default function VideoEditor() {
 			currentProjectPath,
 			currentProjectSnapshot,
 			currentPersistedEditorState,
+			lastSavedSnapshot?.projectId,
 			refreshProjectLibrary,
 			remountPreview,
 		],
@@ -2177,6 +2221,119 @@ export default function VideoEditor() {
 			setProjectBrowserOpen(false);
 		}
 	}, [saveProject]);
+
+	/**
+	 * Saves the current project directly into the projects library under a chosen name.
+	 */
+	const saveProjectWithName = useCallback(
+		async (projectName: string) => {
+			const trimmedProjectName = projectName.trim();
+			if (!trimmedProjectName) {
+				toast.error("Project name is required");
+				return false;
+			}
+
+			if (!currentSourcePath) {
+				toast.error("No video loaded");
+				return false;
+			}
+
+			try {
+				const projectData =
+					currentProjectSnapshot?.videoPath === currentSourcePath
+						? currentProjectSnapshot
+						: createProjectData(
+								currentSourcePath,
+								currentPersistedEditorState,
+								lastSavedSnapshot?.projectId ?? null,
+						  );
+				const thumbnailDataUrl = await captureProjectThumbnail();
+				const result = await window.electronAPI.saveProjectFileNamed(
+					projectData,
+					trimmedProjectName,
+					thumbnailDataUrl,
+				);
+
+				if (result.canceled) {
+					toast.info("Project save canceled");
+					return false;
+				}
+
+				if (!result.success) {
+					toast.error(result.message || "Failed to save project");
+					return false;
+				}
+
+				if (result.path) {
+					setCurrentProjectPath(result.path);
+				}
+				setLastSavedSnapshot(
+					cloneStructured(
+						createProjectData(
+							projectData.videoPath,
+							projectData.editor,
+							result.projectId ?? projectData.projectId ?? null,
+						),
+					),
+				);
+				await refreshProjectLibrary();
+				toast.success(result.path ? `Project saved to ${result.path}` : "Project saved");
+				return true;
+			} finally {
+				remountPreview();
+			}
+		},
+		[
+			captureProjectThumbnail,
+			currentPersistedEditorState,
+			currentProjectSnapshot,
+			currentSourcePath,
+			lastSavedSnapshot?.projectId,
+			refreshProjectLibrary,
+			remountPreview,
+		],
+	);
+
+	/**
+	 * Resets the inline project-name editor back to the current saved display name.
+	 */
+	const closeProjectNameEditor = useCallback(() => {
+		setProjectNameDraft(projectDisplayName);
+		setIsEditingProjectName(false);
+	}, [projectDisplayName]);
+
+	/**
+	 * Commits the inline project-name editor and persists the project under that name.
+	 */
+	const handleProjectNameSubmit = useCallback(
+		async (event?: React.FormEvent<HTMLFormElement>) => {
+			event?.preventDefault();
+			const trimmedProjectName = projectNameDraft.trim();
+			if (!trimmedProjectName) {
+				closeProjectNameEditor();
+				return;
+			}
+
+			setIsSavingProjectName(true);
+			let saved = false;
+			try {
+				saved = await saveProjectWithName(trimmedProjectName);
+			} catch (error) {
+				toast.error(getErrorMessage(error));
+			} finally {
+				setIsSavingProjectName(false);
+			}
+
+			if (saved) {
+				setIsEditingProjectName(false);
+				return;
+			}
+
+			projectNameInputRef.current?.focus();
+			projectNameInputRef.current?.select();
+		},
+		[closeProjectNameEditor, projectNameDraft, saveProjectWithName],
+	);
 
 	const handleOpenProjectFromLibrary = useCallback(
 		async (projectPath: string) => {
@@ -2729,6 +2886,16 @@ export default function VideoEditor() {
 			const oldClip = clipRegions.find((c) => c.id === id);
 			const newStart = Math.round(span.start);
 			const newEnd = Math.round(span.end);
+			const removedSegments = oldClip
+				? [
+						...(newStart > oldClip.startMs
+							? [{ startMs: oldClip.startMs, endMs: newStart }]
+							: []),
+						...(newEnd < oldClip.endMs
+							? [{ startMs: newEnd, endMs: oldClip.endMs }]
+							: []),
+					]
+				: [];
 
 			if (oldClip) {
 				const startDelta = newStart - oldClip.startMs;
@@ -2752,6 +2919,22 @@ export default function VideoEditor() {
 						}),
 					);
 				}
+			}
+
+			if (removedSegments.length > 0) {
+				const removeTrimmedRegions = <T extends { startMs: number; endMs: number }>(
+					regions: T[],
+				): T[] =>
+					regions.filter(
+						(region) =>
+							!removedSegments.some(
+								(segment) => region.startMs < segment.endMs && region.endMs > segment.startMs,
+							),
+					);
+				setZoomRegions((prev) => removeTrimmedRegions(prev));
+				setAnnotationRegions((prev) => removeTrimmedRegions(prev));
+				setSpeedRegions((prev) => removeTrimmedRegions(prev));
+				setAudioRegions((prev) => removeTrimmedRegions(prev));
 			}
 
 			setClipRegions((prev) =>
@@ -2808,12 +2991,28 @@ export default function VideoEditor() {
 
 	const handleClipDelete = useCallback(
 		(id: string) => {
+			const deletedClip = clipRegions.find((clip) => clip.id === id);
 			setClipRegions((prev) => prev.filter((clip) => clip.id !== id));
+			if (deletedClip) {
+				const { startMs, endMs } = deletedClip;
+				setZoomRegions((prev) =>
+					prev.filter((region) => region.endMs <= startMs || region.startMs >= endMs),
+				);
+				setAnnotationRegions((prev) =>
+					prev.filter((region) => region.endMs <= startMs || region.startMs >= endMs),
+				);
+				setSpeedRegions((prev) =>
+					prev.filter((region) => region.endMs <= startMs || region.startMs >= endMs),
+				);
+				setAudioRegions((prev) =>
+					prev.filter((region) => region.endMs <= startMs || region.startMs >= endMs),
+				);
+			}
 			if (selectedClipId === id) {
 				setSelectedClipId(null);
 			}
 		},
-		[selectedClipId],
+		[clipRegions, selectedClipId],
 	);
 
 	const handleSelectSpeed = useCallback((id: string | null) => {
@@ -4138,17 +4337,6 @@ export default function VideoEditor() {
 		return top > 0 || left > 0 || bottom > 0 || right > 0;
 	}, [cropRegion]);
 
-	const openRecordingsFolder = useCallback(async () => {
-		try {
-			const result = await window.electronAPI.openRecordingsFolder();
-			if (!result.success) {
-				toast.error(result.message || result.error || "Failed to open recordings folder.");
-			}
-		} catch (error) {
-			toast.error(`Failed to open recordings folder: ${String(error)}`);
-		}
-	}, []);
-
 	const revealExportedFile = useCallback(async () => {
 		if (!exportedFilePath) return;
 
@@ -4293,13 +4481,14 @@ export default function VideoEditor() {
 					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
 				>
 					<Button
+						ref={projectBrowserTriggerRef}
 						type="button"
 						variant="ghost"
 						size="sm"
-						onClick={() => void openRecordingsFolder()}
+						onClick={handleOpenProjectBrowser}
 						className={APP_HEADER_ICON_BUTTON_CLASS}
-						title={t("common.app.manageRecordings", "Open recordings folder")}
-						aria-label={t("common.app.manageRecordings", "Open recordings folder")}
+						title={t("editor.project.projects", "Open projects")}
+						aria-label={t("editor.project.projects", "Open projects")}
 					>
 						<FolderOpen className="h-4 w-4" />
 					</Button>
@@ -4330,48 +4519,66 @@ export default function VideoEditor() {
 					</Button>
 				</div>
 				<div
-					className="pointer-events-none absolute left-1/2 flex min-w-0 -translate-x-1/2 items-baseline justify-center gap-0"
-					style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+					className="absolute left-1/2 flex min-w-0 -translate-x-1/2 items-center justify-center"
+					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
 				>
-					<span className="text-sm font-semibold tracking-tight text-foreground/90">
-						{projectDisplayName}
-					</span>
-					<span className="text-xs font-medium tracking-tight text-muted-foreground/70">
-						.recordly
-					</span>
+					{isEditingProjectName ? (
+						<form
+							onSubmit={(event) => void handleProjectNameSubmit(event)}
+							className="flex max-w-[min(52vw,460px)] items-baseline gap-1 rounded-[7px] border border-foreground/10 bg-editor-panel/[0.88] px-2.5 py-1 shadow-[0_10px_28px_rgba(0,0,0,0.18)]"
+						>
+							{hasUnsavedChanges ? (
+								<span className="mt-[1px] size-2 shrink-0 rounded-full bg-[#2563EB]" />
+							) : null}
+							<input
+								ref={projectNameInputRef}
+								type="text"
+								value={projectNameDraft}
+								onChange={(event) => setProjectNameDraft(event.target.value)}
+								onBlur={() => {
+									if (!isSavingProjectName) {
+										closeProjectNameEditor();
+									}
+								}}
+								onKeyDown={(event) => {
+									if (event.key === "Escape") {
+										event.preventDefault();
+										closeProjectNameEditor();
+									}
+								}}
+								disabled={isSavingProjectName}
+								className="min-w-[10ch] max-w-[min(40vw,360px)] bg-transparent text-sm font-semibold tracking-tight text-foreground/95 outline-none placeholder:text-muted-foreground/60 disabled:cursor-wait"
+								style={{ width: `${Math.max(projectNameDraft.length, 10)}ch` }}
+								aria-label={t("editor.project.renameInput", "Project name")}
+							/>
+							<span className="shrink-0 text-xs font-medium tracking-tight text-muted-foreground/70">
+								.recordly
+							</span>
+						</form>
+					) : (
+						<button
+							type="button"
+							onClick={() => setIsEditingProjectName(true)}
+							className="inline-flex max-w-[min(52vw,460px)] items-baseline gap-1 rounded-[7px] px-2.5 py-1 transition-colors hover:bg-foreground/5"
+							title={t("editor.project.renameTitle", "Rename project")}
+							aria-label={t("editor.project.renameTitle", "Rename project")}
+						>
+							{hasUnsavedChanges ? (
+								<span className="mt-[1px] size-2 shrink-0 rounded-full bg-[#2563EB]" />
+							) : null}
+							<span className="truncate text-sm font-semibold tracking-tight text-foreground/90">
+								{projectDisplayName}
+							</span>
+							<span className="shrink-0 text-xs font-medium tracking-tight text-muted-foreground/70">
+								.recordly
+							</span>
+						</button>
+					)}
 				</div>
 				<div
 					className="flex items-center gap-2 justify-self-end pr-3"
 					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
 				>
-					<Button
-						ref={projectBrowserTriggerRef}
-						type="button"
-						onClick={handleOpenProjectBrowser}
-						className="inline-flex h-8 min-w-[96px] items-center justify-center gap-1.5 rounded-[5px] bg-neutral-800 px-4 text-white shadow-[0_14px_32px_rgba(0,0,0,0.18)] transition-colors hover:bg-neutral-700 dark:bg-white dark:text-black dark:hover:bg-white/90"
-					>
-						<FolderOpen className="h-4 w-4" />
-						<span className="text-sm font-semibold tracking-tight">
-							{t("editor.project.projects", "Projects")}
-						</span>
-					</Button>
-					<Button
-						type="button"
-						onClick={handleSaveProject}
-						className="inline-flex h-8 min-w-[96px] items-center justify-center gap-1.5 rounded-[5px] bg-neutral-800 px-4 text-white transition-colors hover:bg-neutral-700 dark:bg-white dark:text-black dark:hover:bg-white/90"
-					>
-						<span
-							className={`${hasUnsavedChanges ? "flex" : "hidden"} size-2 relative`}
-						>
-							<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#2563EB] opacity-75"></span>
-							<span className="relative inline-flex size-2 rounded-full bg-[#2563EB]"></span>
-						</span>
-						<Save className="h-4 w-4" weight="fill" />
-						<span className="text-sm font-semibold tracking-tight">
-							{t("common.actions.save")}
-						</span>
-					</Button>
-					<div className="mx-1 h-5 w-px bg-foreground/10" />
 					<DropdownMenu
 						open={showExportDropdown}
 						onOpenChange={setShowExportDropdown}
