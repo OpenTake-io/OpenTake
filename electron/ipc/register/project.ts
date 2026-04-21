@@ -41,6 +41,29 @@ function normalizeRecordingTimeOffsetMs(value: unknown): number {
 	return typeof value === "number" && Number.isFinite(value) ? Math.round(value) : 0;
 }
 
+function normalizeProjectSaveName(projectName?: string | null) {
+  if (typeof projectName !== "string") {
+    return null;
+  }
+
+  const trimmedName = projectName.trim();
+  if (!trimmedName) {
+    return null;
+  }
+
+  const withoutExtension = trimmedName.replace(
+    new RegExp(`\\.${PROJECT_FILE_EXTENSION}$`, "i"),
+    "",
+  );
+  const sanitizedName = withoutExtension
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/[. ]+$/g, "")
+    .trim();
+
+  return sanitizedName || null;
+}
+
 export function registerProjectHandlers() {
   ipcMain.handle('reveal-in-folder', async (_, filePath: string) => {
     try {
@@ -142,10 +165,8 @@ export function registerProjectHandlers() {
         }
       }
 
-      const safeName = (suggestedName || `project-${Date.now()}`).replace(/[^a-zA-Z0-9-_]/g, '_')
-      const defaultName = safeName.endsWith(`.${PROJECT_FILE_EXTENSION}`)
-        ? safeName
-        : `${safeName}.${PROJECT_FILE_EXTENSION}`
+      const safeName = normalizeProjectSaveName(suggestedName) || `project-${Date.now()}`
+      const defaultName = `${safeName}.${PROJECT_FILE_EXTENSION}`
 
       const result = await dialog.showSaveDialog({
         title: 'Save Recordly Project',
@@ -184,6 +205,42 @@ export function registerProjectHandlers() {
       }
     }
   })
+
+    ipcMain.handle('save-project-file-named', async (_, projectData: unknown, projectName: string, thumbnailDataUrl?: string | null) => {
+      try {
+        const normalizedProjectName = normalizeProjectSaveName(projectName)
+        if (!normalizedProjectName) {
+          return {
+            success: false,
+            message: 'Project name is required',
+          }
+        }
+
+        const projectsDir = await getProjectsDir()
+        const targetProjectPath = path.join(
+          projectsDir,
+          `${normalizedProjectName}.${PROJECT_FILE_EXTENSION}`,
+        )
+
+        await fs.writeFile(targetProjectPath, JSON.stringify(projectData, null, 2), 'utf-8')
+        setCurrentProjectPath(targetProjectPath)
+        await saveProjectThumbnail(targetProjectPath, thumbnailDataUrl)
+        await rememberRecentProject(targetProjectPath)
+
+        return {
+          success: true,
+          path: targetProjectPath,
+          message: 'Project saved successfully'
+        }
+      } catch (error) {
+        console.error('Failed to save named project file:', error)
+        return {
+          success: false,
+          message: 'Failed to save project file',
+          error: String(error)
+        }
+      }
+    })
 
   ipcMain.handle('load-project-file', async () => {
     try {
