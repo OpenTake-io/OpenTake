@@ -83,6 +83,22 @@ export async function rememberApprovedLocalReadPath(filePath?: string | null) {
 	}
 }
 
+export async function resolveApprovedLocalMediaPath(candidatePath: string): Promise<string | null> {
+	const normalizedCandidatePath = normalizePath(candidatePath);
+	const realPath = await fs.realpath(normalizedCandidatePath).catch(() => null);
+
+	if (!realPath) {
+		return null;
+	}
+
+	if (!(await isAllowedLocalMediaPath(realPath))) {
+		return null;
+	}
+
+	await rememberApprovedLocalReadPath(realPath);
+	return realPath;
+}
+
 export async function replaceApprovedSessionLocalReadPaths(filePaths: Array<string | null | undefined>) {
 	approvedLocalReadPaths.clear();
 	await Promise.all(filePaths.map((filePath) => rememberApprovedLocalReadPath(filePath)));

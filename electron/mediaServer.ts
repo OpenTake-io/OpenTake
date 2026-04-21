@@ -33,7 +33,7 @@ async function resolveRealPath(filePath: string): Promise<string | null> {
 	}
 }
 
-function isAllowedMediaPath(realPath: string): boolean {
+export function isAllowedMediaPath(realPath: string): boolean {
 	return approvedLocalReadPaths.has(realPath);
 }
 
