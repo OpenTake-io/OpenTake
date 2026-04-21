@@ -2885,6 +2885,16 @@ export default function VideoEditor() {
 			const oldClip = clipRegions.find((c) => c.id === id);
 			const newStart = Math.round(span.start);
 			const newEnd = Math.round(span.end);
+			const removedSegments = oldClip
+				? [
+						...(newStart > oldClip.startMs
+							? [{ startMs: oldClip.startMs, endMs: newStart }]
+							: []),
+						...(newEnd < oldClip.endMs
+							? [{ startMs: newEnd, endMs: oldClip.endMs }]
+							: []),
+					]
+				: [];
 
 			if (oldClip) {
 				const startDelta = newStart - oldClip.startMs;
@@ -2908,6 +2918,23 @@ export default function VideoEditor() {
 						}),
 					);
 				}
+			}
+
+			if (removedSegments.length > 0) {
+				const removeTrimmedRegions = <T extends { startMs: number; endMs: number }>(
+					regions: T[],
+				): T[] =>
+					regions.filter(
+						(region) =>
+							!removedSegments.some(
+								(segment) => region.startMs < segment.endMs && region.endMs > segment.startMs,
+							),
+					);
+				setZoomRegions((prev) => removeTrimmedRegions(prev));
+				setAnnotationRegions((prev) => removeTrimmedRegions(prev));
+				setTrimRegions((prev) => removeTrimmedRegions(prev));
+				setSpeedRegions((prev) => removeTrimmedRegions(prev));
+				setAudioRegions((prev) => removeTrimmedRegions(prev));
 			}
 
 			setClipRegions((prev) =>
