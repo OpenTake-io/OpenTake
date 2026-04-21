@@ -3,12 +3,12 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import { promisify } from "node:util";
 import { BrowserWindow } from "electron";
-import { getFfmpegBinaryPath } from "../ffmpeg/binary";
 import {
-	getAudioSyncAdjustment,
-	appendSyncedAudioFilter,
-} from "../ffmpeg/filters";
-import type { AudioSyncAdjustment } from "../types";
+	persistPendingCursorTelemetry,
+	snapshotCursorTelemetryForPersistence,
+} from "../cursor/telemetry";
+import { getFfmpegBinaryPath } from "../ffmpeg/binary";
+import { appendSyncedAudioFilter, getAudioSyncAdjustment } from "../ffmpeg/filters";
 import {
 	nativeScreenRecordingActive,
 	setNativeScreenRecordingActive,
@@ -27,20 +27,17 @@ import {
 	setCurrentProjectPath,
 	selectedSource,
 } from "../state";
-import { moveFileWithOverwrite, isAutoRecordingPath } from "../utils";
+import type { AudioSyncAdjustment } from "../types";
+import { isAutoRecordingPath, moveFileWithOverwrite } from "../utils";
 import {
-	recordNativeCaptureDiagnostics,
 	getFileSizeIfPresent,
-	validateRecordedVideo,
 	getUsableCompanionAudioCandidates,
+	probeMediaDurationSeconds,
+	recordNativeCaptureDiagnostics,
+	validateRecordedVideo,
 } from "./diagnostics";
-import { probeMediaDurationSeconds } from "./diagnostics";
 import { emitRecordingInterrupted } from "./events";
 import { pruneAutoRecordings } from "./prune";
-import {
-	snapshotCursorTelemetryForPersistence,
-	persistPendingCursorTelemetry,
-} from "../cursor/telemetry";
 import { muxNativeWindowsVideoWithAudio } from "./windows";
 
 const execFileAsync = promisify(execFile);
@@ -259,9 +256,11 @@ export async function muxNativeMacRecordingWithAudio(
 
 	try {
 		await execFileAsync(ffmpegPath, args, { timeout: 120000, maxBuffer: 10 * 1024 * 1024 });
+		await validateRecordedVideo(mixedOutputPath);
 	} catch (error) {
 		const execError = error as NodeJS.ErrnoException & { stderr?: string };
-		console.error("[mux] ffmpeg failed:", execError.stderr || execError.message);
+		console.error("[mux] failed:", execError.stderr || execError.message || String(error));
+		await fs.rm(mixedOutputPath, { force: true }).catch(() => undefined);
 		throw error;
 	}
 
@@ -336,11 +335,35 @@ export async function finalizeStoredVideo(videoPath: string) {
 		}
 	}
 
-	let validation: { fileSizeBytes: number; durationSeconds: number | null } | null = null;
+	let validation: { fileSizeBytes: number; durationSeconds: number | null };
 	try {
 		validation = await validateRecordedVideo(videoPath);
 	} catch (error) {
-		console.warn("Video validation failed (proceeding anyway):", error);
+		if (
+			lastNativeCaptureDiagnostics?.backend === "mac-screencapturekit" ||
+			lastNativeCaptureDiagnostics?.backend === "windows-wgc"
+		) {
+			recordNativeCaptureDiagnostics({
+				backend: lastNativeCaptureDiagnostics.backend,
+				phase: lastNativeCaptureDiagnostics.phase === "mux" ? "mux" : "stop",
+				sourceId: lastNativeCaptureDiagnostics.sourceId ?? null,
+				sourceType: lastNativeCaptureDiagnostics.sourceType ?? "unknown",
+				displayId: lastNativeCaptureDiagnostics.displayId ?? null,
+				displayBounds: lastNativeCaptureDiagnostics.displayBounds ?? null,
+				windowHandle: lastNativeCaptureDiagnostics.windowHandle ?? null,
+				helperPath: lastNativeCaptureDiagnostics.helperPath ?? null,
+				outputPath: videoPath,
+				systemAudioPath: lastNativeCaptureDiagnostics.systemAudioPath ?? null,
+				microphonePath: lastNativeCaptureDiagnostics.microphonePath ?? null,
+				osRelease: lastNativeCaptureDiagnostics.osRelease,
+				supported: lastNativeCaptureDiagnostics.supported,
+				helperExists: lastNativeCaptureDiagnostics.helperExists,
+				processOutput: lastNativeCaptureDiagnostics.processOutput,
+				fileSizeBytes: await getFileSizeIfPresent(videoPath),
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+		throw error;
 	}
 
 	snapshotCursorTelemetryForPersistence();
@@ -351,10 +374,13 @@ export async function finalizeStoredVideo(videoPath: string) {
 		await pruneAutoRecordings([videoPath]);
 	}
 
-	if (lastNativeCaptureDiagnostics?.backend === "mac-screencapturekit") {
+	if (
+		lastNativeCaptureDiagnostics?.backend === "mac-screencapturekit" ||
+		lastNativeCaptureDiagnostics?.backend === "windows-wgc"
+	) {
 		recordNativeCaptureDiagnostics({
-			backend: "mac-screencapturekit",
-			phase: "stop",
+			backend: lastNativeCaptureDiagnostics.backend,
+			phase: lastNativeCaptureDiagnostics.phase === "mux" ? "mux" : "stop",
 			sourceId: lastNativeCaptureDiagnostics.sourceId ?? null,
 			sourceType: lastNativeCaptureDiagnostics.sourceType ?? "unknown",
 			displayId: lastNativeCaptureDiagnostics.displayId ?? null,
@@ -368,7 +394,7 @@ export async function finalizeStoredVideo(videoPath: string) {
 			supported: lastNativeCaptureDiagnostics.supported,
 			helperExists: lastNativeCaptureDiagnostics.helperExists,
 			processOutput: lastNativeCaptureDiagnostics.processOutput,
-			fileSizeBytes: validation?.fileSizeBytes ?? null,
+			fileSizeBytes: validation.fileSizeBytes,
 		});
 	}
 
@@ -376,7 +402,7 @@ export async function finalizeStoredVideo(videoPath: string) {
 		success: true,
 		path: videoPath,
 		message:
-			validation?.durationSeconds !== null && validation !== null
+			validation.durationSeconds !== null
 				? `Video stored successfully (${validation.fileSizeBytes} bytes, ${validation.durationSeconds.toFixed(2)}s)`
 				: `Video stored successfully`,
 	};

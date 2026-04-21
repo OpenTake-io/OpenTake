@@ -132,4 +132,15 @@ describe("getCompanionAudioFallbackPaths", () => {
 			micPath,
 		]);
 	});
+
+	it("rejects tiny MP4 container-only outputs before they reach the editor", async () => {
+		const videoPath = path.join(tempRoot, "recording-123.mp4");
+		await fs.writeFile(videoPath, Buffer.alloc(261));
+
+		const { validateRecordedVideo } = await import("./diagnostics");
+
+		await expect(validateRecordedVideo(videoPath)).rejects.toThrow(
+			"Recorded output is too small to contain playable video",
+		);
+	});
 });
