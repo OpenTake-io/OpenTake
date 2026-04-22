@@ -154,7 +154,21 @@ function restoreWindowSafely(window: BrowserWindow | null) {
 		return;
 	}
 
-	window.restore();
+	if (!isEditorWindow(window) && process.platform === "win32") {
+		showHudOverlayFromTray();
+		return;
+	}
+
+	if (window.isMinimized()) {
+		window.restore();
+	}
+
+	if (!window.isVisible()) {
+		window.show();
+	}
+
+	window.moveTop();
+	window.focus();
 }
 
 // Tray Icons (lazily created after app is ready to avoid accessing Electron APIs too early)
