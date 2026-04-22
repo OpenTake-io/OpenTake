@@ -1,17 +1,17 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { execFile } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
-import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { BrowserWindow } from "electron";
 import { getFfmpegBinaryPath } from "../ffmpeg/binary";
 import {
-	getAudioSyncAdjustment,
 	appendSyncedAudioFilter,
-	normalizePauseSegments,
 	buildPausedAudioFilter,
+	getAudioSyncAdjustment,
+	normalizePauseSegments,
 } from "../ffmpeg/filters";
-import type { PauseSegment, AudioSyncAdjustment } from "../types";
+import { getWindowsCaptureExePath } from "../paths/binaries";
 import {
 	setWindowsCaptureProcess,
 	windowsCaptureOutputBuffer,
@@ -22,10 +22,10 @@ import {
 	setWindowsCaptureStopRequested,
 	selectedSource,
 } from "../state";
+import type { AudioSyncAdjustment, PauseSegment } from "../types";
 import { moveFileWithOverwrite } from "../utils";
-import { probeMediaDurationSeconds } from "./diagnostics";
+import { probeMediaDurationSeconds, validateRecordedVideo } from "./diagnostics";
 import { emitRecordingInterrupted } from "./events";
-import { getWindowsCaptureExePath } from "../paths/binaries";
 
 const execFileAsync = promisify(execFile);
 
@@ -220,99 +220,109 @@ export async function muxNativeWindowsVideoWithAudio(
 		durationDeltaMs: 0,
 	};
 
-	if (audioInputs.length === 2) {
-		const filterParts: string[] = [];
-		const systemPauseFilter = buildPausedAudioFilter(
-			"1:a",
-			"system_trimmed",
-			normalizedPauseSegments,
-		);
-		const micPauseFilter = buildPausedAudioFilter(
-			"2:a",
-			"mic_trimmed",
-			normalizedPauseSegments,
-		);
+	try {
+		if (audioInputs.length === 2) {
+			const filterParts: string[] = [];
+			const systemPauseFilter = buildPausedAudioFilter(
+				"1:a",
+				"system_trimmed",
+				normalizedPauseSegments,
+			);
+			const micPauseFilter = buildPausedAudioFilter(
+				"2:a",
+				"mic_trimmed",
+				normalizedPauseSegments,
+			);
 
-		if (systemPauseFilter) {
-			filterParts.push(systemPauseFilter);
+			if (systemPauseFilter) {
+				filterParts.push(systemPauseFilter);
+			}
+			if (micPauseFilter) {
+				filterParts.push(micPauseFilter);
+			}
+
+			const systemLabel = systemPauseFilter ? "[system_trimmed]" : "[1:a]";
+			const micLabel = micPauseFilter ? "[mic_trimmed]" : "[2:a]";
+
+			appendSyncedAudioFilter(filterParts, systemLabel, "s", systemAdjustment);
+			appendSyncedAudioFilter(filterParts, micLabel, "m", micAdjustment);
+			filterParts.push("[s][m]amix=inputs=2:duration=longest:normalize=0[aout]");
+
+			await execFileAsync(
+				ffmpegPath,
+				[
+					"-y",
+					...inputs,
+					"-filter_complex",
+					filterParts.join(";"),
+					"-map",
+					"0:v:0",
+					"-map",
+					"[aout]",
+					"-c:v",
+					"copy",
+					"-c:a",
+					"aac",
+					"-b:a",
+					"192k",
+					"-shortest",
+					mixedOutputPath,
+				],
+				{ timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
+			);
+		} else {
+			const pauseFilter = buildPausedAudioFilter(
+				"1:a",
+				"trimmed_audio",
+				normalizedPauseSegments,
+			);
+			const singleAdjustment = audioAdjustments.get(audioInputs[0]) ?? {
+				mode: "none",
+				delayMs: 0,
+				tempoRatio: 1,
+				durationDeltaMs: 0,
+			};
+
+			// Always route through the filter graph so that aresample=async=1 is
+			// applied.  This corrects progressive clock drift between video and
+			// audio tracks that a simple duration comparison cannot detect.
+			const filterParts: string[] = [];
+			if (pauseFilter) {
+				filterParts.push(pauseFilter);
+			}
+			const srcLabel = pauseFilter ? "[trimmed_audio]" : "[1:a]";
+			appendSyncedAudioFilter(filterParts, srcLabel, "aout", singleAdjustment);
+
+			await execFileAsync(
+				ffmpegPath,
+				[
+					"-y",
+					...inputs,
+					"-filter_complex",
+					filterParts.join(";"),
+					"-map",
+					"0:v:0",
+					"-map",
+					"[aout]",
+					"-c:v",
+					"copy",
+					"-c:a",
+					"aac",
+					"-b:a",
+					"192k",
+					"-shortest",
+					mixedOutputPath,
+				],
+				{ timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
+			);
 		}
-		if (micPauseFilter) {
-			filterParts.push(micPauseFilter);
-		}
 
-		const systemLabel = systemPauseFilter ? "[system_trimmed]" : "[1:a]";
-		const micLabel = micPauseFilter ? "[mic_trimmed]" : "[2:a]";
-
-		appendSyncedAudioFilter(filterParts, systemLabel, "s", systemAdjustment);
-		appendSyncedAudioFilter(filterParts, micLabel, "m", micAdjustment);
-		filterParts.push("[s][m]amix=inputs=2:duration=longest:normalize=0[aout]");
-
-		await execFileAsync(
-			ffmpegPath,
-			[
-				"-y",
-				...inputs,
-				"-filter_complex",
-				filterParts.join(";"),
-				"-map",
-				"0:v:0",
-				"-map",
-				"[aout]",
-				"-c:v",
-				"copy",
-				"-c:a",
-				"aac",
-				"-b:a",
-				"192k",
-				"-shortest",
-				mixedOutputPath,
-			],
-			{ timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
-		);
-	} else {
-		const pauseFilter = buildPausedAudioFilter("1:a", "trimmed_audio", normalizedPauseSegments);
-		const singleAdjustment = audioAdjustments.get(audioInputs[0]) ?? {
-			mode: "none",
-			delayMs: 0,
-			tempoRatio: 1,
-			durationDeltaMs: 0,
-		};
-
-		// Always route through the filter graph so that aresample=async=1 is
-		// applied.  This corrects progressive clock drift between video and
-		// audio tracks that a simple duration comparison cannot detect.
-		const filterParts: string[] = [];
-		if (pauseFilter) {
-			filterParts.push(pauseFilter);
-		}
-		const srcLabel = pauseFilter ? "[trimmed_audio]" : "[1:a]";
-		appendSyncedAudioFilter(filterParts, srcLabel, "aout", singleAdjustment);
-
-		await execFileAsync(
-			ffmpegPath,
-			[
-				"-y",
-				...inputs,
-				"-filter_complex",
-				filterParts.join(";"),
-				"-map",
-				"0:v:0",
-				"-map",
-				"[aout]",
-				"-c:v",
-				"copy",
-				"-c:a",
-				"aac",
-				"-b:a",
-				"192k",
-				"-shortest",
-				mixedOutputPath,
-			],
-			{ timeout: 120000, maxBuffer: 10 * 1024 * 1024 },
-		);
+		await validateRecordedVideo(mixedOutputPath);
+		await moveFileWithOverwrite(mixedOutputPath, videoPath);
+	} catch (error) {
+		await fs.rm(mixedOutputPath, { force: true }).catch(() => undefined);
+		throw error;
 	}
-
-	await moveFileWithOverwrite(mixedOutputPath, videoPath);
 
 	for (const audioPath of [systemAudioPath, micAudioPath]) {
 		if (audioPath) {

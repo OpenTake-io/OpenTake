@@ -84,6 +84,7 @@ import {
 	recordNativeCaptureDiagnostics,
 	getFileSizeIfPresent,
 	getCompanionAudioFallbackPaths,
+	validateRecordedVideo,
 } from "../recording/diagnostics";
 import { rememberApprovedLocalReadPath } from "../project/manager";
 import {
@@ -105,7 +106,6 @@ import {
 	buildFfmpegCaptureArgs,
 	waitForFfmpegCaptureStart,
 	waitForFfmpegCaptureStop,
-	getDisplayBoundsForSource,
 } from "../recording/ffmpeg";
 import { resolveWindowsCaptureDisplay } from "../windowsCaptureSelection";
 import {
@@ -189,11 +189,21 @@ export function registerRecordingHandlers(
         const recordingsDir = await getRecordingsDir()
         const timestamp = Date.now()
         const outputPath = path.join(recordingsDir, `recording-${timestamp}.mp4`)
-        const displayBounds = source?.id?.startsWith('window:') ? null : getDisplayBoundsForSource(source)
+        const resolvedDisplay = resolveWindowsCaptureDisplay(
+          source,
+          getScreen().getAllDisplays(),
+          getScreen().getPrimaryDisplay(),
+        )
+        const displayBounds = resolvedDisplay.bounds
 
         const config: Record<string, unknown> = {
           outputPath,
           fps: 60,
+          displayId: resolvedDisplay.displayId,
+          displayX: Math.round(resolvedDisplay.bounds.x),
+          displayY: Math.round(resolvedDisplay.bounds.y),
+          displayW: Math.round(resolvedDisplay.bounds.width),
+          displayH: Math.round(resolvedDisplay.bounds.height),
         }
 
         if (options?.capturesSystemAudio) {
@@ -211,25 +221,6 @@ export function registerRecordingHandlers(
             config.micDeviceName = options.microphoneLabel
           }
           setWindowsMicAudioPath(micPath)
-        }
-
-        const windowId = parseWindowId(source?.id)
-        if (windowId && source?.id?.startsWith('window:')) {
-          config.windowHandle = windowId
-        } else {
-          const resolvedDisplay = resolveWindowsCaptureDisplay(
-            source,
-            getScreen().getAllDisplays(),
-            getScreen().getPrimaryDisplay(),
-          )
-          config.displayId = resolvedDisplay.displayId
-
-          // Monitor handle IDs can drift across Electron/Windows capture boundaries,
-          // so also provide display bounds for a coordinate-based native fallback.
-          config.displayX = Math.round(resolvedDisplay.bounds.x)
-          config.displayY = Math.round(resolvedDisplay.bounds.y)
-          config.displayW = Math.round(resolvedDisplay.bounds.width)
-          config.displayH = Math.round(resolvedDisplay.bounds.height)
         }
 
         recordNativeCaptureDiagnostics({
@@ -560,18 +551,19 @@ export function registerRecordingHandlers(
         setWindowsCaptureStopRequested(true)
         proc.stdin.write('stop\n')
         const tempVideoPath = await waitForWindowsCaptureStop(proc)
+
+        const finalVideoPath = preferredVideoPath ?? tempVideoPath
+        if (tempVideoPath !== finalVideoPath) {
+          await moveFileWithOverwrite(tempVideoPath, finalVideoPath)
+        }
+        const validation = await validateRecordedVideo(finalVideoPath)
+
         setWindowsCaptureProcess(null)
         setWindowsNativeCaptureActive(false)
         setNativeScreenRecordingActive(false)
         setWindowsCaptureTargetPath(null)
         setWindowsCaptureStopRequested(false)
         setWindowsCapturePaused(false)
-
-        const finalVideoPath = preferredVideoPath ?? tempVideoPath
-        if (tempVideoPath !== finalVideoPath) {
-          await moveFileWithOverwrite(tempVideoPath, finalVideoPath)
-        }
-
         setWindowsPendingVideoPath(finalVideoPath)
         recordNativeCaptureDiagnostics({
           backend: 'windows-wgc',
@@ -580,7 +572,7 @@ export function registerRecordingHandlers(
           systemAudioPath: windowsSystemAudioPath,
           microphonePath: windowsMicAudioPath,
           processOutput: windowsCaptureOutputBuffer.trim() || undefined,
-          fileSizeBytes: await getFileSizeIfPresent(finalVideoPath),
+          fileSizeBytes: validation.fileSizeBytes,
         })
         return { success: true, path: finalVideoPath }
       } catch (error) {
@@ -599,6 +591,7 @@ export function registerRecordingHandlers(
         if (fallbackPath) {
           try {
             await fs.access(fallbackPath)
+            const validation = await validateRecordedVideo(fallbackPath)
             setWindowsPendingVideoPath(fallbackPath)
             recordNativeCaptureDiagnostics({
               backend: 'windows-wgc',
@@ -607,12 +600,12 @@ export function registerRecordingHandlers(
               systemAudioPath: windowsSystemAudioPath,
               microphonePath: windowsMicAudioPath,
               processOutput: windowsCaptureOutputBuffer.trim() || undefined,
-              fileSizeBytes: await getFileSizeIfPresent(fallbackPath),
+              fileSizeBytes: validation.fileSizeBytes,
               error: String(error),
             })
             return { success: true, path: fallbackPath }
           } catch {
-            // File doesn't exist
+            // File is absent or failed validation.
           }
         }
 
@@ -623,6 +616,7 @@ export function registerRecordingHandlers(
           systemAudioPath: windowsSystemAudioPath,
           microphonePath: windowsMicAudioPath,
           processOutput: windowsCaptureOutputBuffer.trim() || undefined,
+          fileSizeBytes: await getFileSizeIfPresent(fallbackPath),
           error: String(error),
         })
 
@@ -922,10 +916,10 @@ export function registerRecordingHandlers(
       })
       setWindowsSystemAudioPath(null)
       setWindowsMicAudioPath(null)
-      try {
-        return await finalizeStoredVideo(videoPath)
-      } catch {
-        return { success: false, message: 'Failed to mux native Windows recording', error: String(error) }
+      return {
+        success: false,
+        message: 'Failed to finalize native Windows recording',
+        error: String(error),
       }
     }
   })
@@ -1055,15 +1049,24 @@ export function registerRecordingHandlers(
             return stat ? { path: fullPath, mtimeMs: stat.mtimeMs } : null
           }),
       )
-      const latestVideo = candidates
+      const sortedCandidates = candidates
         .filter((candidate): candidate is { path: string; mtimeMs: number } => candidate !== null)
-        .sort((left, right) => right.mtimeMs - left.mtimeMs)[0]
+        .sort((left, right) => right.mtimeMs - left.mtimeMs)
 
-      if (!latestVideo) {
+      for (const candidate of sortedCandidates) {
+        try {
+          await validateRecordedVideo(candidate.path)
+          return { success: true, path: candidate.path }
+        } catch (error) {
+          console.warn("Skipping unusable recovered recording candidate:", candidate.path, error)
+        }
+      }
+
+      if (sortedCandidates.length === 0) {
         return { success: false, message: 'No recorded video found' }
       }
 
-      return { success: true, path: latestVideo.path }
+      return { success: false, message: 'No usable recorded video found' }
     } catch (error) {
       console.error('Failed to get video path:', error)
       return { success: false, message: 'Failed to get video path', error: String(error) }

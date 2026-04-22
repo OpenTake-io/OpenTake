@@ -435,7 +435,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	}, []);
 
 	const storeMicrophoneSidecar = useCallback(
-		async (micFallbackBlobPromise: Promise<Blob | null> | null | undefined, finalPath: string) => {
+		async (
+			micFallbackBlobPromise: Promise<Blob | null> | null | undefined,
+			finalPath: string,
+		) => {
 			const micFallbackBlob = await micFallbackBlobPromise;
 			if (!micFallbackBlob) {
 				return;
@@ -649,9 +652,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					);
 					void logNativeCaptureDiagnostics("stop-native-screen-recording");
 					try {
-						const recoveredPath = await recoverNativeRecordingSession(
-							micFallbackBlobPromise,
-						);
+						const recoveredPath =
+							await recoverNativeRecordingSession(micFallbackBlobPromise);
 						if (recoveredPath) {
 							return;
 						}
@@ -674,10 +676,17 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				if (isNativeWindows) {
 					const muxResult =
 						await window.electronAPI.muxNativeWindowsRecording(pauseSegments);
-					if (!muxResult?.success) {
+					if (!muxResult?.success || !muxResult.path) {
 						void logNativeCaptureDiagnostics("mux-native-windows-recording");
+						const failureMessage = await buildNativeCaptureFailureMessage(
+							"mux-native-windows-recording",
+							muxResult?.message ||
+								"Failed to finalize the Windows recording, so the editor was not opened.",
+						);
+						await notifyRecordingFinalizationFailure(failureMessage);
+						return;
 					}
-					finalPath = muxResult?.path ?? result.path;
+					finalPath = muxResult.path;
 				}
 
 				await storeMicrophoneSidecar(micFallbackBlobPromise, finalPath);

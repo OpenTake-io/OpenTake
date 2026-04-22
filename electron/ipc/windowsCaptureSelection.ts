@@ -36,7 +36,7 @@ export function resolveWindowsCaptureDisplay(
 		primaryDisplay;
 
 	return {
-		displayId: Number(matchedDisplay.id),
+		displayId: requestedOrPrimaryDisplayId,
 		bounds: matchedDisplay.bounds,
 	};
 }
