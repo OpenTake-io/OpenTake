@@ -904,7 +904,12 @@ export function createCountdownWindow(): BrowserWindow {
 
 	win.webContents.on("did-finish-load", () => {
 		if (!win.isDestroyed()) {
-			win.show();
+			if (process.platform === "win32") {
+				win.showInactive();
+				win.moveTop();
+			} else {
+				win.show();
+			}
 		}
 	});
 
