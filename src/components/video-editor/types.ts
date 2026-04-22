@@ -155,6 +155,35 @@ export function getClipSourceEndMs(clip: ClipRegion): number {
 	return Math.round(clip.startMs + displayDurationMs * speed);
 }
 
+export function extendAutoFullTrackClip(
+	clips: ClipRegion[],
+	autoClipId: string | null,
+	previousAutoEndMs: number | null,
+	nextTotalDurationMs: number,
+): ClipRegion[] | null {
+	if (
+		!autoClipId ||
+		!Number.isFinite(previousAutoEndMs) ||
+		!Number.isFinite(nextTotalDurationMs) ||
+		nextTotalDurationMs <= (previousAutoEndMs ?? 0) ||
+		clips.length !== 1
+	) {
+		return null;
+	}
+
+	const [clip] = clips;
+	if (
+		clip.id !== autoClipId ||
+		clip.startMs !== 0 ||
+		clip.speed !== 1 ||
+		clip.endMs !== previousAutoEndMs
+	) {
+		return null;
+	}
+
+	return [{ ...clip, endMs: nextTotalDurationMs }];
+}
+
 /** Convert clip regions (kept segments) to trim regions (gaps to remove). */
 export function clipsToTrims(clips: ClipRegion[], totalDurationMs: number): TrimRegion[] {
 	if (clips.length === 0) return [];
