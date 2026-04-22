@@ -44,10 +44,17 @@ export function getAudioSyncAdjustment(
 		return { mode: "none", delayMs: 0, tempoRatio: 1, durationDeltaMs };
 	}
 
+	// When the recorded audio runs longer than the video, globally speeding it
+	// up can pull speech ahead of the picture. Keep the track anchored at the
+	// start instead and let the downstream mux path trim any trailing overrun.
+	if (durationDeltaMs < 0) {
+		return { mode: "none", delayMs: 0, tempoRatio: 1, durationDeltaMs };
+	}
+
 	const tempoRatio = Math.max(0.5, Math.min(2, audioDuration / videoDuration));
 	const relativeDelta = absDeltaMs / Math.max(videoDuration * 1000, 1);
 
-	if (relativeDelta <= 0.03 || absDeltaMs <= 1500 || durationDeltaMs < 0) {
+	if (relativeDelta <= 0.03 || absDeltaMs <= 1500) {
 		return { mode: "tempo", delayMs: 0, tempoRatio, durationDeltaMs };
 	}
 
@@ -78,9 +85,7 @@ export function formatFfmpegSeconds(milliseconds: number): string {
 	return (milliseconds / 1000).toFixed(3);
 }
 
-export function normalizePauseSegments(
-	pauseSegments: PauseSegment[] | undefined,
-): PauseSegment[] {
+export function normalizePauseSegments(pauseSegments: PauseSegment[] | undefined): PauseSegment[] {
 	if (!Array.isArray(pauseSegments) || pauseSegments.length === 0) {
 		return [];
 	}
