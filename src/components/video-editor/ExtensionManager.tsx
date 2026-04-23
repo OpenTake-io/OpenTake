@@ -9,20 +9,20 @@
 import {
 	BookOpen,
 	Check,
-	ChevronLeft,
-	ChevronRight,
-	Download,
-	ExternalLink,
+	CaretLeft as ChevronLeft,
+	CaretRight as ChevronRight,
+	DownloadSimple as Download,
+	ArrowSquareOut as ExternalLink,
 	FolderOpen,
-	Loader2,
+	SpinnerGap as Loader2,
 	Plus,
-	Puzzle,
-	RefreshCw,
-	Search,
-	ShieldAlert,
+	PuzzlePiece as Puzzle,
+	ArrowsClockwise as RefreshCw,
+	MagnifyingGlass as Search,
+	ShieldWarning as ShieldAlert,
 	Tag,
-	Trash2,
-} from "lucide-react";
+	Trash as Trash2,
+} from "@phosphor-icons/react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -88,34 +88,34 @@ function InstalledExtensionCard({
 					? "border-red-500/30 bg-red-500/5"
 					: isActive
 						? "border-[#2563EB]/20 bg-[#2563EB]/5"
-						: "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]",
+						: "border-foreground/[0.06] bg-white/[0.02] hover:bg-foreground/[0.04]",
 			)}
 			onClick={onClick}
 		>
-			<div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
+			<div className="flex-shrink-0 w-8 h-8 rounded-lg bg-foreground/5 border border-foreground/10 flex items-center justify-center overflow-hidden">
 				<ExtensionIcon
 					icon={extension.manifest.icon}
 					extensionPath={extension.path}
-					className="w-3.5 h-3.5 text-slate-400"
+					className="w-3.5 h-3.5 text-muted-foreground"
 					imageClassName="w-8 h-8 rounded-lg"
 				/>
 			</div>
 
 			<div className="flex-1 min-w-0">
 				<div className="flex items-center gap-1.5">
-					<span className="text-[13px] font-medium text-slate-200 truncate">
+					<span className="text-[13px] font-medium text-foreground truncate">
 						{extension.manifest.name}
 					</span>
 				</div>
 
 				{extension.manifest.author && (
-					<p className="text-[10px] text-slate-500 mt-0.5">
+					<p className="text-[10px] text-muted-foreground/70 mt-0.5">
 						{homepageUrl ? (
 							<a
 								href={homepageUrl}
 								target="_blank"
 								rel="noopener noreferrer"
-								className="hover:text-slate-300 transition-colors"
+								className="hover:text-muted-foreground transition-colors"
 								onClick={(e) => e.stopPropagation()}
 							>
 								{t("detail.by", undefined, { author: extension.manifest.author })}
@@ -126,7 +126,7 @@ function InstalledExtensionCard({
 					</p>
 				)}
 
-				<p className="text-[11px] text-slate-500 mt-0.5 line-clamp-3">
+				<p className="text-[11px] text-muted-foreground/70 mt-0.5 line-clamp-3">
 					{extension.manifest.description || t("detail.noDescription")}
 				</p>
 
@@ -141,7 +141,7 @@ function InstalledExtensionCard({
 						{extension.manifest.permissions.map((perm) => (
 							<span
 								key={perm}
-								className="text-[8px] px-1 py-[1px] rounded bg-white/5 text-slate-600 font-mono"
+								className="text-[8px] px-1 py-[1px] rounded bg-foreground/5 text-muted-foreground font-mono"
 							>
 								{perm}
 							</span>
@@ -155,7 +155,7 @@ function InstalledExtensionCard({
 					<Button
 						variant="ghost"
 						size="icon"
-						className="h-6 w-6 text-slate-600 hover:text-red-400 hover:bg-red-500/10"
+						className="h-6 w-6 text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
 						onClick={(e) => {
 							e.stopPropagation();
 							onUninstall();
@@ -192,10 +192,10 @@ function MarketplaceCard({
 	const homepageUrl = toSafeHttpUrl(extension.homepage);
 	return (
 		<div
-			className="flex items-start gap-3 p-3 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors cursor-pointer"
+			className="flex items-start gap-3 p-3 rounded-xl border border-foreground/[0.06] bg-white/[0.02] hover:bg-foreground/[0.04] transition-colors cursor-pointer"
 			onClick={onClick}
 		>
-			<div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center overflow-hidden">
+			<div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-white/10 to-white/5 border border-foreground/10 flex items-center justify-center overflow-hidden">
 				{extension.iconUrl ? (
 					<img
 						src={extension.iconUrl}
@@ -203,24 +203,24 @@ function MarketplaceCard({
 						className="w-8 h-8 rounded-lg object-cover"
 					/>
 				) : (
-					<ExtensionIcon icon={undefined} className="w-3.5 h-3.5 text-slate-400" />
+					<ExtensionIcon icon={undefined} className="w-3.5 h-3.5 text-muted-foreground" />
 				)}
 			</div>
 
 			<div className="flex-1 min-w-0">
 				<div className="flex items-center gap-1.5">
-					<span className="text-[13px] font-medium text-slate-200 truncate">
+					<span className="text-[13px] font-medium text-foreground truncate">
 						{extension.name}
 					</span>
 				</div>
 
-				<p className="text-[10px] text-slate-500 mt-0.5">
+				<p className="text-[10px] text-muted-foreground/70 mt-0.5">
 					{homepageUrl ? (
 						<a
 							href={homepageUrl}
 							target="_blank"
 							rel="noopener noreferrer"
-							className="hover:text-slate-300 transition-colors"
+							className="hover:text-muted-foreground transition-colors"
 							onClick={(e) => e.stopPropagation()}
 						>
 							{t("detail.by", undefined, { author: extension.author })}
@@ -230,12 +230,12 @@ function MarketplaceCard({
 					)}
 				</p>
 
-				<p className="text-[11px] text-slate-500 mt-0.5 line-clamp-3">
+				<p className="text-[11px] text-muted-foreground/70 mt-0.5 line-clamp-3">
 					{extension.description}
 				</p>
 
 				<div className="flex items-center gap-3 mt-1.5">
-					<span className="flex items-center gap-0.5 text-[10px] text-slate-600">
+					<span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
 						<Download className="w-2.5 h-2.5" />
 						{extension.downloads.toLocaleString()}
 					</span>
@@ -297,10 +297,10 @@ function ScreenshotGallery({ screenshots }: { screenshots: string[] }) {
 
 	return (
 		<div>
-			<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
+			<p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1.5">
 				{t("detail.preview")}
 			</p>
-			<div className="relative group rounded-lg overflow-hidden bg-black/20 border border-white/[0.06]">
+			<div className="relative group rounded-lg overflow-hidden bg-black/20 border border-foreground/[0.06]">
 				<img
 					src={screenshots[index]}
 					alt={t("detail.screenshotAlt", undefined, { number: String(index + 1) })}
@@ -310,14 +310,14 @@ function ScreenshotGallery({ screenshots }: { screenshots: string[] }) {
 					<>
 						<button
 							type="button"
-							className="absolute left-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black/60 text-white/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+							className="absolute left-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-editor-bg/80 text-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-editor-bg/80"
 							onClick={() => setIndex((i) => (i - 1 + count) % count)}
 						>
 							<ChevronLeft className="w-3.5 h-3.5" />
 						</button>
 						<button
 							type="button"
-							className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-black/60 text-white/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+							className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-editor-bg/80 text-foreground/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-editor-bg/80"
 							onClick={() => setIndex((i) => (i + 1) % count)}
 						>
 							<ChevronRight className="w-3.5 h-3.5" />
@@ -329,7 +329,7 @@ function ScreenshotGallery({ screenshots }: { screenshots: string[] }) {
 									key={i}
 									className={cn(
 										"w-1.5 h-1.5 rounded-full transition-colors",
-										i === index ? "bg-white" : "bg-white/30 hover:bg-white/50",
+										i === index ? "bg-white" : "bg-white/30 hover:bg-foreground/50",
 									)}
 									onClick={() => setIndex(i)}
 								/>
@@ -383,11 +383,11 @@ function ExtensionDetailModal({
 				if (!open) onClose();
 			}}
 		>
-			<DialogContent className="max-w-md bg-[#161619] border-white/10 text-slate-200 p-0 gap-0 overflow-hidden">
+			<DialogContent className="max-w-md bg-editor-panel border-foreground/10 text-foreground p-0 gap-0 overflow-hidden">
 				{/* Header */}
 				<div className="p-5 pb-4">
 					<div className="flex items-start gap-3.5">
-						<div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#2563EB]/20 to-[#2563EB]/5 border border-white/10 flex items-center justify-center">
+						<div className="flex-shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#2563EB]/20 to-[#2563EB]/5 border border-foreground/10 flex items-center justify-center">
 							{detail.source === "marketplace" && detail.ext.iconUrl ? (
 								<img
 									src={detail.ext.iconUrl}
@@ -404,18 +404,18 @@ function ExtensionDetailModal({
 						</div>
 						<div className="flex-1 min-w-0">
 							<div className="flex items-center gap-1.5">
-								<h2 className="text-[15px] font-semibold text-white truncate">
+								<h2 className="text-[15px] font-semibold text-foreground truncate">
 									{name}
 								</h2>
 							</div>
-							<p className="text-[11px] text-slate-500 mt-0.5">
+							<p className="text-[11px] text-muted-foreground/70 mt-0.5">
 								{author ? (
 									homepageUrl ? (
 										<a
 											href={homepageUrl}
 											target="_blank"
 											rel="noopener noreferrer"
-											className="hover:text-slate-300 transition-colors inline-flex items-center gap-1"
+											className="hover:text-muted-foreground transition-colors inline-flex items-center gap-1"
 										>
 											{t("detail.by", undefined, { author })}
 											<ExternalLink className="w-2.5 h-2.5" />
@@ -433,7 +433,7 @@ function ExtensionDetailModal({
 					{/* Stats for marketplace extensions */}
 					{detail.source === "marketplace" && (
 						<div className="flex items-center gap-3 mt-3">
-							<span className="flex items-center gap-1 text-[11px] text-slate-500">
+							<span className="flex items-center gap-1 text-[11px] text-muted-foreground/70">
 								<Download className="w-3 h-3" />
 								{t("detail.downloads", undefined, {
 									count: detail.ext.downloads.toLocaleString(),
@@ -450,10 +450,10 @@ function ExtensionDetailModal({
 
 					{/* Description */}
 					<div>
-						<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
+						<p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1.5">
 							{t("detail.description")}
 						</p>
-						<p className="text-[12px] text-slate-400 leading-relaxed whitespace-pre-wrap">
+						<p className="text-[12px] text-muted-foreground leading-relaxed whitespace-pre-wrap">
 							{description}
 						</p>
 					</div>
@@ -461,7 +461,7 @@ function ExtensionDetailModal({
 					{/* Tags */}
 					{detail.source === "marketplace" && detail.ext.tags.length > 0 && (
 						<div>
-							<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
+							<p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1.5">
 								{t("detail.tags")}
 							</p>
 							<div className="flex flex-wrap gap-1.5">
@@ -481,14 +481,14 @@ function ExtensionDetailModal({
 					{/* Permissions */}
 					{permissions.length > 0 && (
 						<div>
-							<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
+							<p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1.5">
 								{t("detail.permissions")}
 							</p>
 							<div className="flex flex-wrap gap-1.5">
 								{permissions.map((perm) => (
 									<span
 										key={perm}
-										className="text-[10px] px-2 py-0.5 rounded bg-white/5 text-slate-400 font-mono"
+										className="text-[10px] px-2 py-0.5 rounded bg-foreground/5 text-muted-foreground font-mono"
 									>
 										{perm}
 									</span>
@@ -500,10 +500,10 @@ function ExtensionDetailModal({
 					{/* Path (installed extensions) */}
 					{isInstalled && (
 						<div>
-							<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">
+							<p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1.5">
 								{t("detail.location")}
 							</p>
-							<p className="text-[10px] text-slate-500 font-mono break-all">
+							<p className="text-[10px] text-muted-foreground/70 font-mono break-all">
 								{detail.ext.path}
 							</p>
 						</div>
@@ -518,7 +518,7 @@ function ExtensionDetailModal({
 				</div>
 
 				{/* Footer actions */}
-				<div className="flex items-center gap-2 px-5 py-3 border-t border-white/[0.06] bg-white/[0.02]">
+				<div className="flex items-center gap-2 px-5 py-3 border-t border-foreground/[0.06] bg-white/[0.02]">
 					{isInstalled && onToggle && (
 						<div className="flex items-center gap-2">
 							<Switch
@@ -526,7 +526,7 @@ function ExtensionDetailModal({
 								onCheckedChange={onToggle}
 								disabled={isError}
 							/>
-							<span className="text-[11px] text-slate-400">
+							<span className="text-[11px] text-muted-foreground">
 								{detail.isActive ? t("status.enabled") : t("status.disabled")}
 							</span>
 						</div>
@@ -556,7 +556,7 @@ function ExtensionDetailModal({
 					<Button
 						variant="ghost"
 						size="sm"
-						className="h-8 px-3 text-[12px] text-slate-400 hover:text-slate-200 hover:bg-white/10"
+						className="h-8 px-3 text-[12px] text-muted-foreground hover:text-foreground hover:bg-foreground/10"
 						onClick={onClose}
 					>
 						{t("actions.close")}
@@ -583,7 +583,7 @@ function TabSwitcher({
 	const t = useScopedT("extensions");
 	return (
 		<LayoutGroup id="extension-tab-switcher">
-			<div className="grid h-8 w-full grid-cols-2 rounded-xl border border-white/10 bg-white/[0.04] p-1">
+			<div className="grid h-8 w-full grid-cols-2 rounded-xl border border-foreground/10 bg-foreground/[0.04] p-1">
 				{TAB_OPTIONS.map((option) => {
 					const isActive = activeTab === option.value;
 					const count = option.value === "installed" ? extensionCount : undefined;
@@ -604,7 +604,7 @@ function TabSwitcher({
 							<span
 								className={cn(
 									"relative z-10 flex items-center justify-center gap-1",
-									isActive ? "text-white" : "text-slate-400 hover:text-slate-200",
+									isActive ? "text-white" : "text-muted-foreground hover:text-foreground",
 								)}
 							>
 								{t(option.labelKey)}
@@ -614,7 +614,7 @@ function TabSwitcher({
 											"text-[8px] px-1 rounded-full font-semibold min-w-[14px] text-center leading-[14px]",
 											isActive
 												? "bg-white/20 text-white"
-												: "bg-white/5 text-slate-600",
+												: "bg-foreground/5 text-muted-foreground",
 										)}
 									>
 										{count}
@@ -776,19 +776,19 @@ export default function ExtensionManager() {
 	);
 
 	return (
-		<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-[#161619] border border-white/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
+		<div className="flex-[2] w-[332px] min-w-[280px] max-w-[332px] bg-editor-panel border border-foreground/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
 			{/* Header */}
 			<div className="flex-shrink-0 p-4 pb-3">
 				<div className="flex items-center justify-between mb-3">
 					<div className="flex items-center gap-2">
 						<Puzzle className="w-4 h-4 text-[#2563EB]" />
-						<h3 className="text-[13px] font-semibold text-slate-200">{t("title")}</h3>
+						<h3 className="text-[13px] font-semibold text-foreground">{t("title")}</h3>
 					</div>
 					<div className="flex items-center gap-0.5">
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-6 w-6 text-slate-500 hover:text-slate-300 hover:bg-white/10"
+							className="h-6 w-6 text-muted-foreground/70 hover:text-muted-foreground hover:bg-foreground/10"
 							onClick={() =>
 								window.electronAPI?.openExternalUrl(EXTENSIONS_SUBMIT_URL)
 							}
@@ -799,7 +799,7 @@ export default function ExtensionManager() {
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-6 w-6 text-slate-500 hover:text-slate-300 hover:bg-white/10"
+							className="h-6 w-6 text-muted-foreground/70 hover:text-muted-foreground hover:bg-foreground/10"
 							onClick={() => window.electronAPI?.openExternalUrl(EXTENSIONS_DOCS_URL)}
 							title={t("actions.docs")}
 						>
@@ -808,7 +808,7 @@ export default function ExtensionManager() {
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-6 w-6 text-slate-500 hover:text-slate-300 hover:bg-white/10"
+							className="h-6 w-6 text-muted-foreground/70 hover:text-muted-foreground hover:bg-foreground/10"
 							onClick={handleRefresh}
 							disabled={isRefreshing}
 							title={t("actions.refresh")}
@@ -818,7 +818,7 @@ export default function ExtensionManager() {
 						<Button
 							variant="ghost"
 							size="icon"
-							className="h-6 w-6 text-slate-500 hover:text-slate-300 hover:bg-white/10"
+							className="h-6 w-6 text-muted-foreground/70 hover:text-muted-foreground hover:bg-foreground/10"
 							onClick={openDirectory}
 							title={t("actions.openFolder")}
 						>
@@ -841,7 +841,7 @@ export default function ExtensionManager() {
 			>
 				{!ready ? (
 					<div className="flex-1 flex items-center justify-center py-12">
-						<Loader2 className="w-5 h-5 text-slate-600 animate-spin" />
+						<Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
 					</div>
 				) : (
 					<AnimatePresence mode="wait" initial={false}>
@@ -948,12 +948,12 @@ function InstalledTab({
 	if (extensions.length === 0) {
 		return (
 			<div className="flex flex-col items-center justify-center gap-3 py-10">
-				<div className="w-11 h-11 rounded-full bg-white/[0.04] flex items-center justify-center">
-					<Puzzle className="w-5 h-5 text-slate-600" />
+				<div className="w-11 h-11 rounded-full bg-foreground/[0.04] flex items-center justify-center">
+					<Puzzle className="w-5 h-5 text-muted-foreground" />
 				</div>
 				<div className="text-center">
-					<p className="text-[13px] font-medium text-slate-400">{t("empty.title")}</p>
-					<p className="text-[11px] text-slate-600 mt-1 leading-relaxed max-w-[200px]">
+					<p className="text-[13px] font-medium text-muted-foreground">{t("empty.title")}</p>
+					<p className="text-[11px] text-muted-foreground mt-1 leading-relaxed max-w-[200px]">
 						{t("empty.description")}
 					</p>
 				</div>
@@ -961,7 +961,7 @@ function InstalledTab({
 					<Button
 						variant="ghost"
 						size="sm"
-						className="h-7 px-2.5 text-[11px] text-slate-400 hover:text-slate-200 hover:bg-white/10 gap-1"
+						className="h-7 px-2.5 text-[11px] text-muted-foreground hover:text-foreground hover:bg-foreground/10 gap-1"
 						onClick={onInstallFromFolder}
 					>
 						<Plus className="w-3 h-3" />
@@ -970,7 +970,7 @@ function InstalledTab({
 					<Button
 						variant="ghost"
 						size="sm"
-						className="h-7 px-2.5 text-[11px] text-slate-400 hover:text-slate-200 hover:bg-white/10 gap-1"
+						className="h-7 px-2.5 text-[11px] text-muted-foreground hover:text-foreground hover:bg-foreground/10 gap-1"
 						onClick={onOpenDirectory}
 					>
 						<FolderOpen className="w-3 h-3" />
@@ -984,13 +984,13 @@ function InstalledTab({
 	return (
 		<div className="flex flex-col gap-2">
 			<div className="flex items-center justify-between mb-1">
-				<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+				<p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
 					{t("tabs.installed")}
 				</p>
 				<Button
 					variant="ghost"
 					size="sm"
-					className="h-6 px-2 text-[10px] text-slate-500 hover:text-slate-300 hover:bg-white/10 gap-1"
+					className="h-6 px-2 text-[10px] text-muted-foreground/70 hover:text-muted-foreground hover:bg-foreground/10 gap-1"
 					onClick={onInstallFromFolder}
 				>
 					<Plus className="w-2.5 h-2.5" />
@@ -1045,7 +1045,7 @@ function BrowseTab({
 		<div className="flex flex-col gap-3">
 			{/* Search */}
 			<div className="relative">
-				<Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+				<Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/70 pointer-events-none" />
 				<input
 					type="text"
 					placeholder={t("search.placeholder")}
@@ -1055,14 +1055,14 @@ function BrowseTab({
 						e.stopPropagation();
 						if (e.key === "Enter") onSearch();
 					}}
-					className="w-full h-8 pl-8 pr-3 rounded-lg bg-white/[0.04] border border-white/[0.08] text-[12px] text-slate-200 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#2563EB]/50 focus:border-[#2563EB]/30 transition-colors"
+					className="w-full h-8 pl-8 pr-3 rounded-lg bg-foreground/[0.04] border border-foreground/[0.08] text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-[#2563EB]/50 focus:border-[#2563EB]/30 transition-colors"
 				/>
 			</div>
 
 			{/* Results */}
 			{loading && (
 				<div className="flex items-center justify-center py-10">
-					<Loader2 className="w-5 h-5 text-slate-600 animate-spin" />
+					<Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
 				</div>
 			)}
 
@@ -1073,7 +1073,7 @@ function BrowseTab({
 					<Button
 						variant="ghost"
 						size="sm"
-						className="h-7 px-2.5 text-[11px] text-slate-400 hover:text-slate-200 hover:bg-white/10"
+						className="h-7 px-2.5 text-[11px] text-muted-foreground hover:text-foreground hover:bg-foreground/10"
 						onClick={onSearch}
 					>
 						{t("actions.retry")}
@@ -1083,8 +1083,8 @@ function BrowseTab({
 
 			{!loading && !error && results.length === 0 && (
 				<div className="flex flex-col items-center gap-2 py-10">
-					<Search className="w-5 h-5 text-slate-600" />
-					<p className="text-[11px] text-slate-600 text-center">
+					<Search className="w-5 h-5 text-muted-foreground" />
+					<p className="text-[11px] text-muted-foreground text-center">
 						{searchQuery ? t("search.noResults") : t("search.noMarketplace")}
 					</p>
 				</div>
@@ -1092,7 +1092,7 @@ function BrowseTab({
 
 			{!loading && !error && results.length > 0 && (
 				<div className="flex flex-col gap-2">
-					<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+					<p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
 						{results.length !== 1
 							? t("search.countPlural", undefined, { count: results.length })
 							: t("search.count", undefined, { count: results.length })}

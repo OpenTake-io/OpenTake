@@ -40,7 +40,7 @@ import {
 	type AutoCaptionSettings,
 	type CaptionCue,
 	type CursorStyle,
-	type CursorTelemetryPoint,
+	type Padding,
 	type SpeedRegion,
 	type TrimRegion,
 	type WebcamOverlaySettings,
@@ -110,6 +110,7 @@ import {
 	DEFAULT_ZOOM_IN_OVERLAP_MS,
 	DEFAULT_ZOOM_OUT_DURATION_MS,
 	DEFAULT_ZOOM_OUT_EASING,
+	DEFAULT_PADDING,
 	getDefaultCaptionFontFamily,
 } from "./types";
 import {
@@ -241,7 +242,7 @@ interface VideoPlaybackProps {
 	zoomOutEasing?: ZoomTransitionEasing;
 	connectedZoomEasing?: ZoomTransitionEasing;
 	borderRadius?: number;
-	padding?: number;
+	padding?: Padding | number;
 	frame?: string | null;
 	cropRegion?: import("./types").CropRegion;
 	webcam?: WebcamOverlaySettings;
@@ -311,7 +312,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			zoomOutEasing = DEFAULT_ZOOM_OUT_EASING,
 			connectedZoomEasing = DEFAULT_CONNECTED_ZOOM_EASING,
 			borderRadius = 0,
-			padding = 50,
+			padding = DEFAULT_PADDING,
 			frame = null,
 			cropRegion,
 			webcam,
@@ -1458,7 +1459,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			blurFilter.resolution = app.renderer.resolution;
 			blurFilter.blur = 0;
 			const motionBlurFilter = new MotionBlurFilter([0, 0], 5, 0);
-			videoContainer.filters = [blurFilter, motionBlurFilter];
+			// Don't attach filters by default — the filter pipeline forces the video
+			// through an intermediate RenderTexture at renderer resolution, downsampling
+			// the native video and destroying detail. Filters are attached conditionally
+			// in the ticker only when zoom motion blur is actually active.
+			videoContainer.filters = null;
 			blurFilterRef.current = blurFilter;
 			motionBlurFilterRef.current = motionBlurFilter;
 
@@ -1543,6 +1548,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				const appliedTransform = applyZoomTransform({
 					cameraContainer,
 					blurFilter: blurFilterRef.current,
+					motionBlurFilter: motionBlurFilterRef.current,
 					stageSize: stageSizeRef.current,
 					baseMask: baseMaskRef.current,
 					zoomScale: state.scale,
@@ -1553,7 +1559,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					motionVector,
 					isPlaying: isPlayingRef.current,
 					motionBlurAmount: zoomMotionBlurRef.current,
-					motionBlurFilter: motionBlurFilterRef.current,
 					transformOverride: transform,
 					motionBlurState: motionBlurStateRef.current,
 					frameTimeMs: performance.now(),
@@ -1738,6 +1743,21 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					motionIntensity,
 					motionVector,
 				);
+
+				// Conditionally attach motion blur filter only when the camera is
+				// actually moving. When filters are attached, PixiJS routes the video
+				// through an intermediate RenderTexture at renderer resolution, which
+				// downsamples the native video and degrades preview quality.
+				// Hysteresis prevents flickering when motionIntensity oscillates near threshold.
+				const filtersActive = Array.isArray(videoContainer.filters) && videoContainer.filters.length > 0;
+				const cameraIsMoving = filtersActive ? motionIntensity > 0.002 : motionIntensity > 0.008;
+				const needsFilters = zoomMotionBlurRef.current > 0 && isPlayingRef.current && cameraIsMoving;
+				if (needsFilters && !filtersActive && motionBlurFilterRef.current) {
+					videoContainer.filters = [motionBlurFilterRef.current];
+				} else if (!needsFilters && filtersActive) {
+					videoContainer.filters = null;
+				}
+
 				applyWebcamBubbleLayout(animationStateRef.current.appliedScale || 1);
 
 				const timeMs = currentTimeRef.current;
@@ -2441,7 +2461,26 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					onDurationChange={(e) => {
 						onDurationChange(e.currentTarget.duration);
 					}}
-					onError={() => onError("Failed to load video")}
+					onError={(e) => {
+						const mediaError = e.currentTarget.error;
+						const code = mediaError?.code;
+						const msg = mediaError?.message;
+						const detail =
+							code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
+								? "format not supported"
+								: code === MediaError.MEDIA_ERR_NETWORK
+									? "network error"
+									: code === MediaError.MEDIA_ERR_DECODE
+										? "decode error"
+										: msg || `code ${code ?? "unknown"}`;
+						console.error(
+							"[VideoPlayback] Video load error:",
+							detail,
+							"src:",
+							videoPath,
+						);
+						onError(`Failed to load video (${detail})`);
+					}}
 				/>
 			</div>
 		);

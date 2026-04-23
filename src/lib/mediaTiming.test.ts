@@ -23,10 +23,11 @@ describe("clampMediaTimeToDuration", () => {
 describe("estimateCompanionAudioStartDelaySeconds", () => {
 	it("returns the positive tail gap when companion audio is shorter", () => {
 		expect(estimateCompanionAudioStartDelaySeconds(10, 9.6)).toBeCloseTo(0.4);
+		expect(estimateCompanionAudioStartDelaySeconds(10, 9.97)).toBeCloseTo(0.03);
 	});
 
 	it("ignores tiny or negative differences", () => {
-		expect(estimateCompanionAudioStartDelaySeconds(10, 9.97)).toBe(0);
+		expect(estimateCompanionAudioStartDelaySeconds(10, 9.99)).toBe(0);
 		expect(estimateCompanionAudioStartDelaySeconds(10, 10.5)).toBe(0);
 	});
 });

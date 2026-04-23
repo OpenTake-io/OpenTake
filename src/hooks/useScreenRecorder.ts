@@ -2,6 +2,7 @@ import { fixWebmDuration } from "@fix-webm-duration/fix";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getEffectiveRecordingDurationMs } from "@/lib/mediaTiming";
+import { selectRecordingMimeType } from "./recordingMimeType";
 
 const TARGET_FRAME_RATE = 60;
 const TARGET_WIDTH = 3840;
@@ -18,7 +19,7 @@ const HIGH_FRAME_RATE_BOOST = 1.7;
 const DEFAULT_WIDTH = 1920;
 const DEFAULT_HEIGHT = 1080;
 const CODEC_ALIGNMENT = 2;
-const RECORDER_TIMESLICE_MS = 1000;
+const RECORDER_TIMESLICE_MS = 250;
 const BITS_PER_MEGABIT = 1_000_000;
 const MIN_FRAME_RATE = 30;
 const CHROME_MEDIA_SOURCE = "desktop";
@@ -32,6 +33,14 @@ const WEBCAM_WIDTH = 1280;
 const WEBCAM_HEIGHT = 720;
 const WEBCAM_FRAME_RATE = 30;
 const WEBCAM_SUFFIX = "-webcam";
+const LINUX_PORTAL_SOURCE: ProcessedDesktopSource = {
+	id: "screen:linux-portal",
+	name: "Linux Portal",
+	display_id: "",
+	thumbnail: null,
+	appIcon: null,
+	sourceType: "screen",
+};
 
 type PauseSegment = {
 	startMs: number;
@@ -262,15 +271,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	}, []);
 
 	const selectMimeType = useCallback(() => {
-		const preferred = [
-			"video/webm;codecs=av1",
-			"video/webm;codecs=h264",
-			"video/webm;codecs=vp9",
-			"video/webm;codecs=vp8",
-			"video/webm",
-		];
-
-		return preferred.find((type) => MediaRecorder.isTypeSupported(type)) ?? "video/webm";
+		return selectRecordingMimeType();
 	}, []);
 
 	const computeBitrate = (width: number, height: number) => {
@@ -331,6 +332,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 	const resolveBrowserCaptureSource = useCallback(async (source: ProcessedDesktopSource) => {
 		if (!source?.id?.startsWith("screen:")) {
+			return source;
+		}
+
+		// Linux/Wayland portal sentinel: do NOT call getSources here, because
+		// on Wayland that triggers an additional xdg-desktop-portal dialog.
+		// The sentinel is handled later by routing through getDisplayMedia,
+		// which lets the portal pick the source in a single dialog.
+		if (source.id === "screen:linux-portal") {
 			return source;
 		}
 
@@ -426,7 +435,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	}, []);
 
 	const storeMicrophoneSidecar = useCallback(
-		async (micFallbackBlobPromise: Promise<Blob | null> | null | undefined, finalPath: string) => {
+		async (
+			micFallbackBlobPromise: Promise<Blob | null> | null | undefined,
+			finalPath: string,
+		) => {
 			const micFallbackBlob = await micFallbackBlobPromise;
 			if (!micFallbackBlob) {
 				return;
@@ -534,8 +546,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			pendingWebcamPathPromise.current = webcamStopPromise.current;
 
 			const recorder = new MediaRecorder(webcamStream.current, {
-				mimeType,
 				videoBitsPerSecond: WEBCAM_BITRATE,
+				...(mimeType ? { mimeType } : {}),
 			});
 
 			webcamRecorder.current = recorder;
@@ -562,7 +574,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						0,
 						getRecordingDurationMs(Date.now()) - webcamTimeOffsetMs.current,
 					);
-					const webcamBlob = new Blob(webcamChunks.current, { type: mimeType });
+					const webcamBlobType = recorder.mimeType || mimeType;
+					const webcamBlob = new Blob(
+						webcamChunks.current,
+						webcamBlobType ? { type: webcamBlobType } : undefined,
+					);
 					webcamChunks.current = [];
 					const fixedBlob = await fixWebmDuration(webcamBlob, duration);
 					const arrayBuffer = await fixedBlob.arrayBuffer();
@@ -636,9 +652,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					);
 					void logNativeCaptureDiagnostics("stop-native-screen-recording");
 					try {
-						const recoveredPath = await recoverNativeRecordingSession(
-							micFallbackBlobPromise,
-						);
+						const recoveredPath =
+							await recoverNativeRecordingSession(micFallbackBlobPromise);
 						if (recoveredPath) {
 							return;
 						}
@@ -661,10 +676,17 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				if (isNativeWindows) {
 					const muxResult =
 						await window.electronAPI.muxNativeWindowsRecording(pauseSegments);
-					if (!muxResult?.success) {
+					if (!muxResult?.success || !muxResult.path) {
 						void logNativeCaptureDiagnostics("mux-native-windows-recording");
+						const failureMessage = await buildNativeCaptureFailureMessage(
+							"mux-native-windows-recording",
+							muxResult?.message ||
+								"Failed to finalize the Windows recording, so the editor was not opened.",
+						);
+						await notifyRecordingFinalizationFailure(failureMessage);
+						return;
 					}
-					finalPath = muxResult?.path ?? result.path;
+					finalPath = muxResult.path;
 				}
 
 				await storeMicrophoneSidecar(micFallbackBlobPromise, finalPath);
@@ -827,10 +849,23 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		setStarting(true);
 
 		try {
-			const selectedSource = await window.electronAPI.getSelectedSource();
+			const platform = await window.electronAPI.getPlatform();
+			const existingSource = await window.electronAPI.getSelectedSource();
+			const selectedSource =
+				existingSource ?? (platform === "linux" ? LINUX_PORTAL_SOURCE : null);
 			if (!selectedSource) {
 				alert("Please select a source to record");
 				return;
+			}
+			// Persist the synthetic Linux portal sentinel to main so that the
+			// setDisplayMediaRequestHandler can short-circuit getSources() and
+			// avoid triggering an extra portal dialog.
+			if (!existingSource && selectedSource.id === "screen:linux-portal") {
+				try {
+					await window.electronAPI.selectSource(selectedSource);
+				} catch (err) {
+					console.warn("Failed to persist Linux portal sentinel source:", err);
+				}
 			}
 
 			const permissionsReady = await preparePermissions();
@@ -841,8 +876,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			recordingSessionTimestamp.current = Date.now();
 			resetRecordingClock(recordingSessionTimestamp.current);
 			await prepareWebcamRecorder();
-
-			const platform = await window.electronAPI.getPlatform();
 			const useNativeMacScreenCapture =
 				platform === "darwin" &&
 				(selectedSource.id?.startsWith("screen:") ||
@@ -968,7 +1001,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 									micFallbackChunks.current.push(event.data);
 								}
 							};
-							recorder.start(1000);
+							recorder.start(RECORDER_TIMESLICE_MS);
 							micFallbackRecorder.current = recorder;
 						} catch (micError) {
 							console.warn("Browser microphone fallback failed:", micError);
@@ -1018,18 +1051,34 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			if (wantsAudioCapture) {
 				let screenMediaStream: MediaStream;
+				const useLinuxPortal = selectedSource.id === "screen:linux-portal";
+				const acquireLinuxPortalStream = (withAudio: boolean) =>
+					mediaDevices.getDisplayMedia({
+						audio: withAudio,
+						video: {
+							displaySurface: "monitor",
+							width: { ideal: TARGET_WIDTH, max: TARGET_WIDTH },
+							height: { ideal: TARGET_HEIGHT, max: TARGET_HEIGHT },
+							frameRate: { ideal: TARGET_FRAME_RATE, max: TARGET_FRAME_RATE },
+							cursor: "never",
+						},
+						selfBrowserSurface: "exclude",
+						surfaceSwitching: "exclude",
+					});
 
 				if (systemAudioEnabled) {
 					try {
-						screenMediaStream = await mediaDevices.getUserMedia({
-							audio: {
-								mandatory: {
-									chromeMediaSource: CHROME_MEDIA_SOURCE,
-									chromeMediaSourceId: browserCaptureSource.id,
-								},
-							},
-							video: browserScreenVideoConstraints,
-						});
+						screenMediaStream = useLinuxPortal
+							? await acquireLinuxPortalStream(true)
+							: await mediaDevices.getUserMedia({
+									audio: {
+										mandatory: {
+											chromeMediaSource: CHROME_MEDIA_SOURCE,
+											chromeMediaSourceId: browserCaptureSource.id,
+										},
+									},
+									video: browserScreenVideoConstraints,
+								});
 					} catch (audioError) {
 						console.warn(
 							"System audio capture failed, falling back to video-only:",
@@ -1038,16 +1087,20 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						alert(
 							"System audio is not available for this source. Recording will continue without system audio.",
 						);
-						screenMediaStream = await mediaDevices.getUserMedia({
-							audio: false,
-							video: browserScreenVideoConstraints,
-						});
+						screenMediaStream = useLinuxPortal
+							? await acquireLinuxPortalStream(false)
+							: await mediaDevices.getUserMedia({
+									audio: false,
+									video: browserScreenVideoConstraints,
+								});
 					}
 				} else {
-					screenMediaStream = await mediaDevices.getUserMedia({
-						audio: false,
-						video: browserScreenVideoConstraints,
-					});
+					screenMediaStream = useLinuxPortal
+						? await acquireLinuxPortalStream(false)
+						: await mediaDevices.getUserMedia({
+								audio: false,
+								video: browserScreenVideoConstraints,
+							});
 				}
 
 				screenStream.current = screenMediaStream;
@@ -1090,7 +1143,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				const micAudioTrack = microphoneStream.current?.getAudioTracks()[0];
 
 				if (systemAudioTrack && micAudioTrack) {
-					const context = new AudioContext();
+					const context = new AudioContext({ sampleRate: 48000 });
 					mixingContext.current = context;
 					const systemSource = context.createMediaStreamSource(
 						new MediaStream([systemAudioTrack]),
@@ -1166,7 +1219,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			const mimeType = selectMimeType();
 
 			console.log(
-				`Recording at ${width}x${height} @ ${frameRate ?? TARGET_FRAME_RATE}fps using ${mimeType} / ${Math.round(
+				`Recording at ${width}x${height} @ ${frameRate ?? TARGET_FRAME_RATE}fps using ${mimeType ?? "browser default"} / ${Math.round(
 					videoBitsPerSecond / BITS_PER_MEGABIT,
 				)} Mbps`,
 			);
@@ -1174,8 +1227,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			chunks.current = [];
 			const hasAudio = stream.current.getAudioTracks().length > 0;
 			const recorder = new MediaRecorder(stream.current, {
-				mimeType,
 				videoBitsPerSecond,
+				...(mimeType ? { mimeType } : {}),
 				...(hasAudio
 					? {
 							audioBitsPerSecond: systemAudioIncluded
@@ -1197,7 +1250,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 				const duration = getRecordingDurationMs(Date.now());
 				const recordedChunks = chunks.current;
-				const buggyBlob = new Blob(recordedChunks, { type: mimeType });
+				const recordingBlobType = recorder.mimeType || mimeType;
+				const buggyBlob = new Blob(
+					recordedChunks,
+					recordingBlobType ? { type: recordingBlobType } : undefined,
+				);
 				chunks.current = [];
 				const timestamp = recordingSessionTimestamp.current ?? Date.now();
 				const videoFileName = `${RECORDING_FILE_PREFIX}${timestamp}${VIDEO_FILE_EXTENSION}`;
@@ -1252,8 +1309,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					: "Failed to start recording",
 			);
 			setRecording(false);
-			cleanupCapturedMedia();
-			await stopWebcamRecorder();
+			try {
+				await window.electronAPI?.setRecordingState(false);
+			} catch (stateError) {
+				console.warn("Failed to reset main-process recording state:", stateError);
+			} finally {
+				cleanupCapturedMedia();
+				await stopWebcamRecorder();
+			}
 		} finally {
 			startInFlight.current = false;
 			setStarting(false);

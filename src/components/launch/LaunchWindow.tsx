@@ -1,27 +1,27 @@
 import {
 	AppWindow,
 	ArrowCircleUp as ArrowUpCircle,
-	ArrowClockwise as RefreshCw,
-	CaretUp as ChevronUp,
 	CheckCircle as CheckCircle2,
-	DotsThreeVertical as MoreVertical,
+	CaretUp as ChevronUp,
 	Eye,
 	EyeSlash as EyeOff,
 	FolderOpen,
+	Translate as Languages,
 	Microphone as Mic,
 	MicrophoneSlash as MicOff,
 	Minus,
 	Monitor,
+	DotsThreeVertical as MoreVertical,
 	Pause,
 	Play,
-	SpeakerHigh as Volume2,
-	SpeakerX as VolumeX,
+	ArrowClockwise as RefreshCw,
 	Stop as Square,
 	Timer,
-	Translate as Languages,
 	VideoCamera as Video,
 	VideoCamera as VideoIcon,
 	VideoCameraSlash as VideoOff,
+	SpeakerHigh as Volume2,
+	SpeakerX as VolumeX,
 	X,
 } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "motion/react";
@@ -41,6 +41,10 @@ import { ContentClamp } from "../ui/content-clamp";
 import ProjectBrowserDialog, {
 	type ProjectLibraryEntry,
 } from "../video-editor/ProjectBrowserDialog";
+import {
+	mergeHudInteractiveBounds,
+	shouldRestoreHudMousePassthroughAfterDrag,
+} from "./hudMousePassthrough";
 import styles from "./LaunchWindow.module.css";
 
 interface DesktopSource {
@@ -465,7 +469,26 @@ export function LaunchWindow() {
 		if (event.currentTarget.hasPointerCapture(event.pointerId)) {
 			event.currentTarget.releasePointerCapture(event.pointerId);
 		}
-		if (wasDragging) {
+		const hudBounds = mergeHudInteractiveBounds(
+			[
+				dropdownRef.current?.getBoundingClientRect(),
+				hudBarRef.current?.getBoundingClientRect(),
+				recordingWebcamPreviewContainerRef.current?.getBoundingClientRect(),
+			].map((bounds) =>
+				bounds
+					? {
+							left: bounds.left,
+							top: bounds.top,
+							right: bounds.right,
+							bottom: bounds.bottom,
+						}
+					: null,
+			),
+		);
+		if (
+			wasDragging &&
+			shouldRestoreHudMousePassthroughAfterDrag(hudBounds, event.clientX, event.clientY)
+		) {
 			window.electronAPI?.hudOverlaySetIgnoreMouse?.(true);
 		}
 	};
@@ -1093,23 +1116,27 @@ export function LaunchWindow() {
 
 	const idleControls = (
 		<>
-			<button
-				type="button"
-				className={`${styles.screenSel} ${styles.electronNoDrag}`}
-				onClick={() => toggleDropdown("sources")}
-				title={selectedSource}
-			>
-				<Monitor size={16} />
-				<ContentClamp className={styles.sourceLabel} truncateLength={36}>
-					{selectedSource}
-				</ContentClamp>
-				<ChevronUp
-					size={10}
-					className={`text-[#6b6b78] ml-0.5 transition-transform duration-200 ${activeDropdown === "sources" ? "" : "rotate-180"}`}
-				/>
-			</button>
+			{platform !== "linux" && (
+				<>
+					<button
+						type="button"
+						className={`${styles.screenSel} ${styles.electronNoDrag}`}
+						onClick={() => toggleDropdown("sources")}
+						title={selectedSource}
+					>
+						<Monitor size={16} />
+						<ContentClamp className={styles.sourceLabel} truncateLength={36}>
+							{selectedSource}
+						</ContentClamp>
+						<ChevronUp
+							size={10}
+							className={`text-[#6b6b78] ml-0.5 transition-transform duration-200 ${activeDropdown === "sources" ? "" : "rotate-180"}`}
+						/>
+					</button>
 
-			<Separator />
+					<Separator />
+				</>
+			)}
 
 			<IconButton
 				onClick={toggleMicrophone}
@@ -1144,7 +1171,11 @@ export function LaunchWindow() {
 			<button
 				type="button"
 				className={`${styles.recBtn} ${styles.electronNoDrag}`}
-				onClick={hasSelectedSource ? toggleRecording : () => toggleDropdown("sources")}
+				onClick={
+					hasSelectedSource || platform === "linux"
+						? toggleRecording
+						: () => toggleDropdown("sources")
+				}
 				disabled={countdownActive}
 				title={t("recording.record")}
 			>
@@ -1556,7 +1587,17 @@ export function LaunchWindow() {
 							className={`${styles.bar} mb-2`}
 						>
 							<div
-								className="flex items-center px-0.5 cursor-grab active:cursor-grabbing"
+								// On Linux (especially Wayland) the compositor owns window
+								// placement, so BrowserWindow.setBounds() is silently ignored.
+								// Fall back to a native OS drag via -webkit-app-region on the
+								// handle.  We still need JS pointer handlers in webcam-preview
+								// mode (which translates via CSS inside the window), so only
+								// mark the handle as a native drag region for the IPC path.
+								className={`flex items-center px-0.5 cursor-grab active:cursor-grabbing ${
+									platform === "linux" && !showRecordingWebcamPreview
+										? styles.electronDrag
+										: ""
+								}`}
 								onPointerDown={handleHudBarPointerDown}
 								onPointerMove={handleHudBarPointerMove}
 								onPointerUp={handleHudBarPointerUp}

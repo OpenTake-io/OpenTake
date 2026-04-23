@@ -91,6 +91,15 @@
 		"radius": "Radius",
 		"roundness": "Roundness",
 		"padding": "Padding",
+		"paddingAdvanced": "Advanced",
+		"paddingAdvancedShow": "Show advanced padding controls",
+		"paddingAdvancedHide": "Hide advanced padding controls",
+		"paddingLinked": "Linked (Uniform)",
+		"paddingUnlinked": "Unlinked (Asymmetrical)",
+		"paddingTop": "Top",
+		"paddingBottom": "Bottom",
+		"paddingLeft": "Left",
+		"paddingRight": "Right",
 		"removeBackground": "Remove background"
 	},
 	"sections": {

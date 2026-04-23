@@ -1,14 +1,21 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
-	AUTO_RECORDING_RETENTION_COUNT,
 	AUTO_RECORDING_MAX_AGE_MS,
-	PROJECT_FILE_EXTENSION,
-	LEGACY_PROJECT_FILE_EXTENSIONS,
+	AUTO_RECORDING_RETENTION_COUNT,
 	COMPANION_AUDIO_LAYOUTS,
+	LEGACY_PROJECT_FILE_EXTENSIONS,
+	PROJECT_FILE_EXTENSION,
+	PROJECTS_DIRECTORY_NAME,
 } from "../constants";
 import { currentVideoPath } from "../state";
-import { normalizePath, getTelemetryPathForVideo, isAutoRecordingPath, getRecordingsDir } from "../utils";
+import {
+	getRecordingsDir,
+	getTelemetryPathForVideo,
+	isAutoRecordingPath,
+	normalizePath,
+	normalizeVideoSourcePath,
+} from "../utils";
 
 export async function hasSiblingProjectFile(videoPath: string) {
 	const baseName = path.basename(videoPath, path.extname(videoPath));
@@ -30,9 +37,74 @@ export async function hasSiblingProjectFile(videoPath: string) {
 
 export { isAutoRecordingPath };
 
+async function loadSavedProjectMediaPaths() {
+	const recordingsDir = await getRecordingsDir();
+	const projectsDir = path.join(recordingsDir, PROJECTS_DIRECTORY_NAME);
+	const protectedPaths = new Set<string>();
+	const candidateExtensions = new Set([
+		PROJECT_FILE_EXTENSION,
+		...LEGACY_PROJECT_FILE_EXTENSIONS,
+	]);
+
+	let projectEntries: Array<{ isFile(): boolean; name: string }>;
+	try {
+		projectEntries = await fs.readdir(projectsDir, { withFileTypes: true });
+	} catch (error) {
+		const code =
+			typeof error === "object" && error !== null && "code" in error ? error.code : undefined;
+		if (code === "ENOENT") {
+			return protectedPaths;
+		}
+
+		throw error;
+	}
+
+	await Promise.all(
+		projectEntries
+			.filter((entry) => {
+				if (!entry.isFile()) {
+					return false;
+				}
+
+				const extension = path.extname(entry.name).replace(/^\./, "").toLowerCase();
+				return candidateExtensions.has(extension);
+			})
+			.map(async (entry) => {
+				const projectPath = path.join(projectsDir, entry.name);
+				const rawProject = JSON.parse(await fs.readFile(projectPath, "utf-8")) as {
+					videoPath?: unknown;
+					editor?: { webcam?: { sourcePath?: unknown } };
+				};
+				const candidatePaths = [
+					rawProject.videoPath,
+					rawProject.editor?.webcam?.sourcePath,
+				];
+
+				for (const candidatePath of candidatePaths) {
+					if (typeof candidatePath !== "string" || candidatePath.trim().length === 0) {
+						continue;
+					}
+
+					const normalizedCandidatePath = normalizePath(
+						normalizeVideoSourcePath(candidatePath) ?? candidatePath,
+					);
+					protectedPaths.add(normalizedCandidatePath);
+					try {
+						protectedPaths.add(await fs.realpath(normalizedCandidatePath));
+					} catch {
+						// Ignore missing project media; project loading already surfaces that error.
+					}
+				}
+			}),
+	);
+
+	return protectedPaths;
+}
+
 export async function pruneAutoRecordings(exemptPaths: string[] = []) {
 	const recordingsDir = await getRecordingsDir();
 	await fs.mkdir(recordingsDir, { recursive: true });
+	const protectedProjectMediaPaths = await loadSavedProjectMediaPaths();
 	const exempt = new Set(
 		[currentVideoPath, ...exemptPaths]
 			.filter((value): value is string => Boolean(value))
@@ -65,6 +137,14 @@ export async function pruneAutoRecordings(exemptPaths: string[] = []) {
 			continue;
 		}
 
+		const resolvedFilePath = await fs.realpath(entry.filePath).catch(() => normalizedFilePath);
+		if (
+			protectedProjectMediaPaths.has(normalizedFilePath) ||
+			protectedProjectMediaPaths.has(resolvedFilePath)
+		) {
+			continue;
+		}
+
 		const tooOld = now - entry.stats.mtimeMs > AUTO_RECORDING_MAX_AGE_MS;
 		const overLimit = index >= AUTO_RECORDING_RETENTION_COUNT;
 		if (!tooOld && !overLimit) {
@@ -78,7 +158,10 @@ export async function pruneAutoRecordings(exemptPaths: string[] = []) {
 			const base = entry.filePath.replace(/\.(mp4|mov|webm)$/i, "");
 			const companionSuffixes = Array.from(
 				new Set(
-					COMPANION_AUDIO_LAYOUTS.flatMap((layout) => [layout.systemSuffix, layout.micSuffix]),
+					COMPANION_AUDIO_LAYOUTS.flatMap((layout) => [
+						layout.systemSuffix,
+						layout.micSuffix,
+					]),
 				),
 			);
 			for (const suffix of companionSuffixes) {

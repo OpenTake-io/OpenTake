@@ -301,6 +301,16 @@ let hudDragFixedSize: { width: number; height: number } | null = null;
 ipcMain.on("hud-overlay-drag", (_event, phase: string, screenX: number, screenY: number) => {
 	if (!hudOverlayWindow || hudOverlayWindow.isDestroyed()) return;
 
+	// On Linux the compositor (especially Wayland) refuses programmatic window
+	// placement, so BrowserWindow.setBounds() with x/y is silently ignored and
+	// the HUD appears "stuck".  The renderer marks the drag handle as
+	// -webkit-app-region: drag on Linux, letting the OS move the window for us.
+	// The resulting position is captured by the win.on("moved", ...) listener
+	// below so `hudUserPosition` stays in sync for in-place resize.
+	if (process.platform === "linux") {
+		return;
+	}
+
 	if (phase === "start") {
 		const bounds = hudOverlayWindow.getBounds();
 		hudDragOffset = { x: screenX - bounds.x, y: screenY - bounds.y };
@@ -498,7 +508,30 @@ export function createHudOverlayWindow(): BrowserWindow {
 		}, 100);
 	});
 
+	// Safety net: on Linux the renderer may fail to fire did-finish-load
+	// (e.g. GPU/VAAPI errors). Show the window after ready-to-show as fallback.
+	win.once("ready-to-show", () => {
+		setTimeout(() => {
+			if (!win.isDestroyed() && !win.isVisible()) {
+				win.show();
+				win.moveTop();
+			}
+		}, 500);
+	});
+
 	hudOverlayWindow = win;
+
+	// On Linux the HUD is dragged by the OS via -webkit-app-region (Wayland
+	// forbids client-side positioning).  Mirror the resulting bounds into
+	// hudUserPosition so subsequent expand/collapse resizes stay in place
+	// instead of snapping back to the default centered spot.
+	if (process.platform === "linux") {
+		win.on("moved", () => {
+			if (win.isDestroyed()) return;
+			const { x, y } = win.getBounds();
+			hudUserPosition = { x, y };
+		});
+	}
 
 	// Reset the user's saved HUD position when displays change so the bar
 	// doesn't end up stranded off-screen after a monitor is disconnected.
@@ -777,6 +810,11 @@ export function createEditorWindow(): BrowserWindow {
 	win.webContents.on("did-finish-load", () => {
 		console.log("[editor-window] did-finish-load", win.webContents.getURL());
 		win?.webContents.send("main-process-message", new Date().toLocaleString());
+		// Fallback for Linux/Wayland where `ready-to-show` may not fire reliably.
+		if (!win.isDestroyed() && !win.isVisible()) {
+			console.log("[editor-window] forcing show after did-finish-load");
+			win.show();
+		}
 	});
 
 	win.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
@@ -888,7 +926,12 @@ export function createCountdownWindow(): BrowserWindow {
 
 	win.webContents.on("did-finish-load", () => {
 		if (!win.isDestroyed()) {
-			win.show();
+			if (process.platform === "win32") {
+				win.showInactive();
+				win.moveTop();
+			} else {
+				win.show();
+			}
 		}
 	});
 

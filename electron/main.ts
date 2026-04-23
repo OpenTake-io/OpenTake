@@ -17,12 +17,14 @@ import {
 import { RECORDINGS_DIR } from "./appPaths";
 import { showCursor } from "./cursorHider";
 import { registerExtensionIpcHandlers } from "./extensions/extensionIpc";
+import { getGpuSwitches } from "./gpuSwitches";
 import {
 	cleanupNativeVideoExportSessions,
 	getSelectedSourceId,
 	killWindowsCaptureProcess,
 	registerIpcHandlers,
 } from "./ipc/handlers";
+import { ensureMediaServer } from "./mediaServer";
 import { ensurePackagedRendererServer } from "./rendererServer";
 import type { UpdateToastPayload } from "./updater";
 import {
@@ -57,15 +59,15 @@ app.commandLine.appendSwitch("enable-unsafe-webgpu");
 app.commandLine.appendSwitch("enable-gpu-rasterization");
 
 function configureGpuAccelerationSwitches() {
-	if (process.platform === "darwin") {
-		app.commandLine.appendSwitch("use-angle", "metal");
-		app.commandLine.appendSwitch("disable-features", "MacCatapLoopbackAudioForScreenShare");
-		return;
+	const { useAngle, useGl, disableFeatures } = getGpuSwitches(process.platform, process.env);
+	if (useAngle) {
+		app.commandLine.appendSwitch("use-angle", useAngle);
 	}
-
-	if (process.platform === "win32") {
-		app.commandLine.appendSwitch("use-angle", "d3d11");
-		return;
+	if (useGl) {
+		app.commandLine.appendSwitch("use-gl", useGl);
+	}
+	if (disableFeatures && disableFeatures.length > 0) {
+		app.commandLine.appendSwitch("disable-features", disableFeatures.join(","));
 	}
 }
 
@@ -147,7 +149,21 @@ function restoreWindowSafely(window: BrowserWindow | null) {
 		return;
 	}
 
-	window.restore();
+	if (!isEditorWindow(window) && process.platform === "win32") {
+		showHudOverlayFromTray();
+		return;
+	}
+
+	if (window.isMinimized()) {
+		window.restore();
+	}
+
+	if (!window.isVisible()) {
+		window.show();
+	}
+
+	window.moveTop();
+	window.focus();
 }
 
 // Tray Icons (lazily created after app is ready to avoid accessing Electron APIs too early)
@@ -836,6 +852,12 @@ app.whenReady().then(async () => {
 		}
 	}
 
+	try {
+		await ensureMediaServer();
+	} catch (error) {
+		console.warn("[media-server] Failed to start media server:", error);
+	}
+
 	registerIpcHandlers(
 		createEditorWindowWrapper,
 		createSourceSelectorWindowWrapper,
@@ -878,8 +900,26 @@ app.whenReady().then(async () => {
 	// ignored by the native capture pipeline.
 	session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
 		try {
-			const sources = await desktopCapturer.getSources({ types: ["screen", "window"] });
 			const sourceId = getSelectedSourceId();
+			// On Linux/Wayland, calling desktopCapturer.getSources() itself
+			// invokes the xdg-desktop-portal picker. If we then return one of
+			// those sources, Chromium triggers a SECOND portal because the
+			// pre-enumerated source IDs are stale on Wayland. To collapse this
+			// into a single portal invocation, when the Linux portal sentinel
+			// is set we skip getSources entirely and hand back a synthetic
+			// source id; Chromium then opens the portal once to actually
+			// resolve the capture.
+			// Default to the sentinel on Linux when no source has been
+			// pre-selected (e.g. fresh session where the renderer skipped the
+			// source picker entirely). This avoids calling getSources() which
+			// would itself trigger an extra portal dialog.
+			const isLinuxPortalSentinel =
+				process.platform === "linux" && (sourceId === "screen:linux-portal" || !sourceId);
+			if (isLinuxPortalSentinel) {
+				callback({ video: { id: "screen:0:0", name: "Entire screen" } });
+				return;
+			}
+			const sources = await desktopCapturer.getSources({ types: ["screen", "window"] });
 			const source = sourceId
 				? (sources.find((s) => s.id === sourceId) ?? sources[0])
 				: sources[0];

@@ -3,12 +3,12 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import { promisify } from "node:util";
 import { BrowserWindow } from "electron";
-import { getFfmpegBinaryPath } from "../ffmpeg/binary";
 import {
-	getAudioSyncAdjustment,
-	appendSyncedAudioFilter,
-} from "../ffmpeg/filters";
-import type { AudioSyncAdjustment } from "../types";
+	persistPendingCursorTelemetry,
+	snapshotCursorTelemetryForPersistence,
+} from "../cursor/telemetry";
+import { getFfmpegBinaryPath } from "../ffmpeg/binary";
+import { appendSyncedAudioFilter, getAudioSyncAdjustment } from "../ffmpeg/filters";
 import {
 	nativeScreenRecordingActive,
 	setNativeScreenRecordingActive,
@@ -27,20 +27,17 @@ import {
 	setCurrentProjectPath,
 	selectedSource,
 } from "../state";
-import { moveFileWithOverwrite, isAutoRecordingPath } from "../utils";
+import type { AudioSyncAdjustment } from "../types";
+import { isAutoRecordingPath, moveFileWithOverwrite } from "../utils";
 import {
-	recordNativeCaptureDiagnostics,
 	getFileSizeIfPresent,
-	validateRecordedVideo,
 	getUsableCompanionAudioCandidates,
+	probeMediaDurationSeconds,
+	recordNativeCaptureDiagnostics,
+	validateRecordedVideo,
 } from "./diagnostics";
-import { probeMediaDurationSeconds } from "./diagnostics";
 import { emitRecordingInterrupted } from "./events";
 import { pruneAutoRecordings } from "./prune";
-import {
-	snapshotCursorTelemetryForPersistence,
-	persistPendingCursorTelemetry,
-} from "../cursor/telemetry";
 import { muxNativeWindowsVideoWithAudio } from "./windows";
 
 const execFileAsync = promisify(execFile);
@@ -158,7 +155,10 @@ export async function muxNativeMacRecordingWithAudio(
 	}
 
 	if (availableAudioInputs.length === 0) {
-		console.warn("[mux] No valid audio files to mux");
+		console.warn(
+			"[mux] No valid audio files to mux — video will have no audio. " +
+				`system=${systemAudioPath ?? "none"} mic=${microphonePath ?? "none"}`,
+		);
 		return;
 	}
 
@@ -194,53 +194,35 @@ export async function muxNativeMacRecordingWithAudio(
 		tempoRatio: 1,
 		durationDeltaMs: 0,
 	};
-	const needsFilter = systemAdjustment.mode !== "none" || micAdjustment.mode !== "none";
 
+	// Always route through the filter graph so that aresample=async=1 is
+	// applied to every audio stream.  This corrects progressive clock drift
+	// between the video and audio tracks that a simple duration comparison
+	// cannot detect (e.g. audio gradually falling behind under CPU load).
 	let args: string[];
 	if (availableAudioInputs.length === 2) {
-		if (needsFilter) {
-			const filterParts: string[] = [];
-			appendSyncedAudioFilter(filterParts, "[1:a]", "s", systemAdjustment);
-			appendSyncedAudioFilter(filterParts, "[2:a]", "m", micAdjustment);
-			filterParts.push("[s][m]amix=inputs=2:duration=longest:normalize=0[aout]");
-			args = [
-				"-y",
-				...inputs,
-				"-filter_complex",
-				filterParts.join(";"),
-				"-map",
-				"0:v:0",
-				"-map",
-				"[aout]",
-				"-c:v",
-				"copy",
-				"-c:a",
-				"aac",
-				"-b:a",
-				"192k",
-				"-shortest",
-				mixedOutputPath,
-			];
-		} else {
-			args = [
-				"-y",
-				...inputs,
-				"-filter_complex",
-				"[1:a][2:a]amix=inputs=2:duration=longest:normalize=0[aout]",
-				"-map",
-				"0:v:0",
-				"-map",
-				"[aout]",
-				"-c:v",
-				"copy",
-				"-c:a",
-				"aac",
-				"-b:a",
-				"192k",
-				"-shortest",
-				mixedOutputPath,
-			];
-		}
+		const filterParts: string[] = [];
+		appendSyncedAudioFilter(filterParts, "[1:a]", "s", systemAdjustment);
+		appendSyncedAudioFilter(filterParts, "[2:a]", "m", micAdjustment);
+		filterParts.push("[s][m]amix=inputs=2:duration=longest:normalize=0[aout]");
+		args = [
+			"-y",
+			...inputs,
+			"-filter_complex",
+			filterParts.join(";"),
+			"-map",
+			"0:v:0",
+			"-map",
+			"[aout]",
+			"-c:v",
+			"copy",
+			"-c:a",
+			"aac",
+			"-b:a",
+			"192k",
+			"-shortest",
+			mixedOutputPath,
+		];
 	} else {
 		const singleAdjustment = audioAdjustments.get(availableAudioInputs[0]) ?? {
 			mode: "none",
@@ -248,54 +230,37 @@ export async function muxNativeMacRecordingWithAudio(
 			tempoRatio: 1,
 			durationDeltaMs: 0,
 		};
-		if (singleAdjustment.mode !== "none") {
-			const filterParts: string[] = [];
-			appendSyncedAudioFilter(filterParts, "[1:a]", "aout", singleAdjustment);
-			args = [
-				"-y",
-				...inputs,
-				"-filter_complex",
-				filterParts.join(";"),
-				"-map",
-				"0:v:0",
-				"-map",
-				"[aout]",
-				"-c:v",
-				"copy",
-				"-c:a",
-				"aac",
-				"-b:a",
-				"192k",
-				"-shortest",
-				mixedOutputPath,
-			];
-		} else {
-			args = [
-				"-y",
-				...inputs,
-				"-map",
-				"0:v:0",
-				"-map",
-				"1:a:0",
-				"-c:v",
-				"copy",
-				"-c:a",
-				"aac",
-				"-b:a",
-				"192k",
-				"-shortest",
-				mixedOutputPath,
-			];
-		}
+		const filterParts: string[] = [];
+		appendSyncedAudioFilter(filterParts, "[1:a]", "aout", singleAdjustment);
+		args = [
+			"-y",
+			...inputs,
+			"-filter_complex",
+			filterParts.join(";"),
+			"-map",
+			"0:v:0",
+			"-map",
+			"[aout]",
+			"-c:v",
+			"copy",
+			"-c:a",
+			"aac",
+			"-b:a",
+			"192k",
+			"-shortest",
+			mixedOutputPath,
+		];
 	}
 
 	console.log("[mux] Running ffmpeg:", ffmpegPath, args.join(" "));
 
 	try {
 		await execFileAsync(ffmpegPath, args, { timeout: 120000, maxBuffer: 10 * 1024 * 1024 });
+		await validateRecordedVideo(mixedOutputPath);
 	} catch (error) {
 		const execError = error as NodeJS.ErrnoException & { stderr?: string };
-		console.error("[mux] ffmpeg failed:", execError.stderr || execError.message);
+		console.error("[mux] failed:", execError.stderr || execError.message || String(error));
+		await fs.rm(mixedOutputPath, { force: true }).catch(() => undefined);
 		throw error;
 	}
 
@@ -370,11 +335,35 @@ export async function finalizeStoredVideo(videoPath: string) {
 		}
 	}
 
-	let validation: { fileSizeBytes: number; durationSeconds: number | null } | null = null;
+	let validation: { fileSizeBytes: number; durationSeconds: number | null };
 	try {
 		validation = await validateRecordedVideo(videoPath);
 	} catch (error) {
-		console.warn("Video validation failed (proceeding anyway):", error);
+		if (
+			lastNativeCaptureDiagnostics?.backend === "mac-screencapturekit" ||
+			lastNativeCaptureDiagnostics?.backend === "windows-wgc"
+		) {
+			recordNativeCaptureDiagnostics({
+				backend: lastNativeCaptureDiagnostics.backend,
+				phase: lastNativeCaptureDiagnostics.phase === "mux" ? "mux" : "stop",
+				sourceId: lastNativeCaptureDiagnostics.sourceId ?? null,
+				sourceType: lastNativeCaptureDiagnostics.sourceType ?? "unknown",
+				displayId: lastNativeCaptureDiagnostics.displayId ?? null,
+				displayBounds: lastNativeCaptureDiagnostics.displayBounds ?? null,
+				windowHandle: lastNativeCaptureDiagnostics.windowHandle ?? null,
+				helperPath: lastNativeCaptureDiagnostics.helperPath ?? null,
+				outputPath: videoPath,
+				systemAudioPath: lastNativeCaptureDiagnostics.systemAudioPath ?? null,
+				microphonePath: lastNativeCaptureDiagnostics.microphonePath ?? null,
+				osRelease: lastNativeCaptureDiagnostics.osRelease,
+				supported: lastNativeCaptureDiagnostics.supported,
+				helperExists: lastNativeCaptureDiagnostics.helperExists,
+				processOutput: lastNativeCaptureDiagnostics.processOutput,
+				fileSizeBytes: await getFileSizeIfPresent(videoPath),
+				error: error instanceof Error ? error.message : String(error),
+			});
+		}
+		throw error;
 	}
 
 	snapshotCursorTelemetryForPersistence();
@@ -385,10 +374,13 @@ export async function finalizeStoredVideo(videoPath: string) {
 		await pruneAutoRecordings([videoPath]);
 	}
 
-	if (lastNativeCaptureDiagnostics?.backend === "mac-screencapturekit") {
+	if (
+		lastNativeCaptureDiagnostics?.backend === "mac-screencapturekit" ||
+		lastNativeCaptureDiagnostics?.backend === "windows-wgc"
+	) {
 		recordNativeCaptureDiagnostics({
-			backend: "mac-screencapturekit",
-			phase: "stop",
+			backend: lastNativeCaptureDiagnostics.backend,
+			phase: lastNativeCaptureDiagnostics.phase === "mux" ? "mux" : "stop",
 			sourceId: lastNativeCaptureDiagnostics.sourceId ?? null,
 			sourceType: lastNativeCaptureDiagnostics.sourceType ?? "unknown",
 			displayId: lastNativeCaptureDiagnostics.displayId ?? null,
@@ -402,7 +394,7 @@ export async function finalizeStoredVideo(videoPath: string) {
 			supported: lastNativeCaptureDiagnostics.supported,
 			helperExists: lastNativeCaptureDiagnostics.helperExists,
 			processOutput: lastNativeCaptureDiagnostics.processOutput,
-			fileSizeBytes: validation?.fileSizeBytes ?? null,
+			fileSizeBytes: validation.fileSizeBytes,
 		});
 	}
 
@@ -410,7 +402,7 @@ export async function finalizeStoredVideo(videoPath: string) {
 		success: true,
 		path: videoPath,
 		message:
-			validation?.durationSeconds !== null && validation !== null
+			validation.durationSeconds !== null
 				? `Video stored successfully (${validation.fileSizeBytes} bytes, ${validation.durationSeconds.toFixed(2)}s)`
 				: `Video stored successfully`,
 	};

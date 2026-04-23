@@ -56,11 +56,13 @@ import {
 	DEFAULT_ZOOM_OUT_DURATION_MS,
 	DEFAULT_ZOOM_OUT_EASING,
 	getDefaultCaptionFontFamily,
+	type Padding,
 	type SpeedRegion,
 	type TrimRegion,
 	type WebcamOverlaySettings,
 	type ZoomRegion,
 	type ZoomTransitionEasing,
+	DEFAULT_PADDING,
 } from "./types";
 
 export const PROJECT_VERSION = 1;
@@ -91,7 +93,7 @@ export interface ProjectEditorState {
 	cursorClickBounceDuration: number;
 	cursorSway: number;
 	borderRadius: number;
-	padding: number;
+	padding: Padding;
 	/** Selected frame ID (e.g. "recordly.frames/browser-dark"), or null for none */
 	frame: string | null;
 	cropRegion: CropRegion;
@@ -118,6 +120,7 @@ export interface ProjectEditorState {
 
 export interface EditorProjectData {
 	version: number;
+	projectId?: string;
 	videoPath: string;
 	editor: Partial<ProjectEditorState>;
 }
@@ -258,10 +261,30 @@ export function deriveNextId(prefix: string, ids: string[]): number {
 	return max + 1;
 }
 
+/**
+ * Resolve a local file path to a URL the `<video>` element can load.
+ *
+ * Prefers the local media HTTP server (works on all platforms regardless of
+ * Chromium's `file://` restrictions).  Falls back to a `file://` URL if the
+ * media server is unavailable.
+ */
+export async function resolveVideoUrl(sourcePath: string): Promise<string> {
+	try {
+		const result = await window.electronAPI.getLocalMediaUrl(sourcePath);
+		if (result.success) {
+			return result.url;
+		}
+	} catch {
+		// Media server unavailable — fall through to file:// URL.
+	}
+	return toFileUrl(sourcePath);
+}
+
 export function validateProjectData(candidate: unknown): candidate is EditorProjectData {
 	if (!candidate || typeof candidate !== "object") return false;
 	const project = candidate as Partial<EditorProjectData>;
 	if (typeof project.version !== "number") return false;
+	if (project.projectId !== undefined && typeof project.projectId !== "string") return false;
 	if (typeof project.videoPath !== "string" || !project.videoPath) return false;
 	if (!project.editor || typeof project.editor !== "object") return false;
 	return true;
@@ -729,7 +752,30 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			? clamp((editor as Partial<ProjectEditorState>).cursorSway as number, 0, 2)
 			: DEFAULT_CURSOR_SWAY,
 		borderRadius: typeof editor.borderRadius === "number" ? editor.borderRadius : 12.5,
-		padding: isFiniteNumber(editor.padding) ? clamp(editor.padding, 0, 100) : 20,
+		padding: (() => {
+			const p = editor.padding;
+			if (p && typeof p === "object") {
+				const linked = typeof p.linked === "boolean" ? p.linked : true;
+				const top = isFiniteNumber(p.top) ? clamp(p.top, 0, 100) : DEFAULT_PADDING.top;
+				if (linked) {
+					return { top, bottom: top, left: top, right: top, linked: true };
+				}
+				return {
+					top,
+					bottom: isFiniteNumber(p.bottom)
+						? clamp(p.bottom, 0, 100)
+						: DEFAULT_PADDING.bottom,
+					left: isFiniteNumber(p.left) ? clamp(p.left, 0, 100) : DEFAULT_PADDING.left,
+					right: isFiniteNumber(p.right) ? clamp(p.right, 0, 100) : DEFAULT_PADDING.right,
+					linked: false,
+				};
+			}
+			if (typeof p === "number" && isFiniteNumber(p)) {
+				const val = clamp(p, 0, 100);
+				return { top: val, bottom: val, left: val, right: val, linked: true };
+			}
+			return { ...DEFAULT_PADDING };
+		})(),
 		frame: typeof editor.frame === "string" ? editor.frame : null,
 		cropRegion: {
 			x: cropX,
@@ -819,7 +865,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			editor.exportQuality === "high" ||
 			editor.exportQuality === "source"
 				? editor.exportQuality
-				: "good",
+				: "source",
 		mp4FrameRate: normalizeExportMp4FrameRate(editor.mp4FrameRate),
 		exportFormat: editor.exportFormat === "gif" ? "gif" : "mp4",
 		gifFrameRate:
@@ -842,9 +888,13 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 export function createProjectData(
 	videoPath: string,
 	editor: Partial<ProjectEditorState>,
+	projectId?: string | null,
 ): EditorProjectData {
 	return {
 		version: PROJECT_VERSION,
+		...(typeof projectId === "string" && projectId.trim().length > 0
+			? { projectId }
+			: {}),
 		videoPath,
 		editor,
 	};

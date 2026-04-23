@@ -123,10 +123,7 @@ export default function Item({
 					style={{
 						height: "85%",
 						minHeight: 22,
-						color: "#fff",
 						minWidth: MIN_ITEM_PX,
-						backgroundImage:
-							"linear-gradient(180deg, transparent 20%, rgba(255,255,255,0.08) 100%)",
 					}}
 					onClick={(event) => {
 						event.stopPropagation();
@@ -144,7 +141,7 @@ export default function Item({
 						title="Resize right"
 					/>
 					{/* Content */}
-					<div className="relative z-10 flex flex-col items-center justify-center text-white/90 opacity-80 group-hover:opacity-100 transition-opacity select-none overflow-hidden">
+					<div className="relative z-10 flex flex-col items-center justify-center text-black/70 dark:text-white/90 opacity-80 group-hover:opacity-100 transition-opacity select-none overflow-hidden">
 						<div className="flex items-center gap-1.5">
 							{isZoom ? (
 								<>

@@ -95,7 +95,7 @@ export function AnnotationOverlay({
 					);
 				}
 				return (
-					<div className="w-full h-full flex items-center justify-center text-slate-400 text-sm">
+					<div className="w-full h-full flex items-center justify-center text-muted-foreground text-sm">
 						No image
 					</div>
 				);
@@ -103,7 +103,7 @@ export function AnnotationOverlay({
 			case "figure":
 				if (!annotation.figureData) {
 					return (
-						<div className="w-full h-full flex items-center justify-center text-slate-400 text-sm">
+						<div className="w-full h-full flex items-center justify-center text-muted-foreground text-sm">
 							No arrow data
 						</div>
 					);
