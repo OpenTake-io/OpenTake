@@ -50,24 +50,24 @@ export function FormatSelector({
 						onClick={() => onFormatChange(option.value)}
 						className={cn(
 							"relative flex flex-col items-center gap-2 p-4 rounded-xl border transition-all duration-200",
-							"focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50 focus:ring-offset-2 focus:ring-offset-[#09090b]",
+							"focus:outline-none focus:ring-2 focus:ring-[#2563EB]/50 focus:ring-offset-2 focus:ring-offset-editor-dialog",
 							isSelected
-								? "bg-[#2563EB]/10 border-[#2563EB]/50 text-white"
-								: "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:border-white/20 hover:text-slate-200",
+								? "bg-[#2563EB]/10 border-[#2563EB]/50 text-[#2563EB] dark:text-white"
+								: "bg-foreground/5 border-foreground/10 text-muted-foreground hover:bg-foreground/10 hover:border-foreground/20 hover:text-foreground",
 							disabled && "opacity-50 cursor-not-allowed",
 						)}
 					>
 						<div
 							className={cn(
 								"w-10 h-10 rounded-full flex items-center justify-center transition-colors",
-								isSelected ? "bg-[#2563EB]/20 text-[#2563EB]" : "bg-white/5",
+								isSelected ? "bg-[#2563EB]/20 text-[#2563EB]" : "bg-foreground/5",
 							)}
 						>
 							{option.icon}
 						</div>
 						<div className="text-center">
 							<div className="font-medium text-sm">{option.label}</div>
-							<div className="text-xs text-slate-500 mt-0.5">
+							<div className="text-xs text-muted-foreground/70 mt-0.5">
 								{option.description}
 							</div>
 						</div>

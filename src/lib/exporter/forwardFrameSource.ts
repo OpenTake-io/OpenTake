@@ -1,6 +1,7 @@
 import { WebDemuxer } from "web-demuxer";
 import { getEffectiveVideoStreamDurationSeconds } from "@/lib/mediaTiming";
 import { getDecodedFrameTimelineOffsetUs } from "./streamingDecoder";
+import { getLocalFilePath } from "./localMediaSource";
 
 const DEFAULT_MAX_DECODE_QUEUE = 12;
 const DEFAULT_MAX_PENDING_FRAMES = 32;
@@ -38,30 +39,6 @@ export class ForwardFrameSource {
 	private firstFrameTimestampUs: number | null = null;
 	private frameTimelineOffsetUs = 0;
 
-	private toLocalFilePath(resourceUrl: string): string | null {
-		if (!resourceUrl.startsWith("file:")) {
-			return null;
-		}
-
-		try {
-			const url = new URL(resourceUrl);
-			let filePath = decodeURIComponent(url.pathname);
-			if (url.host && url.host !== "localhost") {
-				return `\\\\${url.host}${filePath.replace(/\//g, "\\")}`;
-			}
-			if (/^\/[A-Za-z]:/.test(filePath)) {
-				filePath = filePath.slice(1);
-			}
-			return filePath;
-		} catch {
-			const uncMatch = resourceUrl.match(/^file:\/\/([^/]+)(\/.*)$/i);
-			if (uncMatch && uncMatch[1].toLowerCase() !== "localhost") {
-				return `\\\\${uncMatch[1]}${decodeURIComponent(uncMatch[2]).replace(/\//g, "\\")}`;
-			}
-			return resourceUrl.replace(/^file:\/\//, "");
-		}
-	}
-
 	private inferMimeType(fileName: string): string {
 		const extension = fileName.split(".").pop()?.toLowerCase();
 		switch (extension) {
@@ -80,8 +57,9 @@ export class ForwardFrameSource {
 	}
 
 	private async loadVideoFile(resourceUrl: string): Promise<File> {
-		const filename = resourceUrl.split("/").pop() || "video";
-		const localFilePath = this.toLocalFilePath(resourceUrl);
+		const localFilePath = getLocalFilePath(resourceUrl);
+		const filename =
+			(localFilePath ?? resourceUrl).split(/[\\/]/).pop()?.split("?")[0] || "video";
 
 		if (localFilePath) {
 			const result = await window.electronAPI.readLocalFile(localFilePath);

@@ -2,15 +2,15 @@ import type { Range, Span } from "dnd-timeline";
 import { useTimelineContext } from "dnd-timeline";
 import {
 	Check,
-	ChevronDown,
+	CaretDown as ChevronDown,
 	Crop,
-	MessageSquare,
-	Music,
+	ChatText as MessageSquare,
+	MusicNote as Music,
 	Plus,
 	Scissors,
-	WandSparkles,
-	ZoomIn,
-} from "lucide-react";
+	MagicWand as WandSparkles,
+	MagnifyingGlassPlus as ZoomIn,
+} from "@phosphor-icons/react";
 import {
 	forwardRef,
 	type KeyboardEvent as ReactKeyboardEvent,
@@ -398,10 +398,10 @@ function PlaybackCursor({
 					className="absolute -top-1 left-1/2 -translate-x-1/2 hover:scale-125 transition-transform"
 					style={{ width: "16px", height: "16px" }}
 				>
-					<div className="w-3 h-3 mx-auto mt-[2px] bg-[#2563EB] rotate-45 rounded-sm shadow-lg border border-white/20" />
+					<div className="w-3 h-3 mx-auto mt-[2px] bg-[#2563EB] rotate-45 rounded-sm shadow-lg border border-foreground/20" />
 				</div>
 				{isDragging && (
-					<div className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/80 text-[10px] text-white/90 font-medium tabular-nums whitespace-nowrap border border-white/10 shadow-lg pointer-events-none">
+					<div className="absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/80 text-[10px] text-white/90 font-medium tabular-nums whitespace-nowrap border border-foreground/10 shadow-lg pointer-events-none">
 						{formatPlayheadTime(clampedTime)}
 					</div>
 				)}
@@ -480,7 +480,7 @@ function TimelineAxis({
 
 	return (
 		<div
-			className="h-8 bg-[#161619] border-b border-white/10 relative overflow-hidden select-none"
+			className="h-8 bg-editor-bg border-b border-foreground/10 relative overflow-hidden select-none"
 			style={{
 				[sideProperty === "right" ? "marginRight" : "marginLeft"]: `${sidebarWidth}px`,
 			}}
@@ -491,7 +491,7 @@ function TimelineAxis({
 				return (
 					<div
 						key={`minor-${time}`}
-						className="absolute bottom-1 h-1 w-[1px] bg-white/5"
+						className="absolute bottom-1 h-1 w-[1px] bg-foreground/5"
 						style={{ [sideProperty]: `${offset}px` }}
 					/>
 				);
@@ -514,13 +514,13 @@ function TimelineAxis({
 				return (
 					<div key={marker.time} style={markerStyle}>
 						<div className="flex flex-col items-center pb-1">
-							<div className="mb-1.5 h-[5px] w-[5px] rounded-full bg-white/30" />
+							<div className="mb-1.5 h-[5px] w-[5px] rounded-full bg-foreground/30" />
 							<span
 								className={cn(
 									"text-[10px] font-medium tabular-nums tracking-tight",
 									marker.time === currentTimeMs
 										? "text-[#2563EB]"
-										: "text-white/40",
+										: "text-foreground/40",
 								)}
 							>
 								{marker.label}
@@ -703,10 +703,10 @@ function Timeline({
 		<div
 			ref={setRefs}
 			style={style}
-			className="select-none bg-[#17171a] h-full min-h-0 relative cursor-pointer group flex flex-col"
+			className="select-none bg-editor-bg h-full min-h-0 relative cursor-pointer group flex flex-col"
 			onClick={handleTimelineClick}
 		>
-			<div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px)] bg-[length:20px_100%] pointer-events-none" />
+			<div className="absolute inset-0 bg-[linear-gradient(to_right,hsl(var(--foreground)/0.03)_1px,transparent_1px)] bg-[length:20px_100%] pointer-events-none" />
 			<TimelineAxis videoDurationMs={videoDurationMs} currentTimeMs={currentTimeMs} />
 			<PlaybackCursor
 				currentTimeMs={currentTimeMs}
@@ -1895,13 +1895,13 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 
 		if (!videoDuration || videoDuration === 0) {
 			return (
-				<div className="flex-1 flex flex-col items-center justify-center rounded-lg bg-[#17171a] gap-3">
-					<div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center">
-						<Plus className="w-6 h-6 text-slate-600" />
+				<div className="flex-1 flex flex-col items-center justify-center rounded-lg bg-editor-surface gap-3">
+					<div className="w-12 h-12 rounded-full bg-foreground/5 flex items-center justify-center">
+						<Plus className="w-6 h-6 text-muted-foreground" />
 					</div>
 					<div className="text-center">
-						<p className="text-sm font-medium text-slate-300">No Video Loaded</p>
-						<p className="text-xs text-slate-500 mt-1">
+						<p className="text-sm font-medium text-muted-foreground">No Video Loaded</p>
+						<p className="text-xs text-muted-foreground/70 mt-1">
 							Drag and drop a video to start editing
 						</p>
 					</div>
@@ -1910,15 +1910,15 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 		}
 
 		return (
-			<div className="flex-1 min-h-0 flex flex-col bg-[#17171a] overflow-auto">
+			<div className="flex-1 min-h-0 flex flex-col bg-editor-bg overflow-auto">
 				{hideToolbar ? null : (
-					<div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-[#161619]">
+					<div className="flex items-center gap-2 px-4 py-2 border-b border-foreground/10 bg-editor-panel">
 						<div className="flex items-center gap-1">
 							<Button
 								onClick={handleAddZoom}
 								variant="ghost"
 								size="icon"
-								className="h-7 w-7 text-slate-400 hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all"
+								className="h-7 w-7 text-muted-foreground hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all"
 								title="Add Zoom (Z)"
 							>
 								<ZoomIn className="w-4 h-4" />
@@ -1927,7 +1927,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 								onClick={handleSuggestZooms}
 								variant="ghost"
 								size="icon"
-								className="h-7 w-7 text-slate-400 hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all"
+								className="h-7 w-7 text-muted-foreground hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all"
 								title="Suggest Zooms from Cursor"
 							>
 								<WandSparkles className="w-4 h-4" />
@@ -1936,7 +1936,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 								onClick={() => handleAddAnnotation()}
 								variant="ghost"
 								size="icon"
-								className="h-7 w-7 text-slate-400 hover:text-[#B4A046] hover:bg-[#B4A046]/10 transition-all"
+								className="h-7 w-7 text-muted-foreground hover:text-[#B4A046] hover:bg-[#B4A046]/10 transition-all"
 								title="Add Annotation (A)"
 							>
 								<MessageSquare className="w-4 h-4" />
@@ -1945,7 +1945,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 								onClick={handleAddAudio}
 								variant="ghost"
 								size="icon"
-								className="h-7 w-7 text-slate-400 hover:text-[#a855f7] hover:bg-[#a855f7]/10 transition-all"
+								className="h-7 w-7 text-muted-foreground hover:text-[#a855f7] hover:bg-[#a855f7]/10 transition-all"
 								title="Add Audio"
 							>
 								<Music className="w-4 h-4" />
@@ -1954,7 +1954,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 								onClick={handleSplitClip}
 								variant="ghost"
 								size="icon"
-								className="h-7 w-7 text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+								className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-all"
 								title="Split Clip (C)"
 							>
 								<Scissors className="w-4 h-4" />
@@ -1966,7 +1966,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 									<Button
 										variant="ghost"
 										size="sm"
-										className="h-7 px-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-white/10 transition-all gap-1"
+										className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-all gap-1"
 									>
 										<span className="font-medium">
 											{getAspectRatioLabel(aspectRatio)}
@@ -1976,13 +1976,13 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 								</DropdownMenuTrigger>
 								<DropdownMenuContent
 									align="end"
-									className="bg-[#1a1a1c] border-white/10"
+									className="bg-editor-surface-alt border-foreground/10"
 								>
 									{ASPECT_RATIOS.map((ratio) => (
 										<DropdownMenuItem
 											key={ratio}
 											onClick={() => onAspectRatioChange?.(ratio)}
-											className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer flex items-center justify-between gap-3"
+											className="text-muted-foreground hover:text-foreground hover:bg-foreground/10 cursor-pointer flex items-center justify-between gap-3"
 										>
 											<span>{getAspectRatioLabel(ratio)}</span>
 											{aspectRatio === ratio && (
@@ -1990,8 +1990,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 											)}
 										</DropdownMenuItem>
 									))}
-									<div className="mx-1 my-1 h-px bg-white/10" />
-									<div className="px-2 py-1.5 flex items-center gap-2 text-slate-300">
+									<div className="mx-1 my-1 h-px bg-foreground/10" />
+									<div className="px-2 py-1.5 flex items-center gap-2 text-muted-foreground">
 										<span className="text-sm">Custom</span>
 										<input
 											type="text"
@@ -2003,10 +2003,10 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 												)
 											}
 											onKeyDown={handleCustomAspectRatioKeyDown}
-											className="w-12 h-7 rounded border border-white/15 bg-black/20 px-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
+											className="w-12 h-7 rounded border border-foreground/10 bg-foreground/5 px-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
 											aria-label="Custom aspect width"
 										/>
-										<span className="text-slate-500">:</span>
+										<span className="text-muted-foreground/70">:</span>
 										<input
 											type="text"
 											inputMode="numeric"
@@ -2017,14 +2017,14 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 												)
 											}
 											onKeyDown={handleCustomAspectRatioKeyDown}
-											className="w-12 h-7 rounded border border-white/15 bg-black/20 px-1.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
+											className="w-12 h-7 rounded border border-foreground/10 bg-foreground/5 px-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-[#2563EB]"
 											aria-label="Custom aspect height"
 										/>
 										<Button
 											variant="ghost"
 											size="sm"
 											onClick={applyCustomAspectRatio}
-											className="h-7 px-2 text-xs text-slate-300 hover:text-white hover:bg-white/10"
+											className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/10"
 										>
 											Set
 										</Button>
@@ -2034,12 +2034,12 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 									</div>
 								</DropdownMenuContent>
 							</DropdownMenu>
-							<div className="w-[1px] h-4 bg-white/10" />
+							<div className="w-[1px] h-4 bg-foreground/10" />
 							<Button
 								variant="ghost"
 								size="sm"
 								onClick={() => onOpenCropEditor?.()}
-								className="h-7 px-2 text-xs text-slate-400 hover:text-slate-200 hover:bg-white/10 transition-all gap-1.5"
+								className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-all gap-1.5"
 							>
 								<Crop className="w-3.5 h-3.5" />
 								<span className="font-medium">{t("sections.crop", "Crop")}</span>
@@ -2049,21 +2049,21 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							</Button>
 						</div>
 						<div className="flex-1" />
-						<div className="flex items-center gap-4 text-[10px] text-slate-500 font-medium">
+						<div className="flex items-center gap-4 text-[10px] text-muted-foreground/70 font-medium">
 							<span className="flex items-center gap-1.5">
-								<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-sans">
+								<kbd className="px-1.5 py-0.5 bg-foreground/5 border border-foreground/10 rounded text-[#2563EB] font-sans">
 									Side Scroll
 								</kbd>
 								<span>Pan</span>
 							</span>
 							<span className="flex items-center gap-1.5">
-								<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-sans">
+								<kbd className="px-1.5 py-0.5 bg-foreground/5 border border-foreground/10 rounded text-[#2563EB] font-sans">
 									{scrollLabels.pan}
 								</kbd>
 								<span>Pan</span>
 							</span>
 							<span className="flex items-center gap-1.5">
-								<kbd className="px-1.5 py-0.5 bg-white/5 border border-white/10 rounded text-[#2563EB] font-sans">
+								<kbd className="px-1.5 py-0.5 bg-foreground/5 border border-foreground/10 rounded text-[#2563EB] font-sans">
 									{scrollLabels.zoom}
 								</kbd>
 								<span>Zoom</span>
@@ -2073,7 +2073,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				)}
 				<div
 					ref={timelineContainerRef}
-					className="flex-1 min-h-0 overflow-auto bg-[#17171a] relative"
+					className="flex-1 min-h-0 overflow-auto bg-editor-bg relative"
 					tabIndex={0}
 					onFocus={() => {
 						isTimelineFocusedRef.current = true;

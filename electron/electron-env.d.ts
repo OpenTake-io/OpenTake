@@ -1,6 +1,5 @@
 /// <reference types="vite-plugin-electron/electron-env" />
 
-// biome-ignore lint/style/noNamespace: NodeJS.ProcessEnv augmentation requires a namespace declaration.
 declare namespace NodeJS {
 	interface ProcessEnv {
 		/**
@@ -68,6 +67,16 @@ type RendererMarketplaceReviewStatus =
 	import("./extensions/extensionTypes").MarketplaceReviewStatus;
 type RendererMarketplaceSearchResult =
 	import("./extensions/extensionTypes").MarketplaceSearchResult;
+
+interface RendererFfmpegAudioMuxMetrics {
+	tempVideoWriteMs?: number;
+	tempEditedAudioWriteMs?: number;
+	ffmpegExecMs?: number;
+	muxedVideoReadMs?: number;
+	tempVideoBytes?: number;
+	tempEditedAudioBytes?: number;
+	muxedVideoBytes?: number;
+}
 
 interface Window {
 	electronAPI: {
@@ -185,7 +194,10 @@ interface Window {
 			options?: {
 				audioMode?: "none" | "copy-source" | "trim-source" | "edited-track";
 				audioSourcePath?: string | null;
+				audioSourceSampleRate?: number;
 				trimSegments?: Array<{ startMs: number; endMs: number }>;
+				editedTrackStrategy?: "filtergraph-fast-path" | "offline-render-fallback";
+				editedTrackSegments?: Array<{ startMs: number; endMs: number; speed: number }>;
 				editedAudioData?: ArrayBuffer;
 				editedAudioMimeType?: string | null;
 			},
@@ -194,6 +206,7 @@ interface Window {
 			data?: Uint8Array;
 			encoderName?: string;
 			error?: string;
+			metrics?: RendererFfmpegAudioMuxMetrics;
 		}>;
 		nativeVideoExportCancel: (
 			sessionId: string,
@@ -203,7 +216,10 @@ interface Window {
 			options?: {
 				audioMode?: "none" | "copy-source" | "trim-source" | "edited-track";
 				audioSourcePath?: string | null;
+				audioSourceSampleRate?: number;
 				trimSegments?: Array<{ startMs: number; endMs: number }>;
+				editedTrackStrategy?: "filtergraph-fast-path" | "offline-render-fallback";
+				editedTrackSegments?: Array<{ startMs: number; endMs: number; speed: number }>;
 				editedAudioData?: ArrayBuffer;
 				editedAudioMimeType?: string | null;
 			},
@@ -211,6 +227,7 @@ interface Window {
 			success: boolean;
 			data?: Uint8Array;
 			error?: string;
+			metrics?: RendererFfmpegAudioMuxMetrics;
 		}>;
 		getVideoAudioFallbackPaths: (
 			videoPath: string,
@@ -330,6 +347,9 @@ interface Window {
 		getCurrentVideoPath: () => Promise<{ success: boolean; path?: string }>;
 		clearCurrentVideoPath: () => Promise<{ success: boolean }>;
 		deleteRecordingFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+		getLocalMediaUrl: (
+			filePath: string,
+		) => Promise<{ success: true; url: string } | { success: false }>;
 		saveProjectFile: (
 			projectData: unknown,
 			suggestedName?: string,
@@ -338,6 +358,19 @@ interface Window {
 		) => Promise<{
 			success: boolean;
 			path?: string;
+			projectId?: string;
+			message?: string;
+			canceled?: boolean;
+			error?: string;
+		}>;
+		saveProjectFileNamed: (
+			projectData: unknown,
+			projectName: string,
+			thumbnailDataUrl?: string | null,
+		) => Promise<{
+			success: boolean;
+			path?: string;
+			projectId?: string;
 			message?: string;
 			canceled?: boolean;
 			error?: string;

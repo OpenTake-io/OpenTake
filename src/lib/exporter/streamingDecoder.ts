@@ -1,6 +1,7 @@
 import { WebDemuxer } from "web-demuxer";
 import type { SpeedRegion, TrimRegion } from "@/components/video-editor/types";
 import { getEffectiveVideoStreamDurationSeconds } from "@/lib/mediaTiming";
+import { getLocalFilePath } from "./localMediaSource";
 
 const DEFAULT_MAX_DECODE_QUEUE = 12;
 const DEFAULT_MAX_PENDING_FRAMES = 32;
@@ -16,6 +17,7 @@ export interface DecodedVideoInfo {
 	codec: string;
 	hasAudio: boolean;
 	audioCodec?: string;
+	audioSampleRate?: number;
 }
 
 /** Caller must close the VideoFrame after use. */
@@ -79,23 +81,6 @@ export class StreamingVideoDecoder {
 		);
 	}
 
-	private toLocalFilePath(resourceUrl: string): string | null {
-		if (!resourceUrl.startsWith("file:")) {
-			return null;
-		}
-
-		try {
-			const url = new URL(resourceUrl);
-			let filePath = decodeURIComponent(url.pathname);
-			if (/^\/[A-Za-z]:/.test(filePath)) {
-				filePath = filePath.slice(1);
-			}
-			return filePath;
-		} catch {
-			return resourceUrl.replace(/^file:\/\//, "");
-		}
-	}
-
 	private inferMimeType(fileName: string): string {
 		const extension = fileName.split(".").pop()?.toLowerCase();
 		switch (extension) {
@@ -114,8 +99,9 @@ export class StreamingVideoDecoder {
 	}
 
 	private async loadVideoFile(resourceUrl: string): Promise<File> {
-		const filename = resourceUrl.split("/").pop() || "video";
-		const localFilePath = this.toLocalFilePath(resourceUrl);
+		const localFilePath = getLocalFilePath(resourceUrl);
+		const filename =
+			(localFilePath ?? resourceUrl).split(/[\\/]/).pop()?.split("?")[0] || "video";
 
 		if (localFilePath) {
 			const result = await window.electronAPI.readLocalFile(localFilePath);
@@ -220,6 +206,10 @@ export class StreamingVideoDecoder {
 			codec: videoStream?.codec_string || "unknown",
 			hasAudio: !!audioStream,
 			audioCodec: audioStream?.codec_string,
+			audioSampleRate:
+				typeof audioStream?.sample_rate === "string"
+					? Number.parseInt(audioStream.sample_rate, 10)
+					: undefined,
 		};
 
 		return this.metadata;

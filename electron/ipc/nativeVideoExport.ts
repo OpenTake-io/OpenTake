@@ -3,6 +3,9 @@ const NATIVE_EXPORT_INPUT_BYTES_PER_PIXEL = 4;
 export type NativeExportEncodingMode = "fast" | "balanced" | "quality";
 
 export type NativeVideoExportAudioMode = "none" | "copy-source" | "trim-source" | "edited-track";
+export type NativeVideoExportEditedTrackStrategy =
+	| "filtergraph-fast-path"
+	| "offline-render-fallback";
 
 export interface NativeVideoExportStartOptions {
 	width: number;
@@ -18,12 +21,29 @@ export interface NativeVideoExportAudioSegment {
 	endMs: number;
 }
 
+export interface NativeVideoExportEditedTrackSegment extends NativeVideoExportAudioSegment {
+	speed: number;
+}
+
 export interface NativeVideoExportFinishOptions {
 	audioMode?: NativeVideoExportAudioMode;
 	audioSourcePath?: string | null;
+	audioSourceSampleRate?: number;
 	trimSegments?: NativeVideoExportAudioSegment[];
+	editedTrackStrategy?: NativeVideoExportEditedTrackStrategy;
+	editedTrackSegments?: NativeVideoExportEditedTrackSegment[];
 	editedAudioData?: ArrayBuffer;
 	editedAudioMimeType?: string | null;
+}
+
+export interface NativeVideoAudioMuxMetrics {
+	tempVideoWriteMs?: number;
+	tempEditedAudioWriteMs?: number;
+	ffmpegExecMs?: number;
+	muxedVideoReadMs?: number;
+	tempVideoBytes?: number;
+	tempEditedAudioBytes?: number;
+	muxedVideoBytes?: number;
 }
 
 export function getNativeVideoInputByteSize(width: number, height: number): number {
@@ -152,6 +172,81 @@ export function buildTrimmedSourceAudioFilter(
 	return filterParts.join(";");
 }
 
+export function buildEditedTrackSourceAudioFilter(
+	segments: NativeVideoExportEditedTrackSegment[],
+	sourceSampleRate: number,
+): string | null {
+	if (segments.length === 0 || !Number.isFinite(sourceSampleRate) || sourceSampleRate <= 0) {
+		return null;
+	}
+
+	const normalizedSourceSampleRate = Math.round(sourceSampleRate);
+	if (normalizedSourceSampleRate < 1) {
+		return null;
+	}
+
+	const filterParts: string[] = [];
+	const segmentLabels: string[] = [];
+	let hasInvalidSegment = false;
+
+	segments.forEach((segment, index) => {
+		if (
+			!Number.isFinite(segment.startMs) ||
+			!Number.isFinite(segment.endMs) ||
+			segment.startMs < 0 ||
+			segment.endMs < 0
+		) {
+			hasInvalidSegment = true;
+			return;
+		}
+
+		if (segment.endMs - segment.startMs <= 0.5) {
+			hasInvalidSegment = true;
+			return;
+		}
+
+		const label = `edited_audio_${index}`;
+		const speed = segment.speed;
+		if (!Number.isFinite(speed) || speed <= 0) {
+			hasInvalidSegment = true;
+			return;
+		}
+
+		const segmentFilter = [
+			`[1:a]atrim=start=${formatFfmpegSeconds(segment.startMs)}:end=${formatFfmpegSeconds(segment.endMs)}`,
+			"asetpts=PTS-STARTPTS",
+		];
+
+		if (Math.abs(speed - 1) > 0.0001) {
+			const adjustedSampleRate = Math.round(normalizedSourceSampleRate * speed);
+			if (!Number.isSafeInteger(adjustedSampleRate) || adjustedSampleRate < 1) {
+				hasInvalidSegment = true;
+				return;
+			}
+
+			segmentFilter.push(
+				`asetrate=${adjustedSampleRate}`,
+				`aresample=${normalizedSourceSampleRate}`,
+			);
+		}
+
+		filterParts.push(`${segmentFilter.join(",")}[${label}]`);
+		segmentLabels.push(`[${label}]`);
+	});
+
+	if (hasInvalidSegment || segmentLabels.length === 0) {
+		return null;
+	}
+
+	if (segmentLabels.length === 1) {
+		filterParts.push(`${segmentLabels[0]}anull[aout]`);
+	} else {
+		filterParts.push(`${segmentLabels.join("")}concat=n=${segmentLabels.length}:v=0:a=1[aout]`);
+	}
+
+	return filterParts.join(";");
+}
+
 /**
  * Builds FFmpeg arguments for a zero-copy H.264 stream export.
  * FFmpeg receives a pre-encoded Annex B H.264 stream on stdin (produced by the
@@ -159,23 +254,28 @@ export function buildTrimmedSourceAudioFilter(
  * — no re-encoding step, no raw pixel IPC traffic.
  */
 export function buildNativeH264StreamExportArgs(config: {
-        frameRate: number
-        outputPath: string
+	frameRate: number;
+	outputPath: string;
 }): string[] {
-        return [
-                '-y',
-                '-hide_banner',
-                '-loglevel',
-                'error',
-                // Input 0: pre-encoded H.264 Annex B stream from browser VideoEncoder via stdin
-                '-f', 'h264',
-                '-r', String(config.frameRate),
-                '-i', 'pipe:0',
-                '-an', // audio handled separately by muxNativeVideoExportAudio
-                '-c:v', 'copy',
-                '-movflags', '+faststart',
-                config.outputPath,
-        ]
+	return [
+		"-y",
+		"-hide_banner",
+		"-loglevel",
+		"error",
+		// Input 0: pre-encoded H.264 Annex B stream from browser VideoEncoder via stdin
+		"-f",
+		"h264",
+		"-r",
+		String(config.frameRate),
+		"-i",
+		"pipe:0",
+		"-an", // audio handled separately by muxNativeVideoExportAudio
+		"-c:v",
+		"copy",
+		"-movflags",
+		"+faststart",
+		config.outputPath,
+	];
 }
 
 export function getEditedAudioExtension(mimeType?: string | null): string {

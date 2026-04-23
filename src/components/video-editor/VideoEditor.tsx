@@ -14,7 +14,6 @@ import {
 	Plus,
 	PuzzlePiece,
 	ArrowClockwise as Redo2,
-	FloppyDisk as Save,
 	Scissors,
 	SkipBack,
 	SkipForward,
@@ -110,6 +109,7 @@ import {
 	type EditorProjectData,
 	fromFileUrl,
 	normalizeProjectEditor,
+	resolveVideoUrl,
 	toFileUrl,
 	validateProjectData,
 } from "./projectPersistence";
@@ -154,9 +154,11 @@ import {
 	DEFAULT_ZOOM_OUT_DURATION_MS,
 	DEFAULT_ZOOM_OUT_EASING,
 	type EditorEffectSection,
+	extendAutoFullTrackClip,
 	type FigureData,
 	getClipSourceEndMs,
 	type PlaybackSpeed,
+	type Padding,
 	type SpeedRegion,
 	type TrimRegion,
 	type WebcamOverlaySettings,
@@ -484,6 +486,9 @@ export default function VideoEditor() {
 	const [currentProjectPath, setCurrentProjectPath] = useState<string | null>(null);
 	const [projectLibraryEntries, setProjectLibraryEntries] = useState<ProjectLibraryEntry[]>([]);
 	const [projectBrowserOpen, setProjectBrowserOpen] = useState(false);
+	const [isEditingProjectName, setIsEditingProjectName] = useState(false);
+	const [projectNameDraft, setProjectNameDraft] = useState("");
+	const [isSavingProjectName, setIsSavingProjectName] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
@@ -551,6 +556,7 @@ export default function VideoEditor() {
 	const [webcam, setWebcam] = useState<WebcamOverlaySettings>(
 		initialEditorPreferences.webcam ?? DEFAULT_WEBCAM_OVERLAY,
 	);
+	const [resolvedWebcamVideoUrl, setResolvedWebcamVideoUrl] = useState<string | null>(null);
 	const [zoomRegions, setZoomRegions] = useState<ZoomRegion[]>([]);
 	const [cursorTelemetry, setCursorTelemetry] = useState<CursorTelemetryPoint[]>([]);
 	const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
@@ -629,6 +635,7 @@ export default function VideoEditor() {
 	const videoPlaybackRef = useRef<VideoPlaybackRef>(null);
 	const projectBrowserTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const projectBrowserFallbackTriggerRef = useRef<HTMLButtonElement | null>(null);
+	const projectNameInputRef = useRef<HTMLInputElement | null>(null);
 	const nextZoomIdRef = useRef(1);
 	const nextTrimIdRef = useRef(1);
 	const nextClipIdRef = useRef(1);
@@ -743,7 +750,8 @@ export default function VideoEditor() {
 		}
 		context.imageSmoothingEnabled = true;
 		context.imageSmoothingQuality = "high";
-		context.fillStyle = "#111113";
+		const editorBgHsl = getComputedStyle(document.documentElement).getPropertyValue("--editor-bg").trim();
+		context.fillStyle = editorBgHsl ? `hsl(${editorBgHsl})` : "#111113";
 		context.fillRect(0, 0, targetWidth, targetHeight);
 
 		const previewWidth = previewHandle?.containerRef.current?.clientWidth || 1920;
@@ -778,7 +786,7 @@ export default function VideoEditor() {
 					padding,
 					cropRegion,
 					webcam,
-					webcamUrl: webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null,
+					webcamUrl: resolvedWebcamVideoUrl ?? (webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null),
 					videoWidth: previewVideo.videoWidth,
 					videoHeight: previewVideo.videoHeight,
 					annotationRegions,
@@ -1162,7 +1170,7 @@ export default function VideoEditor() {
 				cursorClickBounceDuration: number;
 				cursorSway: number;
 				borderRadius: number;
-				padding: number;
+				padding: Padding;
 				frame: string | null;
 				cropRegion: CropRegion;
 				webcam: WebcamOverlaySettings;
@@ -1236,6 +1244,27 @@ export default function VideoEditor() {
 		const withoutExtension = fileName.replace(/\.recordly$/i, "").replace(/\.[^.]+$/, "");
 		return withoutExtension || t("editor.project.untitled", "Untitled");
 	}, [currentProjectPath, currentSourcePath, t]);
+
+	useEffect(() => {
+		if (!isEditingProjectName) {
+			setProjectNameDraft(projectDisplayName);
+		}
+	}, [isEditingProjectName, projectDisplayName]);
+
+	useEffect(() => {
+		if (!isEditingProjectName) {
+			return;
+		}
+
+		const frameId = window.requestAnimationFrame(() => {
+			projectNameInputRef.current?.focus();
+			projectNameInputRef.current?.select();
+		});
+
+		return () => {
+			window.cancelAnimationFrame(frameId);
+		};
+	}, [isEditingProjectName]);
 
 	const currentPersistedEditorState = useMemo(
 		() =>
@@ -1459,7 +1488,7 @@ export default function VideoEditor() {
 
 			setError(null);
 			setVideoSourcePath(sourcePath);
-			setVideoPath(toFileUrl(sourcePath));
+			setVideoPath(await resolveVideoUrl(sourcePath));
 			setCurrentProjectPath(path ?? null);
 			pendingFreshRecordingAutoZoomPathRef.current = null;
 			if (normalizedEditor.webcam.sourcePath) {
@@ -1504,6 +1533,8 @@ export default function VideoEditor() {
 			setTrimRegions(normalizedEditor.trimRegions);
 			setClipRegions(normalizedEditor.clipRegions);
 			clipInitializedRef.current = normalizedEditor.clipRegions.length > 0;
+			autoFullTrackClipIdRef.current = null;
+			autoFullTrackClipEndMsRef.current = null;
 			setSpeedRegions(normalizedEditor.speedRegions);
 			setAnnotationRegions(normalizedEditor.annotationRegions);
 			setAudioRegions(normalizedEditor.audioRegions);
@@ -1565,7 +1596,11 @@ export default function VideoEditor() {
 
 			setLastSavedSnapshot(
 				cloneStructured(
-					createProjectData(sourcePath, buildPersistedEditorState(normalizedEditor)),
+					createProjectData(
+						sourcePath,
+						buildPersistedEditorState(normalizedEditor),
+						project.projectId ?? null,
+					),
 				),
 			);
 			await refreshProjectLibrary();
@@ -1578,8 +1613,12 @@ export default function VideoEditor() {
 		if (!currentSourcePath) {
 			return null;
 		}
-		return createProjectData(currentSourcePath, currentPersistedEditorState);
-	}, [currentPersistedEditorState, currentSourcePath]);
+		return createProjectData(
+			currentSourcePath,
+			currentPersistedEditorState,
+			lastSavedSnapshot?.projectId ?? null,
+		);
+	}, [currentPersistedEditorState, currentSourcePath, lastSavedSnapshot?.projectId]);
 
 	const syncRecordingSessionWebcam = useCallback(
 		async (webcamPath: string | null) => {
@@ -1669,12 +1708,11 @@ export default function VideoEditor() {
 	const hasUnsavedChanges = useMemo(
 		() =>
 			Boolean(
-				currentProjectPath &&
-					currentProjectSnapshot &&
-					lastSavedSnapshot &&
-					!areDeepEqual(currentProjectSnapshot, lastSavedSnapshot),
+				currentProjectSnapshot &&
+					(!lastSavedSnapshot ||
+						!areDeepEqual(currentProjectSnapshot, lastSavedSnapshot)),
 			),
-		[currentProjectPath, currentProjectSnapshot, lastSavedSnapshot],
+		[currentProjectSnapshot, lastSavedSnapshot],
 	);
 
 	useEffect(() => {
@@ -1687,7 +1725,7 @@ export default function VideoEditor() {
 					}
 
 					const sourcePath = fromFileUrl(smokeExportConfig.inputPath);
-					const sourceVideoUrl = toFileUrl(sourcePath);
+					const sourceVideoUrl = await resolveVideoUrl(sourcePath);
 					const smokeWebcamSourcePath = smokeExportConfig.webcamInputPath
 						? fromFileUrl(smokeExportConfig.webcamInputPath)
 						: null;
@@ -1746,7 +1784,7 @@ export default function VideoEditor() {
 				const sessionResult = await window.electronAPI.getCurrentRecordingSession?.();
 				if (sessionResult?.success && sessionResult.session?.videoPath) {
 					const sourcePath = fromFileUrl(sessionResult.session.videoPath);
-					const sourceVideoUrl = toFileUrl(sourcePath);
+					const sourceVideoUrl = await resolveVideoUrl(sourcePath);
 					setVideoSourcePath(sourcePath);
 					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
@@ -1765,7 +1803,7 @@ export default function VideoEditor() {
 				const result = await window.electronAPI.getCurrentVideoPath();
 				if (result.success && result.path) {
 					const sourcePath = fromFileUrl(result.path);
-					const sourceVideoUrl = toFileUrl(sourcePath);
+					const sourceVideoUrl = await resolveVideoUrl(sourcePath);
 					setVideoSourcePath(sourcePath);
 					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
@@ -1797,6 +1835,20 @@ export default function VideoEditor() {
 		smokeExportConfig.webcamShadow,
 		smokeExportConfig.webcamSize,
 	]);
+
+	useEffect(() => {
+		let cancelled = false;
+		if (!webcam.sourcePath) {
+			setResolvedWebcamVideoUrl(null);
+			return;
+		}
+		void resolveVideoUrl(webcam.sourcePath).then((url) => {
+			if (!cancelled) setResolvedWebcamVideoUrl(url);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [webcam.sourcePath]);
 
 	useEffect(() => {
 		if (!autoApplyFreshRecordingAutoZooms) {
@@ -2016,7 +2068,7 @@ export default function VideoEditor() {
 
 		if (sourcePath !== videoSourcePath) {
 			setVideoSourcePath(sourcePath);
-			setVideoPath(toFileUrl(sourcePath));
+			setVideoPath(await resolveVideoUrl(sourcePath));
 		}
 
 		await syncActiveVideoSource(sourcePath, webcam.sourcePath ?? null);
@@ -2079,7 +2131,11 @@ export default function VideoEditor() {
 				const projectData =
 					currentProjectSnapshot?.videoPath === currentSourcePath
 						? currentProjectSnapshot
-						: createProjectData(currentSourcePath, currentPersistedEditorState);
+						: createProjectData(
+								currentSourcePath,
+								currentPersistedEditorState,
+								lastSavedSnapshot?.projectId ?? null,
+						  );
 
 				const fileNameBase =
 					currentSourcePath
@@ -2118,7 +2174,15 @@ export default function VideoEditor() {
 				if (result.path) {
 					setCurrentProjectPath(result.path);
 				}
-				setLastSavedSnapshot(cloneStructured(projectData));
+				setLastSavedSnapshot(
+					cloneStructured(
+						createProjectData(
+							projectData.videoPath,
+							projectData.editor,
+							result.projectId ?? projectData.projectId ?? null,
+						),
+					),
+				);
 				await refreshProjectLibrary();
 
 				toast.success(`Project saved to ${result.path}`);
@@ -2133,6 +2197,7 @@ export default function VideoEditor() {
 			currentProjectPath,
 			currentProjectSnapshot,
 			currentPersistedEditorState,
+			lastSavedSnapshot?.projectId,
 			refreshProjectLibrary,
 			remountPreview,
 		],
@@ -2160,6 +2225,119 @@ export default function VideoEditor() {
 			setProjectBrowserOpen(false);
 		}
 	}, [saveProject]);
+
+	/**
+	 * Saves the current project directly into the projects library under a chosen name.
+	 */
+	const saveProjectWithName = useCallback(
+		async (projectName: string) => {
+			const trimmedProjectName = projectName.trim();
+			if (!trimmedProjectName) {
+				toast.error("Project name is required");
+				return false;
+			}
+
+			if (!currentSourcePath) {
+				toast.error("No video loaded");
+				return false;
+			}
+
+			try {
+				const projectData =
+					currentProjectSnapshot?.videoPath === currentSourcePath
+						? currentProjectSnapshot
+						: createProjectData(
+								currentSourcePath,
+								currentPersistedEditorState,
+								lastSavedSnapshot?.projectId ?? null,
+						  );
+				const thumbnailDataUrl = await captureProjectThumbnail();
+				const result = await window.electronAPI.saveProjectFileNamed(
+					projectData,
+					trimmedProjectName,
+					thumbnailDataUrl,
+				);
+
+				if (result.canceled) {
+					toast.info("Project save canceled");
+					return false;
+				}
+
+				if (!result.success) {
+					toast.error(result.message || "Failed to save project");
+					return false;
+				}
+
+				if (result.path) {
+					setCurrentProjectPath(result.path);
+				}
+				setLastSavedSnapshot(
+					cloneStructured(
+						createProjectData(
+							projectData.videoPath,
+							projectData.editor,
+							result.projectId ?? projectData.projectId ?? null,
+						),
+					),
+				);
+				await refreshProjectLibrary();
+				toast.success(result.path ? `Project saved to ${result.path}` : "Project saved");
+				return true;
+			} finally {
+				remountPreview();
+			}
+		},
+		[
+			captureProjectThumbnail,
+			currentPersistedEditorState,
+			currentProjectSnapshot,
+			currentSourcePath,
+			lastSavedSnapshot?.projectId,
+			refreshProjectLibrary,
+			remountPreview,
+		],
+	);
+
+	/**
+	 * Resets the inline project-name editor back to the current saved display name.
+	 */
+	const closeProjectNameEditor = useCallback(() => {
+		setProjectNameDraft(projectDisplayName);
+		setIsEditingProjectName(false);
+	}, [projectDisplayName]);
+
+	/**
+	 * Commits the inline project-name editor and persists the project under that name.
+	 */
+	const handleProjectNameSubmit = useCallback(
+		async (event?: React.FormEvent<HTMLFormElement>) => {
+			event?.preventDefault();
+			const trimmedProjectName = projectNameDraft.trim();
+			if (!trimmedProjectName) {
+				closeProjectNameEditor();
+				return;
+			}
+
+			setIsSavingProjectName(true);
+			let saved = false;
+			try {
+				saved = await saveProjectWithName(trimmedProjectName);
+			} catch (error) {
+				toast.error(getErrorMessage(error));
+			} finally {
+				setIsSavingProjectName(false);
+			}
+
+			if (saved) {
+				setIsEditingProjectName(false);
+				return;
+			}
+
+			projectNameInputRef.current?.focus();
+			projectNameInputRef.current?.select();
+		},
+		[closeProjectNameEditor, projectNameDraft, saveProjectWithName],
+	);
 
 	const handleOpenProjectFromLibrary = useCallback(
 		async (projectPath: string) => {
@@ -2216,7 +2394,7 @@ export default function VideoEditor() {
 		let retryAttempts = 0;
 
 		async function loadCursorTelemetry() {
-			if (!videoPath) {
+			if (!videoPath || !videoSourcePath) {
 				if (mounted) {
 					setCursorTelemetry([]);
 				}
@@ -2224,7 +2402,7 @@ export default function VideoEditor() {
 			}
 
 			try {
-				const result = await window.electronAPI.getCursorTelemetry(fromFileUrl(videoPath));
+				const result = await window.electronAPI.getCursorTelemetry(videoSourcePath);
 				if (mounted) {
 					const samples = result.success ? result.samples : [];
 					setCursorTelemetry(samples);
@@ -2279,7 +2457,7 @@ export default function VideoEditor() {
 				pendingTelemetryRetryTimeoutRef.current = null;
 			}
 		};
-	}, [videoPath]);
+	}, [videoPath, videoSourcePath]);
 
 	const normalizedCursorTelemetry = useMemo(() => {
 		if (cursorTelemetry.length === 0) {
@@ -2319,15 +2497,33 @@ export default function VideoEditor() {
 
 	// Initialize a full-track clip when duration is first known
 	const clipInitializedRef = useRef(false);
+	const autoFullTrackClipIdRef = useRef<string | null>(null);
+	const autoFullTrackClipEndMsRef = useRef<number | null>(null);
 	useEffect(() => {
 		const totalMs = Math.round(duration * 1000);
-		if (totalMs <= 0 || clipInitializedRef.current) return;
-		if (clipRegions.length === 0) {
-			const id = `clip-${nextClipIdRef.current++}`;
-			setClipRegions([{ id, startMs: 0, endMs: totalMs, speed: 1 }]);
+		if (totalMs <= 0) return;
+		if (!clipInitializedRef.current) {
+			if (clipRegions.length === 0) {
+				const id = `clip-${nextClipIdRef.current++}`;
+				autoFullTrackClipIdRef.current = id;
+				autoFullTrackClipEndMsRef.current = totalMs;
+				setClipRegions([{ id, startMs: 0, endMs: totalMs, speed: 1 }]);
+			}
+			clipInitializedRef.current = true;
+			return;
 		}
-		clipInitializedRef.current = true;
-	}, [duration, clipRegions.length]);
+
+		const extendedClipRegions = extendAutoFullTrackClip(
+			clipRegions,
+			autoFullTrackClipIdRef.current,
+			autoFullTrackClipEndMsRef.current,
+			totalMs,
+		);
+		if (!extendedClipRegions) return;
+
+		autoFullTrackClipEndMsRef.current = totalMs;
+		setClipRegions(extendedClipRegions);
+	}, [duration, clipRegions]);
 
 	// Derive trimRegions from clipRegions so export/playback pipelines stay unchanged
 	useEffect(() => {
@@ -2712,6 +2908,16 @@ export default function VideoEditor() {
 			const oldClip = clipRegions.find((c) => c.id === id);
 			const newStart = Math.round(span.start);
 			const newEnd = Math.round(span.end);
+			const removedSegments = oldClip
+				? [
+						...(newStart > oldClip.startMs
+							? [{ startMs: oldClip.startMs, endMs: newStart }]
+							: []),
+						...(newEnd < oldClip.endMs
+							? [{ startMs: newEnd, endMs: oldClip.endMs }]
+							: []),
+					]
+				: [];
 
 			if (oldClip) {
 				const startDelta = newStart - oldClip.startMs;
@@ -2735,6 +2941,22 @@ export default function VideoEditor() {
 						}),
 					);
 				}
+			}
+
+			if (removedSegments.length > 0) {
+				const removeTrimmedRegions = <T extends { startMs: number; endMs: number }>(
+					regions: T[],
+				): T[] =>
+					regions.filter(
+						(region) =>
+							!removedSegments.some(
+								(segment) => region.startMs < segment.endMs && region.endMs > segment.startMs,
+							),
+					);
+				setZoomRegions((prev) => removeTrimmedRegions(prev));
+				setAnnotationRegions((prev) => removeTrimmedRegions(prev));
+				setSpeedRegions((prev) => removeTrimmedRegions(prev));
+				setAudioRegions((prev) => removeTrimmedRegions(prev));
 			}
 
 			setClipRegions((prev) =>
@@ -2791,12 +3013,28 @@ export default function VideoEditor() {
 
 	const handleClipDelete = useCallback(
 		(id: string) => {
+			const deletedClip = clipRegions.find((clip) => clip.id === id);
 			setClipRegions((prev) => prev.filter((clip) => clip.id !== id));
+			if (deletedClip) {
+				const { startMs, endMs } = deletedClip;
+				setZoomRegions((prev) =>
+					prev.filter((region) => region.endMs <= startMs || region.startMs >= endMs),
+				);
+				setAnnotationRegions((prev) =>
+					prev.filter((region) => region.endMs <= startMs || region.startMs >= endMs),
+				);
+				setSpeedRegions((prev) =>
+					prev.filter((region) => region.endMs <= startMs || region.startMs >= endMs),
+				);
+				setAudioRegions((prev) =>
+					prev.filter((region) => region.endMs <= startMs || region.startMs >= endMs),
+				);
+			}
 			if (selectedClipId === id) {
 				setSelectedClipId(null);
 			}
 		},
-		[selectedClipId],
+		[clipRegions, selectedClipId],
 	);
 
 	const handleSelectSpeed = useCallback((id: string | null) => {
@@ -3522,7 +3760,7 @@ export default function VideoEditor() {
 						videoPadding: padding,
 						cropRegion,
 						webcam,
-						webcamUrl: webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null,
+						webcamUrl: resolvedWebcamVideoUrl ?? (webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null),
 						annotationRegions,
 						autoCaptions,
 						autoCaptionSettings,
@@ -3691,7 +3929,7 @@ export default function VideoEditor() {
 						padding,
 						cropRegion,
 						webcam,
-						webcamUrl: webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null,
+						webcamUrl: resolvedWebcamVideoUrl ?? (webcam.sourcePath ? toFileUrl(webcam.sourcePath) : null),
 						annotationRegions,
 						autoCaptions,
 						autoCaptionSettings,
@@ -4121,17 +4359,6 @@ export default function VideoEditor() {
 		return top > 0 || left > 0 || bottom > 0 || right > 0;
 	}, [cropRegion]);
 
-	const openRecordingsFolder = useCallback(async () => {
-		try {
-			const result = await window.electronAPI.openRecordingsFolder();
-			if (!result.success) {
-				toast.error(result.message || result.error || "Failed to open recordings folder.");
-			}
-		} catch (error) {
-			toast.error(`Failed to open recordings folder: ${String(error)}`);
-		}
-	}, []);
-
 	const revealExportedFile = useCallback(async () => {
 		if (!exportedFilePath) return;
 
@@ -4160,8 +4387,8 @@ export default function VideoEditor() {
 		? Math.min(
 				typeof exportProgress?.renderProgress === "number"
 					? exportProgress.renderProgress
-					: (exportProgress?.percentage ?? 99),
-				99,
+					: (exportProgress?.percentage ?? 100),
+				100,
 			)
 		: null;
 	const isLightningExportInProgress =
@@ -4217,7 +4444,7 @@ export default function VideoEditor() {
 					})
 				: isExportFinalizing
 					? t("editor.exportStatus.finalizingPercent", "Finalizing {{percent}}%", {
-							percent: Math.round(exportFinalizingProgress ?? 99),
+							percent: Math.round(exportFinalizingProgress ?? 100),
 						})
 					: t("editor.exportStatus.completePercent", "{{percent}}% complete", {
 							percent: Math.round(exportProgress.percentage),
@@ -4241,7 +4468,7 @@ export default function VideoEditor() {
 			<div className="flex h-screen items-center justify-center bg-background">
 				<div className="text-foreground">Loading video...</div>
 				{projectBrowser}
-				<Toaster theme="dark" className="pointer-events-auto" />
+				<Toaster className="pointer-events-auto" />
 			</div>
 		);
 	}
@@ -4254,21 +4481,21 @@ export default function VideoEditor() {
 						ref={projectBrowserFallbackTriggerRef}
 						type="button"
 						onClick={handleOpenProjectBrowser}
-						className="rounded-[5px] bg-white px-3 py-1.5 text-sm font-semibold text-black shadow-[0_14px_32px_rgba(0,0,0,0.18)] transition-colors hover:bg-white/92"
+						className="rounded-[5px] bg-neutral-800 px-3 py-1.5 text-sm font-semibold text-white shadow-[0_14px_32px_rgba(0,0,0,0.18)] transition-colors hover:bg-neutral-700 dark:bg-white dark:text-black dark:hover:bg-white/90"
 					>
 						Open Projects
 					</button>
 				</div>
 				{projectBrowser}
-				<Toaster theme="dark" className="pointer-events-auto" />
+				<Toaster className="pointer-events-auto" />
 			</div>
 		);
 	}
 
 	return (
-		<div className="flex flex-col h-screen bg-[#111113] text-slate-200 overflow-hidden selection:bg-[#2563EB]/30">
+		<div className="flex flex-col h-screen bg-editor-bg text-foreground overflow-hidden selection:bg-[#2563EB]/30">
 			<div
-				className="relative flex h-11 flex-shrink-0 items-center justify-between bg-[#151518]/88 px-5 backdrop-blur-md border-b border-white/10 z-50"
+				className="relative flex h-11 flex-shrink-0 items-center justify-between bg-editor-header/88 px-5 backdrop-blur-md border-b border-foreground/10 z-50"
 				style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
 			>
 				<div
@@ -4276,25 +4503,26 @@ export default function VideoEditor() {
 					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
 				>
 					<Button
+						ref={projectBrowserTriggerRef}
 						type="button"
 						variant="ghost"
 						size="sm"
-						onClick={() => void openRecordingsFolder()}
+						onClick={handleOpenProjectBrowser}
 						className={APP_HEADER_ICON_BUTTON_CLASS}
-						title={t("common.app.manageRecordings", "Open recordings folder")}
-						aria-label={t("common.app.manageRecordings", "Open recordings folder")}
+						title={t("editor.project.projects", "Open projects")}
+						aria-label={t("editor.project.projects", "Open projects")}
 					>
 						<FolderOpen className="h-4 w-4" />
 					</Button>
 					<DiscordLinkButton />
 					<FeedbackDialog />
-					<div className="ml-1 h-5 w-px bg-white/10" />
+					<div className="ml-1 h-5 w-px bg-foreground/10" />
 					<Button
 						type="button"
 						variant="ghost"
 						onClick={handleUndo}
 						disabled={!canUndo}
-						className="inline-flex h-8 w-8 items-center justify-center rounded-[5px] border border-white/10 bg-white/5 p-0 text-slate-200 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+						className="inline-flex h-8 w-8 items-center justify-center rounded-[5px] border border-foreground/10 bg-foreground/5 p-0 text-foreground transition-colors hover:bg-foreground/10 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
 						title={t("common.actions.undo", "Undo")}
 						aria-label={t("common.actions.undo", "Undo")}
 					>
@@ -4305,7 +4533,7 @@ export default function VideoEditor() {
 						variant="ghost"
 						onClick={handleRedo}
 						disabled={!canRedo}
-						className="inline-flex h-8 w-8 items-center justify-center rounded-[5px] border border-white/10 bg-white/5 p-0 text-slate-200 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+						className="inline-flex h-8 w-8 items-center justify-center rounded-[5px] border border-foreground/10 bg-foreground/5 p-0 text-foreground transition-colors hover:bg-foreground/10 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
 						title={t("common.actions.redo", "Redo")}
 						aria-label={t("common.actions.redo", "Redo")}
 					>
@@ -4313,48 +4541,66 @@ export default function VideoEditor() {
 					</Button>
 				</div>
 				<div
-					className="pointer-events-none absolute left-1/2 flex min-w-0 -translate-x-1/2 items-baseline justify-center gap-0"
-					style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+					className="absolute left-1/2 flex min-w-0 -translate-x-1/2 items-center justify-center"
+					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
 				>
-					<span className="text-sm font-semibold tracking-tight text-white/90">
-						{projectDisplayName}
-					</span>
-					<span className="text-xs font-medium tracking-tight text-slate-500">
-						.recordly
-					</span>
+					{isEditingProjectName ? (
+						<form
+							onSubmit={(event) => void handleProjectNameSubmit(event)}
+							className="flex max-w-[min(52vw,460px)] items-baseline gap-1 rounded-[7px] border border-foreground/10 bg-editor-panel/[0.88] px-2.5 py-1 shadow-[0_10px_28px_rgba(0,0,0,0.18)]"
+						>
+							{hasUnsavedChanges ? (
+								<span className="mt-[1px] size-2 shrink-0 rounded-full bg-[#2563EB]" />
+							) : null}
+							<input
+								ref={projectNameInputRef}
+								type="text"
+								value={projectNameDraft}
+								onChange={(event) => setProjectNameDraft(event.target.value)}
+								onBlur={() => {
+									if (!isSavingProjectName) {
+										closeProjectNameEditor();
+									}
+								}}
+								onKeyDown={(event) => {
+									if (event.key === "Escape") {
+										event.preventDefault();
+										closeProjectNameEditor();
+									}
+								}}
+								disabled={isSavingProjectName}
+								className="min-w-[10ch] max-w-[min(40vw,360px)] bg-transparent text-sm font-semibold tracking-tight text-foreground/95 outline-none placeholder:text-muted-foreground/60 disabled:cursor-wait"
+								style={{ width: `${Math.max(projectNameDraft.length, 10)}ch` }}
+								aria-label={t("editor.project.renameInput", "Project name")}
+							/>
+							<span className="shrink-0 text-xs font-medium tracking-tight text-muted-foreground/70">
+								.recordly
+							</span>
+						</form>
+					) : (
+						<button
+							type="button"
+							onClick={() => setIsEditingProjectName(true)}
+							className="inline-flex max-w-[min(52vw,460px)] items-baseline gap-1 rounded-[7px] px-2.5 py-1 transition-colors hover:bg-foreground/5"
+							title={t("editor.project.renameTitle", "Rename project")}
+							aria-label={t("editor.project.renameTitle", "Rename project")}
+						>
+							{hasUnsavedChanges ? (
+								<span className="mt-[1px] size-2 shrink-0 rounded-full bg-[#2563EB]" />
+							) : null}
+							<span className="truncate text-sm font-semibold tracking-tight text-foreground/90">
+								{projectDisplayName}
+							</span>
+							<span className="shrink-0 text-xs font-medium tracking-tight text-muted-foreground/70">
+								.recordly
+							</span>
+						</button>
+					)}
 				</div>
 				<div
 					className="flex items-center gap-2 justify-self-end pr-3"
 					style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
 				>
-					<Button
-						ref={projectBrowserTriggerRef}
-						type="button"
-						onClick={handleOpenProjectBrowser}
-						className="inline-flex h-8 min-w-[96px] items-center justify-center gap-1.5 rounded-[5px] bg-white px-4 text-black shadow-[0_14px_32px_rgba(0,0,0,0.18)] transition-colors hover:bg-white/92"
-					>
-						<FolderOpen className="h-4 w-4" />
-						<span className="text-sm font-semibold tracking-tight">
-							{t("editor.project.projects", "Projects")}
-						</span>
-					</Button>
-					<Button
-						type="button"
-						onClick={handleSaveProject}
-						className="inline-flex h-8 min-w-[96px] items-center justify-center gap-1.5 rounded-[5px] bg-white px-4 text-black transition-colors hover:bg-white/92"
-					>
-						<span
-							className={`${hasUnsavedChanges ? "flex" : "hidden"} size-2 relative`}
-						>
-							<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#2563EB] opacity-75"></span>
-							<span className="relative inline-flex size-2 rounded-full bg-[#2563EB]"></span>
-						</span>
-						<Save className="h-4 w-4" weight="fill" />
-						<span className="text-sm font-semibold tracking-tight">
-							{t("common.actions.save")}
-						</span>
-					</Button>
-					<div className="mx-1 h-5 w-px bg-white/10" />
 					<DropdownMenu
 						open={showExportDropdown}
 						onOpenChange={setShowExportDropdown}
@@ -4378,25 +4624,25 @@ export default function VideoEditor() {
 							className="w-[360px] border-none bg-transparent p-0 shadow-none"
 						>
 							{isExporting ? (
-								<div className="rounded-2xl border border-white/10 bg-[#17171a] p-4 text-slate-200 shadow-2xl">
+								<div className="rounded-2xl border border-foreground/10 bg-editor-surface p-4 text-foreground shadow-2xl">
 									<div className="mb-3 flex items-center justify-between gap-3">
 										<div>
-											<p className="text-sm font-semibold text-white">
+											<p className="text-sm font-semibold text-foreground">
 												{t("editor.exportStatus.exporting", "Exporting")}
 											</p>
-											<p className="text-xs text-slate-400">
+											<p className="text-xs text-muted-foreground">
 												{t(
 													"editor.exportStatus.renderingFile",
 													"Rendering your file.",
 												)}
 											</p>
 											{isLightningExportInProgress ? (
-												<p className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
+												<p className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground/70">
 													PLEASE
 													<button
 														type="button"
 														onClick={() => void openLightningIssues()}
-														className="underline decoration-slate-500/70 underline-offset-2 transition-colors hover:text-slate-200"
+														className="underline decoration-slate-500/70 underline-offset-2 transition-colors hover:text-foreground"
 													>
 														report bugs
 													</button>
@@ -4405,7 +4651,7 @@ export default function VideoEditor() {
 												</p>
 											) : null}
 											{isLegacyExportInProgress ? (
-												<p className="mt-1 text-[11px] text-slate-500">
+												<p className="mt-1 text-[11px] text-muted-foreground/70">
 													Export too slow? Cancel and try Lightning
 													export!
 												</p>
@@ -4420,7 +4666,7 @@ export default function VideoEditor() {
 											{t("common.actions.cancel")}
 										</Button>
 									</div>
-									<div className="h-2 overflow-hidden rounded-full border border-white/5 bg-white/5">
+									<div className="h-2 overflow-hidden rounded-full border border-foreground/5 bg-foreground/5">
 										{isExportSaving ? (
 											<div className="indeterminate-progress h-full rounded-full bg-transparent" />
 										) : (
@@ -4432,36 +4678,35 @@ export default function VideoEditor() {
 											/>
 										)}
 									</div>
-									<p className="mt-2 text-xs text-slate-400">
+									<p className="mt-2 text-xs text-muted-foreground">
 										{exportPercentLabel}
 									</p>
 									{isRenderingAudio ? (
-										<p className="mt-1 text-[11px] text-slate-500">
-											Audio requires real-time playback for speed/overlay
-											edits
+										<p className="mt-1 text-[11px] text-muted-foreground/70">
+											{t("editor.export.processingAudioEdits", "Processing audio with speed/overlay edits")}
 										</p>
 									) : exportRenderSpeedLabel ? (
-										<p className="mt-1 text-[11px] text-slate-500">
+										<p className="mt-1 text-[11px] text-muted-foreground/70">
 											{exportRenderSpeedLabel}
 										</p>
 									) : null}
 									{exportRuntimeLabel ? (
-										<p className="mt-1 text-[11px] text-slate-500">
+										<p className="mt-1 text-[11px] text-muted-foreground/70">
 											Path: {exportRuntimeLabel}
 										</p>
 									) : null}
 								</div>
 							) : exportError ? (
-								<div className="rounded-2xl border border-white/10 bg-[#17171a] p-4 text-slate-200 shadow-2xl">
-									<p className="text-sm font-semibold text-white">
+								<div className="rounded-2xl border border-foreground/10 bg-editor-surface p-4 text-foreground shadow-2xl">
+									<p className="text-sm font-semibold text-foreground">
 										{t("editor.exportStatus.issue", "Export issue")}
 									</p>
 									{exportRuntimeLabel ? (
-										<p className="mt-1 text-[11px] text-slate-500">
+										<p className="mt-1 text-[11px] text-muted-foreground/70">
 											Path: {exportRuntimeLabel}
 										</p>
 									) : null}
-									<p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-slate-400">
+									<p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
 										{exportError}
 									</p>
 									<div className="mt-4 flex gap-2">
@@ -4478,29 +4723,29 @@ export default function VideoEditor() {
 											type="button"
 											variant="outline"
 											onClick={handleExportDropdownClose}
-											className="h-8 flex-1 border-white/10 bg-white/5 text-xs text-slate-300 hover:bg-white/10"
+											className="h-8 flex-1 border-foreground/10 bg-foreground/5 text-xs text-muted-foreground hover:bg-foreground/10"
 										>
 											{t("common.actions.close", "Close")}
 										</Button>
 									</div>
 								</div>
 							) : exportedFilePath ? (
-								<div className="rounded-2xl border border-white/10 bg-[#17171a] p-4 text-slate-200 shadow-2xl">
-									<p className="text-sm font-semibold text-white">
+								<div className="rounded-2xl border border-foreground/10 bg-editor-surface p-4 text-foreground shadow-2xl">
+									<p className="text-sm font-semibold text-foreground">
 										{t("editor.exportStatus.complete", "Export complete")}
 									</p>
-									<p className="mt-1 text-xs text-slate-400">
+									<p className="mt-1 text-xs text-muted-foreground">
 										{t(
 											"editor.exportStatus.savedSuccessfully",
 											"Your file was saved successfully.",
 										)}
 									</p>
 									{exportRuntimeLabel ? (
-										<p className="mt-1 text-[11px] text-slate-500">
+										<p className="mt-1 text-[11px] text-muted-foreground/70">
 											Path: {exportRuntimeLabel}
 										</p>
 									) : null}
-									<p className="mt-3 truncate text-xs text-slate-500">
+									<p className="mt-3 truncate text-xs text-muted-foreground/70">
 										{exportedFilePath.split("/").pop()}
 									</p>
 									<div className="mt-4 flex gap-2">
@@ -4515,7 +4760,7 @@ export default function VideoEditor() {
 											type="button"
 											variant="outline"
 											onClick={handleExportDropdownClose}
-											className="h-8 flex-1 border-white/10 bg-white/5 text-xs text-slate-300 hover:bg-white/10"
+											className="h-8 flex-1 border-foreground/10 bg-foreground/5 text-xs text-muted-foreground hover:bg-foreground/10"
 										>
 											Done
 										</Button>
@@ -4551,7 +4796,7 @@ export default function VideoEditor() {
 			</div>
 
 			<div className="relative flex min-h-0 flex-1 flex-col gap-3 p-4">
-				<div className="flex min-h-0 flex-1 gap-3">
+				<div className="flex min-h-0 flex-1 gap-3 relative z-10">
 					{/* Settings sidebar */}
 					<div className="flex flex-shrink-0 gap-1.5">
 						{/* Icon rail */}
@@ -4571,7 +4816,7 @@ export default function VideoEditor() {
 											{isActive && (
 												<motion.span
 													layoutId="rail-active-bg"
-													className="absolute inset-0 rounded-lg bg-white/[0.08]"
+													className="absolute inset-0 rounded-lg bg-foreground/[0.08]"
 													transition={{
 														type: "spring",
 														stiffness: 450,
@@ -4584,7 +4829,7 @@ export default function VideoEditor() {
 												animate={{
 													color: isActive
 														? "#2563EB"
-														: "rgba(255,255,255,1)",
+														: "hsl(var(--foreground))",
 												}}
 												transition={{ duration: 0.14 }}
 											>
@@ -4620,16 +4865,16 @@ export default function VideoEditor() {
 									</div>
 								);
 							})}
-							<div className="mt-auto pt-3">
+							<div className="mt-auto flex flex-col items-center gap-0.5 pt-3">
 								<motion.button
 									type="button"
 									onClick={() => toast.info("Account coming soon")}
 									title="Account"
-									className="group relative flex h-9 w-9 items-center justify-center rounded-lg text-white/55 outline-none transition hover:text-white focus:outline-none focus-visible:outline-none"
+									className="group relative flex h-9 w-9 items-center justify-center rounded-lg text-foreground/55 outline-none transition hover:text-foreground focus:outline-none focus-visible:outline-none"
 									whileHover={{ opacity: 1 }}
 									initial={{ opacity: 0.55 }}
 								>
-									<motion.span className="absolute inset-0 rounded-lg bg-white/[0.04] opacity-0 transition group-hover:opacity-100" />
+									<motion.span className="absolute inset-0 rounded-lg bg-foreground/[0.04] opacity-0 transition group-hover:opacity-100" />
 									<User className="relative z-10 h-[22px] w-[22px]" />
 								</motion.button>
 							</div>
@@ -4797,7 +5042,7 @@ export default function VideoEditor() {
 											<Button
 												variant="ghost"
 												size="sm"
-												className="h-7 px-2 text-xs text-white hover:text-white hover:bg-white/10 transition-all gap-1"
+												className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-all gap-1"
 											>
 												<span className="font-medium">
 													{getAspectRatioLabel(aspectRatio)}
@@ -4807,13 +5052,13 @@ export default function VideoEditor() {
 										</DropdownMenuTrigger>
 										<DropdownMenuContent
 											align="center"
-											className="bg-[#1a1a1c] border-white/10"
+											className="bg-editor-surface-alt border-foreground/10"
 										>
 											{ASPECT_RATIOS.map((ratio) => (
 												<DropdownMenuItem
 													key={ratio}
 													onClick={() => setAspectRatio(ratio)}
-													className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer flex items-center justify-between gap-3"
+													className="text-muted-foreground hover:text-foreground hover:bg-foreground/10 cursor-pointer flex items-center justify-between gap-3"
 												>
 													<span>{getAspectRatioLabel(ratio)}</span>
 													{aspectRatio === ratio && (
@@ -4823,12 +5068,12 @@ export default function VideoEditor() {
 											))}
 										</DropdownMenuContent>
 									</DropdownMenu>
-									<div className="w-[1px] h-4 bg-white/20" />
+									<div className="w-[1px] h-4 bg-foreground/20" />
 									<Button
 										variant="ghost"
 										size="sm"
 										onClick={handleOpenCropEditor}
-										className="h-7 px-2 text-xs text-white hover:text-white hover:bg-white/10 transition-all gap-1.5"
+										className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-all gap-1.5"
 									>
 										<Crop className="w-3.5 h-3.5" />
 										<span className="font-medium">
@@ -4909,7 +5154,7 @@ export default function VideoEditor() {
 												webcam={webcam}
 												webcamVideoPath={
 													webcam.sourcePath
-														? toFileUrl(webcam.sourcePath)
+														? resolvedWebcamVideoUrl
 														: null
 												}
 												trimRegions={trimRegions}
@@ -4952,7 +5197,7 @@ export default function VideoEditor() {
 										<Button
 											variant="ghost"
 											size="sm"
-											className="h-7 gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 text-[11px] text-white/65 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-all hover:bg-white/[0.08] hover:text-white"
+											className="h-7 gap-1 rounded-full border border-foreground/[0.08] bg-foreground/[0.04] px-2.5 text-[11px] text-foreground/65 shadow-[inset_0_1px_0_hsl(var(--foreground)/0.06)] transition-all hover:bg-foreground/[0.08] hover:text-foreground"
 										>
 											<Plus className="w-3.5 h-3.5" />
 											<span className="font-medium">
@@ -4963,7 +5208,7 @@ export default function VideoEditor() {
 									</DropdownMenuTrigger>
 									<DropdownMenuContent
 										align="start"
-										className="bg-[#1a1a1c] border-white/10"
+										className="bg-editor-surface-alt border-foreground/10"
 									>
 										<DropdownMenuItem
 											onClick={() => {
@@ -4977,24 +5222,24 @@ export default function VideoEditor() {
 														: 0;
 												timelineRef.current?.addAnnotation(nextTrackIndex);
 											}}
-											className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
+											className="text-muted-foreground hover:text-foreground hover:bg-foreground/10 cursor-pointer"
 										>
 											{t("timeline.annotation.label")}
 										</DropdownMenuItem>
 										<DropdownMenuItem
 											onClick={() => timelineRef.current?.addAudio()}
-											className="text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
+											className="text-muted-foreground hover:text-foreground hover:bg-foreground/10 cursor-pointer"
 										>
 											{t("timeline.audio.label")}
 										</DropdownMenuItem>
 									</DropdownMenuContent>
 								</DropdownMenu>
-								<div className="w-[1px] h-4 bg-white/10 mx-1" />
+								<div className="w-[1px] h-4 bg-foreground/10 mx-1" />
 								<Button
 									onClick={() => timelineRef.current?.addZoom()}
 									variant="ghost"
 									size="icon"
-									className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-[#2563EB]/10 hover:text-[#2563EB]"
+									className="h-7 w-7 rounded-full text-muted-foreground transition-all hover:bg-[#2563EB]/10 hover:text-[#2563EB]"
 									title={t("timeline.zoom.addZoom")}
 								>
 									<ZoomIn className="w-4 h-4" />
@@ -5003,7 +5248,7 @@ export default function VideoEditor() {
 									onClick={() => timelineRef.current?.suggestZooms()}
 									variant="ghost"
 									size="icon"
-									className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-[#2563EB]/10 hover:text-[#2563EB]"
+									className="h-7 w-7 rounded-full text-muted-foreground transition-all hover:bg-[#2563EB]/10 hover:text-[#2563EB]"
 									title={t("timeline.zoom.suggestZooms")}
 								>
 									<WandSparkles className="w-4 h-4" />
@@ -5012,7 +5257,7 @@ export default function VideoEditor() {
 									onClick={() => timelineRef.current?.splitClip()}
 									variant="ghost"
 									size="icon"
-									className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+									className="h-7 w-7 rounded-full text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
 									title={t("editor.toolbar.splitClip")}
 								>
 									<Scissors className="w-4 h-4" />
@@ -5021,13 +5266,13 @@ export default function VideoEditor() {
 							{/* Playback controls - centered */}
 							<div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
 								<div className="flex items-center gap-1.5 pointer-events-auto">
-									<span className="mr-1 text-[10px] font-medium tabular-nums text-slate-400">
+									<span className="mr-1 text-[10px] font-medium tabular-nums text-muted-foreground">
 										{formatTime(timelinePlayheadTime)}
 									</span>
 									<Button
 										variant="ghost"
 										size="icon"
-										className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+										className="h-7 w-7 rounded-full text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
 										title={t("editor.playback.skipBack")}
 										onClick={() => {
 											const currentMs = timelinePlayheadTime * 1000;
@@ -5047,7 +5292,7 @@ export default function VideoEditor() {
 									<Button
 										variant="ghost"
 										size="icon"
-										className={`h-7 w-7 rounded-full border border-white/10 transition-all shadow-[0_8px_18px_rgba(0,0,0,0.18)] ${isPlaying ? "bg-white/10 text-white hover:bg-white/20" : "bg-white text-black hover:bg-white/90"}`}
+										className={`h-7 w-7 rounded-full border border-foreground/10 transition-all shadow-[0_8px_18px_rgba(0,0,0,0.18)] ${isPlaying ? "bg-foreground/10 text-foreground hover:bg-foreground/20" : "bg-neutral-800 text-white hover:bg-neutral-700 dark:bg-white dark:text-black dark:hover:bg-white/90"}`}
 										onClick={togglePlayPause}
 										title={isPlaying ? "Pause" : "Play"}
 									>
@@ -5060,7 +5305,7 @@ export default function VideoEditor() {
 									<Button
 										variant="ghost"
 										size="icon"
-										className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+										className="h-7 w-7 rounded-full text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
 										title={t("editor.playback.skipForward")}
 										onClick={() => {
 											const currentMs = timelinePlayheadTime * 1000;
@@ -5075,7 +5320,7 @@ export default function VideoEditor() {
 									>
 										<SkipForward className="w-3.5 h-3.5" weight="fill" />
 									</Button>
-									<span className="text-[10px] font-medium text-slate-500 tabular-nums ml-1">
+									<span className="text-[10px] font-medium text-muted-foreground/70 tabular-nums ml-1">
 										{formatTime(duration)}
 									</span>
 								</div>
@@ -5090,7 +5335,7 @@ export default function VideoEditor() {
 											? t("editor.timeline.expand")
 											: t("editor.timeline.collapse")
 									}
-									className="h-7 w-7 rounded-full text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+									className="h-7 w-7 rounded-full text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
 									onClick={() => {
 										setTimelineCollapsed((p) => !p);
 									}}
@@ -5104,7 +5349,7 @@ export default function VideoEditor() {
 								<div className="flex items-center gap-1.5">
 									<button
 										type="button"
-										className="text-slate-400 hover:text-white transition-colors"
+										className="text-muted-foreground hover:text-foreground transition-colors"
 										title={t("editor.playback.muteUnmute")}
 										onClick={() =>
 											setPreviewVolume(previewVolume <= 0.001 ? 1 : 0)
@@ -5118,9 +5363,9 @@ export default function VideoEditor() {
 											<Volume2 className="w-3.5 h-3.5" />
 										)}
 									</button>
-									<div className="relative flex h-7 w-24 select-none items-center overflow-hidden rounded-full border border-white/[0.06] bg-black/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+									<div className="relative flex h-7 w-24 select-none items-center overflow-hidden rounded-full border border-foreground/[0.06] bg-editor-bg/80 shadow-[inset_0_1px_0_hsl(var(--foreground)/0.06)]">
 										<div
-											className="absolute inset-y-[3px] left-[3px] right-auto rounded-[10px] bg-white/[0.08]"
+											className="absolute inset-y-[3px] left-[3px] right-auto rounded-[10px] bg-foreground/[0.08]"
 											style={{
 												width:
 													previewVolume > 0
@@ -5129,10 +5374,10 @@ export default function VideoEditor() {
 											}}
 										/>
 										<div
-											className="pointer-events-none absolute bottom-[18%] top-[18%] z-10 w-[2px] rounded-full bg-white/95 shadow-[0_0_10px_rgba(37,99,235,0.28)]"
+											className="pointer-events-none absolute bottom-[18%] top-[18%] z-10 w-[2px] rounded-full bg-foreground/95 shadow-[0_0_10px_rgba(37,99,235,0.28)]"
 											style={{ left: `calc(${previewVolume * 100}% - 8px)` }}
 										/>
-										<span className="pointer-events-none relative z-10 pl-2 text-[10px] font-medium text-slate-400">
+										<span className="pointer-events-none relative z-10 pl-2 text-[10px] font-medium text-muted-foreground">
 											{Math.round(previewVolume * 100)}%
 										</span>
 										<input
@@ -5217,13 +5462,13 @@ export default function VideoEditor() {
 						className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
 						onClick={handleCancelCropEditor}
 					/>
-					<div className="fixed left-1/2 top-1/2 z-[60] max-h-[90vh] w-[90vw] max-w-5xl -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-2xl border border-white/10 bg-[#09090b] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+					<div className="fixed left-1/2 top-1/2 z-[60] max-h-[90vh] w-[90vw] max-w-5xl -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-2xl border border-foreground/10 bg-editor-dialog p-8 shadow-2xl animate-in zoom-in-95 duration-200">
 						<div className="mb-6 flex items-center justify-between">
 							<div>
-								<span className="text-xl font-bold text-slate-200">
+								<span className="text-xl font-bold text-foreground">
 									{t("settings.crop.title")}
 								</span>
-								<p className="mt-2 text-sm text-slate-400">
+								<p className="mt-2 text-sm text-muted-foreground">
 									{t("settings.crop.instruction")}
 								</p>
 							</div>
@@ -5231,7 +5476,7 @@ export default function VideoEditor() {
 								variant="ghost"
 								size="icon"
 								onClick={handleCancelCropEditor}
-								className="text-slate-400 hover:bg-white/10 hover:text-white"
+								className="text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
 							>
 								<X className="h-5 w-5" />
 							</Button>
@@ -5257,7 +5502,7 @@ export default function VideoEditor() {
 
 			{projectBrowser}
 
-			<Toaster theme="dark" className="pointer-events-auto" />
+			<Toaster className="pointer-events-auto" />
 		</div>
 	);
 }

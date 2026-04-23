@@ -32,6 +32,28 @@ export interface ExportProgress {
 	audioProgress?: number; // 0-1, progress of real-time audio rendering (speed/audio regions)
 }
 
+export interface ExportFinalizationStageMetrics {
+	encoderFlushMs?: number;
+	queuedMuxingMs?: number;
+	audioProcessingMs?: number;
+	muxerFinalizeMs?: number;
+	editedAudioRenderMs?: number;
+	ffmpegAudioMuxMs?: number;
+	nativeExportFinalizeMs?: number;
+	nativeEncoderFlushMs?: number;
+	ffmpegAudioMuxBreakdown?: ExportFfmpegAudioMuxBreakdown;
+}
+
+export interface ExportFfmpegAudioMuxBreakdown {
+	tempVideoWriteMs?: number;
+	tempEditedAudioWriteMs?: number;
+	ffmpegExecMs?: number;
+	muxedVideoReadMs?: number;
+	tempVideoBytes?: number;
+	tempEditedAudioBytes?: number;
+	muxedVideoBytes?: number;
+}
+
 export interface ExportMetrics {
 	totalElapsedMs: number;
 	metadataLoadMs?: number;
@@ -57,6 +79,8 @@ export interface ExportMetrics {
 	averageEncodeWaitMs?: number;
 	averageNativeCaptureMs?: number;
 	averageNativeWriteMs?: number;
+	effectiveDurationSec?: number;
+	finalizationStageMs?: ExportFinalizationStageMetrics;
 }
 
 export interface ExportResult {

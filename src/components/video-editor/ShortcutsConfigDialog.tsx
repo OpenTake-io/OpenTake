@@ -126,7 +126,7 @@ export function ShortcutsConfigDialog() {
 				if (!open) handleClose();
 			}}
 		>
-			<DialogContent className="bg-[#09090b] border-white/10 text-white max-w-[460px]">
+			<DialogContent className="bg-editor-dialog border-foreground/10 text-foreground max-w-[460px]">
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2 text-sm">
 						<Keyboard className="w-4 h-4 text-[#2563EB]" />
@@ -135,7 +135,7 @@ export function ShortcutsConfigDialog() {
 				</DialogHeader>
 
 				<div className="space-y-0.5">
-					<p className="text-[10px] text-slate-500 mb-2 uppercase tracking-wide font-semibold">
+					<p className="text-[10px] text-muted-foreground/70 mb-2 uppercase tracking-wide font-semibold">
 						{t("shortcutsConfig.configurable")}
 					</p>
 					{SHORTCUT_ACTIONS.map((action) => {
@@ -143,8 +143,8 @@ export function ShortcutsConfigDialog() {
 						const hasConflict = conflict?.forAction === action;
 						return (
 							<div key={action}>
-								<div className="flex items-center justify-between py-1.5 px-1 border-b border-white/5">
-									<span className="text-sm text-slate-300">
+								<div className="flex items-center justify-between py-1.5 px-1 border-b border-foreground/5">
+									<span className="text-sm text-muted-foreground">
 										{SHORTCUT_LABELS[action]}
 									</span>
 									<button
@@ -164,7 +164,7 @@ export function ShortcutsConfigDialog() {
 												? "bg-[#2563EB]/20 border-[#2563EB] text-[#2563EB] animate-pulse"
 												: hasConflict
 													? "bg-amber-500/10 border-amber-500/50 text-amber-400"
-													: "bg-white/5 border-white/10 text-slate-200 hover:border-[#2563EB]/50 hover:text-[#2563EB] cursor-pointer",
+													: "bg-foreground/5 border-foreground/10 text-foreground hover:border-[#2563EB]/50 hover:text-[#2563EB] cursor-pointer",
 										].join(" ")}
 									>
 										{isCapturing
@@ -192,7 +192,7 @@ export function ShortcutsConfigDialog() {
 											<button
 												type="button"
 												onClick={handleCancelConflict}
-												className="px-2 py-0.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-slate-400 transition-colors"
+												className="px-2 py-0.5 bg-foreground/5 hover:bg-foreground/10 border border-foreground/10 rounded text-muted-foreground transition-colors"
 											>
 												{t("shortcutsConfig.cancel")}
 											</button>
@@ -205,23 +205,23 @@ export function ShortcutsConfigDialog() {
 				</div>
 
 				<div className="space-y-0.5 mt-2">
-					<p className="text-[10px] text-slate-500 mb-2 uppercase tracking-wide font-semibold">
+					<p className="text-[10px] text-muted-foreground/70 mb-2 uppercase tracking-wide font-semibold">
 						{t("shortcutsConfig.fixed")}
 					</p>
 					{FIXED_SHORTCUTS.map(({ label, display }) => (
 						<div
 							key={label}
-							className="flex items-center justify-between py-1.5 px-1 border-b border-white/5 last:border-0"
+							className="flex items-center justify-between py-1.5 px-1 border-b border-foreground/5 last:border-0"
 						>
-							<span className="text-sm text-slate-400">{label}</span>
-							<kbd className="px-2 py-1 bg-white/5 border border-white/10 rounded text-xs font-mono text-slate-400 min-w-[90px] text-center">
+							<span className="text-sm text-muted-foreground">{label}</span>
+							<kbd className="px-2 py-1 bg-foreground/5 border border-foreground/10 rounded text-xs font-mono text-muted-foreground min-w-[90px] text-center">
 								{display}
 							</kbd>
 						</div>
 					))}
 				</div>
 
-				<p className="text-[10px] text-slate-500 mt-1">
+				<p className="text-[10px] text-muted-foreground/70 mt-1">
 					{t("shortcutsConfig.instructions")}
 				</p>
 
@@ -230,7 +230,7 @@ export function ShortcutsConfigDialog() {
 						title={t("shortcutsConfig.resetToDefaults")}
 						variant="ghost"
 						size="sm"
-						className="text-slate-400 hover:text-white hover:bg-white/10 gap-1.5 max-w-[200px]"
+						className="text-muted-foreground hover:text-foreground hover:bg-foreground/10 gap-1.5 max-w-[200px]"
 						onClick={handleReset}
 					>
 						<RotateCcw className="w-3 h-3" />
