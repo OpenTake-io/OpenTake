@@ -1194,8 +1194,7 @@ export default function VideoEditor() {
 				gifSizePreset: GifSizePreset;
 			}>,
 		) => {
-			const { cropRegion: _cropRegion, ...persistedEditor } = editor;
-			return persistedEditor;
+			return editor;
 		},
 		[],
 	);
@@ -1527,7 +1526,7 @@ export default function VideoEditor() {
 			setBorderRadius(normalizedEditor.borderRadius);
 			setPadding(normalizedEditor.padding);
 			setFrame(normalizedEditor.frame);
-			setCropRegion(DEFAULT_CROP_REGION);
+			setCropRegion(normalizedEditor.cropRegion);
 			setWebcam(normalizedEditor.webcam);
 			setZoomRegions(normalizedEditor.zoomRegions);
 			setTrimRegions(normalizedEditor.trimRegions);
