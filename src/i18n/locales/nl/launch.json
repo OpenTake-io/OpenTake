@@ -56,6 +56,8 @@
 		"loadingSources": "Bronnen laden...",
 		"screens": "Schermen",
 		"windows": "Vensters",
+		"noScreensAvailable": "Geen schermen beschikbaar",
+		"noWindowsAvailable": "Geen vensters beschikbaar",
 		"windowsNote": "Alleen zichtbare (niet-geminimaliseerde) vensters kunnen worden opgenomen.",
 		"windowPlaceholder": "Venster",
 		"cancel": "Annuleren",

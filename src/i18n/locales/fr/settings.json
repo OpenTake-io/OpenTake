@@ -91,6 +91,15 @@
 		"radius": "Rayon",
 		"roundness": "Arrondi",
 		"padding": "Marge intérieure",
+		"paddingAdvanced": "Avancé",
+		"paddingAdvancedShow": "Afficher les contrôles avancés de marge intérieure",
+		"paddingAdvancedHide": "Masquer les contrôles avancés de marge intérieure",
+		"paddingLinked": "Lié (uniforme)",
+		"paddingUnlinked": "Non lié (asymétrique)",
+		"paddingTop": "Haut",
+		"paddingBottom": "Bas",
+		"paddingLeft": "Gauche",
+		"paddingRight": "Droite",
 		"removeBackground": "Supprimer l’arrière-plan"
 	},
 	"sections": {
