@@ -1,7 +1,7 @@
 {
 	"recording": {
-		"disableSystemAudio": "Desativar audio do sistema",
-		"enableSystemAudio": "Ativar audio do sistema",
+		"disableSystemAudio": "Desativar áudio do sistema",
+		"enableSystemAudio": "Ativar áudio do sistema",
 		"disableMicrophone": "Desativar microfone",
 		"enableMicrophone": "Ativar microfone",
 		"disableWebcam": "Desativar sobreposição da webcam",

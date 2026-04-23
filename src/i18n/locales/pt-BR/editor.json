@@ -3,7 +3,7 @@
 		"play": "Reproduzir",
 		"pause": "Pausar",
 		"skipBack": "Voltar",
-		"skipForward": "Avancar",
+		"skipForward": "Avançar",
 		"muteUnmute": "Silenciar/ativar som"
 	},
 	"annotations": {
@@ -56,9 +56,9 @@
 		"clean": "Clean"
 	},
 	"format": {
-		"mp4Video": "Video MP4",
-		"mp4Description": "Arquivo de video em alta qualidade",
-		"gifAnimation": "Animacao GIF",
+		"mp4Video": "Vídeo MP4",
+		"mp4Description": "Arquivo de vídeo em alta qualidade",
+		"gifAnimation": "Animação GIF",
 		"gifDescription": "Imagem animada para compartilhar"
 	},
 	"gifOptions": {
