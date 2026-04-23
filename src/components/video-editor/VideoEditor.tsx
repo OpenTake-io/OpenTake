@@ -158,6 +158,7 @@ import {
 	type FigureData,
 	getClipSourceEndMs,
 	type PlaybackSpeed,
+	type Padding,
 	type SpeedRegion,
 	type TrimRegion,
 	type WebcamOverlaySettings,
@@ -1169,7 +1170,7 @@ export default function VideoEditor() {
 				cursorClickBounceDuration: number;
 				cursorSway: number;
 				borderRadius: number;
-				padding: number;
+				padding: Padding;
 				frame: string | null;
 				cropRegion: CropRegion;
 				webcam: WebcamOverlaySettings;
