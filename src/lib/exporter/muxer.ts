@@ -172,8 +172,11 @@ export class VideoMuxer {
 			if (!sink) {
 				throw new Error("Stream target closed before finalization");
 			}
-			const closeResult = await closeIpcExportStream(sink.streamId);
+			// Clear streamSink before awaiting close so a concurrent destroy()→
+			// abortStream() short-circuits on `!this.streamSink` instead of racing
+			// us for the same streamId.
 			this.streamSink = null;
+			const closeResult = await closeIpcExportStream(sink.streamId);
 			return {
 				mode: "stream",
 				tempFilePath: closeResult.tempPath,
