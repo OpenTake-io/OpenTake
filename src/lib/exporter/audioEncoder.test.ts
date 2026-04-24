@@ -12,6 +12,7 @@ type OfflineRenderTestHarness = AudioProcessor & {
 		speedRegions: never[],
 		audioRegions: never[],
 		sourceAudioFallbackPaths: string[],
+		sourceAudioFallbackStartDelayMsByPath?: Record<string, number>,
 	): Promise<{
 		mainBuffer: AudioBuffer | null;
 		companionEntries: Array<{ buffer: AudioBuffer; startDelaySec: number }>;
@@ -22,6 +23,7 @@ type OfflineRenderTestHarness = AudioProcessor & {
 		speedRegions: never[],
 		audioRegions: never[],
 		sourceAudioFallbackPaths: string[],
+		sourceAudioFallbackStartDelayMsByPath: Record<string, number> | undefined,
 		muxer: unknown,
 	): Promise<void>;
 };
@@ -81,5 +83,55 @@ describe("AudioProcessor offline render preparation", () => {
 
 		expect(loadAudioFileDemuxer).not.toHaveBeenCalled();
 		expect(renderAndMuxOfflineAudio).not.toHaveBeenCalled();
+	});
+
+	it("uses recorded companion start-delay metadata instead of inferring from duration gap", async () => {
+		const processor = new AudioProcessor() as unknown as OfflineRenderTestHarness;
+		const mainBuffer = { duration: 600, numberOfChannels: 2 } as AudioBuffer;
+		const micBuffer = { duration: 565, numberOfChannels: 1 } as AudioBuffer;
+
+		vi.spyOn(processor, "decodeAudioFromUrl").mockImplementation(async (url: string) => {
+			if (url === "file:///tmp/recording.mp4") {
+				return mainBuffer;
+			}
+			if (url === "/tmp/recording.mic.webm") {
+				return micBuffer;
+			}
+			return null;
+		});
+
+		const prepared = await processor.prepareOfflineRender(
+			"file:///tmp/recording.mp4",
+			[],
+			[],
+			[],
+			["/tmp/recording.mic.webm"],
+			{ "/tmp/recording.mic.webm": 3_500 },
+		);
+
+		expect(prepared.companionEntries[0]?.startDelaySec).toBeCloseTo(3.5);
+	});
+
+	it("avoids the single-sidecar fast path when companion timing metadata is present", async () => {
+		const processor = new AudioProcessor() as unknown as OfflineRenderTestHarness;
+		const loadAudioFileDemuxer = vi.spyOn(processor, "loadAudioFileDemuxer");
+		const renderAndMuxOfflineAudio = vi
+			.spyOn(processor, "renderAndMuxOfflineAudio")
+			.mockResolvedValue();
+
+		await processor.process(
+			null,
+			{} as never,
+			"file:///tmp/recording.mp4",
+			[],
+			[],
+			undefined,
+			[],
+			["/tmp/recording.mic.webm"],
+			{ "/tmp/recording.mic.webm": 2_000 },
+		);
+
+		expect(loadAudioFileDemuxer).not.toHaveBeenCalled();
+		expect(renderAndMuxOfflineAudio).toHaveBeenCalled();
 	});
 });

@@ -143,6 +143,7 @@ export class AudioProcessor {
 		readEndSec?: number,
 		audioRegions?: AudioRegion[],
 		sourceAudioFallbackPaths?: string[],
+		sourceAudioFallbackStartDelayMsByPath?: Record<string, number>,
 	): Promise<void> {
 		const sortedTrims = trimRegions
 			? [...trimRegions].sort((a, b) => a.startMs - b.startMs)
@@ -164,9 +165,13 @@ export class AudioProcessor {
 			videoUrl,
 			sortedSourceAudioFallbackPaths,
 		);
+		const hasTimedCompanionAudio = externalAudioPaths.some(
+			(audioPath) => (sourceAudioFallbackStartDelayMsByPath?.[audioPath] ?? 0) > 0,
+		);
 		const needsSourceAudioMixing =
 			externalAudioPaths.length > 1 ||
-			(hasEmbeddedSourceAudio && externalAudioPaths.length > 0);
+			(hasEmbeddedSourceAudio && externalAudioPaths.length > 0) ||
+			hasTimedCompanionAudio;
 
 		// When speed edits, audio regions, or multiple audio sources need mixing, use offline AudioContext pipeline.
 		if (
@@ -180,6 +185,7 @@ export class AudioProcessor {
 				sortedSpeedRegions,
 				sortedAudioRegions,
 				sortedSourceAudioFallbackPaths,
+				sourceAudioFallbackStartDelayMsByPath,
 				muxer,
 			);
 			return;
@@ -210,6 +216,7 @@ export class AudioProcessor {
 				[],
 				[],
 				externalAudioPaths,
+				sourceAudioFallbackStartDelayMsByPath,
 				muxer,
 			);
 			return;
@@ -255,6 +262,7 @@ export class AudioProcessor {
 		speedRegions?: SpeedRegion[],
 		audioRegions?: AudioRegion[],
 		sourceAudioFallbackPaths?: string[],
+		sourceAudioFallbackStartDelayMsByPath?: Record<string, number>,
 	): Promise<Blob> {
 		const sortedTrims = trimRegions
 			? [...trimRegions].sort((a, b) => a.startMs - b.startMs)
@@ -279,6 +287,7 @@ export class AudioProcessor {
 			sortedSpeedRegions,
 			sortedAudioRegions,
 			sortedSourceAudioFallbackPaths,
+			sourceAudioFallbackStartDelayMsByPath,
 		);
 		return this.renderToWavBlobChunked(prepared);
 	}
@@ -528,6 +537,7 @@ export class AudioProcessor {
 		speedRegions: SpeedRegion[],
 		audioRegions: AudioRegion[],
 		sourceAudioFallbackPaths: string[],
+		sourceAudioFallbackStartDelayMsByPath: Record<string, number> | undefined,
 		muxer: VideoMuxer,
 	): Promise<void> {
 		const prepared = await this.prepareOfflineRender(
@@ -536,6 +546,7 @@ export class AudioProcessor {
 			speedRegions,
 			audioRegions,
 			sourceAudioFallbackPaths,
+			sourceAudioFallbackStartDelayMsByPath,
 		);
 		if (this.cancelled) return;
 		await this.renderAndEncodeChunked(prepared, muxer);
@@ -547,6 +558,7 @@ export class AudioProcessor {
 		speedRegions: SpeedRegion[],
 		audioRegions: AudioRegion[],
 		sourceAudioFallbackPaths: string[],
+		sourceAudioFallbackStartDelayMsByPath?: Record<string, number>,
 	): Promise<PreparedOfflineRender> {
 		if (this.cancelled) throw new Error("Export cancelled");
 		this.onProgress?.(0);
@@ -562,17 +574,20 @@ export class AudioProcessor {
 
 		// Decode companion / sidecar audio files
 		const companionEntries: Array<{ buffer: AudioBuffer; startDelaySec: number }> = [];
+		const refDuration =
+			mainBuffer?.duration ??
+			(externalAudioPaths.length > 0 ? await this.getMediaDurationSec(videoUrl) : 0);
 		for (const audioPath of externalAudioPaths) {
 			if (this.cancelled) throw new Error("Export cancelled");
 			const buffer = await this.decodeAudioFromUrl(audioPath);
 			if (!buffer) continue;
 
-			const refDuration = mainBuffer?.duration ?? (await this.getMediaDurationSec(videoUrl));
 			companionEntries.push({
 				buffer,
 				startDelaySec: estimateCompanionAudioStartDelaySeconds(
 					refDuration,
 					buffer.duration,
+					sourceAudioFallbackStartDelayMsByPath?.[audioPath],
 				),
 			});
 		}

@@ -133,6 +133,39 @@ describe("getCompanionAudioFallbackPaths", () => {
 		]);
 	});
 
+	it("loads saved sidecar timing metadata alongside companion audio paths", async () => {
+		const videoPath = path.join(tempRoot, "recording.mp4");
+		const micPath = path.join(tempRoot, "recording.mic.webm");
+
+		await Promise.all([
+			fs.writeFile(videoPath, "video"),
+			fs.writeFile(micPath, "mic"),
+			fs.writeFile(`${micPath}.json`, JSON.stringify({ startDelayMs: 2750 })),
+		]);
+
+		execFileMock.mockImplementation(
+			(
+				_file: string,
+				_args: string[],
+				_options: Record<string, unknown>,
+				callback: ExecFileCallback,
+			) => {
+				const error = new Error("ffmpeg probe failed") as Error & { stderr?: string };
+				error.stderr = "Stream #0:0: Video: h264";
+				callback(error, "", error.stderr);
+			},
+		);
+
+		const { getCompanionAudioFallbackInfo } = await import("./diagnostics");
+
+		await expect(getCompanionAudioFallbackInfo(videoPath)).resolves.toEqual({
+			paths: [micPath],
+			startDelayMsByPath: {
+				[micPath]: 2750,
+			},
+		});
+	});
+
 	it("rejects tiny MP4 container-only outputs before they reach the editor", async () => {
 		const videoPath = path.join(tempRoot, "recording-123.mp4");
 		await fs.writeFile(videoPath, Buffer.alloc(261));

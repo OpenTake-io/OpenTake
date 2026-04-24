@@ -35,7 +35,7 @@ import {
 } from "../paths/binaries";
 import { rememberApprovedLocalReadPath } from "../project/manager";
 import {
-	getCompanionAudioFallbackPaths,
+	getCompanionAudioFallbackInfo,
 	getFileSizeIfPresent,
 	recordNativeCaptureDiagnostics,
 	validateRecordedVideo,
@@ -1013,19 +1013,19 @@ export function registerRecordingHandlers(
 
 	ipcMain.handle("get-video-audio-fallback-paths", async (_event, videoPath: string) => {
 		if (!videoPath) {
-			return { success: true, paths: [] };
+			return { success: true, paths: [], startDelayMsByPath: {} };
 		}
 
 		try {
-			const paths = await getCompanionAudioFallbackPaths(videoPath);
+			const { paths, startDelayMsByPath } = await getCompanionAudioFallbackInfo(videoPath);
 			await Promise.all([
 				rememberApprovedLocalReadPath(videoPath),
 				...paths.map((fallbackPath) => rememberApprovedLocalReadPath(fallbackPath)),
 			]);
-			return { success: true, paths };
+			return { success: true, paths, startDelayMsByPath };
 		} catch (error) {
 			console.error("Failed to resolve companion audio fallback paths:", error);
-			return { success: false, paths: [], error: String(error) };
+			return { success: false, paths: [], startDelayMsByPath: {}, error: String(error) };
 		}
 	});
 
@@ -1170,11 +1170,30 @@ export function registerRecordingHandlers(
 
 	ipcMain.handle(
 		"store-microphone-sidecar",
-		async (_, audioData: ArrayBuffer, videoPath: string) => {
+		async (
+			_,
+			audioData: ArrayBuffer,
+			videoPath: string,
+			options?: { startDelayMs?: number },
+		) => {
 			try {
 				const baseName = videoPath.replace(/\.[^.]+$/, "");
 				const sidecarPath = `${baseName}.mic.webm`;
 				await fs.writeFile(sidecarPath, Buffer.from(audioData));
+				const startDelayMs = options?.startDelayMs;
+				if (Number.isFinite(startDelayMs) && (startDelayMs ?? 0) >= 0) {
+					try {
+						await fs.writeFile(
+							`${sidecarPath}.json`,
+							JSON.stringify({ startDelayMs: Math.round(startDelayMs ?? 0) }),
+						);
+					} catch (metadataError) {
+						console.warn(
+							"Failed to store microphone sidecar timing metadata:",
+							metadataError,
+						);
+					}
+				}
 				return { success: true, path: sidecarPath };
 			} catch (error) {
 				console.error("Failed to store microphone sidecar:", error);

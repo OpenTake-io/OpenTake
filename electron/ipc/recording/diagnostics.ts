@@ -9,6 +9,10 @@ import type { CompanionAudioCandidate, NativeCaptureDiagnostics } from "../types
 const execFileAsync = promisify(execFile);
 export const MIN_VALID_RECORDED_VIDEO_BYTES = 1024;
 
+type CompanionAudioTimingMetadata = {
+	startDelayMs?: number;
+};
+
 export function recordNativeCaptureDiagnostics(
 	diagnostics: Omit<NativeCaptureDiagnostics, "timestamp">,
 ) {
@@ -99,6 +103,22 @@ export async function getUsableCompanionAudioCandidates(
 	return candidates;
 }
 
+async function readCompanionAudioTimingMetadata(
+	companionPath: string,
+): Promise<CompanionAudioTimingMetadata | null> {
+	try {
+		const raw = await fs.readFile(`${companionPath}.json`, "utf8");
+		const parsed = JSON.parse(raw) as CompanionAudioTimingMetadata | null;
+		if (!parsed || typeof parsed !== "object") {
+			return null;
+		}
+
+		return parsed;
+	} catch {
+		return null;
+	}
+}
+
 export async function hasEmbeddedAudioStream(videoPath: string) {
 	const ffmpegPath = getFfmpegBinaryPath();
 	let stderr = "";
@@ -118,11 +138,17 @@ export async function hasEmbeddedAudioStream(videoPath: string) {
 }
 
 export async function getCompanionAudioFallbackPaths(videoPath: string) {
+	const { paths } = await getCompanionAudioFallbackInfo(videoPath);
+	return paths;
+}
+
+export async function getCompanionAudioFallbackInfo(videoPath: string) {
 	const companionCandidates = await getUsableCompanionAudioCandidates(videoPath);
 	if (companionCandidates.length === 0) {
-		return [];
+		return { paths: [], startDelayMsByPath: {} };
 	}
 
+	let paths: string[];
 	if (await hasEmbeddedAudioStream(videoPath)) {
 		const microphoneCompanionPaths = Array.from(
 			new Set(
@@ -134,13 +160,36 @@ export async function getCompanionAudioFallbackPaths(videoPath: string) {
 			),
 		);
 		if (microphoneCompanionPaths.length === 0) {
-			return [];
+			return { paths: [], startDelayMsByPath: {} };
 		}
 
-		return [videoPath, ...microphoneCompanionPaths];
+		paths = [videoPath, ...microphoneCompanionPaths];
+	} else {
+		paths = Array.from(
+			new Set(companionCandidates.flatMap((candidate) => candidate.usablePaths)),
+		);
 	}
 
-	return Array.from(new Set(companionCandidates.flatMap((candidate) => candidate.usablePaths)));
+	const metadataEntries = await Promise.all(
+		paths.map(async (audioPath) => {
+			const metadata = await readCompanionAudioTimingMetadata(audioPath);
+			const startDelayMs = metadata?.startDelayMs;
+			if (!Number.isFinite(startDelayMs) || (startDelayMs ?? 0) < 0) {
+				return null;
+			}
+
+			return [audioPath, Math.round(startDelayMs ?? 0)] as const;
+		}),
+	);
+
+	return {
+		paths,
+		startDelayMsByPath: Object.fromEntries(
+			metadataEntries.filter(
+				(entry): entry is readonly [string, number] => entry !== null,
+			),
+		),
+	};
 }
 
 export async function validateRecordedVideo(videoPath: string) {

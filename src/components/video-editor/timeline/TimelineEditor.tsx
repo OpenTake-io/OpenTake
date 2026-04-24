@@ -44,7 +44,6 @@ import {
 } from "@/utils/aspectRatioUtils";
 import { formatShortcut } from "@/utils/platformUtils";
 import { loadEditorPreferences, saveEditorPreferences } from "../editorPreferences";
-import { toFileUrl } from "../projectPersistence";
 import type {
 	AnnotationRegion,
 	AudioRegion,

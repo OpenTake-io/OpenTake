@@ -7,10 +7,18 @@ export function clampMediaTimeToDuration(targetTime: number, duration?: number |
 	return Math.max(0, Math.min(safeTargetTime, Math.max(0, duration)));
 }
 
+const MIN_COMPANION_AUDIO_DELAY_SECONDS = 0.025;
+const MAX_INFERRED_COMPANION_AUDIO_DELAY_SECONDS = 0.5;
+
 export function estimateCompanionAudioStartDelaySeconds(
 	timelineDuration?: number | null,
 	audioDuration?: number | null,
+	recordedStartDelayMs?: number | null,
 ): number {
+	if (Number.isFinite(recordedStartDelayMs) && (recordedStartDelayMs ?? 0) >= 0) {
+		return Math.max(0, recordedStartDelayMs ?? 0) / 1000;
+	}
+
 	if (!Number.isFinite(timelineDuration) || !Number.isFinite(audioDuration)) {
 		return 0;
 	}
@@ -19,7 +27,14 @@ export function estimateCompanionAudioStartDelaySeconds(
 	const safeAudioDuration = Math.max(0, audioDuration ?? 0);
 	const estimatedDelaySeconds = safeTimelineDuration - safeAudioDuration;
 
-	return estimatedDelaySeconds > 0.025 ? estimatedDelaySeconds : 0;
+	if (
+		estimatedDelaySeconds <= MIN_COMPANION_AUDIO_DELAY_SECONDS ||
+		estimatedDelaySeconds > MAX_INFERRED_COMPANION_AUDIO_DELAY_SECONDS
+	) {
+		return 0;
+	}
+
+	return estimatedDelaySeconds;
 }
 
 export function getMediaSyncPlaybackRate({
