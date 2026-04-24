@@ -413,6 +413,13 @@ ipcMain.handle("get-hud-overlay-capture-protection", () => {
 	};
 });
 
+ipcMain.handle("get-hud-overlay-mouse-passthrough-supported", () => {
+	return {
+		success: true,
+		supported: isHudOverlayMousePassthroughSupported(),
+	};
+});
+
 ipcMain.handle("set-hud-overlay-capture-protection", (_event, enabled: boolean) => {
 	loadHudOverlayCaptureProtectionSetting();
 	hudOverlayHiddenFromCapture = Boolean(enabled);
