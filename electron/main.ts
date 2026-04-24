@@ -19,6 +19,7 @@ import { showCursor } from "./cursorHider";
 import { registerExtensionIpcHandlers } from "./extensions/extensionIpc";
 import { getGpuSwitches } from "./gpuSwitches";
 import {
+	cleanupAllExportStreams,
 	cleanupNativeVideoExportSessions,
 	getSelectedSourceId,
 	killWindowsCaptureProcess,
@@ -773,6 +774,7 @@ app.on("before-quit", () => {
 	killWindowsCaptureProcess();
 	showCursor();
 	cleanupNativeVideoExportSessions();
+	void cleanupAllExportStreams();
 });
 
 app.on("window-all-closed", () => {
@@ -880,9 +882,11 @@ app.whenReady().then(async () => {
 
 	if (IS_SMOKE_EXPORT) {
 		await logSmokeExportGpuDiagnostics();
-		console.log(
-			`[smoke-export] Starting editor smoke export for ${process.env.RECORDLY_SMOKE_EXPORT_INPUT ?? "<missing input>"}`,
-		);
+		const smokeSource =
+			process.env.RECORDLY_SMOKE_EXPORT_PROJECT ??
+			process.env.RECORDLY_SMOKE_EXPORT_INPUT ??
+			"<missing input>";
+		console.log(`[smoke-export] Starting editor smoke export for ${smokeSource}`);
 		createEditorWindowWrapper();
 		return;
 	}
