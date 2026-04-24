@@ -2,10 +2,17 @@ import type { ChildProcessByStdio } from "node:child_process";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { performance } from "node:perf_hooks";
 import type { Readable, Writable } from "node:stream";
 import type { SaveDialogOptions } from "electron";
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import {
+	closeExportStream,
+	isOwnedExportPath,
+	openExportStream,
+	registerOwnedExportPath,
+	releaseOwnedExportPath,
+	writeToExportStream,
+} from "../export/exportStream";
 import {
 	enqueueNativeVideoExportFrameWrite,
 	flushNativeVideoExportPendingWriteRequests,
@@ -31,6 +38,44 @@ import {
 	type NativeVideoExportFinishOptions,
 } from "../nativeVideoExport";
 import { approveUserPath } from "../utils";
+
+async function moveExportedTempFile(tempPath: string, destinationPath: string) {
+	await fs.mkdir(path.dirname(destinationPath), { recursive: true });
+	try {
+		await fs.rename(tempPath, destinationPath);
+		return;
+	} catch (error) {
+		const code = (error as NodeJS.ErrnoException).code;
+		if (code !== "EXDEV" && code !== "EPERM" && code !== "ENOTEMPTY") {
+			throw error;
+		}
+		// Cross-device or Windows permission quirks — fall back to copy + unlink so
+		// exporting to a different volume still works.
+	}
+
+	await fs.copyFile(tempPath, destinationPath);
+	try {
+		await fs.rm(tempPath, { force: true });
+	} catch (unlinkError) {
+		// Copy succeeded, so the export itself is safe; surface the leaked temp
+		// path instead of silently swallowing the failure so operators can
+		// reclaim disk space manually if the OS temp reaper misses it.
+		console.warn(
+			`[export] Failed to remove temp file after cross-volume copy (${tempPath}):`,
+			unlinkError,
+		);
+	}
+}
+
+function isTempPathSafe(tempPath: string): boolean {
+	const tempRoot = path.resolve(app.getPath("temp"));
+	const candidate = path.resolve(tempPath);
+	if (candidate === tempRoot) {
+		return false;
+	}
+	const withSep = tempRoot.endsWith(path.sep) ? tempRoot : tempRoot + path.sep;
+	return candidate.startsWith(withSep);
+}
 
 export function registerExportHandlers() {
 	ipcMain.handle(
@@ -263,20 +308,25 @@ export function registerExportHandlers() {
 					session.outputPath,
 					options ?? {},
 				);
-				const muxedVideoReadStartedAt = performance.now();
-				const data = await fs.readFile(finalized.outputPath);
 				nativeVideoExportSessions.delete(sessionId);
-				await removeTemporaryExportFile(finalized.outputPath);
+				// Register the finalized path so only app-produced paths can flow back
+				// through finalize-exported-video / discard-exported-temp.
+				registerOwnedExportPath(finalized.outputPath);
+				if (finalized.outputPath !== session.outputPath) {
+					// muxNativeVideoExportAudio removes the intermediate on success, but
+					// clear our registry entry defensively in case a future refactor
+					// changes that contract.
+					releaseOwnedExportPath(session.outputPath);
+				}
 
+				// Return a temp path instead of reading the file back into memory so we
+				// never hit V8's per-ArrayBuffer limit on >2 GiB exports. The renderer
+				// uses finalize-exported-video to move the file to its final path.
 				return {
 					success: true,
-					data: new Uint8Array(data),
+					tempPath: finalized.outputPath,
 					encoderName: session.encoderName,
-					metrics: {
-						...finalized.metrics,
-						muxedVideoReadMs: performance.now() - muxedVideoReadStartedAt,
-						muxedVideoBytes: data.byteLength,
-					},
+					metrics: finalized.metrics,
 				};
 			} catch (error) {
 				flushNativeVideoExportPendingWriteRequests(sessionId, session, String(error));
@@ -288,6 +338,41 @@ export function registerExportHandlers() {
 					success: false,
 					error: String(error),
 				};
+			}
+		},
+	);
+
+	ipcMain.handle(
+		"mux-exported-video-audio-from-path",
+		async (_, videoPath: string, options?: NativeVideoExportFinishOptions) => {
+			if (typeof videoPath !== "string" || !isOwnedExportPath(videoPath)) {
+				return {
+					success: false,
+					error: "Video path is not an app-managed export temp",
+				};
+			}
+			try {
+				const finalized = await muxNativeVideoExportAudio(videoPath, options ?? {});
+				if (finalized.outputPath !== videoPath) {
+					registerOwnedExportPath(finalized.outputPath);
+					// muxNativeVideoExportAudio removes the intermediate on success, so
+					// the input is no longer owned by the registry after the call
+					// returns.
+					releaseOwnedExportPath(videoPath);
+				}
+				return {
+					success: true,
+					tempPath: finalized.outputPath,
+					metrics: finalized.metrics,
+				};
+			} catch (error) {
+				// Only clean up the input path if it is still an owned temp (i.e.
+				// muxNativeVideoExportAudio failed before consuming it).
+				if (isOwnedExportPath(videoPath)) {
+					await removeTemporaryExportFile(videoPath);
+					releaseOwnedExportPath(videoPath);
+				}
+				return { success: false, error: String(error) };
 			}
 		},
 	);
@@ -307,6 +392,43 @@ export function registerExportHandlers() {
 					success: false,
 					error: String(error),
 				};
+			}
+		},
+	);
+
+	ipcMain.handle("export-stream-open", async (_event, options?: { extension?: string }) => {
+		try {
+			const result = await openExportStream(options);
+			return { success: true, streamId: result.streamId, tempPath: result.tempPath };
+		} catch (error) {
+			return { success: false, error: String(error) };
+		}
+	});
+
+	ipcMain.handle(
+		"export-stream-write",
+		async (_event, streamId: string, position: number, chunk: Uint8Array) => {
+			try {
+				await writeToExportStream(streamId, position, chunk);
+				return { success: true };
+			} catch (error) {
+				return { success: false, error: String(error) };
+			}
+		},
+	);
+
+	ipcMain.handle(
+		"export-stream-close",
+		async (_event, streamId: string, options?: { abort?: boolean }) => {
+			try {
+				const result = await closeExportStream(streamId, options);
+				return {
+					success: true,
+					tempPath: result.tempPath,
+					bytesWritten: result.bytesWritten,
+				};
+			} catch (error) {
+				return { success: false, error: String(error) };
 			}
 		},
 	);
@@ -421,4 +543,117 @@ export function registerExportHandlers() {
 			}
 		},
 	);
+
+	ipcMain.handle(
+		"finalize-exported-video",
+		async (
+			event,
+			payload: {
+				tempPath: string;
+				fileName: string;
+				outputPath?: string | null;
+			},
+		) => {
+			const tempPath = payload?.tempPath;
+			const fileName = payload?.fileName;
+			if (typeof tempPath !== "string" || typeof fileName !== "string") {
+				return { success: false, error: "Invalid finalize-exported-video payload" };
+			}
+
+			if (!isTempPathSafe(tempPath) || !isOwnedExportPath(tempPath)) {
+				return {
+					success: false,
+					error: "Temp path is not an app-managed export temp",
+				};
+			}
+
+			try {
+				await fs.access(tempPath);
+			} catch {
+				return {
+					success: false,
+					error: `Exported video temp file is missing: ${tempPath}`,
+				};
+			}
+
+			try {
+				if (payload.outputPath) {
+					const resolvedPath = path.resolve(payload.outputPath);
+					await moveExportedTempFile(tempPath, resolvedPath);
+					releaseOwnedExportPath(tempPath);
+					approveUserPath(resolvedPath);
+					return {
+						success: true,
+						path: resolvedPath,
+						canceled: false,
+						message: "Video exported successfully",
+					};
+				}
+
+				const isGif = fileName.toLowerCase().endsWith(".gif");
+				const filters = isGif
+					? [{ name: "GIF Image", extensions: ["gif"] }]
+					: [{ name: "MP4 Video", extensions: ["mp4"] }];
+				const parentWindow = BrowserWindow.fromWebContents(event.sender);
+				const saveDialogOptions: SaveDialogOptions = {
+					title: isGif ? "Save Exported GIF" : "Save Exported Video",
+					defaultPath: path.join(app.getPath("downloads"), fileName),
+					filters,
+					properties: ["createDirectory", "showOverwriteConfirmation"],
+				};
+
+				const result = parentWindow
+					? await dialog.showSaveDialog(parentWindow, saveDialogOptions)
+					: await dialog.showSaveDialog(saveDialogOptions);
+
+				if (result.canceled || !result.filePath) {
+					// Leave the temp file in place so the renderer can offer "Save Again"
+					// without re-rendering. The renderer owns cleanup on discard.
+					return {
+						success: false,
+						canceled: true,
+						message: "Export canceled",
+					};
+				}
+
+				await moveExportedTempFile(tempPath, result.filePath);
+				releaseOwnedExportPath(tempPath);
+				approveUserPath(result.filePath);
+
+				return {
+					success: true,
+					path: result.filePath,
+					canceled: false,
+					message: "Video exported successfully",
+				};
+			} catch (error) {
+				console.error("Failed to finalize exported video:", error);
+				return {
+					success: false,
+					canceled: false,
+					message: "Failed to save exported video",
+					error: String(error),
+				};
+			}
+		},
+	);
+
+	ipcMain.handle("discard-exported-temp", async (_event, tempPath: string) => {
+		if (typeof tempPath !== "string" || tempPath.length === 0) {
+			return { success: false, error: "Invalid temp path" };
+		}
+		if (!isTempPathSafe(tempPath) || !isOwnedExportPath(tempPath)) {
+			return {
+				success: false,
+				error: "Temp path is not an app-managed export temp",
+			};
+		}
+		try {
+			await removeTemporaryExportFile(tempPath);
+			releaseOwnedExportPath(tempPath);
+			return { success: true };
+		} catch (error) {
+			return { success: false, error: String(error) };
+		}
+	});
 }
