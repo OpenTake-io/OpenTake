@@ -596,6 +596,8 @@ export default function VideoEditor() {
 	const [showExportDropdown, setShowExportDropdown] = useState(false);
 	const [previewVolume, setPreviewVolume] = useState(1);
 	const [sourceAudioFallbackPaths, setSourceAudioFallbackPaths] = useState<string[]>([]);
+	const [sourceAudioFallbackStartDelayMsByPath, setSourceAudioFallbackStartDelayMsByPath] =
+		useState<Record<string, number>>({});
 	const [aspectRatio, setAspectRatio] = useState<AspectRatio>(
 		initialEditorPreferences.aspectRatio,
 	);
@@ -1219,6 +1221,7 @@ export default function VideoEditor() {
 	useEffect(() => {
 		let cancelled = false;
 		setSourceAudioFallbackPaths([]);
+		setSourceAudioFallbackStartDelayMsByPath({});
 
 		if (!currentSourcePath) {
 			return () => {
@@ -1235,6 +1238,7 @@ export default function VideoEditor() {
 				}
 				if (!result.success) {
 					setSourceAudioFallbackPaths([]);
+					setSourceAudioFallbackStartDelayMsByPath({});
 					toast.warning(
 						result.error
 							? `Could not load companion audio sources: ${summarizeErrorMessage(result.error)}`
@@ -1246,9 +1250,11 @@ export default function VideoEditor() {
 
 				toast.dismiss(SOURCE_AUDIO_FALLBACK_TOAST_ID);
 				setSourceAudioFallbackPaths(result.paths ?? []);
+				setSourceAudioFallbackStartDelayMsByPath(result.startDelayMsByPath ?? {});
 			} catch (error) {
 				if (!cancelled) {
 					setSourceAudioFallbackPaths([]);
+					setSourceAudioFallbackStartDelayMsByPath({});
 					toast.warning(
 						`Could not load companion audio sources: ${summarizeErrorMessage(String(error))}`,
 						{ id: SOURCE_AUDIO_FALLBACK_TOAST_ID, duration: 10000 },
@@ -3516,13 +3522,14 @@ export default function VideoEditor() {
 			}
 		}
 
-		for (const audioPath of previewSourceAudioFallbackPaths) {
-			let audio = existing.get(audioPath);
-			if (!audio) {
-				audio = new Audio();
-				audio.preload = "auto";
-				existing.set(audioPath, audio);
-			}
+			for (const audioPath of previewSourceAudioFallbackPaths) {
+				let audio = existing.get(audioPath);
+				if (!audio) {
+					audio = new Audio();
+					audio.preload = "auto";
+					existing.set(audioPath, audio);
+				}
+				audio.dataset.sourceAudioPath = audioPath;
 
 			if (sourceAudioElementResourcesRef.current.get(audioPath) !== audioPath) {
 				audio.pause();
@@ -3665,6 +3672,7 @@ export default function VideoEditor() {
 			const startDelaySeconds = estimateCompanionAudioStartDelaySeconds(
 				duration,
 				audioDuration,
+				sourceAudioFallbackStartDelayMsByPath[audio.dataset.sourceAudioPath ?? ""],
 			);
 			const beforeAudioStart = currentTime + 0.001 < startDelaySeconds;
 			const targetTime = clampMediaTimeToDuration(
@@ -3698,7 +3706,14 @@ export default function VideoEditor() {
 		}
 
 		lastSourceAudioSyncTimeRef.current = currentTime;
-	}, [currentTime, duration, isPlaying, previewSourceAudioFallbackPaths, speedRegions]);
+	}, [
+		currentTime,
+		duration,
+		isPlaying,
+		previewSourceAudioFallbackPaths,
+		sourceAudioFallbackStartDelayMsByPath,
+		speedRegions,
+	]);
 
 	const showExportSuccessToast = useCallback((filePath: string) => {
 		toast.success(`Exported successfully to ${filePath}`, {
@@ -4018,6 +4033,7 @@ export default function VideoEditor() {
 						frame,
 						audioRegions,
 						sourceAudioFallbackPaths,
+						sourceAudioFallbackStartDelayMsByPath,
 						previewWidth,
 						previewHeight,
 						onProgress: (progress: ExportProgress) => {
@@ -4216,6 +4232,7 @@ export default function VideoEditor() {
 			cursorSway,
 			audioRegions,
 			sourceAudioFallbackPaths,
+			sourceAudioFallbackStartDelayMsByPath,
 			exportEncodingMode,
 			exportBackendPreference,
 			exportPipelineModel,

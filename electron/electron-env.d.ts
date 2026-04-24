@@ -159,6 +159,9 @@ interface Window {
 		storeMicrophoneSidecar: (
 			audioData: ArrayBuffer,
 			videoPath: string,
+			options?: {
+				startDelayMs?: number;
+			},
 		) => Promise<{ success: boolean; path?: string; error?: string }>;
 		getRecordedVideoPath: () => Promise<{ success: boolean; path?: string; message?: string }>;
 		listAssetDirectory: (relativeDir: string) => Promise<{
@@ -231,7 +234,12 @@ interface Window {
 		}>;
 		getVideoAudioFallbackPaths: (
 			videoPath: string,
-		) => Promise<{ success: boolean; paths: string[]; error?: string }>;
+		) => Promise<{
+			success: boolean;
+			paths: string[];
+			startDelayMsByPath?: Record<string, number>;
+			error?: string;
+		}>;
 		setRecordingState: (recording: boolean) => Promise<void>;
 		getCursorTelemetry: (videoPath?: string) => Promise<{
 			success: boolean;

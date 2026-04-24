@@ -152,6 +152,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const recordingFinalizationToastId = useRef<string | number | null>(null);
 	const micFallbackRecorder = useRef<MediaRecorder | null>(null);
 	const micFallbackChunks = useRef<Blob[]>([]);
+	const micFallbackStartDelayMs = useRef<number | null>(null);
 
 	const showRecordingFinalizationToast = useCallback((message = "Preparing recording...") => {
 		recordingFinalizationToastId.current = toast.loading(message, {
@@ -472,6 +473,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		async (
 			micFallbackBlobPromise: Promise<Blob | null> | null | undefined,
 			finalPath: string,
+			startDelayMs?: number | null,
 		) => {
 			const micFallbackBlob = await micFallbackBlobPromise;
 			if (!micFallbackBlob) {
@@ -483,6 +485,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				const result = await window.electronAPI.storeMicrophoneSidecar(
 					arrayBuffer,
 					finalPath,
+					Number.isFinite(startDelayMs) && (startDelayMs ?? 0) >= 0
+						? { startDelayMs: startDelayMs ?? 0 }
+						: undefined,
 				);
 				if (!result.success) {
 					const errorMessage =
@@ -531,7 +536,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	}, []);
 
 	const recoverNativeRecordingSession = useCallback(
-		async (micFallbackBlobPromise?: Promise<Blob | null> | null) => {
+		async (
+			micFallbackBlobPromise?: Promise<Blob | null> | null,
+			startDelayMs?: number | null,
+		) => {
 			if (typeof window.electronAPI?.recoverNativeScreenRecording !== "function") {
 				return null;
 			}
@@ -544,7 +552,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			const resolvedMicFallbackBlobPromise =
 				micFallbackBlobPromise ?? stopMicFallbackRecorder();
 			const webcamPath = await stopWebcamRecorder();
-			await storeMicrophoneSidecar(resolvedMicFallbackBlobPromise, result.path);
+			await storeMicrophoneSidecar(resolvedMicFallbackBlobPromise, result.path, startDelayMs);
 			await finalizeRecordingSession(result.path, webcamPath);
 			return result.path;
 		},
@@ -685,6 +693,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			void (async () => {
 				showRecordingFinalizationToast();
+				const fallbackStartDelayMs = micFallbackStartDelayMs.current;
 				const micFallbackBlobPromise = stopMicFallbackRecorder();
 				const webcamPath = await stopWebcamRecorder();
 				const isNativeWindows = nativeWindowsRecording.current;
@@ -702,8 +711,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					);
 					void logNativeCaptureDiagnostics("stop-native-screen-recording");
 					try {
-						const recoveredPath =
-							await recoverNativeRecordingSession(micFallbackBlobPromise);
+						const recoveredPath = await recoverNativeRecordingSession(
+							micFallbackBlobPromise,
+							fallbackStartDelayMs,
+						);
 						if (recoveredPath) {
 							return;
 						}
@@ -750,7 +761,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					finalPath = muxResult.path;
 				}
 
-				await storeMicrophoneSidecar(micFallbackBlobPromise, finalPath);
+				await storeMicrophoneSidecar(
+					micFallbackBlobPromise,
+					finalPath,
+					fallbackStartDelayMs,
+				);
 
 				await finalizeRecordingSession(finalPath, webcamPath);
 			})();
@@ -1025,6 +1040,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 				if (nativeResult.success) {
 					const mainStartedAt = Date.now();
+					micFallbackStartDelayMs.current = null;
 					beginWebcamCapture();
 					nativeScreenRecording.current = true;
 					nativeWindowsRecording.current = useNativeWindowsCapture;
@@ -1067,9 +1083,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 									micFallbackChunks.current.push(event.data);
 								}
 							};
+							micFallbackStartDelayMs.current = Math.max(
+								0,
+								Date.now() - mainStartedAt,
+							);
 							recorder.start(RECORDER_TIMESLICE_MS);
 							micFallbackRecorder.current = recorder;
 						} catch (micError) {
+							micFallbackStartDelayMs.current = null;
 							console.warn("Browser microphone fallback failed:", micError);
 							const permissionDenied =
 								micError instanceof DOMException &&

@@ -21,14 +21,20 @@ describe("clampMediaTimeToDuration", () => {
 });
 
 describe("estimateCompanionAudioStartDelaySeconds", () => {
-	it("returns the positive tail gap when companion audio is shorter", () => {
+	it("keeps small inferred offsets when the companion audio is only slightly shorter", () => {
 		expect(estimateCompanionAudioStartDelaySeconds(10, 9.6)).toBeCloseTo(0.4);
 		expect(estimateCompanionAudioStartDelaySeconds(10, 9.97)).toBeCloseTo(0.03);
 	});
 
-	it("ignores tiny or negative differences", () => {
+	it("prefers an explicitly recorded start delay", () => {
+		expect(estimateCompanionAudioStartDelaySeconds(10, 2, 3_500)).toBeCloseTo(3.5);
+		expect(estimateCompanionAudioStartDelaySeconds(10, 2, 0)).toBe(0);
+	});
+
+	it("ignores tiny, negative, or suspiciously large inferred differences", () => {
 		expect(estimateCompanionAudioStartDelaySeconds(10, 9.99)).toBe(0);
 		expect(estimateCompanionAudioStartDelaySeconds(10, 10.5)).toBe(0);
+		expect(estimateCompanionAudioStartDelaySeconds(600, 565)).toBe(0);
 	});
 });
 

@@ -91,6 +91,7 @@ interface VideoExporterConfig extends ExportConfig {
 	frame?: string | null;
 	audioRegions?: AudioRegion[];
 	sourceAudioFallbackPaths?: string[];
+	sourceAudioFallbackStartDelayMsByPath?: Record<string, number>;
 	previewWidth?: number;
 	previewHeight?: number;
 	onProgress?: (progress: ExportProgress) => void;
@@ -497,6 +498,7 @@ export class ModernVideoExporter {
 								undefined,
 								this.config.audioRegions,
 								this.config.sourceAudioFallbackPaths,
+								this.config.sourceAudioFallbackStartDelayMsByPath,
 							),
 							"audio processing",
 							"audio",
@@ -728,6 +730,10 @@ export class ModernVideoExporter {
 		const sourceAudioFallbackPaths = (this.config.sourceAudioFallbackPaths ?? []).filter(
 			(audioPath) => typeof audioPath === "string" && audioPath.trim().length > 0,
 		);
+		const hasTimedSourceAudioFallback = sourceAudioFallbackPaths.some(
+			(audioPath) =>
+				(this.config.sourceAudioFallbackStartDelayMsByPath?.[audioPath] ?? 0) > 0,
+		);
 		const localVideoSourcePath = this.getNativeVideoSourcePath();
 		const primaryAudioSourcePath =
 			(videoInfo.hasAudio ? localVideoSourcePath : null) ??
@@ -745,7 +751,8 @@ export class ModernVideoExporter {
 		if (
 			speedRegions.length > 0 ||
 			audioRegions.length > 0 ||
-			sourceAudioFallbackPaths.length > 1
+			sourceAudioFallbackPaths.length > 1 ||
+			hasTimedSourceAudioFallback
 		) {
 			const sourceDurationMs = Math.max(
 				0,
@@ -1026,6 +1033,7 @@ export class ModernVideoExporter {
 						this.config.speedRegions,
 						this.config.audioRegions,
 						this.config.sourceAudioFallbackPaths,
+						this.config.sourceAudioFallbackStartDelayMsByPath,
 					),
 					`${NATIVE_EXPORT_ENGINE_NAME} edited audio rendering`,
 					"audio",
@@ -1137,6 +1145,7 @@ export class ModernVideoExporter {
 						this.config.speedRegions,
 						this.config.audioRegions,
 						this.config.sourceAudioFallbackPaths,
+						this.config.sourceAudioFallbackStartDelayMsByPath,
 					),
 					"FFmpeg edited audio rendering",
 					"audio",

@@ -268,8 +268,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	storeRecordedVideo: (videoData: ArrayBuffer, fileName: string) => {
 		return ipcRenderer.invoke("store-recorded-video", videoData, fileName);
 	},
-	storeMicrophoneSidecar: (audioData: ArrayBuffer, videoPath: string) => {
-		return ipcRenderer.invoke("store-microphone-sidecar", audioData, videoPath);
+	storeMicrophoneSidecar: (
+		audioData: ArrayBuffer,
+		videoPath: string,
+		options?: { startDelayMs?: number },
+	) => {
+		return ipcRenderer.invoke("store-microphone-sidecar", audioData, videoPath, options);
 	},
 	getRecordedVideoPath: () => {
 		return ipcRenderer.invoke("get-recorded-video-path");

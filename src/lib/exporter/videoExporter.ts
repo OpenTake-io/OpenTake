@@ -79,6 +79,7 @@ interface VideoExporterConfig extends ExportConfig {
 	frame?: string | null;
 	audioRegions?: AudioRegion[];
 	sourceAudioFallbackPaths?: string[];
+	sourceAudioFallbackStartDelayMsByPath?: Record<string, number>;
 	previewWidth?: number;
 	previewHeight?: number;
 	onProgress?: (progress: ExportProgress) => void;
@@ -369,6 +370,7 @@ export class VideoExporter {
 								undefined,
 								this.config.audioRegions,
 								this.config.sourceAudioFallbackPaths,
+								this.config.sourceAudioFallbackStartDelayMsByPath,
 							),
 							"audio processing",
 							"audio",
@@ -495,6 +497,10 @@ export class VideoExporter {
 		const sourceAudioFallbackPaths = (this.config.sourceAudioFallbackPaths ?? []).filter(
 			(audioPath) => typeof audioPath === "string" && audioPath.trim().length > 0,
 		);
+		const hasTimedSourceAudioFallback = sourceAudioFallbackPaths.some(
+			(audioPath) =>
+				(this.config.sourceAudioFallbackStartDelayMsByPath?.[audioPath] ?? 0) > 0,
+		);
 		const localVideoSourcePath = this.getNativeVideoSourcePath();
 		const primaryAudioSourcePath =
 			(videoInfo.hasAudio ? localVideoSourcePath : null) ??
@@ -512,7 +518,8 @@ export class VideoExporter {
 		if (
 			speedRegions.length > 0 ||
 			audioRegions.length > 0 ||
-			sourceAudioFallbackPaths.length > 1
+			sourceAudioFallbackPaths.length > 1 ||
+			hasTimedSourceAudioFallback
 		) {
 			const sourceDurationMs = Math.max(
 				0,
@@ -786,6 +793,7 @@ export class VideoExporter {
 						this.config.speedRegions,
 						this.config.audioRegions,
 						this.config.sourceAudioFallbackPaths,
+						this.config.sourceAudioFallbackStartDelayMsByPath,
 					),
 					"native edited audio rendering",
 					"audio",
@@ -884,6 +892,7 @@ export class VideoExporter {
 						this.config.speedRegions,
 						this.config.audioRegions,
 						this.config.sourceAudioFallbackPaths,
+						this.config.sourceAudioFallbackStartDelayMsByPath,
 					),
 					"ffmpeg edited audio rendering",
 					"audio",

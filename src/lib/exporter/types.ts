@@ -11,6 +11,7 @@ export interface ExportConfig {
 	maxDecodeQueue?: number;
 	maxPendingFrames?: number;
 	maxInFlightNativeWrites?: number;
+	sourceAudioFallbackStartDelayMsByPath?: Record<string, number>;
 }
 
 export type ExportRenderBackend = "webgpu" | "webgl";
