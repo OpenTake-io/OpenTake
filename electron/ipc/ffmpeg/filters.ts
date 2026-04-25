@@ -102,8 +102,12 @@ export function appendSyncedAudioFilter(
 	inputLabel: string,
 	outputLabel: string,
 	adjustment: AudioSyncAdjustment,
+	options: number | { volumeMultiplier?: number; preFilters?: string[] } = 1,
 ) {
-	const filters: string[] = [];
+	const volumeMultiplier =
+		typeof options === "number" ? options : (options.volumeMultiplier ?? 1);
+	const preFilters = typeof options === "number" ? [] : (options.preFilters ?? []);
+	const filters: string[] = [...preFilters];
 
 	if (adjustment.mode === "delay" && adjustment.delayMs > 0) {
 		filters.push(`adelay=${adjustment.delayMs}|${adjustment.delayMs}`);
@@ -115,6 +119,14 @@ export function appendSyncedAudioFilter(
 
 	if (adjustment.mode === "pad" && adjustment.durationDeltaMs > 0) {
 		filters.push(`apad=pad_dur=${formatFfmpegSeconds(adjustment.durationDeltaMs)}`);
+	}
+
+	if (
+		Number.isFinite(volumeMultiplier) &&
+		volumeMultiplier > 0 &&
+		Math.abs(volumeMultiplier - 1) > 0.0005
+	) {
+		filters.push(`volume=${volumeMultiplier.toFixed(3)}`);
 	}
 
 	filters.push("aresample=async=1:first_pts=0", "asetpts=PTS-STARTPTS");
