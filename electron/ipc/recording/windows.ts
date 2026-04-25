@@ -7,24 +7,29 @@ import { BrowserWindow } from "electron";
 import { getFfmpegBinaryPath } from "../ffmpeg/binary";
 import {
 	appendSyncedAudioFilter,
+	applyRecordedAudioStartDelay,
 	buildPausedAudioFilter,
 	getAudioSyncAdjustment,
 	normalizePauseSegments,
 } from "../ffmpeg/filters";
 import { getWindowsCaptureExePath } from "../paths/binaries";
 import {
+	selectedSource,
 	setWindowsCaptureProcess,
+	setWindowsCaptureStopRequested,
+	setWindowsNativeCaptureActive,
 	windowsCaptureOutputBuffer,
+	windowsCaptureStopRequested,
 	windowsCaptureTargetPath,
 	windowsNativeCaptureActive,
-	setWindowsNativeCaptureActive,
-	windowsCaptureStopRequested,
-	setWindowsCaptureStopRequested,
-	selectedSource,
 } from "../state";
 import type { AudioSyncAdjustment, PauseSegment } from "../types";
 import { moveFileWithOverwrite } from "../utils";
-import { probeMediaDurationSeconds, validateRecordedVideo } from "./diagnostics";
+import {
+	getCompanionAudioStartDelayMs,
+	probeMediaDurationSeconds,
+	validateRecordedVideo,
+} from "./diagnostics";
 import { emitRecordingInterrupted } from "./events";
 
 const execFileAsync = promisify(execFile);
@@ -191,15 +196,31 @@ export async function muxNativeWindowsVideoWithAudio(
 	if (videoDuration > 0) {
 		for (let i = 0; i < audioFilePaths.length; i++) {
 			const audioDuration = await probeMediaDurationSeconds(audioFilePaths[i]);
-			const adjustment = getAudioSyncAdjustment(videoDuration, audioDuration);
+			const recordedStartDelayMs = await getCompanionAudioStartDelayMs(audioFilePaths[i]);
+			const adjustment = applyRecordedAudioStartDelay(
+				getAudioSyncAdjustment(videoDuration, audioDuration),
+				recordedStartDelayMs,
+			);
 			audioAdjustments.set(audioInputs[i], adjustment);
-			if (adjustment.mode === "tempo") {
+			if (Number.isFinite(recordedStartDelayMs) && adjustment.mode === "delay") {
+				console.log(
+					`[mux-win] ${audioInputs[i]} audio recorded a start delay of ${adjustment.delayMs}ms`,
+				);
+			} else if (Number.isFinite(recordedStartDelayMs) && adjustment.mode === "pad") {
+				console.log(
+					`[mux-win] ${audioInputs[i]} audio started on time but ends ${adjustment.durationDeltaMs}ms early — padding trailing silence`,
+				);
+			} else if (adjustment.mode === "tempo") {
 				console.log(
 					`[mux-win] ${audioInputs[i]} audio differs from video by ${adjustment.durationDeltaMs}ms — applying tempo ratio ${adjustment.tempoRatio.toFixed(6)}`,
 				);
 			} else if (adjustment.mode === "delay" && adjustment.delayMs > 0) {
 				console.log(
 					`[mux-win] ${audioInputs[i]} audio appears to start late by ${adjustment.delayMs}ms — adding leading silence`,
+				);
+			} else if (adjustment.mode === "pad" && adjustment.durationDeltaMs > 0) {
+				console.log(
+					`[mux-win] ${audioInputs[i]} audio is much shorter than video by ${adjustment.durationDeltaMs}ms — padding trailing silence`,
 				);
 			}
 		}
@@ -326,7 +347,10 @@ export async function muxNativeWindowsVideoWithAudio(
 
 	for (const audioPath of [systemAudioPath, micAudioPath]) {
 		if (audioPath) {
-			await fs.rm(audioPath, { force: true }).catch(() => undefined);
+			await Promise.all([
+				fs.rm(audioPath, { force: true }).catch(() => undefined),
+				fs.rm(`${audioPath}.json`, { force: true }).catch(() => undefined),
+			]);
 		}
 	}
 }
