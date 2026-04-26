@@ -92,6 +92,12 @@
 		"radius": "Straal",
 		"roundness": "Afronding",
 		"padding": "Opvulling",
+		"paddingLinked": "Gekoppeld (uniform)",
+		"paddingUnlinked": "Ontkoppeld (asymmetrisch)",
+		"paddingTop": "Boven",
+		"paddingBottom": "Onder",
+		"paddingLeft": "Links",
+		"paddingRight": "Rechts",
 		"removeBackground": "Achtergrond verwijderen"
 	},
 	"sections": {

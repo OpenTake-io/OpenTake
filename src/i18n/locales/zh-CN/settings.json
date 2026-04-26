@@ -92,6 +92,12 @@
 		"radius": "圆角半径",
 		"roundness": "圆角",
 		"padding": "内边距",
+		"paddingLinked": "联动（统一）",
+		"paddingUnlinked": "独立（非对称）",
+		"paddingTop": "上",
+		"paddingBottom": "下",
+		"paddingLeft": "左",
+		"paddingRight": "右",
 		"removeBackground": "移除背景"
 	},
 	"sections": {

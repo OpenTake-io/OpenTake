@@ -92,6 +92,12 @@
 		"radius": "Rayon",
 		"roundness": "Arrondi",
 		"padding": "Marge intérieure",
+		"paddingLinked": "Lié (uniforme)",
+		"paddingUnlinked": "Dissocié (asymétrique)",
+		"paddingTop": "Haut",
+		"paddingBottom": "Bas",
+		"paddingLeft": "Gauche",
+		"paddingRight": "Droite",
 		"removeBackground": "Supprimer l’arrière-plan"
 	},
 	"sections": {
