@@ -17,7 +17,7 @@ import {
 	resetSpringState,
 	stepSpringValue,
 } from "./motionSmoothing";
-import { cursorSetAssets } from "./uploadedCursorAssets";
+import { cursorSetAssets, getCursorStyleSizeMultiplier } from "./uploadedCursorAssets";
 
 type CursorAssetKey = NonNullable<CursorTelemetryPoint["cursorType"]>;
 type StatefulCursorStyle = Extract<CursorStyle, "macos" | "tahoe" | "tahoe-inverted">;
@@ -95,14 +95,6 @@ const CURSOR_SHADOW_OFFSET_X = 0;
 const CURSOR_SHADOW_OFFSET_Y = 2;
 const CURSOR_SHADOW_BLUR = 3;
 const CURSOR_SHADOW_PADDING = 12;
-const MACOS_POINTER_RAW_HEIGHT = 746;
-const TAHOE_POINTER_RAW_HEIGHT = 958;
-const CURSOR_STYLE_SIZE_MULTIPLIERS: Record<StatefulCursorStyle, number> = {
-	macos: TAHOE_POINTER_RAW_HEIGHT / MACOS_POINTER_RAW_HEIGHT,
-	tahoe: 1,
-	"tahoe-inverted": 1,
-};
-
 let cursorAssetsPromise: Promise<void> | null = null;
 let cursorPackAssetsPromise: Promise<void> | null = null;
 let loadedCursorPackSourcesSignature = "";
@@ -161,10 +153,6 @@ function isStatefulCursorStyle(style: CursorStyle): style is StatefulCursorStyle
 
 function isSingleCursorStyle(style: CursorStyle): style is SingleCursorStyle {
 	return style === "dot" || style === "figma";
-}
-
-function getCursorStyleSizeMultiplier(style: CursorStyle) {
-	return isStatefulCursorStyle(style) ? CURSOR_STYLE_SIZE_MULTIPLIERS[style] : 1;
 }
 
 function resolveCursorPackVariant(cursorType: CursorAssetKey): CursorPackVariant {

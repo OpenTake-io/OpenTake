@@ -76,10 +76,15 @@ import {
 	SPEED_OPTIONS,
 } from "./types";
 import { fromCursorSwaySliderValue, toCursorSwaySliderValue } from "./videoPlayback/cursorSway";
-import { cursorSetAssets } from "./videoPlayback/uploadedCursorAssets";
+import {
+	cursorSetAssets,
+	getCursorStyleSizeMultiplier,
+} from "./videoPlayback/uploadedCursorAssets";
 import { getWebcamPositionForPreset, resolveWebcamCorner } from "./webcamOverlay";
 
 const tahoeCursorUrl = cursorSetAssets.tahoe.arrow.url;
+const BUILTIN_CURSOR_PREVIEW_SIZE = 28;
+const BUILTIN_CURSOR_PREVIEW_FRAME_SIZE = 48;
 
 const GRADIENTS = [
 	"linear-gradient( 111.6deg,  rgba(114,167,232,1) 9.4%, rgba(253,129,82,1) 43.9%, rgba(253,129,82,1) 54.8%, rgba(249,202,86,1) 86.3% )",
@@ -653,14 +658,27 @@ function CursorStylePreview({
 						? (previewUrls["tahoe-inverted"] ?? tahoeCursorUrl)
 						: previewUrls[style];
 
-	if (style === "macos" || style === "tahoe") {
+	if (style === "macos" || style === "tahoe" || style === "tahoe-inverted") {
+		const previewSize = BUILTIN_CURSOR_PREVIEW_SIZE * getCursorStyleSizeMultiplier(style);
 		return (
-			<img
-				src={previewSrc}
-				alt=""
-				className="h-7 w-7 object-contain drop-shadow-[0_8px_12px_rgba(15,23,42,0.18)]"
-				draggable={false}
-			/>
+			<div
+				className="flex items-center justify-center"
+				style={{
+					width: `${BUILTIN_CURSOR_PREVIEW_FRAME_SIZE}px`,
+					height: `${BUILTIN_CURSOR_PREVIEW_FRAME_SIZE}px`,
+				}}
+			>
+				<img
+					src={previewSrc ?? tahoeCursorUrl}
+					alt=""
+					className="max-w-none object-contain drop-shadow-[0_8px_12px_rgba(15,23,42,0.18)]"
+					draggable={false}
+					style={{
+						width: `${previewSize}px`,
+						height: `${previewSize}px`,
+					}}
+				/>
+			</div>
 		);
 	}
 
