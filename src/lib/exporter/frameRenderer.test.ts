@@ -278,6 +278,24 @@ describe("FrameRenderer webcam export path", () => {
 		expect(renderer.webcamSeekPromise).toBeNull();
 	});
 
+	it("subtracts stored webcam offsets during export sync", async () => {
+		const renderer = createRenderer() as unknown as FrameRendererTestAccess & {
+			config: { webcam?: { timeOffsetMs?: number } };
+		};
+		const webcamVideo = new FakeVideoElement({ duration: 10, currentTime: 0.25 });
+		renderer.webcamVideoElement = webcamVideo;
+		renderer.config.webcam = {
+			...(renderer.config.webcam ?? {}),
+			timeOffsetMs: 250,
+		};
+
+		await renderer.syncWebcamFrame(2);
+
+		expect(webcamVideo.currentTime).toBe(1.75);
+		expect(renderer.lastSyncedWebcamTime).toBe(1.75);
+		expect(renderer.webcamSeekPromise).toBeNull();
+	});
+
 	it("falls back to animation frame when requestVideoFrameCallback does not fire", async () => {
 		const renderer = createRenderer() as unknown as FrameRendererTestAccess;
 		const webcamVideo = new FakeVideoElement({

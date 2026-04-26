@@ -50,6 +50,7 @@ import {
 	getWebcamOverlayPosition,
 	getWebcamOverlaySizePx,
 } from "@/components/video-editor/webcamOverlay";
+import { getWebcamMediaTargetTimeSeconds } from "@/components/video-editor/videoPlayback/webcamSync";
 import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
 import { extensionHost } from "@/lib/extensions";
 import {
@@ -693,8 +694,16 @@ export class FrameRenderer {
 	}
 
 	private async syncWebcamFrame(targetTime: number): Promise<void> {
+		const webcamTargetTime = getWebcamMediaTargetTimeSeconds({
+			currentTime: targetTime,
+			webcamDuration: Number.isFinite(this.webcamVideoElement?.duration)
+				? this.webcamVideoElement?.duration
+				: null,
+			timeOffsetMs: this.config.webcam?.timeOffsetMs,
+		});
+
 		if (this.webcamForwardFrameSource) {
-			const clampedTime = clampMediaTimeToDuration(targetTime, null);
+			const clampedTime = clampMediaTimeToDuration(webcamTargetTime, null);
 			const decodedFrame = await this.webcamForwardFrameSource.getFrameAtTime(clampedTime);
 			this.closeWebcamDecodedFrame();
 			this.webcamDecodedFrame = decodedFrame;
@@ -710,7 +719,7 @@ export class FrameRenderer {
 		}
 
 		const clampedTime = clampMediaTimeToDuration(
-			targetTime,
+			webcamTargetTime,
 			Number.isFinite(webcamVideo.duration) ? webcamVideo.duration : null,
 		);
 
