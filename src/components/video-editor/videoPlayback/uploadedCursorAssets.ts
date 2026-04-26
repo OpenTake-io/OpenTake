@@ -21,6 +21,16 @@ import type { CursorStyle, CursorTelemetryPoint } from "../types";
 type CursorAssetKey = NonNullable<CursorTelemetryPoint["cursorType"]>;
 type CursorSetStyle = Extract<CursorStyle, "macos" | "tahoe" | "tahoe-inverted">;
 
+const MACOS_POINTER_ASSET_HEIGHT = 746;
+const MACOS_POINTER_CONTENT_HEIGHT = 386;
+const TAHOE_POINTER_ASSET_HEIGHT = 958;
+const TAHOE_POINTER_CONTENT_HEIGHT = 851;
+
+// Measured from the raw pointer assets using the non-shadow pixel bounds.
+const MACOS_CURSOR_STYLE_SIZE_MULTIPLIER =
+	(TAHOE_POINTER_CONTENT_HEIGHT / TAHOE_POINTER_ASSET_HEIGHT) /
+	(MACOS_POINTER_CONTENT_HEIGHT / MACOS_POINTER_ASSET_HEIGHT);
+
 export type UploadedCursorAsset = {
 	url: string;
 	fallbackAnchor: {
@@ -66,5 +76,17 @@ export const cursorSetAssets: Record<
 		"not-allowed": asset(tahoeNotAllowedUrl, 23, 0),
 	},
 };
+
+export const cursorStyleSizeMultipliers: Record<CursorSetStyle, number> = {
+	macos: MACOS_CURSOR_STYLE_SIZE_MULTIPLIER,
+	tahoe: 1,
+	"tahoe-inverted": 1,
+};
+
+export function getCursorStyleSizeMultiplier(style: CursorStyle) {
+	return style in cursorStyleSizeMultipliers
+		? cursorStyleSizeMultipliers[style as CursorSetStyle]
+		: 1;
+}
 
 export const uploadedCursorAssets = cursorSetAssets.tahoe;
