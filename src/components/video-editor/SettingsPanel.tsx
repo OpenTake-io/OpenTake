@@ -1848,9 +1848,7 @@ export function SettingsPanel({
 				/>
 				<div className="flex flex-col gap-1.5 pt-0.5">
 					<div className="flex items-center justify-between">
-						<span className="text-[10px] text-muted-foreground">
-							{tSettings("effects.padding")}
-						</span>
+						<SectionLabel>{tSettings("effects.padding")}</SectionLabel>
 						<button
 							type="button"
 							onClick={togglePaddingLink}
