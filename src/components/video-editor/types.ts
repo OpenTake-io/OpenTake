@@ -266,19 +266,11 @@ export interface AnnotationTextStyle {
 }
 
 function getDefaultAnnotationFontFamily() {
-	if (typeof navigator !== "undefined" && /mac/i.test(navigator.platform)) {
-		return '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, sans-serif';
-	}
-
-	return "Inter, system-ui, sans-serif";
+	return '"SF Pro Display", "SF Pro Text", Helvetica, sans-serif';
 }
 
 export function getDefaultCaptionFontFamily() {
-	if (typeof navigator !== "undefined" && /mac/i.test(navigator.platform)) {
-		return '"SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif';
-	}
-
-	return '"Helvetica Neue", Helvetica, Arial, sans-serif';
+	return '"SF Pro Text", "SF Pro Display", Helvetica, sans-serif';
 }
 
 export interface AnnotationRegion {
