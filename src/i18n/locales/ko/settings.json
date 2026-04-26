@@ -92,6 +92,12 @@
 		"radius": "반경",
 		"roundness": "둥글기",
 		"padding": "여백",
+		"paddingLinked": "연결됨 (균일)",
+		"paddingUnlinked": "연결 안 됨 (비대칭)",
+		"paddingTop": "위",
+		"paddingBottom": "아래",
+		"paddingLeft": "왼쪽",
+		"paddingRight": "오른쪽",
 		"removeBackground": "배경 제거"
 	},
 	"sections": {

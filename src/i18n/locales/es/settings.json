@@ -92,6 +92,12 @@
 		"radius": "Radio",
 		"roundness": "Redondez",
 		"padding": "Relleno",
+		"paddingLinked": "Vinculado (uniforme)",
+		"paddingUnlinked": "No vinculado (asimétrico)",
+		"paddingTop": "Superior",
+		"paddingBottom": "Inferior",
+		"paddingLeft": "Izquierdo",
+		"paddingRight": "Derecho",
 		"removeBackground": "Quitar fondo"
 	},
 	"sections": {
