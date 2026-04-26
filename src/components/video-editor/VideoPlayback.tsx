@@ -124,7 +124,7 @@ import { clampFocusToStage as clampFocusToStageUtil } from "./videoPlayback/focu
 import { layoutVideoContent as layoutVideoContentUtil } from "./videoPlayback/layoutUtils";
 import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
 import { createVideoEventHandlers } from "./videoPlayback/videoEventHandlers";
-import { getWebcamPreviewTargetTimeSeconds } from "./videoPlayback/webcamSync";
+import { getWebcamMediaTargetTimeSeconds } from "./videoPlayback/webcamSync";
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
 import {
 	applyZoomTransform,
@@ -1233,7 +1233,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				return;
 			}
 
-			const targetTime = getWebcamPreviewTargetTimeSeconds({
+			const targetTime = getWebcamMediaTargetTimeSeconds({
 				currentTime,
 				webcamDuration: Number.isFinite(webcamVideo.duration) ? webcamVideo.duration : null,
 				timeOffsetMs: webcam.timeOffsetMs,
