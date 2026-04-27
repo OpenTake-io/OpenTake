@@ -85,7 +85,6 @@ import {
 	VIDEO_SHADOW_LAYER_PROFILES,
 	WEBCAM_SHADOW_LAYER_PROFILES,
 } from "./shadowProfile";
-import { isCssGradientBackground, paintCssGradientBackground } from "./cssGradientBackground";
 import type { ExportRenderBackend } from "./types";
 
 interface FrameRenderConfig {
@@ -963,9 +962,44 @@ export class FrameRenderer {
 			} else if (wallpaper.startsWith("#")) {
 				bgCtx.fillStyle = wallpaper;
 				bgCtx.fillRect(0, 0, this.config.width, this.config.height);
-			} else if (isCssGradientBackground(wallpaper)) {
-				if (!paintCssGradientBackground(bgCtx, wallpaper, this.config.width, this.config.height)) {
+			} else if (
+				wallpaper.startsWith("linear-gradient") ||
+				wallpaper.startsWith("radial-gradient")
+			) {
+				const gradientMatch = wallpaper.match(/(linear|radial)-gradient\((.+)\)/);
+				if (!gradientMatch) {
 					bgCtx.fillStyle = "#000000";
+					bgCtx.fillRect(0, 0, this.config.width, this.config.height);
+				} else {
+					const [, type, params] = gradientMatch;
+					const parts = params.split(",").map((value) => value.trim());
+					const gradient =
+						type === "linear"
+							? bgCtx.createLinearGradient(0, 0, 0, this.config.height)
+							: bgCtx.createRadialGradient(
+									this.config.width / 2,
+									this.config.height / 2,
+									0,
+									this.config.width / 2,
+									this.config.height / 2,
+									Math.max(this.config.width, this.config.height) / 2,
+								);
+
+					parts.forEach((part, index) => {
+						if (type === "linear" && (part.startsWith("to ") || part.includes("deg"))) {
+							return;
+						}
+
+						const colorMatch = part.match(/^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-z]+)/);
+						if (!colorMatch) {
+							return;
+						}
+
+						const position = index / Math.max(parts.length - 1, 1);
+						gradient.addColorStop(position, colorMatch[1]);
+					});
+
+					bgCtx.fillStyle = gradient;
 					bgCtx.fillRect(0, 0, this.config.width, this.config.height);
 				}
 			} else {
