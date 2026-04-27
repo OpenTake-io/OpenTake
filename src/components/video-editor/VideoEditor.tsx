@@ -124,6 +124,7 @@ import {
 	RECORDLY_ISSUES_URL,
 } from "./TutorialHelp";
 import TimelineEditor, { type TimelineEditorHandle } from "./timeline/TimelineEditor";
+import { TIMELINE_VIEWPORT_MIN_HEIGHT_PX } from "./timeline/timelineLayout";
 import { normalizeCursorTelemetry } from "./timeline/zoomSuggestionUtils";
 import {
 	type AnnotationRegion,
@@ -5698,8 +5699,9 @@ export default function VideoEditor() {
 				<div
 					className="flex-shrink-0 flex flex-col"
 					style={{
-						height: timelineCollapsed ? undefined : "15%",
-						minHeight: timelineCollapsed ? 0 : 160,
+						height: timelineCollapsed ? undefined : TIMELINE_VIEWPORT_MIN_HEIGHT_PX,
+						minHeight: timelineCollapsed ? 0 : TIMELINE_VIEWPORT_MIN_HEIGHT_PX,
+						maxHeight: timelineCollapsed ? undefined : TIMELINE_VIEWPORT_MIN_HEIGHT_PX,
 					}}
 				>
 					<TimelineEditor
