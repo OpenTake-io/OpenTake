@@ -63,6 +63,8 @@ import TimelineWrapper from "./TimelineWrapper";
 import {
 	getTimelineContentMinHeightPx,
 	getTimelineRowsMinHeightPx,
+	getTimelineViewportStretchFactor,
+	TIMELINE_AXIS_HEIGHT_PX,
 } from "./timelineLayout";
 import { type AudioPeaksData, useAudioPeaks } from "./useAudioPeaks";
 import { buildInteractionZoomSuggestions } from "./zoomSuggestionUtils";
@@ -709,13 +711,14 @@ function Timeline({
 	const timelineRowCount = 2 + annotationRowIds.length + audioRowIds.length;
 	const timelineRowsMinHeightPx = getTimelineRowsMinHeightPx(timelineRowCount);
 	const timelineContentMinHeightPx = getTimelineContentMinHeightPx(timelineRowCount);
+	const timelineViewportStretchFactor = getTimelineViewportStretchFactor(timelineRowCount);
 
 	return (
 		<div
 			ref={setRefs}
 			style={{
 				...style,
-				minHeight: `max(100%, ${timelineContentMinHeightPx}px)`,
+				minHeight: `max(100%, ${timelineContentMinHeightPx}px, calc(${TIMELINE_AXIS_HEIGHT_PX}px + (100% - ${TIMELINE_AXIS_HEIGHT_PX}px) * ${timelineViewportStretchFactor}))`,
 			}}
 			className="select-none bg-editor-bg relative cursor-pointer group flex flex-col"
 			onClick={handleTimelineClick}
