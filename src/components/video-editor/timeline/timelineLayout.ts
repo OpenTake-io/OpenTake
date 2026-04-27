@@ -18,6 +18,12 @@ export function getTimelineContentMinHeightPx(rowCount: number) {
 	return TIMELINE_AXIS_HEIGHT_PX + getTimelineRowsMinHeightPx(rowCount);
 }
 
-export const TIMELINE_VIEWPORT_MIN_HEIGHT_PX = getTimelineContentMinHeightPx(
-	TIMELINE_VISIBLE_ROW_COUNT,
-);
+export function getTimelineViewportStretchFactor(rowCount: number) {
+	const normalizedRowCount = normalizeRowCount(rowCount);
+
+	if (normalizedRowCount <= 0) {
+		return 1;
+	}
+
+	return Math.max(1, normalizedRowCount / TIMELINE_VISIBLE_ROW_COUNT);
+}
