@@ -51,7 +51,7 @@ import {
 	getWebcamOverlaySizePx,
 } from "@/components/video-editor/webcamOverlay";
 import { getWebcamMediaTargetTimeSeconds } from "@/components/video-editor/videoPlayback/webcamSync";
-import { getAssetPath, getRenderableAssetUrl } from "@/lib/assetPath";
+import { getAssetPath, getRenderableAssetUrl, getRenderableVideoUrl } from "@/lib/assetPath";
 import { extensionHost } from "@/lib/extensions";
 import {
 	mapCursorToCanvasNormalized,
@@ -578,6 +578,10 @@ export class FrameRenderer {
 	private async resolveWallpaperForExport(wallpaper: string): Promise<string> {
 		if (!wallpaper) {
 			return wallpaper;
+		}
+
+		if (isVideoWallpaperSource(wallpaper)) {
+			return getRenderableVideoUrl(wallpaper);
 		}
 
 		if (

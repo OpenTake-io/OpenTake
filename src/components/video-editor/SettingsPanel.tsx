@@ -13,7 +13,12 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useTheme } from "@/contexts/ThemeContext";
-import { getAssetPath, getRenderableAssetUrl, getWallpaperThumbnailUrl } from "@/lib/assetPath";
+import {
+	getAssetPath,
+	getRenderableAssetUrl,
+	getRenderableVideoUrl,
+	getWallpaperThumbnailUrl,
+} from "@/lib/assetPath";
 import type { ExtensionSettingField } from "@/lib/extensions";
 import { extensionHost, type FrameInstance } from "@/lib/extensions";
 import { cn } from "@/lib/utils";
@@ -144,6 +149,47 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 		<p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
 			{children}
 		</p>
+	);
+}
+
+function WallpaperVideoPreview({ src }: { src: string }) {
+	const [resolvedSrc, setResolvedSrc] = useState(src);
+
+	useEffect(() => {
+		let cancelled = false;
+
+		void (async () => {
+			try {
+				const nextSrc = await getRenderableVideoUrl(src);
+				if (!cancelled) {
+					setResolvedSrc(nextSrc);
+				}
+			} catch {
+				if (!cancelled) {
+					setResolvedSrc(src);
+				}
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [src]);
+
+	return (
+		<video
+			src={resolvedSrc}
+			muted
+			playsInline
+			preload="metadata"
+			className="h-full w-full select-none object-cover [transform:translateZ(0)]"
+			draggable={false}
+			onMouseEnter={(e) => e.currentTarget.play().catch(() => undefined)}
+			onMouseLeave={(e) => {
+				e.currentTarget.pause();
+				e.currentTarget.currentTime = 0;
+			}}
+		/>
 	);
 }
 
@@ -847,7 +893,7 @@ export function SettingsPanel({
 						const assetUrl = await getAssetPath(wallpaper.relativePath);
 						// Use tiny thumbnails for the grid; full-res loads on selection
 						if (isVideoWallpaperSource(wallpaper.publicPath)) {
-							return getRenderableAssetUrl(assetUrl);
+							return getRenderableVideoUrl(assetUrl);
 						}
 						return getWallpaperThumbnailUrl(assetUrl);
 					}),
@@ -1260,19 +1306,7 @@ export function SettingsPanel({
 		>
 			<div className="absolute inset-[1px] overflow-hidden rounded-[8px] bg-editor-dialog">
 				{isVideoWallpaperSource(wallpaperUrl) ? (
-					<video
-						src={wallpaperUrl}
-						muted
-						playsInline
-						preload="metadata"
-						className="h-full w-full select-none object-cover [transform:translateZ(0)]"
-						draggable={false}
-						onMouseEnter={(e) => e.currentTarget.play().catch(() => undefined)}
-						onMouseLeave={(e) => {
-							e.currentTarget.pause();
-							e.currentTarget.currentTime = 0;
-						}}
-					/>
+					<WallpaperVideoPreview src={wallpaperUrl} />
 				) : (
 					<img
 						src={wallpaperUrl}
