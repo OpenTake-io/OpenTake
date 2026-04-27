@@ -527,7 +527,7 @@ export function registerProjectHandlers() {
       return { success: false, error: String(error), message: 'Failed to open projects folder.' }
     }
   })
-  ipcMain.handle('set-current-video-path', async (_, path: string) => {
+  ipcMain.handle('set-current-video-path', async (_, path: string, options?: { preserveProjectPath?: boolean }) => {
     setCurrentVideoPath(normalizeVideoSourcePath(path) ?? path)
     approveUserPath(currentVideoPath)
     const resolvedSession = await resolveRecordingSession(currentVideoPath)
@@ -547,11 +547,13 @@ export function registerProjectHandlers() {
       await persistRecordingSessionManifest(resolvedSession)
     }
 
-    setCurrentProjectPath(null)
+    if (!options?.preserveProjectPath) {
+      setCurrentProjectPath(null)
+    }
     return { success: true, webcamPath: resolvedSession.webcamPath ?? null }
   })
 
-  ipcMain.handle('set-current-recording-session', async (_, session: { videoPath: string; webcamPath?: string | null; timeOffsetMs?: number }) => {
+  ipcMain.handle('set-current-recording-session', async (_, session: { videoPath: string; webcamPath?: string | null; timeOffsetMs?: number }, options?: { preserveProjectPath?: boolean }) => {
     const normalizedVideoPath = normalizeVideoSourcePath(session.videoPath) ?? session.videoPath
     setCurrentVideoPath(normalizedVideoPath)
     setCurrentRecordingSession({
@@ -563,7 +565,9 @@ export function registerProjectHandlers() {
       currentRecordingSession!.videoPath,
       currentRecordingSession!.webcamPath,
     ])
-    setCurrentProjectPath(null)
+    if (!options?.preserveProjectPath) {
+      setCurrentProjectPath(null)
+    }
     await persistRecordingSessionManifest(currentRecordingSession!)
     return { success: true }
   })
