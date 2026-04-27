@@ -4,6 +4,8 @@ import {
 	getTimelineRowsMinHeightPx,
 	TIMELINE_AXIS_HEIGHT_PX,
 	TIMELINE_ROW_MIN_HEIGHT_PX,
+	TIMELINE_VIEWPORT_MIN_HEIGHT_PX,
+	TIMELINE_VISIBLE_ROW_COUNT,
 } from "./timelineLayout";
 
 describe("timelineLayout", () => {
@@ -26,6 +28,13 @@ describe("timelineLayout", () => {
 		expect(getTimelineRowsMinHeightPx(2.9)).toBe(2 * TIMELINE_ROW_MIN_HEIGHT_PX);
 		expect(getTimelineContentMinHeightPx(2.9)).toBe(
 			TIMELINE_AXIS_HEIGHT_PX + 2 * TIMELINE_ROW_MIN_HEIGHT_PX,
+		);
+	});
+
+	it("caps the default timeline viewport to two visible rows", () => {
+		expect(TIMELINE_VISIBLE_ROW_COUNT).toBe(2);
+		expect(TIMELINE_VIEWPORT_MIN_HEIGHT_PX).toBe(
+			TIMELINE_AXIS_HEIGHT_PX + TIMELINE_VISIBLE_ROW_COUNT * TIMELINE_ROW_MIN_HEIGHT_PX,
 		);
 	});
 });
