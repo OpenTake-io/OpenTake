@@ -19,6 +19,13 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      - name: Install bundled FFmpeg binary
+        run: node node_modules/ffmpeg-static/install.js
+
+      - name: Verify bundled FFmpeg binary
+        run: |
+          node -e "const fs=require('node:fs'); const ffmpeg=require('ffmpeg-static'); if (typeof ffmpeg !== 'string' || !fs.existsSync(ffmpeg)) { throw new Error('Bundled ffmpeg-static binary is missing: ' + ffmpeg); } console.log('Using bundled ffmpeg binary: ' + ffmpeg);"
+
       - name: Install app dependencies
         run: npx electron-builder install-app-deps
 
@@ -56,6 +63,13 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      - name: Install bundled FFmpeg binary
+        run: node node_modules/ffmpeg-static/install.js
+
+      - name: Verify bundled FFmpeg binary
+        run: |
+          node -e "const fs=require('node:fs'); const ffmpeg=require('ffmpeg-static'); if (typeof ffmpeg !== 'string' || !fs.existsSync(ffmpeg)) { throw new Error('Bundled ffmpeg-static binary is missing: ' + ffmpeg); } console.log('Using bundled ffmpeg binary: ' + ffmpeg);"
+
       - name: Install app dependencies
         run: npx electron-builder install-app-deps
 
@@ -90,6 +104,13 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      - name: Install bundled FFmpeg binary
+        run: node node_modules/ffmpeg-static/install.js
+
+      - name: Verify bundled FFmpeg binary
+        run: |
+          node -e "const fs=require('node:fs'); const ffmpeg=require('ffmpeg-static'); if (typeof ffmpeg !== 'string' || !fs.existsSync(ffmpeg)) { throw new Error('Bundled ffmpeg-static binary is missing: ' + ffmpeg); } console.log('Using bundled ffmpeg binary: ' + ffmpeg);"
+
       - name: Install Linux native build dependencies
         run: |
           sudo apt-get update
@@ -116,5 +137,3 @@ jobs:
             release/**/*.AppImage
             release/latest-linux.yml
           retention-days: 30
-
-
