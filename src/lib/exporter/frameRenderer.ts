@@ -68,7 +68,6 @@ import { clampMediaTimeToDuration } from "@/lib/mediaTiming";
 import { isVideoWallpaperSource } from "@/lib/wallpapers";
 import { renderAnnotations } from "./annotationRenderer";
 import { renderCaptions } from "./captionRenderer";
-import { isCssGradientBackground, paintCssGradientBackground } from "./cssGradientBackground";
 import { ForwardFrameSource } from "./forwardFrameSource";
 import { resolveMediaElementSource } from "./localMediaSource";
 
@@ -499,8 +498,52 @@ export class FrameRenderer {
 			} else if (wallpaper.startsWith("#")) {
 				bgCtx.fillStyle = wallpaper;
 				bgCtx.fillRect(0, 0, this.config.width, this.config.height);
-			} else if (isCssGradientBackground(wallpaper)) {
-				if (!paintCssGradientBackground(bgCtx, wallpaper, this.config.width, this.config.height)) {
+			} else if (
+				wallpaper.startsWith("linear-gradient") ||
+				wallpaper.startsWith("radial-gradient")
+			) {
+				const gradientMatch = wallpaper.match(/(linear|radial)-gradient\((.+)\)/);
+				if (gradientMatch) {
+					const [, type, params] = gradientMatch;
+					const parts = params.split(",").map((s) => s.trim());
+
+					let gradient: CanvasGradient;
+
+					if (type === "linear") {
+						gradient = bgCtx.createLinearGradient(0, 0, 0, this.config.height);
+						parts.forEach((part, index) => {
+							if (part.startsWith("to ") || part.includes("deg")) return;
+
+							const colorMatch = part.match(
+								/^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-z]+)/,
+							);
+							if (colorMatch) {
+								const color = colorMatch[1];
+								const position = index / (parts.length - 1);
+								gradient.addColorStop(position, color);
+							}
+						});
+					} else {
+						const cx = this.config.width / 2;
+						const cy = this.config.height / 2;
+						const radius = Math.max(this.config.width, this.config.height) / 2;
+						gradient = bgCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+
+						parts.forEach((part, index) => {
+							const colorMatch = part.match(
+								/^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|[a-z]+)/,
+							);
+							if (colorMatch) {
+								const color = colorMatch[1];
+								const position = index / (parts.length - 1);
+								gradient.addColorStop(position, color);
+							}
+						});
+					}
+
+					bgCtx.fillStyle = gradient;
+					bgCtx.fillRect(0, 0, this.config.width, this.config.height);
+				} else {
 					console.warn("[FrameRenderer] Could not parse gradient, using black fallback");
 					bgCtx.fillStyle = "#000000";
 					bgCtx.fillRect(0, 0, this.config.width, this.config.height);

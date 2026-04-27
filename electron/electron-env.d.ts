@@ -401,7 +401,7 @@ interface Window {
 		setCurrentVideoPath: (
 			path: string,
 			options?: { preserveProjectPath?: boolean },
-		) => Promise<{ success: boolean }>;
+		) => Promise<{ success: boolean; webcamPath: string | null }>;
 		setCurrentRecordingSession: (session: {
 			videoPath: string;
 			webcamPath?: string | null;
