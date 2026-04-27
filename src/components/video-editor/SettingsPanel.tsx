@@ -537,7 +537,7 @@ const CAPTION_LANGUAGE_OPTIONS = [
 	{ value: "de", label: "German" },
 	{ value: "it", label: "Italian" },
 	{ value: "pt", label: "Portuguese" },
-	{ value: "zh", label: "Chinese" },
+	{ value: "zh", label: "Chinese (Simplified)" },
 	{ value: "ja", label: "Japanese" },
 	{ value: "ko", label: "Korean" },
 ] as const;
@@ -549,7 +549,8 @@ const APP_LANGUAGE_LABELS: Record<AppLocale, string> = {
 	nl: "Nederlands",
 	ko: "한국어",
 	"pt-BR": "Português",
-	"zh-CN": "中文",
+	"zh-CN": "簡體中文",
+	"zh-TW": "繁體中文",
 };
 
 function loadPreviewImage(url: string) {
