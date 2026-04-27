@@ -51,7 +51,11 @@ import {
 	getWebcamOverlaySizePx,
 } from "@/components/video-editor/webcamOverlay";
 import { getWebcamMediaTargetTimeSeconds } from "@/components/video-editor/videoPlayback/webcamSync";
-import { getAssetPath, getRenderableAssetUrl, getRenderableVideoUrl } from "@/lib/assetPath";
+import {
+	getAssetPath,
+	getExportableVideoUrl,
+	getRenderableAssetUrl,
+} from "@/lib/assetPath";
 import { extensionHost } from "@/lib/extensions";
 import {
 	mapCursorToCanvasNormalized,
@@ -374,17 +378,39 @@ export class FrameRenderer {
 					videoSrc = await getAssetPath(wallpaper.replace(/^\//, ""));
 				}
 
+				const backgroundSource = await resolveMediaElementSource(videoSrc);
+				this.cleanupBackgroundSource = backgroundSource.revoke;
+
 				const video = document.createElement("video");
 				video.muted = true;
 				video.loop = true;
 				video.playsInline = true;
 				video.preload = "auto";
-				video.src = videoSrc;
+				video.src = backgroundSource.src;
+				video.load();
 
 				await new Promise<void>((resolve, reject) => {
-					video.onloadeddata = () => resolve();
-					video.onerror = () =>
+					const onReady = () => {
+						if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+							return;
+						}
+						cleanup();
+						resolve();
+					};
+					const onError = () => {
+						cleanup();
 						reject(new Error(`Failed to load video wallpaper: ${wallpaper}`));
+					};
+					const cleanup = () => {
+						video.removeEventListener("loadeddata", onReady);
+						video.removeEventListener("canplay", onReady);
+						video.removeEventListener("error", onError);
+					};
+
+					video.addEventListener("loadeddata", onReady);
+					video.addEventListener("canplay", onReady);
+					video.addEventListener("error", onError);
+					onReady();
 				});
 
 				this.backgroundVideoElement = video;
@@ -581,7 +607,7 @@ export class FrameRenderer {
 		}
 
 		if (isVideoWallpaperSource(wallpaper)) {
-			return getRenderableVideoUrl(wallpaper);
+			return getExportableVideoUrl(wallpaper);
 		}
 
 		if (
