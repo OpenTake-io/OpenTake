@@ -18,7 +18,6 @@ import {
 	BASE_PREVIEW_WIDTH,
 	ZOOM_DEPTH_SCALES,
 } from "@/components/video-editor/types";
-import { computePaddedLayout } from "@/components/video-editor/videoPlayback/layoutUtils";
 import { DEFAULT_FOCUS } from "@/components/video-editor/videoPlayback/constants";
 import {
 	type CursorFollowCameraState,
@@ -31,6 +30,7 @@ import {
 	PixiCursorOverlay,
 	preloadCursorAssets,
 } from "@/components/video-editor/videoPlayback/cursorRenderer";
+import { computePaddedLayout } from "@/components/video-editor/videoPlayback/layoutUtils";
 import {
 	createSpringState,
 	getZoomSpringConfig,
@@ -38,6 +38,7 @@ import {
 	type SpringState,
 	stepSpringValue,
 } from "@/components/video-editor/videoPlayback/motionSmoothing";
+import { getWebcamMediaTargetTimeSeconds } from "@/components/video-editor/videoPlayback/webcamSync";
 import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
 import {
 	applyZoomTransform,
@@ -50,12 +51,7 @@ import {
 	getWebcamOverlayPosition,
 	getWebcamOverlaySizePx,
 } from "@/components/video-editor/webcamOverlay";
-import { getWebcamMediaTargetTimeSeconds } from "@/components/video-editor/videoPlayback/webcamSync";
-import {
-	getAssetPath,
-	getExportableVideoUrl,
-	getRenderableAssetUrl,
-} from "@/lib/assetPath";
+import { getAssetPath, getExportableVideoUrl, getRenderableAssetUrl } from "@/lib/assetPath";
 import { extensionHost } from "@/lib/extensions";
 import {
 	mapCursorToCanvasNormalized,
@@ -194,6 +190,8 @@ export class FrameRenderer {
 	private shadowCtx: CanvasRenderingContext2D | null = null;
 	private compositeCanvas: HTMLCanvasElement | null = null;
 	private compositeCtx: CanvasRenderingContext2D | null = null;
+	private backgroundForwardFrameSource: ForwardFrameSource | null = null;
+	private backgroundDecodedFrame: VideoFrame | null = null;
 	private backgroundVideoElement: HTMLVideoElement | null = null;
 	private backgroundCtx: CanvasRenderingContext2D | null = null;
 	private backgroundSeekPromise: Promise<void> | null = null;
@@ -370,6 +368,19 @@ export class FrameRenderer {
 		}
 
 		this.backgroundCtx = bgCtx;
+		this.backgroundForwardFrameSource?.cancel();
+		void this.backgroundForwardFrameSource?.destroy();
+		this.backgroundForwardFrameSource = null;
+		this.closeBackgroundDecodedFrame();
+		this.cleanupBackgroundSource?.();
+		this.cleanupBackgroundSource = null;
+		if (this.backgroundVideoElement) {
+			this.backgroundVideoElement.pause();
+			this.backgroundVideoElement.src = "";
+			this.backgroundVideoElement.load();
+			this.backgroundVideoElement = null;
+		}
+		this.backgroundSeekPromise = null;
 
 		try {
 			// Check for video wallpaper first
@@ -377,6 +388,19 @@ export class FrameRenderer {
 				let videoSrc = wallpaper;
 				if (wallpaper.startsWith("/") && !wallpaper.startsWith("//")) {
 					videoSrc = await getAssetPath(wallpaper.replace(/^\//, ""));
+				}
+
+				try {
+					const frameSource = new ForwardFrameSource();
+					await frameSource.initialize(videoSrc);
+					this.backgroundForwardFrameSource = frameSource;
+					this.backgroundSprite = bgCanvas;
+					return;
+				} catch (error) {
+					console.warn(
+						"[FrameRenderer] Decoder-backed video wallpaper unavailable during export; falling back to media element sync:",
+						error,
+					);
 				}
 
 				const backgroundSource = await resolveMediaElementSource(videoSrc);
@@ -540,12 +564,24 @@ export class FrameRenderer {
 
 	private drawVideoFrameToBackground(): void {
 		const video = this.backgroundVideoElement;
+		if (!video) return;
+
+		this.drawBackgroundSourceToCanvas(video, video.videoWidth, video.videoHeight);
+	}
+
+	private drawBackgroundSourceToCanvas(
+		source: CanvasImageSource,
+		sourceWidth: number,
+		sourceHeight: number,
+	): void {
 		const ctx = this.backgroundCtx;
-		if (!video || !ctx) return;
+		if (!ctx) return;
 
 		const w = this.config.width;
 		const h = this.config.height;
-		const videoAspect = video.videoWidth / video.videoHeight;
+		const safeSourceWidth = Math.max(1, sourceWidth);
+		const safeSourceHeight = Math.max(1, sourceHeight);
+		const videoAspect = safeSourceWidth / safeSourceHeight;
 		const canvasAspect = w / h;
 
 		let drawWidth: number, drawHeight: number, drawX: number, drawY: number;
@@ -562,7 +598,36 @@ export class FrameRenderer {
 		}
 
 		ctx.clearRect(0, 0, w, h);
-		ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
+		ctx.drawImage(source, drawX, drawY, drawWidth, drawHeight);
+	}
+
+	private closeBackgroundDecodedFrame(): void {
+		if (!this.backgroundDecodedFrame) {
+			return;
+		}
+
+		this.backgroundDecodedFrame.close();
+		this.backgroundDecodedFrame = null;
+	}
+
+	private async syncBackgroundFrame(timeSeconds: number): Promise<void> {
+		if (this.backgroundForwardFrameSource) {
+			const decodedFrame = await this.backgroundForwardFrameSource.getFrameAtTime(
+				Math.max(0, timeSeconds),
+			);
+			this.closeBackgroundDecodedFrame();
+			this.backgroundDecodedFrame = decodedFrame;
+			if (decodedFrame) {
+				this.drawBackgroundSourceToCanvas(
+					decodedFrame,
+					decodedFrame.displayWidth,
+					decodedFrame.displayHeight,
+				);
+			}
+			return;
+		}
+
+		await this.syncBackgroundVideo(timeSeconds);
 	}
 
 	private async syncBackgroundVideo(timeSeconds: number): Promise<void> {
@@ -1040,8 +1105,8 @@ export class FrameRenderer {
 		}
 
 		// Sync video wallpaper frame
-		if (this.backgroundVideoElement) {
-			await this.syncBackgroundVideo(this.currentVideoTime);
+		if (this.backgroundForwardFrameSource || this.backgroundVideoElement) {
+			await this.syncBackgroundFrame(this.currentVideoTime);
 		}
 
 		// Create or update video sprite from VideoFrame
@@ -1327,7 +1392,15 @@ export class FrameRenderer {
 	private updateLayout(): void {
 		if (!this.app || !this.videoSprite || !this.maskGraphics || !this.videoContainer) return;
 
-		const { width, height, cropRegion, borderRadius = 0, padding = 0, videoWidth, videoHeight } = this.config;
+		const {
+			width,
+			height,
+			cropRegion,
+			borderRadius = 0,
+			padding = 0,
+			videoWidth,
+			videoHeight,
+		} = this.config;
 
 		const layout = computePaddedLayout({
 			width,
@@ -1848,6 +1921,10 @@ export class FrameRenderer {
 		this.compositeCanvas = null;
 		this.compositeCtx = null;
 		this.backgroundCtx = null;
+		this.closeBackgroundDecodedFrame();
+		this.backgroundForwardFrameSource?.cancel();
+		void this.backgroundForwardFrameSource?.destroy();
+		this.backgroundForwardFrameSource = null;
 		if (this.backgroundVideoElement) {
 			this.backgroundVideoElement.pause();
 			this.backgroundVideoElement.src = "";

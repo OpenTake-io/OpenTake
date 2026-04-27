@@ -24,7 +24,6 @@ import type {
 	ZoomTransitionEasing,
 } from "@/components/video-editor/types";
 import { getDefaultCaptionFontFamily, ZOOM_DEPTH_SCALES } from "@/components/video-editor/types";
-import { computePaddedLayout } from "@/components/video-editor/videoPlayback/layoutUtils";
 import { DEFAULT_FOCUS } from "@/components/video-editor/videoPlayback/constants";
 import {
 	type CursorFollowCameraState,
@@ -37,6 +36,7 @@ import {
 	PixiCursorOverlay,
 	preloadCursorAssets,
 } from "@/components/video-editor/videoPlayback/cursorRenderer";
+import { computePaddedLayout } from "@/components/video-editor/videoPlayback/layoutUtils";
 import {
 	createSpringState,
 	getZoomSpringConfig,
@@ -44,6 +44,7 @@ import {
 	type SpringState,
 	stepSpringValue,
 } from "@/components/video-editor/videoPlayback/motionSmoothing";
+import { getWebcamMediaTargetTimeSeconds } from "@/components/video-editor/videoPlayback/webcamSync";
 import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
 import {
 	applyZoomTransform,
@@ -56,12 +57,7 @@ import {
 	getWebcamOverlayPosition,
 	getWebcamOverlaySizePx,
 } from "@/components/video-editor/webcamOverlay";
-import { getWebcamMediaTargetTimeSeconds } from "@/components/video-editor/videoPlayback/webcamSync";
-import {
-	getAssetPath,
-	getExportableVideoUrl,
-	getRenderableAssetUrl,
-} from "@/lib/assetPath";
+import { getAssetPath, getExportableVideoUrl, getRenderableAssetUrl } from "@/lib/assetPath";
 import { extensionHost } from "@/lib/extensions";
 import {
 	mapCursorToCanvasNormalized,
@@ -861,6 +857,20 @@ export class FrameRenderer {
 				let videoSrc = wallpaper;
 				if (wallpaper.startsWith("/") && !wallpaper.startsWith("//")) {
 					videoSrc = await getAssetPath(wallpaper.replace(/^\//, ""));
+				}
+
+				try {
+					const frameSource = new ForwardFrameSource();
+					await frameSource.initialize(videoSrc);
+					this.backgroundForwardFrameSource = frameSource;
+					this.backgroundVideoElement = null;
+					this.backgroundSeekPromise = null;
+					return;
+				} catch (error) {
+					console.warn(
+						"[FrameRenderer] Decoder-backed video wallpaper unavailable during export; falling back to media element sync:",
+						error,
+					);
 				}
 
 				const backgroundSource = await resolveMediaElementSource(videoSrc);
