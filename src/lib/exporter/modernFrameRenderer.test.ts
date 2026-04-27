@@ -36,6 +36,7 @@ vi.mock("pixi-filters/motion-blur", () => ({
 
 vi.mock("@/lib/assetPath", () => ({
 	getAssetPath: vi.fn(async (value: string) => value),
+	getExportableVideoUrl: vi.fn(async (value: string) => value),
 	getRenderableAssetUrl: vi.fn((value: string) => value),
 }));
 
