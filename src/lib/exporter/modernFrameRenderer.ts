@@ -57,7 +57,11 @@ import {
 	getWebcamOverlaySizePx,
 } from "@/components/video-editor/webcamOverlay";
 import { getWebcamMediaTargetTimeSeconds } from "@/components/video-editor/videoPlayback/webcamSync";
-import { getAssetPath, getRenderableAssetUrl, getRenderableVideoUrl } from "@/lib/assetPath";
+import {
+	getAssetPath,
+	getExportableVideoUrl,
+	getRenderableAssetUrl,
+} from "@/lib/assetPath";
 import { extensionHost } from "@/lib/extensions";
 import {
 	mapCursorToCanvasNormalized,
@@ -332,6 +336,7 @@ export class FrameRenderer {
 	private backgroundForwardFrameSource: ForwardFrameSource | null = null;
 	private backgroundDecodedFrame: VideoFrame | null = null;
 	private backgroundVideoElement: HTMLVideoElement | null = null;
+	private cleanupBackgroundSource: (() => void) | null = null;
 	private videoShadowLayers: ShadowLayer[] = [];
 	private webcamShadowLayers: ShadowLayer[] = [];
 	private webcamSprite: Sprite | null = null;
@@ -344,6 +349,8 @@ export class FrameRenderer {
 	private webcamFrameCacheCtx: CanvasRenderingContext2D | null = null;
 	private sceneVideoFrameStagingCanvas: HTMLCanvasElement | null = null;
 	private sceneVideoFrameStagingCtx: CanvasRenderingContext2D | null = null;
+	private backgroundVideoFrameStagingCanvas: HTMLCanvasElement | null = null;
+	private backgroundVideoFrameStagingCtx: CanvasRenderingContext2D | null = null;
 	private webcamVideoFrameStagingCanvas: HTMLCanvasElement | null = null;
 	private webcamVideoFrameStagingCtx: CanvasRenderingContext2D | null = null;
 	private captionMeasureCanvas: HTMLCanvasElement | null = null;
@@ -708,7 +715,7 @@ export class FrameRenderer {
 	}
 
 	private ensureVideoFrameStagingCanvas(
-		kind: "scene" | "webcam",
+		kind: "scene" | "background" | "webcam",
 		width: number,
 		height: number,
 	): { canvas: HTMLCanvasElement; context: CanvasRenderingContext2D } | null {
@@ -717,9 +724,15 @@ export class FrameRenderer {
 		const currentCanvas =
 			kind === "scene"
 				? this.sceneVideoFrameStagingCanvas
-				: this.webcamVideoFrameStagingCanvas;
+				: kind === "background"
+					? this.backgroundVideoFrameStagingCanvas
+					: this.webcamVideoFrameStagingCanvas;
 		const currentContext =
-			kind === "scene" ? this.sceneVideoFrameStagingCtx : this.webcamVideoFrameStagingCtx;
+			kind === "scene"
+				? this.sceneVideoFrameStagingCtx
+				: kind === "background"
+					? this.backgroundVideoFrameStagingCtx
+					: this.webcamVideoFrameStagingCtx;
 
 		if (
 			currentCanvas &&
@@ -741,6 +754,9 @@ export class FrameRenderer {
 		if (kind === "scene") {
 			this.sceneVideoFrameStagingCanvas = canvas;
 			this.sceneVideoFrameStagingCtx = context;
+		} else if (kind === "background") {
+			this.backgroundVideoFrameStagingCanvas = canvas;
+			this.backgroundVideoFrameStagingCtx = context;
 		} else {
 			this.webcamVideoFrameStagingCanvas = canvas;
 			this.webcamVideoFrameStagingCtx = context;
@@ -751,7 +767,7 @@ export class FrameRenderer {
 
 	private stageVideoFrameForTexture(
 		frame: VideoFrame,
-		kind: "scene" | "webcam",
+		kind: "scene" | "background" | "webcam",
 		fallbackWidth: number,
 		fallbackHeight: number,
 	): CanvasImageSource | VideoFrame {
@@ -814,6 +830,8 @@ export class FrameRenderer {
 		void this.backgroundForwardFrameSource?.destroy();
 		this.backgroundForwardFrameSource = null;
 		this.closeBackgroundDecodedFrame();
+		this.cleanupBackgroundSource?.();
+		this.cleanupBackgroundSource = null;
 
 		if (this.backgroundVideoElement) {
 			this.backgroundVideoElement.pause();
@@ -856,17 +874,39 @@ export class FrameRenderer {
 					);
 				}
 
+				const backgroundSource = await resolveMediaElementSource(videoSrc);
+				this.cleanupBackgroundSource = backgroundSource.revoke;
+
 				const video = document.createElement("video");
 				video.muted = true;
 				video.loop = true;
 				video.playsInline = true;
 				video.preload = "auto";
-				video.src = videoSrc;
+				video.src = backgroundSource.src;
+				video.load();
 
 				await new Promise<void>((resolve, reject) => {
-					video.onloadeddata = () => resolve();
-					video.onerror = () =>
+					const onReady = () => {
+						if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+							return;
+						}
+						cleanup();
+						resolve();
+					};
+					const onError = () => {
+						cleanup();
 						reject(new Error(`Failed to load video wallpaper: ${wallpaper}`));
+					};
+					const cleanup = () => {
+						video.removeEventListener("loadeddata", onReady);
+						video.removeEventListener("canplay", onReady);
+						video.removeEventListener("error", onError);
+					};
+
+					video.addEventListener("loadeddata", onReady);
+					video.addEventListener("canplay", onReady);
+					video.addEventListener("error", onError);
+					onReady();
 				});
 
 				this.backgroundVideoElement = video;
@@ -1434,8 +1474,14 @@ export class FrameRenderer {
 			this.closeBackgroundDecodedFrame();
 			this.backgroundDecodedFrame = decodedFrame;
 			if (decodedFrame) {
-				this.ensureBackgroundSprite(
+				const resolvedBackgroundSource = this.stageVideoFrameForTexture(
 					decodedFrame,
+					"background",
+					decodedFrame.displayWidth,
+					decodedFrame.displayHeight,
+				);
+				this.ensureBackgroundSprite(
+					resolvedBackgroundSource,
 					decodedFrame.displayWidth,
 					decodedFrame.displayHeight,
 				);
@@ -1488,7 +1534,7 @@ export class FrameRenderer {
 		}
 
 		if (isVideoWallpaperSource(wallpaper)) {
-			return getRenderableVideoUrl(wallpaper);
+			return getExportableVideoUrl(wallpaper);
 		}
 
 		if (

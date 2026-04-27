@@ -177,6 +177,10 @@ async function resolveLocalMediaUrl(filePath: string): Promise<string> {
 	return toFileUrl(filePath);
 }
 
+function isBundledAssetPath(asset: string): boolean {
+	return asset.startsWith("/wallpapers/") || asset.startsWith("/app-icons/");
+}
+
 export async function getRenderableVideoUrl(asset: string): Promise<string> {
 	if (
 		!asset ||
@@ -188,11 +192,30 @@ export async function getRenderableVideoUrl(asset: string): Promise<string> {
 		return asset;
 	}
 
-	const isBundledAssetPath =
-		asset.startsWith("/wallpapers/") || asset.startsWith("/app-icons/");
-
-	if (isAbsoluteLocalAssetPath(asset) && !isBundledAssetPath) {
+	if (isAbsoluteLocalAssetPath(asset) && !isBundledAssetPath(asset)) {
 		return resolveLocalMediaUrl(asset);
+	}
+
+	if (asset.startsWith("/") && !asset.startsWith("//")) {
+		return getAssetPath(asset.replace(/^\/+/, ""));
+	}
+
+	return asset;
+}
+
+export async function getExportableVideoUrl(asset: string): Promise<string> {
+	if (
+		!asset ||
+		asset.startsWith("blob:") ||
+		asset.startsWith("data:") ||
+		asset.startsWith("file://") ||
+		asset.startsWith("http")
+	) {
+		return asset;
+	}
+
+	if (isAbsoluteLocalAssetPath(asset) && !isBundledAssetPath(asset)) {
+		return toFileUrl(asset);
 	}
 
 	if (asset.startsWith("/") && !asset.startsWith("//")) {
