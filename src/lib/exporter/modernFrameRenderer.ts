@@ -862,18 +862,6 @@ export class FrameRenderer {
 					videoSrc = await getAssetPath(wallpaper.replace(/^\//, ""));
 				}
 
-				try {
-					const frameSource = new ForwardFrameSource();
-					await frameSource.initialize(videoSrc);
-					this.backgroundForwardFrameSource = frameSource;
-					return;
-				} catch (error) {
-					console.warn(
-						"[FrameRenderer] Decoder-backed wallpaper source unavailable during export; falling back to media element sync:",
-						error,
-					);
-				}
-
 				const backgroundSource = await resolveMediaElementSource(videoSrc);
 				this.cleanupBackgroundSource = backgroundSource.revoke;
 
