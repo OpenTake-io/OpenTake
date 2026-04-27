@@ -2059,7 +2059,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 		}
 
 		return (
-			<div className="flex-1 min-h-0 flex flex-col bg-editor-bg overflow-auto">
+			<div className="flex-1 min-h-0 flex flex-col bg-editor-bg overflow-hidden">
 				{hideToolbar ? null : (
 					<div className="flex items-center gap-2 px-4 py-2 border-b border-foreground/10 bg-editor-panel">
 						<div className="flex items-center gap-1">
