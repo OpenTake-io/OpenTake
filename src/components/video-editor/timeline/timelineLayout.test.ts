@@ -2,10 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
 	getTimelineContentMinHeightPx,
 	getTimelineRowsMinHeightPx,
-	getTimelineViewportStretchFactor,
 	TIMELINE_AXIS_HEIGHT_PX,
 	TIMELINE_ROW_MIN_HEIGHT_PX,
-	TIMELINE_VISIBLE_ROW_COUNT,
 } from "./timelineLayout";
 
 describe("timelineLayout", () => {
@@ -29,13 +27,5 @@ describe("timelineLayout", () => {
 		expect(getTimelineContentMinHeightPx(2.9)).toBe(
 			TIMELINE_AXIS_HEIGHT_PX + 2 * TIMELINE_ROW_MIN_HEIGHT_PX,
 		);
-	});
-
-	it("caps the default timeline viewport to two visible rows", () => {
-		expect(TIMELINE_VISIBLE_ROW_COUNT).toBe(2);
-		expect(getTimelineViewportStretchFactor(2)).toBe(1);
-		expect(getTimelineViewportStretchFactor(4)).toBe(2);
-		expect(getTimelineViewportStretchFactor(5)).toBe(2.5);
-		expect(getTimelineViewportStretchFactor(0)).toBe(1);
 	});
 });
