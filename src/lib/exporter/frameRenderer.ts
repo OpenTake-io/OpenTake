@@ -196,6 +196,7 @@ export class FrameRenderer {
 	private compositeCtx: CanvasRenderingContext2D | null = null;
 	private backgroundVideoElement: HTMLVideoElement | null = null;
 	private backgroundCtx: CanvasRenderingContext2D | null = null;
+	private backgroundSeekPromise: Promise<void> | null = null;
 	private cleanupBackgroundSource: (() => void) | null = null;
 	private config: FrameRenderConfig;
 	private animationState: AnimationState;
@@ -571,14 +572,120 @@ export class FrameRenderer {
 		if (video.duration && Number.isFinite(video.duration)) {
 			const targetTime = timeSeconds % video.duration;
 			if (Math.abs(video.currentTime - targetTime) > 0.01) {
-				video.currentTime = targetTime;
-				await new Promise<void>((resolve) => {
-					const onSeeked = () => {
-						video.removeEventListener("seeked", onSeeked);
+				if (this.backgroundSeekPromise) {
+					await this.backgroundSeekPromise;
+				}
+
+				this.backgroundSeekPromise = new Promise<void>((resolve) => {
+					let settled = false;
+					let fallbackTimeout: number | null = null;
+					let animationFrameRequestId: number | null = null;
+					let videoFrameRequestId: number | null = null;
+
+					const finish = () => {
+						if (settled) {
+							return;
+						}
+						settled = true;
+						cleanup();
 						resolve();
 					};
-					video.addEventListener("seeked", onSeeked);
+
+					const waitForPresentedFrame = () => {
+						const requestVideoFrameCallback = (
+							video as HTMLVideoElement & {
+								requestVideoFrameCallback?: (
+									callback: (
+										now: DOMHighResTimeStamp,
+										metadata: VideoFrameCallbackMetadata,
+									) => void,
+								) => number;
+								cancelVideoFrameCallback?: (handle: number) => void;
+							}
+						).requestVideoFrameCallback;
+
+						animationFrameRequestId = requestAnimationFrame(() => {
+							animationFrameRequestId = null;
+							finish();
+						});
+
+						if (typeof requestVideoFrameCallback === "function") {
+							videoFrameRequestId = requestVideoFrameCallback.call(video, () => {
+								videoFrameRequestId = null;
+								finish();
+							});
+						}
+					};
+
+					const handleMediaReady = () => {
+						if (
+							!video.seeking &&
+							Math.abs(video.currentTime - targetTime) <= 0.01 &&
+							video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+						) {
+							waitForPresentedFrame();
+						}
+					};
+
+					const cleanup = () => {
+						video.removeEventListener("seeked", waitForPresentedFrame);
+						video.removeEventListener("loadeddata", handleMediaReady);
+						video.removeEventListener("canplay", handleMediaReady);
+						video.removeEventListener("error", finish);
+						if (animationFrameRequestId !== null) {
+							cancelAnimationFrame(animationFrameRequestId);
+							animationFrameRequestId = null;
+						}
+						if (
+							videoFrameRequestId !== null &&
+							typeof (
+								video as HTMLVideoElement & {
+									cancelVideoFrameCallback?: (handle: number) => void;
+								}
+							).cancelVideoFrameCallback === "function"
+						) {
+							(
+								video as HTMLVideoElement & {
+									cancelVideoFrameCallback: (handle: number) => void;
+								}
+							).cancelVideoFrameCallback(videoFrameRequestId);
+							videoFrameRequestId = null;
+						}
+						if (fallbackTimeout !== null) {
+							window.clearTimeout(fallbackTimeout);
+						}
+					};
+
+					video.addEventListener("seeked", waitForPresentedFrame, { once: true });
+					video.addEventListener("loadeddata", handleMediaReady, { once: true });
+					video.addEventListener("canplay", handleMediaReady, { once: true });
+					video.addEventListener("error", finish, { once: true });
+
+					fallbackTimeout = window.setTimeout(() => {
+						finish();
+					}, 50);
+
+					try {
+						video.currentTime = targetTime;
+					} catch {
+						finish();
+						return;
+					}
+
+					if (
+						!video.seeking &&
+						Math.abs(video.currentTime - targetTime) <= 0.001 &&
+						video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+					) {
+						waitForPresentedFrame();
+					}
 				});
+
+				try {
+					await this.backgroundSeekPromise;
+				} finally {
+					this.backgroundSeekPromise = null;
+				}
 			}
 		}
 		this.drawVideoFrameToBackground();
