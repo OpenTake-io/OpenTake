@@ -1131,20 +1131,45 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			if (wantsAudioCapture) {
 				let screenMediaStream: MediaStream;
 				const useLinuxPortal = selectedSource.id === "screen:linux-portal";
-				const acquireLinuxPortalStream = (withAudio: boolean) =>
-					mediaDevices.getDisplayMedia({
-						audio: withAudio,
-						video: {
-							displaySurface: "monitor",
-							width: { ideal: TARGET_WIDTH, max: TARGET_WIDTH },
-							height: { ideal: TARGET_HEIGHT, max: TARGET_HEIGHT },
-							frameRate: { ideal: TARGET_FRAME_RATE, max: TARGET_FRAME_RATE },
-							cursor: "never",
-						},
-						selfBrowserSurface: "exclude",
-						surfaceSwitching: "exclude",
-					});
+				const acquireLinuxPortalStream = async (withAudio: boolean): Promise<MediaStream> => {
+					try {
+						return await mediaDevices.getDisplayMedia({
+							audio: withAudio,
+							video: {
+								displaySurface: "monitor",
+								width: { ideal: TARGET_WIDTH, max: TARGET_WIDTH },
+								height: { ideal: TARGET_HEIGHT, max: TARGET_HEIGHT },
+								frameRate: { ideal: TARGET_FRAME_RATE, max: TARGET_FRAME_RATE },
+								cursor: "never",
+							},
+							selfBrowserSurface: "exclude",
+							surfaceSwitching: "exclude",
+						});
+					} catch (err) {
+						console.warn("Linux portal failed, falling back to desktop capture:", err);
 
+						const sources = await window.electronAPI.getSources({ types: ["screen"] });
+
+						if (!sources.length) {
+							throw new Error("No screen sources available");
+						}
+
+						const source = sources[0];
+
+						return await navigator.mediaDevices.getUserMedia({
+							audio: false, //intentional
+							video: {
+								mandatory: {
+									chromeMediaSource: "desktop",
+									chromeMediaSourceId: source.id,
+									maxWidth: TARGET_WIDTH,
+									maxHeight: TARGET_HEIGHT,
+									maxFrameRate: TARGET_FRAME_RATE,
+								},
+							},
+						} as any);
+					}
+				};
 				if (systemAudioEnabled) {
 					try {
 						screenMediaStream = useLinuxPortal
