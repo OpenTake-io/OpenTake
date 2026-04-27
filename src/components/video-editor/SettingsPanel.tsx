@@ -1777,14 +1777,18 @@ export function SettingsPanel({
 										<div
 											key={g}
 											className={wallpaperTileClass(gradient === g)}
-											style={{ background: g }}
 											aria-label={`Gradient ${idx + 1}`}
 											onClick={() => {
 												setGradient(g);
 												onWallpaperChange(g);
 											}}
 											role="button"
-										/>
+										>
+											<div
+												className="absolute inset-[1px] overflow-hidden rounded-[8px]"
+												style={{ background: g }}
+											/>
+										</div>
 									))}
 								</div>
 							)}
