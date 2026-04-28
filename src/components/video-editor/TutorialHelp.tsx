@@ -16,7 +16,7 @@ import { formatShortcut } from "@/utils/platformUtils";
 import { toast } from "sonner";
 
 export const RECORDLY_ISSUES_URL = "https://github.com/webadderall/Recordly/issues";
-const RECORDLY_DISCORD_URL = "https://discord.gg/FcfNN4S9m";
+const RECORDLY_DISCORD_URL = "https://discord.gg/sdv2FBVNgE";
 const RECORDLY_X_URL = "https://x.com/webadderall";
 const CONTACT_EMAIL = "youngchen3442@gmail.com";
 export const APP_HEADER_ACTION_BUTTON_CLASS = "h-7 px-2 text-xs text-muted-foreground hover:bg-foreground/10 hover:text-foreground transition-all gap-1.5";
