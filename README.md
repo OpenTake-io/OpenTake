@@ -1,5 +1,3 @@
-# Recordly
-
 Language: EN | [简中](README.zh-CN.md)
 
 <p align="center">
@@ -13,10 +11,13 @@ Language: EN | [简中](README.zh-CN.md)
 
 ### Create polished, pro-grade screen recordings.
 [Recordly](https://www.recordly.dev) is an **open-source screen recorder** and editor for **walkthroughs, demos, product videos**, and more. 
+**Accepting PRs.** [Donate](https://ko-fi.com/webadderall/goal?g=0)
 
-**Contribution encouraged.** [Donate](https://ko-fi.com/webadderall/goal?g=0)
+<p align="center">
+  <img src="https://i.postimg.cc/8CrQtGJf/Screenshot-2026-04-30-at-5-11-52-pm.png" width="700" alt="Recordly recording interface screenshot">
+</p>
 
-https://github.com/user-attachments/assets/1446cd12-c053-4b9c-b49f-d9c93db77fc4
+https://github.com/user-attachments/assets/c328cb35-fbb3-46c1-8cb5-504f8910705f
 
 ---
 
@@ -151,11 +152,11 @@ Browse and install community extensions from the [Recordly Marketplace](https://
 # Screenshots
 
 <p align="center">
-  <img src="https://i.postimg.cc/CKxm8DRs/Screenshot-2026-03-20-at-7-07-22-pm.png" width="700" alt="Recordly editor screenshot">
+  <img src="https://i.postimg.cc/8CrQtGJf/Screenshot-2026-04-30-at-5-11-52-pm.png" width="700" alt="Recordly recording interface screenshot">
 </p>
 
 <p align="center">
-  <img src="https://i.postimg.cc/hjwdYRyV/Screenshot-2026-03-20-at-1-53-57-pm.png" width="700" alt="Recordly recording interface screenshot">
+  <img src="https://i.postimg.cc/pLSMfrTM/Screenshot-2026-04-30-at-5-11-45-pm.png" width="700" alt="Recordly editor screenshot">
 </p>
 
 <p align="center">
