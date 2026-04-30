@@ -18,6 +18,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { useI18n } from "@/contexts/I18nContext";
 import { getAssetPath, getRenderableAssetUrl, getRenderableVideoUrl } from "@/lib/assetPath";
 import { clampMediaTimeToDuration, getMediaSyncPlaybackRate } from "@/lib/mediaTiming";
 import {
@@ -351,6 +352,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		},
 		ref,
 	) => {
+		const { t } = useI18n();
+		const editCurrentCaptionLabel = t("settings.captions.editCurrent", "Edit current caption");
 		const videoRef = useRef<HTMLVideoElement | null>(null);
 		const containerRef = useRef<HTMLDivElement | null>(null);
 		const appRef = useRef<Application | null>(null);
@@ -484,6 +487,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				measureText: (text) => measurementContext.measureText(text).width,
 			});
 		}, [autoCaptionSettings, autoCaptions, currentTime]);
+		const activeCaptionEditTarget = activeCaptionLayout?.editTarget ?? null;
+		const activeCaptionEditTargetId = activeCaptionEditTarget?.id ?? null;
 		const isCaptionEditing = captionEditSession !== null;
 		const captionEditDraft = captionEditSession?.draft ?? "";
 		const captionEditTargetId = captionEditSession?.target.id ?? null;
@@ -568,6 +573,25 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			captionEditSessionRef.current = null;
 			setCaptionEditSession(null);
 		}, []);
+
+		useEffect(() => {
+			if (!activeCaptionEditTarget) {
+				return;
+			}
+
+			setCaptionEditSession((session) => {
+				if (!session || session.target.id === activeCaptionEditTargetId) {
+					return session;
+				}
+
+				const nextSession = {
+					...session,
+					target: activeCaptionEditTarget,
+				};
+				captionEditSessionRef.current = nextSession;
+				return nextSession;
+			});
+		}, [activeCaptionEditTarget, activeCaptionEditTargetId]);
 
 		useEffect(() => {
 			if (!captionEditTargetId) {
@@ -2519,7 +2543,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 										}
 										aria-label={
 											onEditAutoCaption && !captionEditSession
-												? "Edit current caption"
+												? editCurrentCaptionLabel
 												: undefined
 										}
 										ref={captionBoxRef}
@@ -2615,7 +2639,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 													1,
 													activeCaptionLayout.visibleLines.length,
 												)}
-												aria-label="Edit current caption"
+												aria-label={editCurrentCaptionLabel}
 												style={{
 													display: "block",
 													width: `${
