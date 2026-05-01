@@ -683,6 +683,7 @@ export default function VideoEditor() {
 	const [hasPendingExportSave, setHasPendingExportSave] = useState(false);
 	const [lastSavedSnapshot, setLastSavedSnapshot] = useState<EditorProjectData | null>(null);
 	const [editorPresets, setEditorPresets] = useState<EditorPreset[]>(() => loadEditorPresets());
+	const [activeEditorPresetId, setActiveEditorPresetId] = useState<string | null>(null);
 	const [presetPopoverOpen, setPresetPopoverOpen] = useState(false);
 	const [presetNameDraft, setPresetNameDraft] = useState("");
 	const [showCropModal, setShowCropModal] = useState(false);
@@ -858,13 +859,29 @@ export default function VideoEditor() {
 		[currentPresetSnapshot],
 	);
 	const currentEditorPreset = useMemo(
-		() =>
+		() => editorPresets.find((preset) => preset.id === activeEditorPresetId) ?? null,
+		[activeEditorPresetId, editorPresets],
+	);
+
+	useEffect(() => {
+		const activePreset = currentEditorPreset;
+		if (
+			activePreset &&
+			serializeEditorPresetSnapshot(activePreset.snapshot) === currentPresetSignature
+		) {
+			return;
+		}
+
+		const matchingPreset =
 			editorPresets.find(
 				(preset) =>
 					serializeEditorPresetSnapshot(preset.snapshot) === currentPresetSignature,
-			) ?? null,
-		[editorPresets, currentPresetSignature],
-	);
+			) ?? null;
+		const nextActivePresetId = matchingPreset?.id ?? null;
+		if (nextActivePresetId !== activeEditorPresetId) {
+			setActiveEditorPresetId(nextActivePresetId);
+		}
+	}, [activeEditorPresetId, currentEditorPreset, currentPresetSignature, editorPresets]);
 
 	useEffect(() => {
 		if (!presetPopoverOpen) {
@@ -921,17 +938,22 @@ export default function VideoEditor() {
 				return;
 			}
 
+			setActiveEditorPresetId(preset.id);
 			applyEditorPresetSnapshot(preset.snapshot);
-			toast.success(`Applied preset \"${preset.name}\"`);
+			toast.success(
+				t("editor.presets.toasts.applied", "Applied preset \"{{name}}\"", {
+					name: preset.name,
+				}),
+			);
 		},
-		[applyEditorPresetSnapshot, editorPresets],
+		[applyEditorPresetSnapshot, editorPresets, t],
 	);
 
 	const handleSaveEditorPreset = useCallback(
 		(name: string) => {
 			const normalizedName = name.trim().replace(/\s+/g, " ");
 			if (normalizedName.length === 0) {
-				toast.error("Enter a preset name.");
+				toast.error(t("editor.presets.errors.nameRequired", "Enter a preset name."));
 				return false;
 			}
 
@@ -939,29 +961,49 @@ export default function VideoEditor() {
 				(preset) => preset.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase(),
 			);
 			if (hasDuplicateName) {
-				toast.error("A preset with that name already exists.");
+				toast.error(
+					t(
+						"editor.presets.errors.duplicateName",
+						"A preset with that name already exists.",
+					),
+				);
 				return false;
 			}
 
 			const snapshot = captureEditorPresetSnapshot();
 			const timestamp = new Date().toISOString();
+			const nextPreset: EditorPreset = {
+				id: crypto.randomUUID(),
+				name: normalizedName,
+				createdAt: timestamp,
+				updatedAt: timestamp,
+				snapshot,
+			};
 			const nextPresets = [
-				{
-					id: crypto.randomUUID(),
-					name: normalizedName,
-					createdAt: timestamp,
-					updatedAt: timestamp,
-					snapshot,
-				},
+				nextPreset,
 				...editorPresets,
 			];
 
+			if (!saveEditorPresets(nextPresets)) {
+				toast.error(
+					t(
+						"editor.presets.errors.saveFailed",
+						"Could not save that preset. Check your browser storage settings and try again.",
+					),
+				);
+				return false;
+			}
+
 			setEditorPresets(nextPresets);
-			saveEditorPresets(nextPresets);
-			toast.success(`Saved preset \"${normalizedName}\"`);
+			setActiveEditorPresetId(nextPreset.id);
+			toast.success(
+				t("editor.presets.toasts.saved", "Saved preset \"{{name}}\"", {
+					name: normalizedName,
+				}),
+			);
 			return true;
 		},
-		[captureEditorPresetSnapshot, editorPresets],
+		[captureEditorPresetSnapshot, editorPresets, t],
 	);
 
 	const handleDeleteEditorPreset = useCallback(
@@ -972,11 +1014,27 @@ export default function VideoEditor() {
 			}
 
 			const nextPresets = editorPresets.filter((item) => item.id !== presetId);
+			if (!saveEditorPresets(nextPresets)) {
+				toast.error(
+					t(
+						"editor.presets.errors.deleteFailed",
+						"Could not delete that preset. Check your browser storage settings and try again.",
+					),
+				);
+				return;
+			}
+
 			setEditorPresets(nextPresets);
-			saveEditorPresets(nextPresets);
-			toast.success(`Deleted preset \"${preset.name}\"`);
+			if (preset.id === activeEditorPresetId) {
+				setActiveEditorPresetId(null);
+			}
+			toast.success(
+				t("editor.presets.toasts.deleted", "Deleted preset \"{{name}}\"", {
+					name: preset.name,
+				}),
+			);
 		},
-		[editorPresets],
+		[activeEditorPresetId, editorPresets, t],
 	);
 
 	const handleSavePresetSubmit = useCallback(() => {
@@ -5198,11 +5256,13 @@ export default function VideoEditor() {
 						<PopoverTrigger asChild>
 							<button
 								type="button"
+								title={t("editor.presets.open", "Open presets")}
+								aria-label={t("editor.presets.open", "Open presets")}
 								className="inline-flex items-center gap-1.5 bg-transparent p-0 text-sm font-medium tracking-tight text-foreground outline-none transition-opacity hover:opacity-80"
 							>
 								<span className="flex items-center gap-1.5">
 									<BookmarkSimple weight="fill" className="h-4 w-4" />
-									<span>{currentEditorPreset?.name ?? "Presets"}</span>
+									<span>{currentEditorPreset?.name ?? t("editor.presets.label", "Presets")}</span>
 								</span>
 								<ChevronDown className="h-3.5 w-3.5 text-foreground" />
 							</button>
@@ -5221,31 +5281,34 @@ export default function VideoEditor() {
 									className="space-y-2"
 								>
 									<p className="text-[11px] font-medium text-foreground">
-										Save current preset as
+										{t("editor.presets.saveCurrentAs", "Save current preset as")}
 									</p>
 									<div className="flex items-center gap-2">
 										<Input
 											value={presetNameDraft}
 											onChange={(event) => setPresetNameDraft(event.target.value)}
-											placeholder="Preset name"
 											className="h-9 rounded-xl border-foreground/10 bg-background/70 text-sm"
+											placeholder={t("editor.presets.namePlaceholder", "Preset name")}
+											aria-label={t("editor.presets.namePlaceholder", "Preset name")}
 										/>
 										<Button
 											type="submit"
 											size="sm"
 											className="h-9 rounded-xl bg-[#2563EB] px-3 text-white hover:bg-[#1d4ed8]"
 										>
-											Save
+											{t("common.actions.save", "Save")}
 										</Button>
 									</div>
 								</form>
 
 								<div className="space-y-2">
-									<p className="text-[11px] font-medium text-foreground">Saved presets</p>
+									<p className="text-[11px] font-medium text-foreground">
+										{t("editor.presets.savedList", "Saved presets")}
+									</p>
 									<div className="max-h-56 space-y-1 overflow-y-auto pr-1 custom-scrollbar">
 										{editorPresets.length === 0 ? (
 											<div className="rounded-xl border border-dashed border-foreground/10 px-3 py-4 text-center text-[11px] text-muted-foreground">
-												No presets yet.
+												{t("editor.presets.empty", "No presets yet.")}
 											</div>
 										) : (
 											editorPresets.map((preset) => {
@@ -5266,14 +5329,22 @@ export default function VideoEditor() {
 															className="flex min-w-0 flex-1 items-center justify-between text-left"
 														>
 															<span className="truncate pr-3">{preset.name}</span>
-															{isActive && <Check className="h-3.5 w-3.5 shrink-0 text-[#2563EB]" />}
+															{isActive ? <Check className="h-3.5 w-3.5 shrink-0 text-[#2563EB]" /> : null}
 														</button>
 														<button
 															type="button"
 															onClick={() => handleDeleteEditorPreset(preset.id)}
 															className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/8 hover:text-foreground"
-															aria-label={`Delete preset ${preset.name}`}
-															title={`Delete preset ${preset.name}`}
+															aria-label={t(
+																"editor.presets.deleteAriaLabel",
+																"Delete preset {{name}}",
+																{ name: preset.name },
+															)}
+															title={t(
+																"editor.presets.deleteAriaLabel",
+																"Delete preset {{name}}",
+																{ name: preset.name },
+															)}
 														>
 															<X className="h-3.5 w-3.5" />
 														</button>
