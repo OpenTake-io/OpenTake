@@ -371,6 +371,8 @@ Pull requests are welcome.
 - buildwithfur
 - Tobias
 - Anonymous Supporter
+- Tandava Appadoo
+- Digitalfastmind
 - Roberto Marcelino
 - Rajan RK
 - Francesco
