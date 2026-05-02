@@ -10,16 +10,19 @@ function makeClick(timeMs: number, cx = 0.5, cy = 0.5): CursorTelemetryPoint {
 	return { timeMs, cx, cy, interactionType: "click" };
 }
 
-/** Wraps a list of click samples with surrounding move events so the telemetry
- *  passes the `normalizedSamples.length < 2` guard. */
+function makeMove(timeMs: number, cx = 0.5, cy = 0.5): CursorTelemetryPoint {
+	return { timeMs, cx, cy, interactionType: "move" };
+}
+
+/** Wraps click samples with surrounding move events to mimic real mixed telemetry. */
 function withMoves(
 	clicks: CursorTelemetryPoint[],
 	totalMs: number,
 ): CursorTelemetryPoint[] {
 	return [
-		{ timeMs: 0, cx: 0.5, cy: 0.5, interactionType: "move" },
+		makeMove(0),
 		...clicks,
-		{ timeMs: totalMs, cx: 0.5, cy: 0.5, interactionType: "move" },
+		makeMove(totalMs),
 	];
 }
 
@@ -41,6 +44,17 @@ describe("buildInteractionZoomSuggestions (click-cluster logic)", () => {
 		const [s] = result.suggestions;
 		expect(s.start).toBe(5_000 - CLICK_CLUSTER_PAD_MS);
 		expect(s.end).toBe(5_000 + CLICK_CLUSTER_PAD_MS);
+	});
+
+	it("accepts a single explicit click sample without needing surrounding moves", () => {
+		const result = buildInteractionZoomSuggestions({
+			cursorTelemetry: [makeClick(5_000)],
+			totalMs: TOTAL_MS,
+			defaultDurationMs: 3_000,
+		});
+
+		expect(result.status).toBe("ok");
+		expect(result.suggestions).toHaveLength(1);
 	});
 
 	it("merges two clicks within 2500ms into one zoom track", () => {
@@ -111,6 +125,24 @@ describe("buildInteractionZoomSuggestions (click-cluster logic)", () => {
 			{ timeMs: 1_000, cx: 0.5, cy: 0.5, interactionType: "move" },
 			{ timeMs: 2_000, cx: 0.6, cy: 0.6, interactionType: "move" },
 			{ timeMs: TOTAL_MS, cx: 0.6, cy: 0.6, interactionType: "move" },
+		];
+
+		const result = buildInteractionZoomSuggestions({
+			cursorTelemetry: telemetry,
+			totalMs: TOTAL_MS,
+			defaultDurationMs: 3_000,
+		});
+
+		expect(result.status).toBe("no-interactions");
+		expect(result.suggestions).toHaveLength(0);
+	});
+
+	it("ignores dwell-derived click-like heuristics when there are no explicit clicks", () => {
+		const telemetry: CursorTelemetryPoint[] = [
+			makeMove(0, 0.5, 0.5),
+			makeMove(200, 0.5005, 0.5005),
+			makeMove(400, 0.5008, 0.5008),
+			makeMove(600, 0.501, 0.501),
 		];
 
 		const result = buildInteractionZoomSuggestions({

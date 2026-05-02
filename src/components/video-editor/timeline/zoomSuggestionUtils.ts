@@ -19,6 +19,7 @@ export interface CursorInteractionCandidate extends ZoomDwellCandidate {
 		| "dropdown-open"
 		| "text-selection"
 		| "text-field-click";
+	source: "explicit" | "heuristic";
 }
 
 export interface SuggestedZoomRegion {
@@ -213,6 +214,7 @@ export function detectInteractionCandidates(
 			focus: { cx: clickSample.cx, cy: clickSample.cy },
 			strength: baseStrength,
 			kind,
+			source: "explicit",
 		});
 	}
 
@@ -220,12 +222,12 @@ export function detectInteractionCandidates(
 	const dwellCandidates = detectZoomDwellCandidates(samples).map<CursorInteractionCandidate>(
 		(candidate) => {
 			if (candidate.strength >= 1100) {
-				return { ...candidate, kind: "text-focus-like" };
+				return { ...candidate, kind: "text-focus-like", source: "heuristic" };
 			}
 			if (candidate.strength <= 800) {
-				return { ...candidate, kind: "click-like" };
+				return { ...candidate, kind: "click-like", source: "heuristic" };
 			}
-			return { ...candidate, kind: "dwell" };
+			return { ...candidate, kind: "dwell", source: "heuristic" };
 		},
 	);
 
@@ -249,6 +251,7 @@ export function detectInteractionCandidates(
 				},
 				strength: prev.strength + curr.strength + 500,
 				kind: "double-click-like",
+				source: "heuristic",
 			});
 		}
 	}
@@ -345,13 +348,23 @@ export function buildInteractionZoomSuggestions(params: {
 	}
 
 	const normalizedSamples = normalizeCursorTelemetry(cursorTelemetry, totalMs);
-	if (normalizedSamples.length < 2) {
+	if (normalizedSamples.length === 0) {
+		return { status: "no-telemetry", suggestions: [] };
+	}
+
+	if (
+		normalizedSamples.length === 1 &&
+		normalizedSamples[0].interactionType !== "click" &&
+		normalizedSamples[0].interactionType !== "double-click" &&
+		normalizedSamples[0].interactionType !== "right-click" &&
+		normalizedSamples[0].interactionType !== "middle-click"
+	) {
 		return { status: "no-telemetry", suggestions: [] };
 	}
 
 	// Only use explicit click events (uiohook telemetry) – ignore dwell heuristics
 	const clickCandidates = detectInteractionCandidates(normalizedSamples).filter(
-		(c) => c.kind === "click-like" || c.kind === "double-click-like" || c.kind === "dropdown-open" || c.kind === "text-field-click" || c.kind === "text-selection",
+		(candidate) => candidate.source === "explicit",
 	);
 
 	if (clickCandidates.length === 0) {
