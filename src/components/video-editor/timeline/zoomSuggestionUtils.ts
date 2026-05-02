@@ -38,8 +38,10 @@ export interface InteractionZoomSuggestionResult {
 	suggestions: SuggestedZoomRegion[];
 }
 
-const DEFAULT_SUGGESTION_SPACING_MS = 1800;
-const DEFAULT_MERGE_NEARBY_GAP_MS = 1500;
+/** Max gap between consecutive clicks before they are split into separate zoom clusters. */
+export const CLICK_CLUSTER_MERGE_GAP_MS = 2500;
+/** Padding added before the first click and after the last click in a cluster. */
+export const CLICK_CLUSTER_PAD_MS = 500;
 
 function normalizeTelemetrySample(
 	sample: CursorTelemetryPoint,
@@ -254,6 +256,73 @@ export function detectInteractionCandidates(
 	return [...explicitInteractionCandidates, ...dwellCandidates, ...doubleClickCandidates];
 }
 
+/**
+ * Groups a sorted list of click timestamps into clusters where consecutive
+ * clicks are no more than `mergeGapMs` apart. Returns an array of
+ * `{ firstMs, lastMs, focus }` objects, one per cluster.  The focus is taken
+ * from the click with the highest interaction strength, falling back to the
+ * centroid of all clicks in the cluster.
+ */
+function buildClickClusters(
+	clicks: CursorInteractionCandidate[],
+	mergeGapMs: number,
+): Array<{ firstMs: number; lastMs: number; focus: ZoomFocus }> {
+	if (clicks.length === 0) {
+		return [];
+	}
+
+	const sorted = [...clicks].sort((a, b) => a.centerTimeMs - b.centerTimeMs);
+	const clusters: Array<{ firstMs: number; lastMs: number; focus: ZoomFocus }> = [];
+
+	let clusterStart = sorted[0].centerTimeMs;
+	let clusterEnd = sorted[0].centerTimeMs;
+	let bestStrength = sorted[0].strength;
+	let bestFocus = sorted[0].focus;
+	let sumCx = sorted[0].focus.cx;
+	let sumCy = sorted[0].focus.cy;
+	let count = 1;
+
+	for (let i = 1; i < sorted.length; i++) {
+		const click = sorted[i];
+		const gap = click.centerTimeMs - clusterEnd;
+
+		if (gap <= mergeGapMs) {
+			// Extend current cluster
+			clusterEnd = Math.max(clusterEnd, click.centerTimeMs);
+			if (click.strength > bestStrength) {
+				bestStrength = click.strength;
+				bestFocus = click.focus;
+			}
+			sumCx += click.focus.cx;
+			sumCy += click.focus.cy;
+			count += 1;
+		} else {
+			// Flush current cluster and start a new one
+			clusters.push({
+				firstMs: clusterStart,
+				lastMs: clusterEnd,
+				focus: bestFocus ?? { cx: sumCx / count, cy: sumCy / count },
+			});
+			clusterStart = click.centerTimeMs;
+			clusterEnd = click.centerTimeMs;
+			bestStrength = click.strength;
+			bestFocus = click.focus;
+			sumCx = click.focus.cx;
+			sumCy = click.focus.cy;
+			count = 1;
+		}
+	}
+
+	// Flush last cluster
+	clusters.push({
+		firstMs: clusterStart,
+		lastMs: clusterEnd,
+		focus: bestFocus ?? { cx: sumCx / count, cy: sumCy / count },
+	});
+
+	return clusters;
+}
+
 export function buildInteractionZoomSuggestions(params: {
 	cursorTelemetry: CursorTelemetryPoint[];
 	totalMs: number;
@@ -261,18 +330,17 @@ export function buildInteractionZoomSuggestions(params: {
 	reservedSpans?: Array<{ start: number; end: number }>;
 	spacingMs?: number;
 	mergeGapMs?: number;
+	padMs?: number;
 }): InteractionZoomSuggestionResult {
 	const {
 		cursorTelemetry,
 		totalMs,
-		defaultDurationMs,
 		reservedSpans = [],
-		spacingMs = DEFAULT_SUGGESTION_SPACING_MS,
-		mergeGapMs = DEFAULT_MERGE_NEARBY_GAP_MS,
+		mergeGapMs = CLICK_CLUSTER_MERGE_GAP_MS,
+		padMs = CLICK_CLUSTER_PAD_MS,
 	} = params;
 
-	const defaultDuration = Math.min(defaultDurationMs, totalMs);
-	if (defaultDuration <= 0) {
+	if (totalMs <= 0) {
 		return { status: "no-slots", suggestions: [] };
 	}
 
@@ -281,62 +349,53 @@ export function buildInteractionZoomSuggestions(params: {
 		return { status: "no-telemetry", suggestions: [] };
 	}
 
-	const interactionCandidates = detectInteractionCandidates(normalizedSamples);
-	if (interactionCandidates.length === 0) {
+	// Only use explicit click events (uiohook telemetry) – ignore dwell heuristics
+	const clickCandidates = detectInteractionCandidates(normalizedSamples).filter(
+		(c) => c.kind === "click-like" || c.kind === "double-click-like" || c.kind === "dropdown-open" || c.kind === "text-field-click" || c.kind === "text-selection",
+	);
+
+	if (clickCandidates.length === 0) {
 		return { status: "no-interactions", suggestions: [] };
 	}
 
-	const sortedCandidates = [...interactionCandidates].sort((a, b) => b.strength - a.strength);
-	const acceptedCenters: number[] = [];
-	const accepted: SuggestedZoomRegion[] = [];
+	// Group nearby clicks into clusters, then derive zoom windows from those clusters
+	const clusters = buildClickClusters(clickCandidates, mergeGapMs);
+
 	const reserved = [...reservedSpans].sort((a, b) => a.start - b.start);
+	const suggestions: SuggestedZoomRegion[] = [];
 
-	sortedCandidates.forEach((candidate) => {
-		const tooCloseToAccepted = acceptedCenters.some(
-			(center) => Math.abs(center - candidate.centerTimeMs) < spacingMs,
-		);
+	for (const cluster of clusters) {
+		const regionStart = Math.max(0, cluster.firstMs - padMs);
+		const regionEnd = Math.min(totalMs, cluster.lastMs + padMs);
 
-		if (tooCloseToAccepted) {
-			return;
-		}
-
-		const centeredStart = Math.round(candidate.centerTimeMs - defaultDuration / 2);
-		const candidateStart = Math.max(0, Math.min(centeredStart, totalMs - defaultDuration));
-		const candidateEnd = candidateStart + defaultDuration;
-		const hasOverlap = reserved.some(
-			(span) => candidateEnd > span.start && candidateStart < span.end,
-		);
-
-		if (hasOverlap) {
-			return;
-		}
-
-		reserved.push({ start: candidateStart, end: candidateEnd });
-		acceptedCenters.push(candidate.centerTimeMs);
-		accepted.push({
-			start: candidateStart,
-			end: candidateEnd,
-			focus: candidate.focus,
-		});
-	});
-
-	const sortedAccepted = [...accepted].sort((a, b) => a.start - b.start);
-	const merged: SuggestedZoomRegion[] = [];
-	for (const region of sortedAccepted) {
-		const previous = merged[merged.length - 1];
-		if (previous && region.start - previous.end <= mergeGapMs) {
-			previous.end = Math.max(previous.end, region.end);
+		if (regionEnd <= regionStart) {
 			continue;
 		}
 
-		merged.push({ ...region });
+		const hasOverlap = reserved.some(
+			(span) => regionEnd > span.start && regionStart < span.end,
+		);
+
+		if (hasOverlap) {
+			continue;
+		}
+
+		reserved.push({ start: regionStart, end: regionEnd });
+		suggestions.push({
+			start: regionStart,
+			end: regionEnd,
+			focus: cluster.focus,
+		});
 	}
 
-	if (merged.length === 0) {
+	if (suggestions.length === 0) {
 		return { status: "no-slots", suggestions: [] };
 	}
 
-	return { status: "ok", suggestions: merged };
+	// Sort chronologically
+	suggestions.sort((a, b) => a.start - b.start);
+
+	return { status: "ok", suggestions };
 }
 
 /**
