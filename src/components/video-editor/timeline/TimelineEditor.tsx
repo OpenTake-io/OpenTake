@@ -1479,14 +1479,11 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				const activeClip = clipRegions.find(
 					(clip) => startPos >= clip.startMs && startPos < clip.endMs,
 				);
-				if (!activeClip) {
-					return false;
-				}
 
 				const sorted = [...zoomRegions].sort((a, b) => a.startMs - b.startMs);
 				const nextRegion = sorted.find((region) => region.startMs > startPos);
-				const gapToNextClipEdge = activeClip.endMs - startPos;
-				const gapToNextRegion = nextRegion ? nextRegion.startMs - startPos : gapToNextClipEdge;
+				const gapToNextClipEdge = activeClip ? activeClip.endMs - startPos : totalMs - startPos;
+				const gapToNextRegion = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
 				const availableDuration = Math.min(gapToNextClipEdge, gapToNextRegion);
 
 				const isOverlapping = sorted.some(
@@ -1513,7 +1510,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				if (!canPlaceZoomAtMs(startPos)) {
 					toast.error("Cannot place zoom here", {
 						description:
-							"Place zooms inside a kept clip and leave enough room before the clip ends.",
+							"Zoom already exists here or there is not enough room before the next zoom or clip end.",
 					});
 					return;
 				}
