@@ -234,6 +234,7 @@ interface CaptionRenderState {
 interface RenderSnapshot {
 	timeMs: number;
 	cursorTimeMs: number;
+	backgroundTimelineTimeMs: number;
 	sceneTransform: { scale: number; x: number; y: number };
 	zoom: { scale: number; focusX: number; focusY: number; progress: number };
 }
@@ -2550,6 +2551,7 @@ export class FrameRenderer {
 		return {
 			timeMs,
 			cursorTimeMs,
+			backgroundTimelineTimeMs: backgroundTimelineTimestamp / 1000,
 			sceneTransform: {
 				scale: this.animationState.appliedScale,
 				x: this.animationState.x,
@@ -2633,6 +2635,17 @@ export class FrameRenderer {
 		const resolvedSnapshot = centerSnapshot ?? lastSnapshot;
 		if (!resolvedSnapshot) {
 			return null;
+		}
+
+		if (resolvedSnapshot !== lastSnapshot) {
+			await this.renderSceneSample(
+				Math.round(resolvedSnapshot.timeMs * 1000),
+				Math.round(resolvedSnapshot.cursorTimeMs * 1000),
+				Math.round(resolvedSnapshot.backgroundTimelineTimeMs * 1000),
+				layoutCache,
+				true,
+				false,
+			);
 		}
 
 		const hasOverlayCanvasWork =

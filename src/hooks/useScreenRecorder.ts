@@ -1103,6 +1103,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				}
 			}
 
+			hideEditorOverlayCursorByDefault.current = true;
+
 			const wantsAudioCapture = microphoneEnabled || systemAudioEnabled;
 			const browserCaptureSource = await resolveBrowserCaptureSource(selectedSource);
 
@@ -1258,20 +1260,25 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					stream.current.addTrack(micAudioTrack);
 				}
 			} else {
-				const mediaStream = await mediaDevices.getDisplayMedia({
-					audio: false,
-					video: {
-						displaySurface: selectedSource.id?.startsWith("window:")
-							? "window"
-							: "monitor",
-						width: { ideal: TARGET_WIDTH, max: TARGET_WIDTH },
-						height: { ideal: TARGET_HEIGHT, max: TARGET_HEIGHT },
-						frameRate: { ideal: TARGET_FRAME_RATE, max: TARGET_FRAME_RATE },
-						cursor: "never",
-					},
-					selfBrowserSurface: "exclude",
-					surfaceSwitching: "exclude",
-				});
+				const mediaStream = useLinuxPortal
+					? await mediaDevices.getDisplayMedia({
+							audio: false,
+							video: {
+								displaySurface: selectedSource.id?.startsWith("window:")
+									? "window"
+									: "monitor",
+								width: { ideal: TARGET_WIDTH, max: TARGET_WIDTH },
+								height: { ideal: TARGET_HEIGHT, max: TARGET_HEIGHT },
+								frameRate: { ideal: TARGET_FRAME_RATE, max: TARGET_FRAME_RATE },
+								cursor: "never",
+							},
+							selfBrowserSurface: "exclude",
+							surfaceSwitching: "exclude",
+						})
+					: await mediaDevices.getUserMedia({
+							audio: false,
+							video: browserScreenVideoConstraints,
+						});
 
 				stream.current = mediaStream;
 				videoTrack = mediaStream.getVideoTracks()[0];

@@ -1448,9 +1448,9 @@ export function SettingsPanel({
 
 	const resetZoomSection = () => {
 		onZoomTemporalMotionBlurChange?.(initialEditorPreferences.zoomTemporalMotionBlur);
-		onZoomMotionBlurSampleCountChange?.(initialEditorPreferences.zoomMotionBlurSampleCount);
+		onZoomMotionBlurSampleCountChange?.(TEMPORAL_MOTION_BLUR_DEFAULT_SAMPLE_COUNT);
 		onZoomMotionBlurShutterFractionChange?.(
-			initialEditorPreferences.zoomMotionBlurShutterFraction,
+			TEMPORAL_MOTION_BLUR_DEFAULT_SHUTTER_FRACTION,
 		);
 		onZoomInDurationMsChange?.(initialEditorPreferences.zoomInDurationMs);
 		onZoomOutDurationMsChange?.(initialEditorPreferences.zoomOutDurationMs);
@@ -1481,7 +1481,6 @@ export function SettingsPanel({
 			MOTION_PRESET_ORDER.find((presetId) => {
 				const preset = CURSOR_MOTION_PRESETS[presetId];
 				return (
-					preset.zoomSmoothness === DEFAULT_ZOOM_SMOOTHNESS &&
 					preset.zoomInDurationMs === zoomInDurationMs &&
 					preset.zoomOutDurationMs === zoomOutDurationMs &&
 					preset.cursorSize === cursorSize &&

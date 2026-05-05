@@ -443,14 +443,16 @@ export function loadEditorPresets(): EditorPreset[] {
 	}
 }
 
-export function saveEditorPresets(presets: EditorPreset[]): void {
+export function saveEditorPresets(presets: EditorPreset[]): boolean {
 	if (typeof globalThis.localStorage === "undefined") {
-		return;
+		return false;
 	}
 
 	try {
 		globalThis.localStorage.setItem(EDITOR_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+		return true;
 	} catch {
 		// Ignore storage failures so editor controls still work.
+		return false;
 	}
 }

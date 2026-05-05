@@ -77,6 +77,7 @@ import {
 	getAspectRatioLabel,
 	getAspectRatioValue,
 } from "@/utils/aspectRatioUtils";
+import { cn } from "@/lib/utils";
 import { ExtensionIcon } from "./ExtensionIcon";
 
 const PhCursorFill = (props: { className?: string; weight?: "fill" | "regular" }) => (
@@ -103,7 +104,10 @@ import { resolveAutoCaptionSourcePath } from "./autoCaptionSource";
 import { CropControl } from "./CropControl";
 import { ExportSettingsMenu } from "./ExportSettingsMenu";
 import ExtensionManager from "./ExtensionManager";
-import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
+import {
+	loadEditorPreferences,
+	saveEditorPreferences,
+} from "./editorPreferences";
 import ProjectBrowserDialog, { type ProjectLibraryEntry } from "./ProjectBrowserDialog";
 import {
 	createProjectData,
@@ -622,6 +626,18 @@ export default function VideoEditor() {
 	const [cursorSmoothing, setCursorSmoothing] = useState(
 		initialEditorPreferences.cursorSmoothing,
 	);
+	const [cursorSpringStiffnessMultiplier, setCursorSpringStiffnessMultiplier] = useState(
+		initialEditorPreferences.cursorSpringStiffnessMultiplier,
+	);
+	const [cursorSpringDampingMultiplier, setCursorSpringDampingMultiplier] = useState(
+		initialEditorPreferences.cursorSpringDampingMultiplier,
+	);
+	const [cursorSpringMassMultiplier, setCursorSpringMassMultiplier] = useState(
+		initialEditorPreferences.cursorSpringMassMultiplier,
+	);
+	const [sessionShowCursorOverride, setSessionShowCursorOverride] = useState<boolean | null>(
+		null,
+	);
 	const [zoomSmoothness, setZoomSmoothness] = useState(0.5);
 	const [zoomClassicMode, setZoomClassicMode] = useState(false);
 	const [cursorMotionBlur, setCursorMotionBlur] = useState(
@@ -685,6 +701,7 @@ export default function VideoEditor() {
 	const [sourceAudioFallbackPaths, setSourceAudioFallbackPaths] = useState<string[]>([]);
 	const [sourceAudioFallbackStartDelayMsByPath, setSourceAudioFallbackStartDelayMsByPath] =
 		useState<Record<string, number>>({});
+	const effectiveShowCursor = sessionShowCursorOverride ?? showCursor;
 	const [aspectRatio, setAspectRatio] = useState<AspectRatio>(
 		initialEditorPreferences.aspectRatio,
 	);
@@ -917,10 +934,13 @@ export default function VideoEditor() {
 					previewWidth,
 					previewHeight,
 					cursorTelemetry,
-					showCursor,
+					effectiveShowCursor,
 					cursorStyle,
 					cursorSize,
 					cursorSmoothing,
+					cursorSpringStiffnessMultiplier,
+					cursorSpringDampingMultiplier,
+					cursorSpringMassMultiplier,
 					zoomSmoothness,
 					zoomClassicMode,
 					cursorMotionBlur,
@@ -996,6 +1016,9 @@ export default function VideoEditor() {
 		cursorMotionBlur,
 		cursorSize,
 		cursorSmoothing,
+		cursorSpringDampingMultiplier,
+		cursorSpringMassMultiplier,
+		cursorSpringStiffnessMultiplier,
 		zoomSmoothness,
 		cursorStyle,
 		cursorSway,
@@ -1004,7 +1027,7 @@ export default function VideoEditor() {
 		padding,
 		resolvedWebcamVideoUrl,
 		shadowIntensity,
-		showCursor,
+		effectiveShowCursor,
 		speedRegions,
 		wallpaper,
 		webcam,
@@ -1030,6 +1053,11 @@ export default function VideoEditor() {
 			encoderName: previous?.encoderName,
 			phase: "saving",
 		}));
+	}, []);
+
+	const handleShowCursorChange = useCallback((nextShowCursor: boolean) => {
+		setSessionShowCursorOverride(null);
+		setShowCursor(nextShowCursor);
 	}, []);
 
 	const remountPreview = useCallback(() => {
@@ -1323,6 +1351,9 @@ export default function VideoEditor() {
 				cursorStyle: CursorStyle;
 				cursorSize: number;
 				cursorSmoothing: number;
+				cursorSpringStiffnessMultiplier: number;
+				cursorSpringDampingMultiplier: number;
+				cursorSpringMassMultiplier: number;
 				zoomSmoothness: number;
 				zoomClassicMode: boolean;
 				cursorMotionBlur: number;
@@ -1471,6 +1502,9 @@ export default function VideoEditor() {
 				cursorStyle,
 				cursorSize,
 				cursorSmoothing,
+				cursorSpringStiffnessMultiplier,
+				cursorSpringDampingMultiplier,
+				cursorSpringMassMultiplier,
 				zoomSmoothness,
 				zoomClassicMode,
 				cursorMotionBlur,
@@ -1521,6 +1555,9 @@ export default function VideoEditor() {
 			cursorStyle,
 			cursorSize,
 			cursorSmoothing,
+			cursorSpringStiffnessMultiplier,
+			cursorSpringDampingMultiplier,
+			cursorSpringMassMultiplier,
 			zoomSmoothness,
 			zoomClassicMode,
 			cursorMotionBlur,
@@ -1694,11 +1731,19 @@ export default function VideoEditor() {
 			setZoomInEasing(normalizedEditor.zoomInEasing);
 			setZoomOutEasing(normalizedEditor.zoomOutEasing);
 			setConnectedZoomEasing(normalizedEditor.connectedZoomEasing);
+			setSessionShowCursorOverride(null);
 			setShowCursor(normalizedEditor.showCursor);
 			setLoopCursor(normalizedEditor.loopCursor);
 			setCursorStyle(normalizedEditor.cursorStyle);
 			setCursorSize(normalizedEditor.cursorSize);
 			setCursorSmoothing(normalizedEditor.cursorSmoothing);
+			setCursorSpringStiffnessMultiplier(
+				normalizedEditor.cursorSpringStiffnessMultiplier,
+			);
+			setCursorSpringDampingMultiplier(
+				normalizedEditor.cursorSpringDampingMultiplier,
+			);
+			setCursorSpringMassMultiplier(normalizedEditor.cursorSpringMassMultiplier);
 			setZoomSmoothness(normalizedEditor.zoomSmoothness);
 			setZoomClassicMode(normalizedEditor.zoomClassicMode);
 			setCursorMotionBlur(normalizedEditor.cursorMotionBlur);
@@ -2005,9 +2050,9 @@ export default function VideoEditor() {
 					pendingFreshRecordingAutoZoomPathRef.current = autoApplyFreshRecordingAutoZooms
 						? sourceVideoUrl
 						: null;
-					if (sessionResult.session.hideOverlayCursorByDefault) {
-						setShowCursor(false);
-					}
+					setSessionShowCursorOverride(
+						sessionResult.session.hideOverlayCursorByDefault ? false : null,
+					);
 					setWebcam((prev) => ({
 						...prev,
 						enabled: Boolean(sessionResult.session?.webcamPath),
@@ -2027,6 +2072,7 @@ export default function VideoEditor() {
 					setCurrentProjectPath(null);
 					setLastSavedSnapshot(null);
 					pendingFreshRecordingAutoZoomPathRef.current = null;
+					setSessionShowCursorOverride(null);
 					setWebcam((prev) => ({
 						...prev,
 						enabled: false,
@@ -2097,6 +2143,9 @@ export default function VideoEditor() {
 			cursorStyle,
 			cursorSize,
 			cursorSmoothing,
+			cursorSpringStiffnessMultiplier,
+			cursorSpringDampingMultiplier,
+			cursorSpringMassMultiplier,
 			cursorMotionBlur,
 			cursorClickBounce,
 			cursorClickBounceDuration,
@@ -2138,6 +2187,9 @@ export default function VideoEditor() {
 		cursorStyle,
 		cursorSize,
 		cursorSmoothing,
+		cursorSpringStiffnessMultiplier,
+		cursorSpringDampingMultiplier,
+		cursorSpringMassMultiplier,
 		cursorMotionBlur,
 		cursorClickBounce,
 		cursorClickBounceDuration,
@@ -3975,10 +4027,13 @@ export default function VideoEditor() {
 						autoCaptionSettings,
 						zoomRegions: effectiveZoomRegions,
 						cursorTelemetry: effectiveCursorTelemetry,
-						showCursor,
+						effectiveShowCursor,
 						cursorStyle,
 						cursorSize,
 						cursorSmoothing,
+						cursorSpringStiffnessMultiplier,
+						cursorSpringDampingMultiplier,
+						cursorSpringMassMultiplier,
 						zoomSmoothness,
 						zoomClassicMode,
 						cursorMotionBlur,
@@ -4147,10 +4202,13 @@ export default function VideoEditor() {
 						autoCaptionSettings,
 						zoomRegions: effectiveZoomRegions,
 						cursorTelemetry: effectiveCursorTelemetry,
-						showCursor,
+						effectiveShowCursor,
 						cursorStyle,
 						cursorSize,
 						cursorSmoothing,
+						cursorSpringStiffnessMultiplier,
+						cursorSpringDampingMultiplier,
+						cursorSpringMassMultiplier,
 						zoomSmoothness,
 						zoomClassicMode,
 						cursorMotionBlur,
@@ -4383,11 +4441,14 @@ export default function VideoEditor() {
 			zoomInEasing,
 			zoomOutEasing,
 			connectedZoomEasing,
-			showCursor,
+			effectiveShowCursor,
 			cursorStyle,
 			effectiveCursorTelemetry,
 			cursorSize,
 			cursorSmoothing,
+			cursorSpringStiffnessMultiplier,
+			cursorSpringDampingMultiplier,
+			cursorSpringMassMultiplier,
 			zoomSmoothness,
 			zoomClassicMode,
 			cursorMotionBlur,
@@ -5255,8 +5316,8 @@ export default function VideoEditor() {
 								onZoomOutEasingChange={setZoomOutEasing}
 								connectedZoomEasing={connectedZoomEasing}
 								onConnectedZoomEasingChange={setConnectedZoomEasing}
-								showCursor={showCursor}
-								onShowCursorChange={setShowCursor}
+								showCursor={effectiveShowCursor}
+								onShowCursorChange={handleShowCursorChange}
 								loopCursor={loopCursor}
 								onLoopCursorChange={setLoopCursor}
 								cursorStyle={cursorStyle}
@@ -5265,6 +5326,16 @@ export default function VideoEditor() {
 								onCursorSizeChange={setCursorSize}
 								cursorSmoothing={cursorSmoothing}
 								onCursorSmoothingChange={setCursorSmoothing}
+								cursorSpringStiffnessMultiplier={cursorSpringStiffnessMultiplier}
+								onCursorSpringStiffnessMultiplierChange={
+									setCursorSpringStiffnessMultiplier
+								}
+								cursorSpringDampingMultiplier={cursorSpringDampingMultiplier}
+								onCursorSpringDampingMultiplierChange={
+									setCursorSpringDampingMultiplier
+								}
+								cursorSpringMassMultiplier={cursorSpringMassMultiplier}
+								onCursorSpringMassMultiplierChange={setCursorSpringMassMultiplier}
 								zoomClassicMode={zoomClassicMode}
 								onZoomClassicModeChange={setZoomClassicMode}
 								cursorMotionBlur={cursorMotionBlur}
@@ -5455,10 +5526,17 @@ export default function VideoEditor() {
 												}
 												onAnnotationSizeChange={handleAnnotationSizeChange}
 												cursorTelemetry={effectiveCursorTelemetry}
-												showCursor={showCursor}
+												showCursor={effectiveShowCursor}
 												cursorStyle={cursorStyle}
 												cursorSize={cursorSize}
 												cursorSmoothing={cursorSmoothing}
+												cursorSpringStiffnessMultiplier={
+													cursorSpringStiffnessMultiplier
+												}
+												cursorSpringDampingMultiplier={
+													cursorSpringDampingMultiplier
+												}
+												cursorSpringMassMultiplier={cursorSpringMassMultiplier}
 												zoomSmoothness={zoomSmoothness}
 												zoomClassicMode={zoomClassicMode}
 												cursorMotionBlur={cursorMotionBlur}

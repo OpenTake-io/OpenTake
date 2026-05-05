@@ -100,15 +100,15 @@ function recenterFocusWhenCursorLeavesSafeZone(
 	let nextFocusY = currentFocus.cy;
 
 	if (cursorFocus.cx < safeLeft) {
-		nextFocusX = cursorFocus.cx;
+		nextFocusX = cursorFocus.cx + halfSpan - safeZoneInset;
 	} else if (cursorFocus.cx > safeRight) {
-		nextFocusX = cursorFocus.cx;
+		nextFocusX = cursorFocus.cx - halfSpan + safeZoneInset;
 	}
 
 	if (cursorFocus.cy < safeTop) {
-		nextFocusY = cursorFocus.cy;
+		nextFocusY = cursorFocus.cy + halfSpan - safeZoneInset;
 	} else if (cursorFocus.cy > safeBottom) {
-		nextFocusY = cursorFocus.cy;
+		nextFocusY = cursorFocus.cy - halfSpan + safeZoneInset;
 	}
 
 	return clampFocusToScale(
@@ -157,17 +157,20 @@ export function computeCursorFollowFocus(
 			: clampedRegionFocus;
 	}
 
+	const timeWentBackwards = state.initialized && timeMs + 0.5 < state.lastTimeMs;
+	if (timeWentBackwards) {
+		state.reachedFullZoom = false;
+	}
+
 	// Track when zoom reaches full strength
 	if (zoomStrength >= 0.99) {
 		state.reachedFullZoom = true;
 	}
 
 	// Zooming out: was fully zoomed but strength is now dropping — freeze camera
-	if (state.reachedFullZoom && zoomStrength < 0.99) {
+	if (!timeWentBackwards && state.reachedFullZoom && zoomStrength < 0.99) {
 		return { cx: state.frozenFocusX, cy: state.frozenFocusY };
 	}
-
-	const timeWentBackwards = state.initialized && timeMs + 0.5 < state.lastTimeMs;
 
 	if (!state.initialized || !state.wasZoomed || timeWentBackwards) {
 		const initialFocus = recenterFocusWhenCursorLeavesSafeZone(
