@@ -327,6 +327,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	getCursorTelemetry: (videoPath?: string) => {
 		return ipcRenderer.invoke("get-cursor-telemetry", videoPath);
 	},
+	setCursorTelemetry: (videoPath: string | undefined, samples: CursorTelemetryPoint[]) => {
+		return ipcRenderer.invoke("set-cursor-telemetry", videoPath, samples);
+	},
 	getSystemCursorAssets: () => {
 		return ipcRenderer.invoke("get-system-cursor-assets");
 	},
@@ -436,14 +439,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	}) => {
 		return ipcRenderer.invoke("generate-auto-captions", options);
 	},
-	setCurrentVideoPath: (path: string, options?: { preserveProjectPath?: boolean }) => {
+	setCurrentVideoPath: (
+		path: string,
+		options?: {
+			preserveProjectPath?: boolean;
+			hideOverlayCursorByDefault?: boolean;
+		},
+	) => {
 		return ipcRenderer.invoke("set-current-video-path", path, options);
 	},
-	setCurrentRecordingSession: (session: {
-		videoPath: string;
-		webcamPath?: string | null;
-		timeOffsetMs?: number;
-	}, options?: { preserveProjectPath?: boolean }) => {
+	setCurrentRecordingSession: (
+		session: {
+			videoPath: string;
+			webcamPath?: string | null;
+			timeOffsetMs?: number;
+			hideOverlayCursorByDefault?: boolean;
+		},
+		options?: { preserveProjectPath?: boolean },
+	) => {
 		return ipcRenderer.invoke("set-current-recording-session", session, options);
 	},
 	getCurrentRecordingSession: () => {
@@ -602,6 +615,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	getPlatform: () => {
 		return ipcRenderer.invoke("get-platform");
+	},
+	getLinuxWindowSystem: () => {
+		return ipcRenderer.invoke("get-linux-window-system");
 	},
 	revealInFolder: (filePath: string) => {
 		return ipcRenderer.invoke("reveal-in-folder", filePath);
