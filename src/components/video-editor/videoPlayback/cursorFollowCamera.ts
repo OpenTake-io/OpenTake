@@ -100,15 +100,15 @@ function recenterFocusWhenCursorLeavesSafeZone(
 	let nextFocusY = currentFocus.cy;
 
 	if (cursorFocus.cx < safeLeft) {
-		nextFocusX = cursorFocus.cx + halfSpan - safeZoneInset;
+		nextFocusX = cursorFocus.cx;
 	} else if (cursorFocus.cx > safeRight) {
-		nextFocusX = cursorFocus.cx - halfSpan + safeZoneInset;
+		nextFocusX = cursorFocus.cx;
 	}
 
 	if (cursorFocus.cy < safeTop) {
-		nextFocusY = cursorFocus.cy + halfSpan - safeZoneInset;
+		nextFocusY = cursorFocus.cy;
 	} else if (cursorFocus.cy > safeBottom) {
-		nextFocusY = cursorFocus.cy - halfSpan + safeZoneInset;
+		nextFocusY = cursorFocus.cy;
 	}
 
 	return clampFocusToScale(
