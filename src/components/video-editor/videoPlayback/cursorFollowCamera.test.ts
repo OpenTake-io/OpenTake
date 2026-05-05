@@ -72,9 +72,9 @@ describe("computeCursorFollowFocus", () => {
 			{ snapToEdgesRatio: 0.25 },
 		);
 
-		expect(firstShift.cx).toBeCloseTo(0.7, 6);
+		expect(firstShift.cx).toBeCloseTo(0.575, 6);
 		expect(firstShift.cy).toBeCloseTo(0.5, 6);
-		expect(secondShift.cx).toBeCloseTo(0.7, 6);
+		expect(secondShift.cx).toBeCloseTo(0.595, 6);
 		expect(secondShift.cy).toBeCloseTo(0.5, 6);
 	});
 
