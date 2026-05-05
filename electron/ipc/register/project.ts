@@ -541,25 +541,27 @@ export function registerProjectHandlers() {
         timeOffsetMs: 0,
       }
 
-    setCurrentRecordingSession({
+    const nextSession = {
       ...resolvedSession,
       hideOverlayCursorByDefault:
         normalizeBoolean(options?.hideOverlayCursorByDefault) ||
         normalizeBoolean(resolvedSession.hideOverlayCursorByDefault),
-    })
+    }
+
+    setCurrentRecordingSession(nextSession)
     await replaceApprovedSessionLocalReadPaths([
       resolvedSession.videoPath,
       resolvedSession.webcamPath,
     ])
 
-    if (resolvedSession.webcamPath) {
-      await persistRecordingSessionManifest(resolvedSession)
+    if (nextSession.webcamPath) {
+      await persistRecordingSessionManifest(nextSession)
     }
 
     if (!options?.preserveProjectPath) {
       setCurrentProjectPath(null)
     }
-    return { success: true, webcamPath: resolvedSession.webcamPath ?? null }
+    return { success: true, webcamPath: nextSession.webcamPath ?? null }
   })
 
   ipcMain.handle('set-current-recording-session', async (_, session: { videoPath: string; webcamPath?: string | null; timeOffsetMs?: number; hideOverlayCursorByDefault?: boolean }, options?: { preserveProjectPath?: boolean }) => {

@@ -1476,21 +1476,18 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				}
 
 				const startPos = Math.max(0, Math.min(startMs, totalMs));
-				const activeClip = clipRegions.find(
-					(clip) => startPos >= clip.startMs && startPos < clip.endMs,
-				);
-				const nextClip = clipRegions.find((clip) => clip.startMs > startPos);
+				const activeClip =
+					clipRegions.length === 0
+						? { startMs: 0, endMs: totalMs }
+						: clipRegions.find((clip) => startPos >= clip.startMs && startPos < clip.endMs);
+				if (!activeClip) {
+					return false;
+				}
 
 				const sorted = [...zoomRegions].sort((a, b) => a.startMs - b.startMs);
 				const nextRegion = sorted.find((region) => region.startMs > startPos);
-				const gapToNextClipEdge = clipRegions.length === 0
-					? totalMs - startPos
-					: activeClip
-						? activeClip.endMs - startPos
-						: nextClip
-							? nextClip.startMs - startPos
-							: 0;
-				const gapToNextRegion = nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
+				const gapToNextClipEdge = activeClip.endMs - startPos;
+				const gapToNextRegion = nextRegion ? nextRegion.startMs - startPos : gapToNextClipEdge;
 				const availableDuration = Math.min(gapToNextClipEdge, gapToNextRegion);
 
 				const isOverlapping = sorted.some(

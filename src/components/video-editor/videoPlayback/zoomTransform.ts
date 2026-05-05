@@ -174,12 +174,13 @@ function computeZoomBlurGeometry({
 		Math.hypot(focusStagePxX, stageSize.height - focusStagePxY),
 		Math.hypot(stageSize.width - focusStagePxX, stageSize.height - focusStagePxY),
 	);
+	const radius = Math.max(outerRadius, 1);
 
 	return {
 		centerX: focusStagePxX,
 		centerY: focusStagePxY,
-		innerRadius: Math.max(18, Math.min(outerRadius - 1, visibleHalfDiagonal)),
-		radius: Math.max(outerRadius, 1),
+		innerRadius: Math.max(0, Math.min(Math.max(18, Math.min(radius - 1, visibleHalfDiagonal)), radius - 1)),
+		radius,
 	};
 }
 
