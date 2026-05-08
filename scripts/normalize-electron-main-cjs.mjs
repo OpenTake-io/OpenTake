@@ -112,6 +112,184 @@ function updateLexicalState(line, state) {
 	return { mode };
 }
 
+function hasTokenBoundary(line, startIndex, endIndex) {
+	const before = line[startIndex - 1];
+	const after = line[endIndex];
+	const isIdentifier = (char) => Boolean(char && /[A-Za-z0-9_$]/.test(char));
+	return !isIdentifier(before) && !isIdentifier(after);
+}
+
+function replaceImportMetaUrlInCode(line, state) {
+	const token = "import.meta.url";
+	let mode = state.mode;
+	let escaped = false;
+	let changed = false;
+	let normalizedLine = "";
+
+	for (let index = 0; index < line.length; index += 1) {
+		const char = line[index];
+		const next = line[index + 1];
+
+		if (mode === "block-comment") {
+			normalizedLine += char;
+			if (char === "*" && next === "/") {
+				normalizedLine += next;
+				mode = null;
+				index += 1;
+			}
+			continue;
+		}
+
+		if (mode === "single-quote" || mode === "double-quote" || mode === "template") {
+			normalizedLine += char;
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+
+			if (char === "\\") {
+				escaped = true;
+				continue;
+			}
+
+			if (
+				(mode === "single-quote" && char === "'") ||
+				(mode === "double-quote" && char === '"') ||
+				(mode === "template" && char === "`")
+			) {
+				mode = null;
+			}
+			continue;
+		}
+
+		if (char === "/" && next === "/") {
+			normalizedLine += line.slice(index);
+			break;
+		}
+
+		if (char === "/" && next === "*") {
+			normalizedLine += char + next;
+			mode = "block-comment";
+			index += 1;
+			continue;
+		}
+
+		if (char === "'") {
+			normalizedLine += char;
+			mode = "single-quote";
+			continue;
+		}
+
+		if (char === '"') {
+			normalizedLine += char;
+			mode = "double-quote";
+			continue;
+		}
+
+		if (char === "`") {
+			normalizedLine += char;
+			mode = "template";
+			continue;
+		}
+
+		if (
+			line.startsWith(token, index) &&
+			hasTokenBoundary(line, index, index + token.length)
+		) {
+			normalizedLine += IMPORT_META_URL_CJS_REPLACEMENT;
+			changed = true;
+			index += token.length - 1;
+			continue;
+		}
+
+		normalizedLine += char;
+	}
+
+	if (mode === "single-quote" || mode === "double-quote") {
+		mode = null;
+	}
+
+	return {
+		line: normalizedLine,
+		state: { mode },
+		changed,
+	};
+}
+
+function containsImportMetaInCode(line, state) {
+	const token = "import.meta";
+	let mode = state.mode;
+	let escaped = false;
+
+	for (let index = 0; index < line.length; index += 1) {
+		const char = line[index];
+		const next = line[index + 1];
+
+		if (mode === "block-comment") {
+			if (char === "*" && next === "/") {
+				mode = null;
+				index += 1;
+			}
+			continue;
+		}
+
+		if (mode === "single-quote" || mode === "double-quote" || mode === "template") {
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+
+			if (char === "\\") {
+				escaped = true;
+				continue;
+			}
+
+			if (
+				(mode === "single-quote" && char === "'") ||
+				(mode === "double-quote" && char === '"') ||
+				(mode === "template" && char === "`")
+			) {
+				mode = null;
+			}
+			continue;
+		}
+
+		if (char === "/" && next === "/") {
+			break;
+		}
+
+		if (char === "/" && next === "*") {
+			mode = "block-comment";
+			index += 1;
+			continue;
+		}
+
+		if (char === "'") {
+			mode = "single-quote";
+			continue;
+		}
+
+		if (char === '"') {
+			mode = "double-quote";
+			continue;
+		}
+
+		if (char === "`") {
+			mode = "template";
+			continue;
+		}
+
+		if (
+			line.startsWith(token, index) &&
+			hasTokenBoundary(line, index, index + token.length)
+		) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 export function normalizeElectronMainCjsSource(source) {
 	let changed = false;
 	const lineBreak = source.includes("\r\n") ? "\r\n" : "\n";
@@ -129,16 +307,13 @@ export function normalizeElectronMainCjsSource(source) {
 			}
 		}
 
-		const normalizedLine = line.replace(
-			/\bimport\.meta\.url\b/g,
-			IMPORT_META_URL_CJS_REPLACEMENT,
-		);
-		if (normalizedLine !== line) {
+		const normalized = replaceImportMetaUrlInCode(line, state);
+		if (normalized.changed) {
 			changed = true;
 		}
 
-		normalizedLines.push(normalizedLine);
-		state = updateLexicalState(normalizedLine, state);
+		normalizedLines.push(normalized.line);
+		state = normalized.state;
 	}
 
 	if (!changed) {
@@ -166,7 +341,7 @@ export function findElectronMainCjsEsmSyntax(source) {
 				});
 				continue;
 			}
-			if (/\bimport\.meta\b/.test(line)) {
+			if (containsImportMetaInCode(line, state)) {
 				matches.push({
 					line: index + 1,
 					text: line.trim(),

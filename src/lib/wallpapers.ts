@@ -56,7 +56,7 @@ function getBundledWallpaperFileName(value: string) {
 		return null;
 	}
 
-	const normalizedValue = value.split("?")[0] ?? value;
+	const normalizedValue = value.split(/[?#]/)[0] ?? value;
 	const fileName = normalizedValue.split("/").filter(Boolean).pop();
 	return fileName ? safeDecodeFileName(fileName) : null;
 }

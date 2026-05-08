@@ -890,8 +890,14 @@ async function main() {
 	const benchmarkRequests = buildBenchmarkRequests();
 
 	const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "recordly-export-queue-bench-"));
-	const inputPath = path.join(tempDir, "input.mp4");
-	const webcamInputPath = useWebcamOverlay ? path.join(tempDir, "webcam.mp4") : null;
+	const inputExtension = providedInputPath ? path.extname(providedInputPath) || ".mp4" : ".mp4";
+	const inputPath = path.join(tempDir, `input${inputExtension}`);
+	const webcamExtension = providedWebcamInputPath
+		? path.extname(providedWebcamInputPath) || ".mp4"
+		: ".mp4";
+	const webcamInputPath = useWebcamOverlay
+		? path.join(tempDir, `webcam${webcamExtension}`)
+		: null;
 
 	try {
 		console.log("[benchmark-export-queues] Config");

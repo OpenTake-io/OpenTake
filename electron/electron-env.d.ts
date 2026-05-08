@@ -301,6 +301,13 @@ interface Window {
 					size: number;
 					elapsedMs: number;
 					deltaMs: number | null;
+					recordedElapsedMs?: number;
+					recordedDeltaMs?: number | null;
+				}>;
+				pauseIntervals?: Array<{
+					startElapsedMs: number;
+					endElapsedMs?: number;
+					durationMs?: number;
 				}>;
 			},
 		) => Promise<{ success: boolean; path?: string; error?: string }>;
