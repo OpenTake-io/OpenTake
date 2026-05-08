@@ -8,6 +8,7 @@ import {
 	TIMELINE_AXIS_HEIGHT_PX,
 } from "../../timelineLayout";
 import type { AudioPeaksData } from "../../useAudioPeaks";
+import { isAnnotationTrackRowId, isAudioTrackRowId } from "../../core/rows";
 import type { TimelineRenderItem } from "../../model/timelineModel";
 import TimelineAxis from "../axis/TimelineAxis";
 import PlaybackCursor from "../playhead/PlaybackCursor";
@@ -21,17 +22,13 @@ interface TimelineCanvasProps {
 	onSeek?: (time: number) => void;
 	canPlaceZoomAtMs?: (startMs: number) => boolean;
 	onSelectZoom?: (id: string | null) => void;
-	onSelectTrim?: (id: string | null) => void;
 	onSelectClip?: (id: string | null) => void;
 	onSelectAnnotation?: (id: string | null) => void;
-	onSelectSpeed?: (id: string | null) => void;
 	onSelectAudio?: (id: string | null) => void;
 	onAddZoomAtMs?: (startMs: number) => void;
 	selectedZoomId: string | null;
-	selectedTrimId?: string | null;
 	selectedClipId?: string | null;
 	selectedAnnotationId?: string | null;
-	selectedSpeedId?: string | null;
 	selectedAudioId?: string | null;
 	selectAllBlocksActive?: boolean;
 	onClearBlockSelection?: () => void;
@@ -47,16 +44,12 @@ export default function TimelineCanvas({
 	onAddZoomAtMs,
 	canPlaceZoomAtMs,
 	onSelectZoom,
-	onSelectTrim,
 	onSelectClip,
 	onSelectAnnotation,
-	onSelectSpeed,
 	onSelectAudio,
 	selectedZoomId,
-	selectedTrimId: _selectedTrimId,
 	selectedClipId,
 	selectedAnnotationId,
-	selectedSpeedId: _selectedSpeedId,
 	selectedAudioId,
 	selectAllBlocksActive = false,
 	onClearBlockSelection,
@@ -80,10 +73,8 @@ export default function TimelineCanvas({
 			if (!onSeek || videoDurationMs <= 0) return;
 
 			onSelectZoom?.(null);
-			onSelectTrim?.(null);
 			onSelectClip?.(null);
 			onSelectAnnotation?.(null);
-			onSelectSpeed?.(null);
 			onSelectAudio?.(null);
 			onClearBlockSelection?.();
 
@@ -97,10 +88,8 @@ export default function TimelineCanvas({
 		[
 			onSeek,
 			onSelectZoom,
-			onSelectTrim,
 			onSelectClip,
 			onSelectAnnotation,
-			onSelectSpeed,
 			onSelectAudio,
 			onClearBlockSelection,
 			videoDurationMs,
@@ -110,12 +99,15 @@ export default function TimelineCanvas({
 		],
 	);
 
-	const audioRowIds = useMemo(
-		() => new Set(items.map((item) => item.rowId)).size,
-		[items],
-	);
-
-	const timelineRowCount = Math.max(2, audioRowIds);
+	const timelineRowCount = useMemo(() => {
+		const annotationRowIds = new Set<string>();
+		const audioRowIds = new Set<string>();
+		for (const item of items) {
+			if (isAnnotationTrackRowId(item.rowId)) annotationRowIds.add(item.rowId);
+			if (isAudioTrackRowId(item.rowId)) audioRowIds.add(item.rowId);
+		}
+		return 2 + annotationRowIds.size + audioRowIds.size;
+	}, [items]);
 	const timelineRowsMinHeightPx = getTimelineRowsMinHeightPx(timelineRowCount);
 	const timelineContentMinHeightPx = getTimelineContentMinHeightPx(timelineRowCount);
 	const timelineViewportStretchFactor = getTimelineViewportStretchFactor(timelineRowCount);
