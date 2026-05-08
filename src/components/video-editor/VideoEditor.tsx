@@ -2140,13 +2140,14 @@ export default function VideoEditor() {
 						preserveProjectPath: Boolean(path),
 					},
 				);
+				const sessionResult = await window.electronAPI.getCurrentRecordingSession?.();
+				applySessionPresentation(sessionResult?.success ? sessionResult.session : null);
 			} else {
 				await window.electronAPI.setCurrentVideoPath(sourcePath, {
 					preserveProjectPath: Boolean(path),
 				});
+				applySessionPresentation(null);
 			}
-			const sessionResult = await window.electronAPI.getCurrentRecordingSession?.();
-			applySessionPresentation(sessionResult?.success ? sessionResult.session : null);
 
 			setWallpaper(normalizedEditor.wallpaper);
 			setShadowIntensity(normalizedEditor.shadowIntensity);
@@ -4629,13 +4630,11 @@ export default function VideoEditor() {
 					const backendPreference =
 						pipelineModel === "legacy"
 							? "webcodecs"
-							: useExperimentalNativeExport
-								? "auto"
-								: smokeExportConfig.enabled
-									? (smokeExportConfig.backendPreference ??
-										(smokeExportConfig.useNativeExport
-											? "breeze"
-											: "webcodecs"))
+							: smokeExportConfig.enabled
+								? (smokeExportConfig.backendPreference ??
+									(smokeExportConfig.useNativeExport ? "breeze" : "webcodecs"))
+								: useExperimentalNativeExport
+									? "auto"
 									: (settings.backendPreference ?? exportBackendPreference);
 					const supportedSourceDimensions =
 						await ensureSupportedMp4SourceDimensions(selectedMp4FrameRate);
