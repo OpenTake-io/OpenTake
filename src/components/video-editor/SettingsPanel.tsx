@@ -45,7 +45,11 @@ import { useI18n, useScopedT } from "../../contexts/I18nContext";
 import type { AppLocale } from "../../i18n/config";
 import { SUPPORTED_LOCALES } from "../../i18n/config";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
-import { CURSOR_MOTION_PRESETS, type CursorMotionPresetId } from "./cursorMotionPresets";
+import {
+	CURSOR_MOTION_PRESETS,
+	getMatchingCursorMotionPresetId,
+	type CursorMotionPresetId,
+} from "./cursorMotionPresets";
 import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
 import { SliderControl } from "./SliderControl";
 import { KeyboardShortcutsDialog } from "./TutorialHelp";
@@ -1515,21 +1519,18 @@ export function SettingsPanel({
 
 	const activeMotionPresetId = useMemo(() => {
 		return (
-			MOTION_PRESET_ORDER.find((presetId) => {
-				const preset = CURSOR_MOTION_PRESETS[presetId];
-				return (
-					preset.zoomInDurationMs === zoomInDurationMs &&
-					preset.zoomOutDurationMs === zoomOutDurationMs &&
-					preset.cursorSize === cursorSize &&
-					preset.cursorSmoothing === cursorSmoothing &&
-					preset.cursorSpringStiffnessMultiplier === cursorSpringStiffnessMultiplier &&
-					preset.cursorSpringDampingMultiplier === cursorSpringDampingMultiplier &&
-					preset.cursorSpringMassMultiplier === cursorSpringMassMultiplier &&
-					preset.cursorMotionBlur === cursorMotionBlur &&
-					preset.cursorClickBounce === cursorClickBounce &&
-					preset.cursorClickBounceDuration === cursorClickBounceDuration
-				);
-			}) ?? null
+			getMatchingCursorMotionPresetId({
+				zoomInDurationMs,
+				zoomOutDurationMs,
+				cursorSize,
+				cursorSmoothing,
+				cursorSpringStiffnessMultiplier,
+				cursorSpringDampingMultiplier,
+				cursorSpringMassMultiplier,
+				cursorMotionBlur,
+				cursorClickBounce,
+				cursorClickBounceDuration,
+			}) ?? "focused"
 		);
 	}, [
 		cursorClickBounce,
