@@ -6,6 +6,7 @@
  */
 
 import { createExtensionModuleUrl, resolveExtensionRelativeFileUrl } from "./fileUrls";
+import * as PhosphorIcons from "@phosphor-icons/react";
 import type {
 	ContributedCursorStyle,
 	ContributedFrame,
@@ -143,6 +144,9 @@ export class ExtensionHost {
 		Set<(settingId: string, value: unknown) => void>
 	>();
 	private listeners = new Set<() => void>();
+	private fullSettingsStore: Record<string, Record<string, unknown>> | null = null;
+	private persistTimeout: any = null;
+	private iconPathCache = new Map<string, Path2D>();
 
 	// Shared playback/project state — set by the app, queried by extensions
 	private _videoInfo: { width: number; height: number; durationMs: number; fps: number } | null =
@@ -468,6 +472,7 @@ export class ExtensionHost {
 			borderRadius: layout.borderRadius,
 			padding: normalizedPadding,
 		};
+		this.notifyListeners();
 	}
 
 	setZoomState(
@@ -478,6 +483,7 @@ export class ExtensionHost {
 
 	setShadowConfig(config: { enabled: boolean; intensity: number }): void {
 		this._shadowConfig = config;
+		this.notifyListeners();
 	}
 
 	setCursorTelemetry(
@@ -572,12 +578,20 @@ export class ExtensionHost {
 		}
 	}
 
+	private getFullSettingsStore(): Record<string, Record<string, unknown>> {
+		if (this.fullSettingsStore) {
+			return this.fullSettingsStore;
+		}
+		this.fullSettingsStore = this.readPersistedSettingsStore();
+		return this.fullSettingsStore;
+	}
+
 	private ensureExtensionSettingsLoaded(extensionId: string): void {
 		if (this.extensionSettings.has(extensionId)) {
 			return;
 		}
 
-		const store = this.readPersistedSettingsStore();
+		const store = this.getFullSettingsStore();
 		const persisted = store[extensionId];
 		const normalized =
 			persisted && typeof persisted === "object" && !Array.isArray(persisted)
@@ -588,7 +602,7 @@ export class ExtensionHost {
 	}
 
 	private persistExtensionSettings(extensionId: string): void {
-		const store = this.readPersistedSettingsStore();
+		const store = this.getFullSettingsStore();
 		const settings = this.extensionSettings.get(extensionId) ?? {};
 
 		if (Object.keys(settings).length === 0) {
@@ -597,7 +611,14 @@ export class ExtensionHost {
 			store[extensionId] = { ...settings };
 		}
 
-		this.writePersistedSettingsStore(store);
+		// Debounce the actual write to localStorage to avoid blocking the UI thread during rapid changes
+		if (this.persistTimeout) {
+			clearTimeout(this.persistTimeout);
+		}
+		this.persistTimeout = setTimeout(() => {
+			this.writePersistedSettingsStore(store);
+			this.persistTimeout = null;
+		}, 500);
 	}
 
 	/**
@@ -955,6 +976,68 @@ export class ExtensionHost {
 					width: host._videoLayout.canvasWidth,
 					height: host._videoLayout.canvasHeight,
 				};
+			},
+
+			drawIcon(
+				ctx: CanvasRenderingContext2D,
+				name: string,
+				x: number,
+				y: number,
+				size: number,
+				color: string,
+				weight: "thin" | "light" | "regular" | "bold" | "fill" = "regular",
+			): void {
+				const cacheKey = `${name}:${weight}`;
+				let path = host.iconPathCache.get(cacheKey);
+
+				if (!path) {
+					// 1. Get the Icon component from the project's library
+					const Icon = (PhosphorIcons as any)[name];
+					if (!Icon) return;
+
+					try {
+						// 2. Extract path data by dry-running the component
+						const Icon = (PhosphorIcons as any)[name];
+						if (!Icon) {
+							console.warn(`[extensions] Icon ${name} not found in Phosphor library`);
+							return;
+						}
+
+						const element = (Icon as any).render?.({ weight }, null);
+						const weights = element?.props?.weights;
+						const definition = weights?.get(weight);
+						const children = definition?.props?.children;
+						
+						// Handle both single path and array of paths
+						let pathElement = children;
+						if (Array.isArray(children)) {
+							pathElement = children.find((c: any) => c?.type === 'path' || c?.props?.d);
+						}
+
+						const pathData = pathElement?.props?.d;
+
+						if (pathData) {
+							path = new Path2D(pathData);
+							host.iconPathCache.set(cacheKey, path);
+						} else {
+							console.warn(`[extensions] No path data found for ${name}:${weight}`, { element, children });
+						}
+					} catch (err) {
+						console.error(`[extensions] Failed to extract path for icon ${name}:`, err);
+						return;
+					}
+				}
+
+				if (path) {
+					ctx.save();
+					ctx.translate(x, y);
+					const scale = size / 256; // Phosphor icons use a 256x256 grid
+					ctx.scale(scale, scale);
+					ctx.translate(-128, -128); // Center the icon
+					ctx.fillStyle = color;
+					ctx.fill(path);
+					ctx.restore();
+				}
 			},
 
 			onSettingChange(callback: (settingId: string, value: unknown) => void): () => void {

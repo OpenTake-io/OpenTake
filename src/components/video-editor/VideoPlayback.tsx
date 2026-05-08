@@ -430,6 +430,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const [pixiRendererBackend, setPixiRendererBackend] = useState<PixiPreviewBackend | null>(
 			null,
 		);
+		const [frameUpdateCounter, setFrameUpdateCounter] = useState(0);
+
+		useEffect(() => {
+			return extensionHost.onChange(() => {
+				setFrameUpdateCounter((c) => c + 1);
+			});
+		}, []);
+
 		const overlayRef = useRef<HTMLDivElement | null>(null);
 		const focusIndicatorRef = useRef<HTMLDivElement | null>(null);
 		const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -998,10 +1006,14 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			const frameContainer = frameContainerRef.current;
 			if (!frameContainer) return;
 
-			// Clear existing frame sprite
+			// Clear existing frame sprite and its texture to free memory
 			if (frameSpriteRef.current) {
-				frameContainer.removeChild(frameSpriteRef.current);
-				frameSpriteRef.current.destroy();
+				const sprite = frameSpriteRef.current;
+				frameContainer.removeChild(sprite);
+				if (sprite.texture) {
+					sprite.texture.destroy(true); // destroy texture and its baseTexture
+				}
+				sprite.destroy();
 				frameSpriteRef.current = null;
 			}
 
@@ -1065,7 +1077,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			return () => {
 				cancelled = true;
 			};
-		}, [frame]);
+		}, [frame, frameUpdateCounter]);
 
 		const selectedZoom = useMemo(() => {
 			if (!selectedZoomId) return null;

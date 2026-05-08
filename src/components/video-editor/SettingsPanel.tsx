@@ -263,41 +263,21 @@ function ExtensionSettingsSection({
 
 				if (field.type === "slider") {
 					return (
-						<div
-							key={field.id}
-							className="flex items-center justify-between gap-2 rounded-lg bg-foreground/[0.03] px-2.5 py-1.5"
-						>
-							<span className="text-[11px] text-muted-foreground flex-shrink-0">
-								{field.label}
-							</span>
-							<div className="flex items-center gap-1.5">
-								<input
-									type="range"
-									min={field.min ?? 0}
-									max={field.max ?? 1}
-									step={field.step ?? 0.01}
-									value={
-										typeof value === "number"
-											? value
-											: (field.defaultValue as number)
-									}
-									onChange={(e) => {
-										extensionHost.setExtensionSetting(
-											extensionId,
-											field.id,
-											parseFloat(e.target.value),
-										);
-										forceUpdate((n) => n + 1);
-									}}
-									className="w-20 h-1 accent-[#2563EB]"
-								/>
-								<span className="text-[10px] text-muted-foreground/70 w-8 text-right font-mono">
-									{(typeof value === "number"
-										? value
-										: (field.defaultValue as number)
-									).toFixed(1)}
-								</span>
-							</div>
+						<div key={field.id} className="mt-1">
+							<SliderControl
+								label={field.label}
+								value={typeof value === "number" ? value : (field.defaultValue as number)}
+								defaultValue={field.defaultValue as number}
+								min={field.min ?? 0}
+								max={field.max ?? 100}
+								step={field.step ?? 1}
+								onChange={(v) => {
+									extensionHost.setExtensionSetting(extensionId, field.id, v);
+									forceUpdate((n) => n + 1);
+								}}
+								formatValue={(v) => v.toFixed(1)}
+								parseInput={(text) => parseFloat(text)}
+							/>
 						</div>
 					);
 				}
@@ -1215,9 +1195,12 @@ export function SettingsPanel({
 		if (GRADIENTS.includes(selected)) {
 			setGradient(selected);
 		}
+	}, [selected]);
 
-		if (selected.startsWith("data:image") && !customImages.includes(selected)) {
-			setCustomImages((prev) => [selected, ...prev]);
+	useEffect(() => {
+		if (selected.startsWith("data:image")) {
+			setCustomImages((prev) => (prev.includes(selected) ? prev : [selected, ...prev]));
+			return;
 		}
 
 		const isKnownWallpaper =
@@ -1225,16 +1208,11 @@ export function SettingsPanel({
 			wallpaperPreviewPaths.includes(selected) ||
 			extensionWallpaperPaths.includes(selected);
 
-		if (
-			!isKnownWallpaper &&
-			isVideoWallpaperSource(selected) &&
-			!customImages.includes(selected)
-		) {
-			setCustomImages((prev) => [selected, ...prev]);
+		if (!isKnownWallpaper && isVideoWallpaperSource(selected)) {
+			setCustomImages((prev) => (prev.includes(selected) ? prev : [selected, ...prev]));
 		}
 	}, [
 		builtInWallpaperPaths,
-		customImages,
 		extensionWallpaperPaths,
 		selected,
 		wallpaperPreviewPaths,
@@ -1480,6 +1458,13 @@ export function SettingsPanel({
 
 	const resetBackgroundSection = () => {
 		onBackgroundBlurChange?.(initialEditorPreferences.backgroundBlur);
+		onWallpaperChange(
+			initialEditorPreferences.wallpaper ||
+				builtInWallpaperPaths[0] ||
+				extensionWallpaperPaths[0] ||
+				BUILT_IN_WALLPAPERS[0]?.publicPath ||
+				"",
+		);
 	};
 
 	const resetZoomSection = () => {
@@ -1558,7 +1543,11 @@ export function SettingsPanel({
 	};
 
 	const resetFrameSection = () => {
+		onShadowChange?.(initialEditorPreferences.shadowIntensity);
+		onBorderRadiusChange?.(initialEditorPreferences.borderRadius);
 		onAspectRatioChange?.(initialEditorPreferences.aspectRatio);
+		onPaddingChange?.({ ...initialEditorPreferences.padding });
+		onFrameChange?.(initialEditorPreferences.frame);
 		removeBackgroundStateRef.current = null;
 	};
 
