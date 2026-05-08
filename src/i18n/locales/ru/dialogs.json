@@ -9,7 +9,7 @@
 		"exportingFormat": "Экспорт в {{format}}",
 		"exportComplete": "Экспорт завершён",
 		"formatReady": "Ваш {{format}} готов",
-		"showInFolder": "Показать в Folder",
+		"showInFolder": "Показать в папке",
 		"compiling": "Создание",
 		"renderingFrames": "Обработка кадров",
 		"processing": "Обработка...",

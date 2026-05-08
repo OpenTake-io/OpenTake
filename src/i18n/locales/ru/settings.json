@@ -18,7 +18,7 @@
 		"label": "Скорость"
 	},
 	"clip": {
-		"title": "Клин",
+		"title": "Клип",
 		"muteAudio": "Выключить звук",
 		"delete": "Удалить"
 	},
@@ -80,7 +80,7 @@
 		"zoomOutEasing": "Кривая отдаления",
 		"connectedZoomGap": "Интервал между зумом",
 		"connectedZoomDuration": "Длительность интервала",
-		"connectedZoomEasing": "Кривая панаромирования",
+		"connectedZoomEasing": "Кривая панорамирования",
 		"zoomEasingOptions": {
 			"recordly": "Recordly",
 			"glide": "Плавно",
@@ -116,7 +116,7 @@
 		"radius": "Радиус",
 		"roundness": "Скругление",
 		"padding": "Отступы",
-		"paddingLinked": "Связаные (одинаковые)",
+		"paddingLinked": "Связанные (одинаковые)",
 		"paddingUnlinked": "Раздельные",
 		"paddingTop": "Сверху",
 		"paddingBottom": "Снизу",
