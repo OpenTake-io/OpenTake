@@ -183,6 +183,11 @@ describe("ModernFrameRenderer blur export path", () => {
 	beforeEach(() => {
 		Object.assign(globalThis, {
 			window: globalThis,
+			requestAnimationFrame: (callback: FrameRequestCallback) => {
+				callback(0);
+				return 1;
+			},
+			cancelAnimationFrame: vi.fn(),
 			HTMLMediaElement: {
 				HAVE_CURRENT_DATA: 2,
 			},
@@ -232,6 +237,7 @@ describe("ModernFrameRenderer blur export path", () => {
 	});
 
 	it("prefers decoder-backed sync for video wallpapers during export", async () => {
+		vi.clearAllMocks();
 		const renderer = new FrameRenderer({
 			width: 1920,
 			height: 1080,
@@ -256,6 +262,44 @@ describe("ModernFrameRenderer blur export path", () => {
 		expect(resolveMediaElementSourceMock).not.toHaveBeenCalled();
 		expect(renderer.backgroundForwardFrameSource).toBeTruthy();
 		expect(renderer.backgroundVideoElement).toBeNull();
+	});
+
+	it("falls back to media-element sync when video wallpaper packet streaming fails", async () => {
+		vi.clearAllMocks();
+		initializeForwardFrameSourceMock.mockResolvedValue(undefined);
+		getForwardFrameAtTimeMock.mockRejectedValueOnce(
+			new Error("readAVPacket pipeline failed: Failed after 3 attempts"),
+		);
+		resolveMediaElementSourceMock.mockResolvedValueOnce({
+			src: "blob:background-video",
+			revoke: vi.fn(),
+		});
+		const renderer = new FrameRenderer({
+			width: 1920,
+			height: 1080,
+			nativeReadbackMode: "pixels",
+			wallpaper: "/wallpapers/wispysky.mp4",
+			zoomRegions: [],
+			showShadow: false,
+			shadowIntensity: 0,
+			backgroundBlur: 0,
+			cropRegion: { x: 0, y: 0, width: 1, height: 1 },
+			webcam: {
+				...DEFAULT_WEBCAM_OVERLAY,
+				enabled: false,
+			},
+			videoWidth: 1920,
+			videoHeight: 1080,
+		}) as any;
+
+		await renderer.setupBackground();
+		await expect(renderer.syncBackgroundFrame(1)).resolves.toBeUndefined();
+
+		expect(cancelForwardFrameSourceMock).toHaveBeenCalled();
+		expect(destroyForwardFrameSourceMock).toHaveBeenCalled();
+		expect(resolveMediaElementSourceMock).toHaveBeenCalledWith("wallpapers/wispysky.mp4");
+		expect(renderer.backgroundForwardFrameSource).toBeNull();
+		expect(renderer.backgroundVideoElement).toBeTruthy();
 	});
 });
 
