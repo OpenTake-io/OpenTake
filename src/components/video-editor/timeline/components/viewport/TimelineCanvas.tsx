@@ -450,7 +450,10 @@ export default function TimelineCanvas({
 			}
 
 			const rect = e.currentTarget.getBoundingClientRect();
-			const clickX = e.clientX - rect.left - sidebarWidth;
+			const clickX =
+				direction === "rtl"
+					? rect.right - sidebarWidth - e.clientX
+					: e.clientX - rect.left - sidebarWidth;
 			if (clickX < 0) return;
 			const relativeMs = pixelsToValue(clickX);
 			const absoluteMs = Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
@@ -465,6 +468,7 @@ export default function TimelineCanvas({
 			onClearBlockSelection,
 			videoDurationMs,
 			sidebarWidth,
+			direction,
 			range.start,
 			pixelsToValue,
 		],

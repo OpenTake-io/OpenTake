@@ -214,7 +214,8 @@ export function useTimelineEditorRuntime({
 				return;
 			}
 
-			const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
+			const latestStartPos = Math.max(0, totalMs - defaultDuration);
+			const startPos = Math.max(0, Math.min(currentTimeMs, latestStartPos));
 			const endPos = Math.min(startPos + defaultDuration, totalMs);
 			onAnnotationAdded({ start: startPos, end: endPos }, trackIndex);
 		},
