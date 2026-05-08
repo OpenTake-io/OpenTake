@@ -142,6 +142,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 		ref,
 	) {
 		const t = useScopedT("settings");
+		const tTimeline = useScopedT("timeline");
+		const tEditor = useScopedT("editor");
 		const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
 		const totalMs = useMemo(
 			() => Math.max(0, Math.round(videoDuration * 1000)),
@@ -337,6 +339,11 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 						onAddAudio={handleToolbarAddAudio}
 						onSplitClip={handleSplitClip}
 						cropLabel={t("sections.crop", "Crop")}
+						addZoomLabel={tTimeline("zoom.addZoom", "Add Zoom (Z)")}
+						suggestZoomsLabel={tTimeline("zoom.suggestZooms", "Suggest Zooms from Cursor")}
+						addAnnotationLabel={tTimeline("annotation.addAnnotation", "Add Annotation (A)")}
+						addAudioLabel={tTimeline("audio.label", "Audio")}
+						splitClipLabel={tEditor("toolbar.splitClip", "Split Clip (C)")}
 					/>
 				)}
 				<div

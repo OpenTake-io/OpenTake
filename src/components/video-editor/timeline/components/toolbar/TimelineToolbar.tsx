@@ -41,6 +41,11 @@ interface TimelineToolbarProps {
 	onAddAudio: () => void;
 	onSplitClip: () => void;
 	cropLabel: string;
+	addZoomLabel: string;
+	suggestZoomsLabel: string;
+	addAnnotationLabel: string;
+	addAudioLabel: string;
+	splitClipLabel: string;
 }
 
 export default function TimelineToolbar({
@@ -61,23 +66,28 @@ export default function TimelineToolbar({
 	onAddAudio,
 	onSplitClip,
 	cropLabel,
+	addZoomLabel,
+	suggestZoomsLabel,
+	addAnnotationLabel,
+	addAudioLabel,
+	splitClipLabel,
 }: TimelineToolbarProps) {
 	return (
 		<div className="flex items-center gap-2 px-4 py-2 border-b border-foreground/10 bg-editor-panel">
 			<div className="flex items-center gap-1">
-				<Button onClick={onAddZoom} variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all" title="Add Zoom (Z)">
+				<Button onClick={onAddZoom} variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all" title={addZoomLabel} aria-label={addZoomLabel}>
 					<ZoomIn className="w-4 h-4" />
 				</Button>
-				<Button onClick={onSuggestZooms} variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all" title="Suggest Zooms from Cursor">
+				<Button onClick={onSuggestZooms} variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-[#2563EB] hover:bg-[#2563EB]/10 transition-all" title={suggestZoomsLabel} aria-label={suggestZoomsLabel}>
 					<WandSparkles className="w-4 h-4" />
 				</Button>
-				<Button onClick={onAddAnnotation} variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-[#B4A046] hover:bg-[#B4A046]/10 transition-all" title="Add Annotation (A)">
+				<Button onClick={onAddAnnotation} variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-[#B4A046] hover:bg-[#B4A046]/10 transition-all" title={addAnnotationLabel} aria-label={addAnnotationLabel}>
 					<MessageSquare className="w-4 h-4" />
 				</Button>
-				<Button onClick={onAddAudio} variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-[#a855f7] hover:bg-[#a855f7]/10 transition-all" title="Add Audio">
+				<Button onClick={onAddAudio} variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-[#a855f7] hover:bg-[#a855f7]/10 transition-all" title={addAudioLabel} aria-label={addAudioLabel}>
 					<Music className="w-4 h-4" />
 				</Button>
-				<Button onClick={onSplitClip} variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-all" title="Split Clip (C)">
+				<Button onClick={onSplitClip} variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-all" title={splitClipLabel} aria-label={splitClipLabel}>
 					<Scissors className="w-4 h-4" />
 				</Button>
 			</div>
