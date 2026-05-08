@@ -153,6 +153,7 @@ type PixiRendererAttempt = {
 };
 
 const PIXI_RENDERER_INIT_TIMEOUT_MS = 8_000;
+const BACKGROUND_MEDIA_ELEMENT_READY_TIMEOUT_MS = 5_000;
 
 function isCanvasRenderer(renderer: Application): boolean {
 	const rendererName = renderer?.renderer?.constructor?.name?.toLowerCase();
@@ -924,31 +925,61 @@ export class FrameRenderer {
 		video.load();
 
 		const ready = await new Promise<boolean>((resolve) => {
-			const onReady = () => {
-				if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-					return;
+			let settled = false;
+			let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+			function cleanup() {
+				if (timeoutId !== null) {
+					clearTimeout(timeoutId);
 				}
-				cleanup();
-				resolve(true);
-			};
-			const onError = () => {
-				cleanup();
-				resolve(false);
-			};
-			const cleanup = () => {
 				video.removeEventListener("loadeddata", onReady);
 				video.removeEventListener("canplay", onReady);
 				video.removeEventListener("error", onError);
-			};
+			}
+
+			function settle(value: boolean) {
+				if (settled) {
+					return;
+				}
+				settled = true;
+				cleanup();
+				resolve(value);
+			}
+			function onReady() {
+				if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+					return;
+				}
+				settle(true);
+			}
+			function onError() {
+				settle(false);
+			}
 
 			video.addEventListener("loadeddata", onReady);
 			video.addEventListener("canplay", onReady);
 			video.addEventListener("error", onError);
+			timeoutId = setTimeout(() => {
+				console.warn(
+					`[FrameRenderer] Video wallpaper media element fallback did not become ready within ${BACKGROUND_MEDIA_ELEMENT_READY_TIMEOUT_MS}ms`,
+				);
+				settle(false);
+			}, BACKGROUND_MEDIA_ELEMENT_READY_TIMEOUT_MS);
 			onReady();
 		});
 
 		if (!ready) {
 			console.warn(`[FrameRenderer] Failed to load video wallpaper: ${errorLabel}`);
+			try {
+				video.pause();
+				video.src = "";
+				video.load();
+			} catch {
+				// Ignore media element teardown errors on failed fallback.
+			}
+			backgroundSource.revoke();
+			if (this.cleanupBackgroundSource === backgroundSource.revoke) {
+				this.cleanupBackgroundSource = null;
+			}
 			return false;
 		}
 
