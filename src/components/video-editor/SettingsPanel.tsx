@@ -1458,8 +1458,17 @@ export function SettingsPanel({
 
 	const resetBackgroundSection = () => {
 		onBackgroundBlurChange?.(initialEditorPreferences.backgroundBlur);
+
+		const preferredWallpaper = initialEditorPreferences.wallpaper;
+		const hasPreferredWallpaper =
+			(preferredWallpaper && builtInWallpaperPaths.includes(preferredWallpaper)) ||
+			(preferredWallpaper && extensionWallpaperPaths.includes(preferredWallpaper)) ||
+			(preferredWallpaper && customImages.includes(preferredWallpaper)) ||
+			(preferredWallpaper && isHexWallpaper(preferredWallpaper)) ||
+			(preferredWallpaper && GRADIENTS.includes(preferredWallpaper));
+
 		onWallpaperChange(
-			initialEditorPreferences.wallpaper ||
+			(hasPreferredWallpaper ? preferredWallpaper : "") ||
 				builtInWallpaperPaths[0] ||
 				extensionWallpaperPaths[0] ||
 				BUILT_IN_WALLPAPERS[0]?.publicPath ||

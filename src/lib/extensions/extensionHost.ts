@@ -472,7 +472,6 @@ export class ExtensionHost {
 			borderRadius: layout.borderRadius,
 			padding: normalizedPadding,
 		};
-		this.notifyListeners();
 	}
 
 	setZoomState(
@@ -483,7 +482,6 @@ export class ExtensionHost {
 
 	setShadowConfig(config: { enabled: boolean; intensity: number }): void {
 		this._shadowConfig = config;
-		this.notifyListeners();
 	}
 
 	setCursorTelemetry(
