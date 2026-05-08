@@ -339,6 +339,11 @@ async function writeSmokeExportReport(
 const SMOKE_EXPORT_READY_TIMEOUT_MS = 30_000;
 const DEFAULT_MP4_EXPORT_FRAME_RATE: ExportMp4FrameRate = 30;
 const SOURCE_AUDIO_FALLBACK_TOAST_ID = "source-audio-fallback-error";
+const SOURCE_AUDIO_PREVIEW_PLAYING_SEEK_DRIFT_SECONDS = 0.18;
+const SOURCE_AUDIO_PREVIEW_PAUSED_SEEK_DRIFT_SECONDS = 0.01;
+const SOURCE_AUDIO_PREVIEW_RATE_TOLERANCE_SECONDS = 0.08;
+const SOURCE_AUDIO_PREVIEW_RATE_CORRECTION_WINDOW_SECONDS = 8;
+const SOURCE_AUDIO_PREVIEW_MAX_RATE_ADJUSTMENT = 0.015;
 const PROJECT_AUTOSAVE_DELAY_MS = 1000;
 const EXPORT_ERROR_TOAST_DURATION_MS = 20000;
 
@@ -439,7 +444,9 @@ function getSmokeExportConfig(search: string): SmokeExportConfig {
 					: enabled && params.get("smokeBackendPreference") === "breeze"
 						? "breeze"
 						: undefined,
-		renderBackend: enabled ? parseSmokeRenderBackend(params.get("smokeRenderBackend")) : undefined,
+		renderBackend: enabled
+			? parseSmokeRenderBackend(params.get("smokeRenderBackend"))
+			: undefined,
 		maxEncodeQueue: enabled
 			? parseSmokeExportNumber(params.get("smokeMaxEncodeQueue"))
 			: undefined,
@@ -595,9 +602,7 @@ export default function VideoEditor() {
 	);
 	const devOpenRecordingConfig = useMemo(
 		() =>
-			getDevOpenRecordingConfig(
-				typeof window === "undefined" ? "" : window.location.search,
-			),
+			getDevOpenRecordingConfig(typeof window === "undefined" ? "" : window.location.search),
 		[],
 	);
 	const [appPlatform, setAppPlatform] = useState<string>(
@@ -1730,16 +1735,16 @@ export default function VideoEditor() {
 	}, [activeEffectSection]);
 
 	const buildPersistedEditorState = useCallback(
-			(
-				editor: Partial<{
-					wallpaper: string;
-					shadowIntensity: number;
-					backgroundBlur: number;
-					zoomMotionBlur: number;
-					zoomMotionBlurTuning: ZoomMotionBlurTuning;
-					zoomTemporalMotionBlur: number;
-					zoomMotionBlurSampleCount: number | null;
-					zoomMotionBlurShutterFraction: number | null;
+		(
+			editor: Partial<{
+				wallpaper: string;
+				shadowIntensity: number;
+				backgroundBlur: number;
+				zoomMotionBlur: number;
+				zoomMotionBlurTuning: ZoomMotionBlurTuning;
+				zoomTemporalMotionBlur: number;
+				zoomMotionBlurSampleCount: number | null;
+				zoomMotionBlurShutterFraction: number | null;
 				connectZooms: boolean;
 				zoomInDurationMs: number;
 				zoomInOverlapMs: number;
@@ -2135,15 +2140,16 @@ export default function VideoEditor() {
 						preserveProjectPath: Boolean(path),
 					},
 				);
-				} else {
-					await window.electronAPI.setCurrentVideoPath(sourcePath, {
-						preserveProjectPath: Boolean(path),
-					});
-				}
 				const sessionResult = await window.electronAPI.getCurrentRecordingSession?.();
 				applySessionPresentation(sessionResult?.success ? sessionResult.session : null);
+			} else {
+				await window.electronAPI.setCurrentVideoPath(sourcePath, {
+					preserveProjectPath: Boolean(path),
+				});
+				applySessionPresentation(null);
+			}
 
-				setWallpaper(normalizedEditor.wallpaper);
+			setWallpaper(normalizedEditor.wallpaper);
 			setShadowIntensity(normalizedEditor.shadowIntensity);
 			setBackgroundBlur(normalizedEditor.backgroundBlur);
 			setZoomMotionBlur(normalizedEditor.zoomMotionBlur);
@@ -2157,10 +2163,10 @@ export default function VideoEditor() {
 			setZoomOutDurationMs(normalizedEditor.zoomOutDurationMs);
 			setConnectedZoomGapMs(normalizedEditor.connectedZoomGapMs);
 			setConnectedZoomDurationMs(normalizedEditor.connectedZoomDurationMs);
-				setZoomInEasing(normalizedEditor.zoomInEasing);
-				setZoomOutEasing(normalizedEditor.zoomOutEasing);
-				setConnectedZoomEasing(normalizedEditor.connectedZoomEasing);
-				setShowCursor(normalizedEditor.showCursor);
+			setZoomInEasing(normalizedEditor.zoomInEasing);
+			setZoomOutEasing(normalizedEditor.zoomOutEasing);
+			setConnectedZoomEasing(normalizedEditor.connectedZoomEasing);
+			setShowCursor(normalizedEditor.showCursor);
 			setLoopCursor(normalizedEditor.loopCursor);
 			setCursorStyle(normalizedEditor.cursorStyle);
 			setCursorSize(normalizedEditor.cursorSize);
@@ -2249,7 +2255,12 @@ export default function VideoEditor() {
 			await refreshProjectLibrary();
 			return true;
 		},
-		[buildPersistedEditorState, refreshProjectLibrary, syncHistoryButtons],
+		[
+			applySessionPresentation,
+			buildPersistedEditorState,
+			refreshProjectLibrary,
+			syncHistoryButtons,
+		],
 	);
 
 	const currentProjectSnapshot = useMemo(() => {
@@ -3907,7 +3918,7 @@ export default function VideoEditor() {
 				),
 			);
 		},
-		[applySessionPresentation],
+		[],
 	);
 
 	const handleAnnotationDelete = useCallback(
@@ -4326,7 +4337,9 @@ export default function VideoEditor() {
 		const previousTimelineTime = lastSourceAudioSyncTimeRef.current;
 		const timelineJumped =
 			previousTimelineTime === null || Math.abs(currentTime - previousTimelineTime) > 0.25;
-		const driftThreshold = isPlaying ? 0.35 : 0.01;
+		const driftThreshold = isPlaying
+			? SOURCE_AUDIO_PREVIEW_PLAYING_SEEK_DRIFT_SECONDS
+			: SOURCE_AUDIO_PREVIEW_PAUSED_SEEK_DRIFT_SECONDS;
 
 		for (const audio of sourceAudioElementsRef.current.values()) {
 			enablePitchPreservingPlayback(audio);
@@ -4354,6 +4367,9 @@ export default function VideoEditor() {
 				basePlaybackRate: targetPlaybackRate,
 				currentTime: audio.currentTime,
 				targetTime,
+				toleranceSeconds: SOURCE_AUDIO_PREVIEW_RATE_TOLERANCE_SECONDS,
+				correctionWindowSeconds: SOURCE_AUDIO_PREVIEW_RATE_CORRECTION_WINDOW_SECONDS,
+				maxAdjustment: SOURCE_AUDIO_PREVIEW_MAX_RATE_ADJUSTMENT,
 			});
 			if (Math.abs(audio.playbackRate - syncedPlaybackRate) > 0.001) {
 				audio.playbackRate = syncedPlaybackRate;
@@ -4606,8 +4622,7 @@ export default function VideoEditor() {
 						? (smokeExportConfig.fps ?? settings.mp4FrameRate ?? mp4FrameRate)
 						: (settings.mp4FrameRate ?? mp4FrameRate);
 					const pipelineModel = smokeExportConfig.enabled
-						? (smokeExportConfig.pipelineModel ??
-							"modern")
+						? (smokeExportConfig.pipelineModel ?? "modern")
 						: (settings.pipelineModel ?? exportPipelineModel);
 					const useExperimentalNativeExport =
 						pipelineModel === "modern" &&
@@ -4615,12 +4630,12 @@ export default function VideoEditor() {
 					const backendPreference =
 						pipelineModel === "legacy"
 							? "webcodecs"
-							: useExperimentalNativeExport
-								? "auto"
 							: smokeExportConfig.enabled
 								? (smokeExportConfig.backendPreference ??
 									(smokeExportConfig.useNativeExport ? "breeze" : "webcodecs"))
-								: (settings.backendPreference ?? exportBackendPreference);
+								: useExperimentalNativeExport
+									? "auto"
+									: (settings.backendPreference ?? exportBackendPreference);
 					const supportedSourceDimensions =
 						await ensureSupportedMp4SourceDimensions(selectedMp4FrameRate);
 					const { width: exportWidth, height: exportHeight } =
@@ -5368,31 +5383,35 @@ export default function VideoEditor() {
 		? isExportPreparing
 			? t("editor.exportStatus.preparing", "Preparing export...")
 			: isExportSaving
-			? t("editor.exportStatus.saving", "Opening save dialog...")
-			: isRenderingAudio
-				? t("editor.exportStatus.renderingAudio", "Rendering audio {{percent}}%", {
-						percent: Math.round((exportProgress.audioProgress ?? 0) * 100),
-					})
-				: isExportFinalizing
-					? exportFormat === "mp4" && exportPipelineModel === "modern"
-						? isExportFinalSaveIndeterminate
-							? t(
-									"editor.exportStatus.muxingAndSaving",
-									"Muxing audio and saving file...",
-								)
-							: t(
-								"editor.exportStatus.muxingAndSavingPercent",
-								"Muxing and saving {{percent}}%",
-								{
-									percent: exportFinalizingPercent ?? 100,
-								},
-							)
-						: t("editor.exportStatus.finalizingPercent", "Finalizing {{percent}}%", {
-								percent: exportFinalizingPercent ?? 100,
-							})
-					: t("editor.exportStatus.completePercent", "{{percent}}% complete", {
-							percent: Math.round(exportProgress.percentage),
+				? t("editor.exportStatus.saving", "Opening save dialog...")
+				: isRenderingAudio
+					? t("editor.exportStatus.renderingAudio", "Rendering audio {{percent}}%", {
+							percent: Math.round((exportProgress.audioProgress ?? 0) * 100),
 						})
+					: isExportFinalizing
+						? exportFormat === "mp4" && exportPipelineModel === "modern"
+							? isExportFinalSaveIndeterminate
+								? t(
+										"editor.exportStatus.muxingAndSaving",
+										"Muxing audio and saving file...",
+									)
+								: t(
+										"editor.exportStatus.muxingAndSavingPercent",
+										"Muxing and saving {{percent}}%",
+										{
+											percent: exportFinalizingPercent ?? 100,
+										},
+									)
+							: t(
+									"editor.exportStatus.finalizingPercent",
+									"Finalizing {{percent}}%",
+									{
+										percent: exportFinalizingPercent ?? 100,
+									},
+								)
+						: t("editor.exportStatus.completePercent", "{{percent}}% complete", {
+								percent: Math.round(exportProgress.percentage),
+							})
 		: t("editor.exportStatus.preparing", "Preparing export...");
 
 	const projectBrowser = (
