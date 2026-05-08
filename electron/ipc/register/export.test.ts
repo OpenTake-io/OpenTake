@@ -40,6 +40,7 @@ async function makeTempDir() {
 }
 
 afterEach(async () => {
+	vi.restoreAllMocks();
 	await Promise.allSettled(
 		tempDirs.splice(0).map((dir) => fs.rm(dir, { force: true, recursive: true })),
 	);
@@ -57,6 +58,31 @@ describe("moveExportedTempFile", () => {
 		await expect(fs.readFile(destinationPath, "utf8")).resolves.toBe(
 			"recordly-export",
 		);
+		await expect(fs.access(tempPath)).rejects.toThrow();
+	});
+
+	it("falls back when Windows reports the destination already exists during initial rename", async () => {
+		const dir = await makeTempDir();
+		const tempPath = path.join(dir, "export-temp.mp4");
+		const destinationPath = path.join(dir, "export-final.mp4");
+		await fs.writeFile(tempPath, "new-export");
+		await fs.writeFile(destinationPath, "previous-export");
+
+		const originalRename = fs.rename.bind(fs);
+		const renameSpy = vi.spyOn(fs, "rename");
+		renameSpy.mockImplementation(async (from, to) => {
+			if (from === tempPath && to === destinationPath) {
+				const error = new Error("destination exists") as NodeJS.ErrnoException;
+				error.code = "EEXIST";
+				throw error;
+			}
+
+			return originalRename(from, to);
+		});
+
+		await moveExportedTempFile(tempPath, destinationPath);
+
+		await expect(fs.readFile(destinationPath, "utf8")).resolves.toBe("new-export");
 		await expect(fs.access(tempPath)).rejects.toThrow();
 	});
 });

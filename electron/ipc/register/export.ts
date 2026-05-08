@@ -58,7 +58,12 @@ export async function moveExportedTempFile(tempPath: string, destinationPath: st
 		return;
 	} catch (error) {
 		const code = (error as NodeJS.ErrnoException).code;
-		if (code !== "EXDEV" && code !== "EPERM" && code !== "ENOTEMPTY") {
+		if (
+			code !== "EXDEV" &&
+			code !== "EPERM" &&
+			code !== "ENOTEMPTY" &&
+			code !== "EEXIST"
+		) {
 			throw error;
 		}
 		// Cross-device or Windows permission quirks — fall back to copy + unlink so
@@ -143,6 +148,10 @@ async function resolveAllowedReadableFilePath(
 	}
 
 	const resolvedPath = path.resolve(filePath);
+	if (!isAllowedLocalReadPath(resolvedPath)) {
+		throw new Error(`${label} is not approved for local reads`);
+	}
+
 	const realPath = await fs.realpath(resolvedPath).catch(() => null);
 	if (!realPath) {
 		throw new Error(`${label} does not exist`);
