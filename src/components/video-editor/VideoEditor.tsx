@@ -186,6 +186,7 @@ import {
 	extendAutoFullTrackClip,
 	type FigureData,
 	getClipSourceEndMs,
+	getTimelineDurationMs,
 	type Padding,
 	mapSourceTimeToTimelineTime as resolveSourceTimeToTimelineTime,
 	mapTimelineTimeToSourceTime as resolveTimelineTimeToSourceTime,
@@ -3418,6 +3419,10 @@ export default function VideoEditor() {
 		() => mapSourceTimeToTimelineTime(currentTime * 1000) / 1000,
 		[currentTime, mapSourceTimeToTimelineTime],
 	);
+	const timelineDuration = useMemo(
+		() => getTimelineDurationMs(clipRegions, duration * 1000) / 1000,
+		[clipRegions, duration],
+	);
 
 	// Merge clip speeds into speed regions so playback + export respect per-clip speed
 	const effectiveSpeedRegions = useMemo<SpeedRegion[]>(() => {
@@ -6549,14 +6554,17 @@ export default function VideoEditor() {
 											handleSeek(
 												next
 													? next.time / 1000
-													: Math.min(duration, timelinePlayheadTime + 5),
+													: Math.min(
+															timelineDuration,
+															timelinePlayheadTime + 5,
+														),
 											);
 										}}
 									>
 										<SkipForward className="w-3.5 h-3.5" weight="fill" />
 									</Button>
 									<span className="text-[10px] font-medium text-muted-foreground/70 tabular-nums ml-1">
-										{formatTime(duration)}
+										{formatTime(timelineDuration)}
 									</span>
 								</div>
 							</div>
@@ -6642,7 +6650,7 @@ export default function VideoEditor() {
 					<TimelineEditor
 						ref={timelineRef}
 						hideToolbar
-						videoDuration={duration}
+						videoDuration={timelineDuration}
 						currentTime={currentTime}
 						playheadTime={timelinePlayheadTime}
 						onSeek={handleSeek}
