@@ -90,7 +90,9 @@ export default function TimelineAxis({ videoDurationMs, currentTimeMs }: Timelin
 							<span
 								className={cn(
 									"text-[10px] font-medium tabular-nums tracking-tight",
-									marker.time === currentTimeMs ? "text-[#2563EB]" : "text-foreground/40",
+									Math.abs(marker.time - currentTimeMs) < 1
+										? "text-[#2563EB]"
+										: "text-foreground/40",
 								)}
 							>
 								{marker.label}
