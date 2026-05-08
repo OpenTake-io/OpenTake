@@ -37,3 +37,8 @@ export interface TimelineRenderItem {
 	speedValue?: number;
 	variant: "zoom" | "trim" | "clip" | "annotation" | "speed" | "audio";
 }
+
+export interface AudioPeaksData {
+	durationMs: number;
+	peaks: Float32Array;
+}
