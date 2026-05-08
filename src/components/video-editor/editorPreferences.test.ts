@@ -4,11 +4,11 @@ import {
 	DEFAULT_EDITOR_PREFERENCES,
 	EDITOR_PREFERENCES_STORAGE_KEY,
 	EDITOR_PRESETS_STORAGE_KEY,
-	loadEditorPresets,
 	loadEditorPreferences,
+	loadEditorPresets,
 	normalizeEditorPreferences,
-	saveEditorPresets,
 	saveEditorPreferences,
+	saveEditorPresets,
 } from "./editorPreferences";
 import { DEFAULT_AUTO_CAPTION_SETTINGS } from "./types";
 
@@ -69,9 +69,14 @@ describe("editorPreferences", () => {
 		expect(DEFAULT_EDITOR_PREFERENCES.exportQuality).toBe("source");
 	});
 
-	it("defaults cursor preferences to macOS at 2.5x", () => {
-		expect(DEFAULT_EDITOR_PREFERENCES.cursorStyle).toBe("macos");
+	it("defaults cursor preferences to Tahoe at 2.5x with lighter sway", () => {
+		expect(DEFAULT_EDITOR_PREFERENCES.cursorStyle).toBe("tahoe");
 		expect(DEFAULT_EDITOR_PREFERENCES.cursorSize).toBe(2.5);
+		expect(DEFAULT_EDITOR_PREFERENCES.cursorSway).toBe(0.25);
+	});
+
+	it("defaults MP4 exports to the Lightning pipeline", () => {
+		expect(DEFAULT_EDITOR_PREFERENCES.exportPipelineModel).toBe("modern");
 	});
 
 	it("loads stored editor control preferences", () => {
@@ -218,11 +223,11 @@ describe("editorPreferences", () => {
 			showCursor: false,
 			loopCursor: true,
 			cursorStyle: "figma",
-			cursorSize: 3,
-			cursorSmoothing: 1.25,
-			cursorMotionBlur: 0.5,
-			cursorClickBounce: 2.25,
-			cursorClickBounceDuration: 350,
+			cursorSize: DEFAULT_EDITOR_PREFERENCES.cursorSize,
+			cursorSmoothing: DEFAULT_EDITOR_PREFERENCES.cursorSmoothing,
+			cursorMotionBlur: DEFAULT_EDITOR_PREFERENCES.cursorMotionBlur,
+			cursorClickBounce: DEFAULT_EDITOR_PREFERENCES.cursorClickBounce,
+			cursorClickBounceDuration: DEFAULT_EDITOR_PREFERENCES.cursorClickBounceDuration,
 			cursorSway: 1.5,
 			borderRadius: 18,
 			padding: { top: 30, right: 30, bottom: 30, left: 30, linked: true },
