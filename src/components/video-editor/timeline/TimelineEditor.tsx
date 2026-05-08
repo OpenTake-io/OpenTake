@@ -1,4 +1,5 @@
 import type { Span } from "dnd-timeline";
+import { Plus } from "@phosphor-icons/react";
 import {
 	forwardRef,
 	type KeyboardEvent as ReactKeyboardEvent,
@@ -32,7 +33,6 @@ import { useTimelineAudioPeaks } from "./hooks/useTimelineAudioPeaks";
 import { calculateTimelineScale } from "./core/time";
 import { useTimelineEditorRuntime } from "./hooks/useTimelineEditorRuntime";
 import { useTimelineRange } from "./hooks/useTimelineRange";
-import TimelineEditorShell from "./components/editor/TimelineEditorShell";
 import TimelineCanvas from "./components/viewport/TimelineCanvas";
 import TimelineToolbar from "./components/toolbar/TimelineToolbar";
 
@@ -300,11 +300,25 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			void handleAddAudio();
 		}, [handleAddAudio]);
 
+		if (!videoDuration || videoDuration === 0) {
+			return (
+				<div className="flex-1 flex flex-col items-center justify-center rounded-lg bg-editor-surface gap-3">
+					<div className="w-12 h-12 rounded-full bg-foreground/5 flex items-center justify-center">
+						<Plus className="w-6 h-6 text-muted-foreground" />
+					</div>
+					<div className="text-center">
+						<p className="text-sm font-medium text-muted-foreground">No Video Loaded</p>
+						<p className="text-xs text-muted-foreground/70 mt-1">
+							Drag and drop a video to start editing
+						</p>
+					</div>
+				</div>
+			);
+		}
+
 		return (
-			<TimelineEditorShell
-				videoDuration={videoDuration}
-				hideToolbar={hideToolbar}
-				toolbar={
+			<div className="flex-1 min-h-0 flex flex-col bg-editor-bg overflow-hidden">
+				{hideToolbar ? null : (
 					<TimelineToolbar
 						aspectRatio={aspectRatio}
 						isCropped={isCropped}
@@ -324,9 +338,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 						onSplitClip={handleSplitClip}
 						cropLabel={t("sections.crop", "Crop")}
 					/>
-				}
-				timelineViewport={
-					<div
+				)}
+				<div
 					ref={timelineContainerRef}
 					className="flex-1 min-h-0 overflow-auto bg-editor-bg relative"
 					tabIndex={0}
@@ -387,8 +400,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 						/>
 					</TimelineWrapper>
 				</div>
-				}
-			/>
+			</div>
 		);
 	},
 );

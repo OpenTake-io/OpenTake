@@ -1,6 +1,7 @@
 import { useEffect, type RefObject } from "react";
 import { matchesShortcut } from "@/lib/shortcuts";
 import type { TimelineShortcutBindings } from "../core/timelineTypes";
+import { resolveDeleteSelectionTarget } from "./utils/timelineSelectionUtils";
 
 interface UseTimelineKeyboardShortcutsParams {
 	isMac: boolean;
@@ -89,18 +90,28 @@ export function useTimelineKeyboardShortcuts({
 				e.key === "Backspace" ||
 				matchesShortcut(e, keyShortcuts.deleteSelected, isMac)
 			) {
-				if (selectAllBlocksActive) {
+				const target = resolveDeleteSelectionTarget({
+					selectAllBlocksActive,
+					selectedKeyframeId,
+					selectedZoomId,
+					selectedClipId,
+					selectedAnnotationId,
+					selectedAudioId,
+				});
+				if (target !== "none") {
 					e.preventDefault();
+				}
+				if (target === "all") {
 					deleteAllBlocks();
-				} else if (selectedKeyframeId) {
+				} else if (target === "keyframe") {
 					deleteSelectedKeyframe();
-				} else if (selectedZoomId) {
+				} else if (target === "zoom") {
 					deleteSelectedZoom();
-				} else if (selectedClipId) {
+				} else if (target === "clip") {
 					deleteSelectedClip();
-				} else if (selectedAnnotationId) {
+				} else if (target === "annotation") {
 					deleteSelectedAnnotation();
-				} else if (selectedAudioId) {
+				} else if (target === "audio") {
 					deleteSelectedAudio();
 				}
 			}

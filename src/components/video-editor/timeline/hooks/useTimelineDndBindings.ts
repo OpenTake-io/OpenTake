@@ -28,6 +28,8 @@ interface UseTimelineDndBindingsParams {
 	onAudioSpanChange?: (id: string, span: Span, trackIndex?: number) => void;
 }
 
+type TimelineItemKind = "zoom" | "trim" | "clip" | "annotation" | "speed" | "audio" | null;
+
 export function useTimelineDndBindings({
 	zoomRegions,
 	trimRegions,
@@ -42,16 +44,39 @@ export function useTimelineDndBindings({
 	onSpeedSpanChange,
 	onAudioSpanChange,
 }: UseTimelineDndBindingsParams) {
+	const resolveItemKind = useCallback(
+		(id: string): TimelineItemKind => {
+			if (zoomRegions.some((r) => r.id === id)) return "zoom";
+			if (trimRegions.some((r) => r.id === id)) return "trim";
+			if (clipRegions.some((r) => r.id === id)) return "clip";
+			if (annotationRegions.some((r) => r.id === id)) return "annotation";
+			if (speedRegions.some((r) => r.id === id)) return "speed";
+			if (audioRegions.some((r) => r.id === id)) return "audio";
+			return null;
+		},
+		[zoomRegions, trimRegions, clipRegions, annotationRegions, speedRegions, audioRegions],
+	);
+
+	const resolveTrackIndex = useCallback(
+		(kind: "annotation" | "audio", id: string, rowId?: string): number => {
+			if (kind === "annotation") {
+				return rowId && isAnnotationTrackRowId(rowId)
+					? getAnnotationTrackIndex(rowId)
+					: (annotationRegions.find((region) => region.id === id)?.trackIndex ?? 0);
+			}
+			return rowId && isAudioTrackRowId(rowId)
+				? getAudioTrackIndex(rowId)
+				: (audioRegions.find((region) => region.id === id)?.trackIndex ?? 0);
+		},
+		[annotationRegions, audioRegions],
+	);
+
 	const hasOverlap = useCallback(
 		(newSpan: Span, excludeId?: string, rowId?: string): boolean => {
-			const isZoomItem = zoomRegions.some((r) => r.id === excludeId);
-			const isTrimItem = trimRegions.some((r) => r.id === excludeId);
-			const isClipItem = clipRegions.some((r) => r.id === excludeId);
-			const isAnnotationItem = annotationRegions.some((r) => r.id === excludeId);
-			const isSpeedItem = speedRegions.some((r) => r.id === excludeId);
-			const isAudioItem = audioRegions.some((r) => r.id === excludeId);
+			if (!excludeId) return false;
+			const itemKind = resolveItemKind(excludeId);
 
-			if (isAnnotationItem) return false;
+			if (itemKind === "annotation") return false;
 
 			const checkOverlap = (
 				regions: (ZoomRegion | TrimRegion | ClipRegion | SpeedRegion | AudioRegion)[],
@@ -61,17 +86,13 @@ export function useTimelineDndBindings({
 					return spansOverlap(newSpan, { start: region.startMs, end: region.endMs });
 				});
 
-			if (isZoomItem) return checkOverlap(zoomRegions);
-			if (isTrimItem) return checkOverlap(trimRegions);
-			if (isClipItem) return checkOverlap(clipRegions);
-			if (isSpeedItem) return checkOverlap(speedRegions);
+			if (itemKind === "zoom") return checkOverlap(zoomRegions);
+			if (itemKind === "trim") return checkOverlap(trimRegions);
+			if (itemKind === "clip") return checkOverlap(clipRegions);
+			if (itemKind === "speed") return checkOverlap(speedRegions);
 
-			if (isAudioItem) {
-				const activeAudioRegion = audioRegions.find((region) => region.id === excludeId);
-				const activeTrackIndex =
-					rowId && isAudioTrackRowId(rowId)
-						? getAudioTrackIndex(rowId)
-						: (activeAudioRegion?.trackIndex ?? 0);
+			if (itemKind === "audio") {
+				const activeTrackIndex = resolveTrackIndex("audio", excludeId, rowId);
 				return checkOverlap(
 					audioRegions.filter((region) => (region.trackIndex ?? 0) === activeTrackIndex),
 				);
@@ -79,7 +100,15 @@ export function useTimelineDndBindings({
 
 			return false;
 		},
-		[zoomRegions, trimRegions, clipRegions, annotationRegions, speedRegions, audioRegions],
+		[
+			resolveItemKind,
+			resolveTrackIndex,
+			zoomRegions,
+			trimRegions,
+			clipRegions,
+			audioRegions,
+			speedRegions,
+		],
 	);
 
 	const timelineItems = useMemo<TimelineRenderItem[]>(
@@ -110,35 +139,26 @@ export function useTimelineDndBindings({
 
 	const handleItemSpanChange = useCallback(
 		(id: string, span: Span, rowId?: string) => {
-			if (zoomRegions.some((r) => r.id === id)) {
+			const itemKind = resolveItemKind(id);
+			if (itemKind === "zoom") {
 				onZoomSpanChange(id, span);
-			} else if (trimRegions.some((r) => r.id === id)) {
+			} else if (itemKind === "trim") {
 				onTrimSpanChange?.(id, span);
-			} else if (clipRegions.some((r) => r.id === id)) {
+			} else if (itemKind === "clip") {
 				onClipSpanChange?.(id, span);
-			} else if (annotationRegions.some((r) => r.id === id)) {
-				const nextTrackIndex =
-					rowId && isAnnotationTrackRowId(rowId)
-						? getAnnotationTrackIndex(rowId)
-						: (annotationRegions.find((region) => region.id === id)?.trackIndex ?? 0);
+			} else if (itemKind === "annotation") {
+				const nextTrackIndex = resolveTrackIndex("annotation", id, rowId);
 				onAnnotationSpanChange?.(id, span, nextTrackIndex);
-			} else if (speedRegions.some((r) => r.id === id)) {
+			} else if (itemKind === "speed") {
 				onSpeedSpanChange?.(id, span);
-			} else if (audioRegions.some((r) => r.id === id)) {
-				const nextTrackIndex =
-					rowId && isAudioTrackRowId(rowId)
-						? getAudioTrackIndex(rowId)
-						: (audioRegions.find((region) => region.id === id)?.trackIndex ?? 0);
+			} else if (itemKind === "audio") {
+				const nextTrackIndex = resolveTrackIndex("audio", id, rowId);
 				onAudioSpanChange?.(id, span, nextTrackIndex);
 			}
 		},
 		[
-			zoomRegions,
-			trimRegions,
-			clipRegions,
-			annotationRegions,
-			speedRegions,
-			audioRegions,
+			resolveItemKind,
+			resolveTrackIndex,
 			onZoomSpanChange,
 			onTrimSpanChange,
 			onClipSpanChange,
