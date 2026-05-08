@@ -207,6 +207,29 @@ function normalizeLocale(locale: string | null | undefined): AppLocale {
 	return DEFAULT_LOCALE;
 }
 
+function getSystemLocale(): AppLocale {
+	if (typeof navigator === "undefined") {
+		return DEFAULT_LOCALE;
+	}
+
+	const preferredLocales = Array.isArray(navigator.languages)
+		? navigator.languages
+		: [navigator.language];
+
+	for (const locale of preferredLocales) {
+		if (typeof locale !== "string" || locale.trim().length === 0) {
+			continue;
+		}
+
+		const normalized = normalizeLocale(locale);
+		if (normalized !== DEFAULT_LOCALE || locale.toLowerCase().startsWith(DEFAULT_LOCALE)) {
+			return normalized;
+		}
+	}
+
+	return DEFAULT_LOCALE;
+}
+
 function getInitialLocale(): AppLocale {
 	if (typeof window === "undefined") {
 		return DEFAULT_LOCALE;
@@ -217,9 +240,7 @@ function getInitialLocale(): AppLocale {
 		return normalizeLocale(storedLocale);
 	}
 
-	// Product default must be English on first launch unless user explicitly
-	// selected another locale and we persisted it in localStorage.
-	return DEFAULT_LOCALE;
+	return getSystemLocale();
 }
 
 function getMessageValue(source: unknown, key: string): string | undefined {
