@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
 import { spansOverlap } from "../core/spans";
@@ -10,12 +10,72 @@ interface AudioRegionLite {
 	trackIndex?: number;
 }
 
+interface AudioFilePickerResult {
+	success: boolean;
+	path?: string;
+}
+
+interface TimelineAudioActionsDeps {
+	openFilePicker: () => Promise<AudioFilePickerResult | null | undefined>;
+	probeAudioDurationMs: (audioPath: string) => Promise<number>;
+	reportError: (title: string, description: string) => void;
+}
+
 interface UseTimelineAudioActionsParams {
 	videoDuration: number;
 	totalMs: number;
 	currentTimeMs: number;
 	audioRegions: AudioRegionLite[];
 	onAudioAdded?: (span: { start: number; end: number }, audioPath: string, trackIndex?: number) => void;
+	deps?: Partial<TimelineAudioActionsDeps>;
+}
+
+async function defaultOpenFilePicker(): Promise<AudioFilePickerResult | null | undefined> {
+	return window.electronAPI.openAudioFilePicker();
+}
+
+async function defaultProbeAudioDurationMs(audioPath: string): Promise<number> {
+	const resolved = await resolveMediaElementSource(audioPath);
+	return new Promise<number>((resolve) => {
+		const audio = new Audio();
+		const cleanup = () => {
+			audio.removeAttribute("src");
+			audio.load();
+			resolved.revoke();
+		};
+
+		audio.addEventListener(
+			"loadedmetadata",
+			() => {
+				resolve(Math.round(audio.duration * 1000));
+				cleanup();
+			},
+			{ once: true },
+		);
+		audio.addEventListener(
+			"error",
+			() => {
+				resolve(0);
+				cleanup();
+			},
+			{ once: true },
+		);
+		audio.src = resolved.src;
+	});
+}
+
+function defaultReportError(title: string, description: string) {
+	toast.error(title, { description });
+}
+
+function buildTimelineAudioActionsDeps(
+	overrides?: Partial<TimelineAudioActionsDeps>,
+): TimelineAudioActionsDeps {
+	return {
+		openFilePicker: overrides?.openFilePicker ?? defaultOpenFilePicker,
+		probeAudioDurationMs: overrides?.probeAudioDurationMs ?? defaultProbeAudioDurationMs,
+		reportError: overrides?.reportError ?? defaultReportError,
+	};
 }
 
 export function useTimelineAudioActions({
@@ -24,62 +84,38 @@ export function useTimelineAudioActions({
 	currentTimeMs,
 	audioRegions,
 	onAudioAdded,
+	deps: depsOverrides,
 }: UseTimelineAudioActionsParams) {
+	const deps = useMemo(() => buildTimelineAudioActionsDeps(depsOverrides), [depsOverrides]);
+
 	const handleAddAudio = useCallback(
 		async (preferredTrackIndex?: number) => {
 			if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onAudioAdded) {
 				return;
 			}
 
-			const result = await window.electronAPI.openAudioFilePicker();
+			const result = await deps.openFilePicker();
 			if (!result?.success || !result.path) {
 				return;
 			}
 
 			const audioPath = result.path;
-			const audioDurationMs = await new Promise<number>((resolve) => {
-				void (async () => {
-					const resolved = await resolveMediaElementSource(audioPath);
-					const audio = new Audio();
-					const cleanup = () => {
-						audio.removeAttribute("src");
-						audio.load();
-						resolved.revoke();
-					};
-
-					audio.addEventListener(
-						"loadedmetadata",
-						() => {
-							resolve(Math.round(audio.duration * 1000));
-							cleanup();
-						},
-						{ once: true },
-					);
-					audio.addEventListener(
-						"error",
-						() => {
-							resolve(0);
-							cleanup();
-						},
-						{ once: true },
-					);
-					audio.src = resolved.src;
-				})();
-			});
-
+			const audioDurationMs = await deps.probeAudioDurationMs(audioPath);
 			if (audioDurationMs <= 0) {
-				toast.error("Could not read audio file", {
-					description: "The selected file may be corrupted or in an unsupported format.",
-				});
+				deps.reportError(
+					"Could not read audio file",
+					"The selected file may be corrupted or in an unsupported format.",
+				);
 				return;
 			}
 
 			const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
 			const maxRemainingDuration = totalMs - startPos;
 			if (maxRemainingDuration <= 0) {
-				toast.error("Cannot place audio here", {
-					description: "There is no remaining space at the current playhead position.",
-				});
+				deps.reportError(
+					"Cannot place audio here",
+					"There is no remaining space at the current playhead position.",
+				);
 				return;
 			}
 
@@ -140,17 +176,17 @@ export function useTimelineAudioActions({
 			}
 
 			if (selectedTrackIndex === null || availableGap <= 0) {
-				toast.error("Cannot place audio here", {
-					description:
-						"Audio region already exists at this location or not enough space available.",
-				});
+				deps.reportError(
+					"Cannot place audio here",
+					"Audio region already exists at this location or not enough space available.",
+				);
 				return;
 			}
 
 			const actualDuration = Math.min(audioDurationMs, availableGap, totalMs - startPos);
-			onAudioAdded({ start: startPos, end: startPos + actualDuration }, result.path, selectedTrackIndex);
+			onAudioAdded({ start: startPos, end: startPos + actualDuration }, audioPath, selectedTrackIndex);
 		},
-		[videoDuration, totalMs, currentTimeMs, audioRegions, onAudioAdded],
+		[videoDuration, totalMs, onAudioAdded, deps, currentTimeMs, audioRegions],
 	);
 
 	return { handleAddAudio };
