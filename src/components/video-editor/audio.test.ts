@@ -255,9 +255,7 @@ describe("Motion preset normalization", () => {
 
 		expect(result.zoomInDurationMs).toBe(smooth.zoomInDurationMs);
 		expect(result.zoomOutDurationMs).toBe(smooth.zoomOutDurationMs);
-		expect(result.cursorSpringStiffnessMultiplier).toBe(
-			smooth.cursorSpringStiffnessMultiplier,
-		);
+		expect(result.cursorSpringStiffnessMultiplier).toBe(smooth.cursorSpringStiffnessMultiplier);
 		expect(result.cursorSpringDampingMultiplier).toBe(smooth.cursorSpringDampingMultiplier);
 	});
 
