@@ -1,11 +1,10 @@
-import type { Span } from "dnd-timeline";
 import type {
 	AnnotationRegion,
 	AudioRegion,
 	ClipRegion,
-	ZoomMode,
 	ZoomRegion,
 } from "../../types";
+import type { TimelineRegionSpan, TimelineRenderItem } from "../core/timelineTypes";
 import { CLIP_ROW_ID, ZOOM_ROW_ID } from "../core/constants";
 import {
 	getAnnotationTrackIndex,
@@ -15,24 +14,6 @@ import {
 	isAnnotationTrackRowId,
 	isAudioTrackRowId,
 } from "../core/rows";
-
-export interface TimelineRenderItem {
-	id: string;
-	rowId: string;
-	span: Span;
-	label: string;
-	zoomDepth?: number;
-	zoomMode?: ZoomMode;
-	speedValue?: number;
-	variant: "zoom" | "trim" | "clip" | "annotation" | "speed" | "audio";
-}
-
-export interface TimelineRegionSpan {
-	id: string;
-	start: number;
-	end: number;
-	rowId: string;
-}
 
 export function getAnnotationLabel(region: AnnotationRegion): string {
 	if (region.type === "text") {

@@ -1,7 +1,7 @@
 import type { Span } from "dnd-timeline";
 import { useCallback, useImperativeHandle } from "react";
 import type { ForwardedRef, RefObject } from "react";
-import type { ShortcutBinding } from "@/lib/shortcuts";
+import type { TimelineShortcutBindings } from "../core/timelineTypes";
 import { useTimelineDndBindings } from "./useTimelineDndBindings";
 import { useTimelineAnnotationsActions } from "./useTimelineAnnotationsActions";
 import { useTimelineAudioActions } from "./useTimelineAudioActions";
@@ -61,13 +61,7 @@ interface UseTimelineEditorRuntimeParams {
 	selectedAudioId?: string | null;
 	onSelectAudio?: (id: string | null) => void;
 	isMac: boolean;
-	keyShortcuts: {
-		addKeyframe: ShortcutBinding;
-		addZoom: ShortcutBinding;
-		splitClip: ShortcutBinding;
-		addAnnotation: ShortcutBinding;
-		deleteSelected: ShortcutBinding;
-	};
+	keyShortcuts: TimelineShortcutBindings;
 	isTimelineFocusedRef: RefObject<boolean>;
 }
 
@@ -187,13 +181,10 @@ export function useTimelineEditorRuntime({
 
 	const { defaultRegionDurationMs, canPlaceZoomAtMs, addZoomAtMs, handleAddZoom, handleSuggestZooms } =
 		useTimelineZoomActions({
-			videoDuration,
-			totalMs,
-			currentTimeMs,
-			zoomRegions,
-			clipRegions,
+			timeline: { videoDuration, totalMs, currentTimeMs },
+			regions: { zoom: zoomRegions, clip: clipRegions },
 			cursorTelemetry,
-			disableSuggestedZooms,
+			options: { disableSuggestedZooms },
 			autoSuggestZoomsTrigger,
 			onAutoSuggestZoomsConsumed,
 			onZoomAdded,
@@ -208,10 +199,8 @@ export function useTimelineEditorRuntime({
 	}, [videoDuration, totalMs, currentTimeMs, onClipSplit]);
 
 	const { handleAddAudio } = useTimelineAudioActions({
-		videoDuration,
-		totalMs,
-		currentTimeMs,
-		audioRegions,
+		timeline: { videoDuration, totalMs, currentTimeMs },
+		regions: { audio: audioRegions },
 		onAudioAdded,
 	});
 

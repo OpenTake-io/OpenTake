@@ -1,13 +1,6 @@
 import { useEffect, type RefObject } from "react";
-import { matchesShortcut, type ShortcutBinding } from "@/lib/shortcuts";
-
-interface TimelineShortcutBindings {
-	addKeyframe: ShortcutBinding;
-	addZoom: ShortcutBinding;
-	splitClip: ShortcutBinding;
-	addAnnotation: ShortcutBinding;
-	deleteSelected: ShortcutBinding;
-}
+import { matchesShortcut } from "@/lib/shortcuts";
+import type { TimelineShortcutBindings } from "../core/timelineTypes";
 
 interface UseTimelineKeyboardShortcutsParams {
 	isMac: boolean;

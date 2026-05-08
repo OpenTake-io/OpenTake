@@ -8,9 +8,10 @@ import type {
 	TrimRegion,
 	ZoomRegion,
 } from "../../types";
+import type { TimelineRenderItem } from "../core/timelineTypes";
 import { getAnnotationTrackIndex, getAudioTrackIndex, isAnnotationTrackRowId, isAudioTrackRowId } from "../core/rows";
 import { spansOverlap } from "../core/spans";
-import { buildAllRegionSpans, buildTimelineItems, resolveDropRowId, type TimelineRenderItem } from "../model/timelineModel";
+import { buildAllRegionSpans, buildTimelineItems, resolveDropRowId } from "../model/timelineModel";
 
 interface UseTimelineDndBindingsParams {
 	zoomRegions: ZoomRegion[];

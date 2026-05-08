@@ -1,8 +1,8 @@
 import { spansOverlap } from "../core/spans";
-import type { AudioRegionLite } from "./timelineHookTypes";
+import type { TimelineAudioRegion } from "../core/timelineTypes";
 
 interface ResolveAudioPlacementParams {
-	audioRegions: AudioRegionLite[];
+	audioRegions: TimelineAudioRegion[];
 	startPos: number;
 	totalMs: number;
 	audioDurationMs: number;
