@@ -206,8 +206,14 @@ function pickMicrophoneChunkEvents(value: unknown): MicrophoneChunkTimingEvent[]
 			const { index, size, elapsedMs, deltaMs, recordedElapsedMs, recordedDeltaMs } = event;
 			if (
 				typeof index !== "number" ||
+				!Number.isFinite(index) ||
+				index < 0 ||
 				typeof size !== "number" ||
-				typeof elapsedMs !== "number"
+				!Number.isFinite(size) ||
+				size < 0 ||
+				typeof elapsedMs !== "number" ||
+				!Number.isFinite(elapsedMs) ||
+				elapsedMs < 0
 			) {
 				return null;
 			}
@@ -216,7 +222,10 @@ function pickMicrophoneChunkEvents(value: unknown): MicrophoneChunkTimingEvent[]
 				index: Math.round(index),
 				size: Math.round(size),
 				elapsedMs: Math.round(elapsedMs),
-				deltaMs: typeof deltaMs === "number" ? Math.round(deltaMs) : null,
+				deltaMs:
+					typeof deltaMs === "number" && Number.isFinite(deltaMs)
+						? Math.max(0, Math.round(deltaMs))
+						: null,
 				...(typeof recordedElapsedMs === "number" &&
 				Number.isFinite(recordedElapsedMs) &&
 				recordedElapsedMs >= 0
@@ -240,7 +249,12 @@ function pickMicrophonePauseIntervals(value: unknown): MicrophonePauseInterval[]
 
 	const intervals = value
 		.map((interval) => {
-			if (!isRecord(interval) || typeof interval.startElapsedMs !== "number") {
+			if (
+				!isRecord(interval) ||
+				typeof interval.startElapsedMs !== "number" ||
+				!Number.isFinite(interval.startElapsedMs) ||
+				interval.startElapsedMs < 0
+			) {
 				return null;
 			}
 

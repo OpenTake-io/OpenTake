@@ -42,6 +42,7 @@ import {
 	type NativeExportEncodingMode,
 	type NativeVideoExportFinishOptions,
 } from "../nativeVideoExport";
+import { isAllowedLocalReadPath, resolveApprovedLocalMediaPath } from "../project/manager";
 import { approveUserPath } from "../utils";
 
 function getPartialExportDestinationPath(destinationPath: string) {
@@ -74,8 +75,32 @@ export async function moveExportedTempFile(tempPath: string, destinationPath: st
 			if (code !== "EEXIST" && code !== "EPERM") {
 				throw renameError;
 			}
-			await fs.rm(destinationPath, { force: true });
-			await fs.rename(partialDestinationPath, destinationPath);
+
+			const backupDestinationPath = getPartialExportDestinationPath(destinationPath);
+			let movedExistingDestination = false;
+			try {
+				await fs.rename(destinationPath, backupDestinationPath);
+				movedExistingDestination = true;
+			} catch (backupError) {
+				if ((backupError as NodeJS.ErrnoException).code !== "ENOENT") {
+					throw backupError;
+				}
+			}
+
+			try {
+				await fs.rename(partialDestinationPath, destinationPath);
+			} catch (replaceError) {
+				if (movedExistingDestination) {
+					await fs
+						.rename(backupDestinationPath, destinationPath)
+						.catch(() => undefined);
+				}
+				throw replaceError;
+			}
+
+			if (movedExistingDestination) {
+				await fs.rm(backupDestinationPath, { force: true });
+			}
 		}
 		try {
 			await fs.rm(tempPath, { force: true });
@@ -92,6 +117,98 @@ export async function moveExportedTempFile(tempPath: string, destinationPath: st
 		await fs.rm(partialDestinationPath, { force: true }).catch(() => undefined);
 		throw error;
 	}
+}
+
+async function resolveAllowedReadableFilePath(
+	filePath: string,
+	label: string,
+	options: { mediaOnly?: boolean } = {},
+) {
+	if (typeof filePath !== "string" || filePath.trim().length === 0) {
+		throw new Error(`${label} requires a file path`);
+	}
+
+	if (options.mediaOnly ?? true) {
+		const resolvedMediaPath = await resolveApprovedLocalMediaPath(filePath);
+		if (!resolvedMediaPath) {
+			throw new Error(`${label} is not an approved readable media file`);
+		}
+
+		return resolvedMediaPath;
+	}
+
+	const resolvedPath = path.resolve(filePath);
+	const realPath = await fs.realpath(resolvedPath).catch(() => null);
+	if (!realPath) {
+		throw new Error(`${label} does not exist`);
+	}
+
+	const stat = await fs.stat(realPath).catch(() => null);
+	if (!stat?.isFile()) {
+		throw new Error(`${label} is not a readable file`);
+	}
+
+	if (!isAllowedLocalReadPath(realPath)) {
+		throw new Error(`${label} is not approved for local reads`);
+	}
+
+	return realPath;
+}
+
+async function sanitizeNativeStaticLayoutExportOptions(
+	options: NativeStaticLayoutExportOptions,
+): Promise<NativeStaticLayoutExportOptions> {
+	const sanitized: NativeStaticLayoutExportOptions = {
+		...options,
+		inputPath: await resolveAllowedReadableFilePath(options.inputPath, "Native input"),
+	};
+	const mutableOptions = sanitized as unknown as Record<string, unknown>;
+
+	for (const [field, label] of [
+		["backgroundImagePath", "Native background image"],
+		["webcamInputPath", "Native webcam input"],
+		["cursorAtlasPath", "Native cursor atlas"],
+	] as const) {
+		const value = mutableOptions[field];
+		if (typeof value === "string" && value.trim().length > 0) {
+			mutableOptions[field] = await resolveAllowedReadableFilePath(value, label);
+		} else if (value === "" || value === undefined) {
+			mutableOptions[field] = null;
+		} else if (value !== null) {
+			throw new Error(`${label} must be a file path`);
+		}
+	}
+
+	for (const [field, label] of [
+		["cursorTelemetryPath", "Native cursor telemetry"],
+		["cursorAtlasMetadataPath", "Native cursor atlas metadata"],
+		["zoomTelemetryPath", "Native zoom telemetry"],
+		["timelineMapPath", "Native timeline map"],
+	] as const) {
+		const value = mutableOptions[field];
+		if (typeof value === "string" && value.trim().length > 0) {
+			mutableOptions[field] = await resolveAllowedReadableFilePath(value, label, {
+				mediaOnly: false,
+			});
+		} else if (value === "" || value === undefined) {
+			mutableOptions[field] = null;
+		} else if (value !== null) {
+			throw new Error(`${label} must be a file path`);
+		}
+	}
+
+	const audioOptions = sanitized.audioOptions;
+	if (audioOptions?.audioSourcePath) {
+		sanitized.audioOptions = {
+			...audioOptions,
+			audioSourcePath: await resolveAllowedReadableFilePath(
+				audioOptions.audioSourcePath,
+				"Native audio source",
+			),
+		};
+	}
+
+	return sanitized;
 }
 
 function isTempPathSafe(tempPath: string): boolean {
@@ -251,7 +368,14 @@ export function registerExportHandlers() {
 				throw new Error("Native metadata probe requires a file path");
 			}
 
-			const metadata = await probeNativeVideoMetadata(getFfmpegBinaryPath(), filePath);
+			const resolvedFilePath = await resolveAllowedReadableFilePath(
+				filePath,
+				"Native metadata probe",
+			);
+			const metadata = await probeNativeVideoMetadata(
+				getFfmpegBinaryPath(),
+				resolvedFilePath,
+			);
 			return {
 				success: true,
 				metadata,
@@ -272,10 +396,11 @@ export function registerExportHandlers() {
 				if (!options || typeof options.inputPath !== "string") {
 					throw new Error("Native static layout export requires an input path");
 				}
+				const sanitizedOptions = await sanitizeNativeStaticLayoutExportOptions(options);
 
 				const result = await exportNativeStaticLayoutVideo(
 					getFfmpegBinaryPath(),
-					options,
+					sanitizedOptions,
 					(progress) => {
 						if (event.sender.isDestroyed()) {
 							return;

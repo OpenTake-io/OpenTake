@@ -1460,12 +1460,13 @@ const mux = skipMux
 				},
 			);
 
+const finalOutputPath = skipMux ? encodedPath : outputPath;
 const outputInfo = skipMux
 	? { streams: [] }
 	: ffprobeJson([
 			"-show_entries",
 			"stream=index,codec_type,codec_name,width,height,duration,avg_frame_rate,nb_frames",
-			outputPath,
+			finalOutputPath,
 		]);
 const outputStreams = outputInfo.streams ?? [];
 const outputVideo = outputStreams.find((stream) => stream.codec_type === "video") ?? null;
@@ -1476,7 +1477,9 @@ console.log(
 		{
 			success: true,
 			inputPath,
-			outputPath,
+			outputPath: finalOutputPath,
+			requestedOutputPath: outputPath,
+			encodedPath,
 			fps,
 			bitrateMbps,
 			encodingMode,

@@ -151,7 +151,7 @@ function findLatestStableCursorType(
 		return sample.cursorType;
 	}
 
-	return samples[lo]?.cursorType ?? "arrow";
+	return "arrow";
 }
 
 function getCursorTypeIndex(cursorType: string | undefined) {

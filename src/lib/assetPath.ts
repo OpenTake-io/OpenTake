@@ -136,9 +136,11 @@ export async function getRenderableAssetUrl(asset: string): Promise<string> {
 
 	const availableAsset = await resolveAvailableWallpaperPath(asset);
 	const resolvedAsset =
-		availableAsset.startsWith("/") && !availableAsset.startsWith("//")
-			? await getAssetPath(availableAsset.replace(/^\//, ""))
-			: availableAsset;
+		isAbsoluteLocalAssetPath(availableAsset) && !isBundledAssetPath(availableAsset)
+			? toFileUrl(availableAsset)
+			: isBundledAssetPath(availableAsset)
+				? await getAssetPath(availableAsset.replace(/^\//, ""))
+				: availableAsset;
 
 	const localFilePath = toLocalFilePath(resolvedAsset);
 	if (!localFilePath || typeof window === "undefined" || !window.electronAPI?.readLocalFile) {

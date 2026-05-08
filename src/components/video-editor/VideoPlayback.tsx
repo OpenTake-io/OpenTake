@@ -1248,6 +1248,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			}
 
 			if (suspendRendering) {
+				app.ticker.stop();
 				bgVideoRef.current?.pause();
 				webcamVideoRef.current?.pause();
 				layoutVideoContentRef.current?.();

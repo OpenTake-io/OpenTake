@@ -1,5 +1,4 @@
 const { app, BrowserWindow, ipcMain } = require("electron");
-const fs = require("node:fs");
 const path = require("node:path");
 
 const drawHeight = 256;

@@ -70,6 +70,21 @@ describe("wallpapers", () => {
 		);
 	});
 
+	it("strips query strings and fragments before checking bundled wallpaper files", async () => {
+		vi.stubGlobal("window", {
+			electronAPI: {
+				listAssetDirectory: vi.fn().mockResolvedValue({
+					success: true,
+					files: ["wispysky.mp4"],
+				}),
+			},
+		});
+
+		await expect(resolveAvailableWallpaperPath("/wallpapers/wispysky.mp4#t=0.1")).resolves.toBe(
+			"/wallpapers/wispysky.mp4#t=0.1",
+		);
+	});
+
 	it("preserves non-bundled wallpaper values", async () => {
 		await expect(resolveAvailableWallpaperPath("#123456")).resolves.toBe("#123456");
 		await expect(resolveAvailableWallpaperPath("data:image/png;base64,abc")).resolves.toBe(
