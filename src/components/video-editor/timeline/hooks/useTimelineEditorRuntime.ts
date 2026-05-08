@@ -3,7 +3,6 @@ import { useCallback, useImperativeHandle } from "react";
 import type { ForwardedRef, RefObject } from "react";
 import type { TimelineShortcutBindings } from "../core/timelineTypes";
 import { useTimelineDndBindings } from "./useTimelineDndBindings";
-import { useTimelineAnnotationsActions } from "./actions/useTimelineAnnotationsActions";
 import { useTimelineAudioActions } from "./actions/useTimelineAudioActions";
 import { useTimelineKeyboardShortcuts } from "./useTimelineKeyboardShortcuts";
 import { useTimelineNormalization } from "./useTimelineNormalization";
@@ -204,13 +203,23 @@ export function useTimelineEditorRuntime({
 		onAudioAdded,
 	});
 
-	const { handleAddAnnotation } = useTimelineAnnotationsActions({
-		videoDuration,
-		totalMs,
-		currentTimeMs,
-		defaultRegionDurationMs,
-		onAnnotationAdded,
-	});
+	const handleAddAnnotation = useCallback(
+		(trackIndex = 0) => {
+			if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onAnnotationAdded) {
+				return;
+			}
+
+			const defaultDuration = Math.min(defaultRegionDurationMs, totalMs);
+			if (defaultDuration <= 0) {
+				return;
+			}
+
+			const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
+			const endPos = Math.min(startPos + defaultDuration, totalMs);
+			onAnnotationAdded({ start: startPos, end: endPos }, trackIndex);
+		},
+		[videoDuration, totalMs, currentTimeMs, defaultRegionDurationMs, onAnnotationAdded],
+	);
 
 	useTimelineKeyboardShortcuts({
 		isMac,
