@@ -262,6 +262,11 @@ function ExtensionSettingsSection({
 				}
 
 				if (field.type === "slider") {
+					const step = field.step ?? 0.01;
+					const stepText = String(step);
+					const precision = stepText.includes(".")
+						? stepText.split(".")[1]?.length ?? 0
+						: 0;
 					return (
 						<div key={field.id} className="mt-1">
 							<SliderControl
@@ -270,12 +275,12 @@ function ExtensionSettingsSection({
 								defaultValue={field.defaultValue as number}
 								min={field.min ?? 0}
 								max={field.max ?? 1}
-								step={field.step ?? 0.01}
+								step={step}
 								onChange={(v) => {
 									extensionHost.setExtensionSetting(extensionId, field.id, v);
 									forceUpdate((n) => n + 1);
 								}}
-								formatValue={(v) => v.toFixed(1)}
+								formatValue={(v) => v.toFixed(precision)}
 								parseInput={(text) => parseFloat(text)}
 							/>
 						</div>
@@ -1552,11 +1557,17 @@ export function SettingsPanel({
 	};
 
 	const resetFrameSection = () => {
+		const preferredFrame = initialEditorPreferences.frame;
+		const resolvedFrame = preferredFrame
+			? availableFrames.some((candidate) => candidate.id === preferredFrame)
+				? preferredFrame
+				: null
+			: null;
 		onShadowChange?.(initialEditorPreferences.shadowIntensity);
 		onBorderRadiusChange?.(initialEditorPreferences.borderRadius);
 		onAspectRatioChange?.(initialEditorPreferences.aspectRatio);
 		onPaddingChange?.({ ...initialEditorPreferences.padding });
-		onFrameChange?.(initialEditorPreferences.frame);
+		onFrameChange?.(resolvedFrame);
 		removeBackgroundStateRef.current = null;
 	};
 

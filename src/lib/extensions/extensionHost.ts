@@ -185,6 +185,14 @@ export class ExtensionHost {
 		isPlaying: boolean;
 	} | null = null;
 
+	constructor() {
+		if (typeof window !== "undefined") {
+			window.addEventListener("beforeunload", () => {
+				this.flushPersistedSettings();
+			});
+		}
+	}
+
 	/**
 	 * Activate an extension given its info and resolved module URL.
 	 */
@@ -274,6 +282,7 @@ export class ExtensionHost {
 		}
 
 		this.activeExtensions.delete(extensionId);
+		this.flushPersistedSettings();
 		this.notifyListeners();
 		console.log(`[extensions] Deactivated: ${extensionId}`);
 	}
@@ -286,6 +295,7 @@ export class ExtensionHost {
 		for (const id of ids) {
 			await this.deactivateExtension(id);
 		}
+		this.flushPersistedSettings();
 	}
 
 	// ---------------------------------------------------------------------------
@@ -617,6 +627,14 @@ export class ExtensionHost {
 			this.writePersistedSettingsStore(store);
 			this.persistTimeout = null;
 		}, 500);
+	}
+
+	private flushPersistedSettings(): void {
+		if (this.persistTimeout) {
+			clearTimeout(this.persistTimeout);
+			this.persistTimeout = null;
+		}
+		this.writePersistedSettingsStore(this.getFullSettingsStore());
 	}
 
 	/**
