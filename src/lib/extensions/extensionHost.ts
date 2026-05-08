@@ -145,7 +145,7 @@ export class ExtensionHost {
 	>();
 	private listeners = new Set<() => void>();
 	private fullSettingsStore: Record<string, Record<string, unknown>> | null = null;
-	private persistTimeout: any = null;
+	private persistTimeout: ReturnType<typeof setTimeout> | null = null;
 	private iconPathCache = new Map<string, Path2D>();
 
 	// Shared playback/project state — set by the app, queried by extensions
