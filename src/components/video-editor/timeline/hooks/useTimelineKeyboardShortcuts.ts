@@ -58,12 +58,22 @@ export function useTimelineKeyboardShortcuts({
 }: UseTimelineKeyboardShortcutsParams) {
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+			const eventTarget = e.target;
+			if (
+				eventTarget instanceof HTMLInputElement ||
+				eventTarget instanceof HTMLTextAreaElement ||
+				eventTarget instanceof HTMLSelectElement ||
+				(eventTarget instanceof HTMLElement && eventTarget.isContentEditable)
+			) {
+				return;
+			}
+
+			if (!isTimelineFocusedRef.current) {
 				return;
 			}
 
 			if (matchesShortcut(e, { key: "a", ctrl: true }, isMac)) {
-				if (!hasAnyTimelineBlocks || !isTimelineFocusedRef.current) {
+				if (!hasAnyTimelineBlocks) {
 					return;
 				}
 				e.preventDefault();

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { normalizeRegionSpan } from "../core/spans";
 import type { AudioRegion, SpeedRegion, TrimRegion, ZoomRegion } from "../../types";
 
@@ -27,21 +27,12 @@ export function useTimelineNormalization({
 	onSpeedSpanChange,
 	onAudioSpanChange,
 }: UseTimelineNormalizationParams) {
-	const zoomRegionsRef = useRef(zoomRegions);
-	const trimRegionsRef = useRef(trimRegions);
-	const speedRegionsRef = useRef(speedRegions);
-	const audioRegionsRef = useRef(audioRegions);
-	zoomRegionsRef.current = zoomRegions;
-	trimRegionsRef.current = trimRegions;
-	speedRegionsRef.current = speedRegions;
-	audioRegionsRef.current = audioRegions;
-
 	useEffect(() => {
 		if (totalMs === 0 || safeMinDurationMs <= 0) {
 			return;
 		}
 
-		zoomRegionsRef.current.forEach((region) => {
+		zoomRegions.forEach((region) => {
 			const normalized = normalizeRegionSpan({
 				startMs: region.startMs,
 				endMs: region.endMs,
@@ -54,7 +45,7 @@ export function useTimelineNormalization({
 			}
 		});
 
-		trimRegionsRef.current.forEach((region) => {
+		trimRegions.forEach((region) => {
 			const normalized = normalizeRegionSpan({
 				startMs: region.startMs,
 				endMs: region.endMs,
@@ -67,7 +58,7 @@ export function useTimelineNormalization({
 			}
 		});
 
-		speedRegionsRef.current.forEach((region) => {
+		speedRegions.forEach((region) => {
 			const normalized = normalizeRegionSpan({
 				startMs: region.startMs,
 				endMs: region.endMs,
@@ -80,7 +71,7 @@ export function useTimelineNormalization({
 			}
 		});
 
-		audioRegionsRef.current.forEach((region) => {
+		audioRegions.forEach((region) => {
 			const normalized = normalizeRegionSpan({
 				startMs: region.startMs,
 				endMs: region.endMs,
@@ -95,6 +86,10 @@ export function useTimelineNormalization({
 	}, [
 		totalMs,
 		safeMinDurationMs,
+		zoomRegions,
+		trimRegions,
+		speedRegions,
+		audioRegions,
 		onZoomSpanChange,
 		onTrimSpanChange,
 		onSpeedSpanChange,
