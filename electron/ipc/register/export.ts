@@ -99,7 +99,12 @@ export async function moveExportedTempFile(tempPath: string, destinationPath: st
 			}
 
 			if (movedExistingDestination) {
-				await fs.rm(backupDestinationPath, { force: true });
+				await fs.rm(backupDestinationPath, { force: true }).catch((cleanupError) => {
+					console.warn(
+						`[export] Failed to remove backup file after replace (${backupDestinationPath}):`,
+						cleanupError,
+					);
+				});
 			}
 		}
 		try {
