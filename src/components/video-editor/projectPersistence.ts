@@ -868,10 +868,10 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			: 1,
 		cameraSpringDampingMultiplier: isFiniteNumber(editor.cameraSpringDampingMultiplier)
 			? clamp(editor.cameraSpringDampingMultiplier, 0.25, 3)
-			: 1,
+			: 1.13,
 		cameraSpringMassMultiplier: isFiniteNumber(editor.cameraSpringMassMultiplier)
 			? clamp(editor.cameraSpringMassMultiplier, 0.25, 3)
-			: 1,
+			: 1.12,
 		zoomSmoothness: DEFAULT_ZOOM_SMOOTHNESS,
 		zoomClassicMode:
 			typeof editor.zoomClassicMode === "boolean" ? editor.zoomClassicMode : false,
