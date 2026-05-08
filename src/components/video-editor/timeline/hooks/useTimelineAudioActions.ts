@@ -1,14 +1,8 @@
 import { useCallback, useMemo } from "react";
-import { toast } from "sonner";
 import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
-import { spansOverlap } from "../core/spans";
-
-interface AudioRegionLite {
-	id: string;
-	startMs: number;
-	endMs: number;
-	trackIndex?: number;
-}
+import { resolveAudioPlacement } from "./timelineAudioPlacement";
+import type { AudioRegionLite } from "./timelineHookTypes";
+import { timelineNotifications } from "./timelineNotifications";
 
 interface AudioFilePickerResult {
 	success: boolean;
@@ -22,10 +16,14 @@ interface TimelineAudioActionsDeps {
 }
 
 interface UseTimelineAudioActionsParams {
-	videoDuration: number;
-	totalMs: number;
-	currentTimeMs: number;
-	audioRegions: AudioRegionLite[];
+	timeline: {
+		videoDuration: number;
+		totalMs: number;
+		currentTimeMs: number;
+	};
+	regions: {
+		audio: AudioRegionLite[];
+	};
 	onAudioAdded?: (span: { start: number; end: number }, audioPath: string, trackIndex?: number) => void;
 	deps?: Partial<TimelineAudioActionsDeps>;
 }
@@ -64,28 +62,24 @@ async function defaultProbeAudioDurationMs(audioPath: string): Promise<number> {
 	});
 }
 
-function defaultReportError(title: string, description: string) {
-	toast.error(title, { description });
-}
-
 function buildTimelineAudioActionsDeps(
 	overrides?: Partial<TimelineAudioActionsDeps>,
 ): TimelineAudioActionsDeps {
 	return {
 		openFilePicker: overrides?.openFilePicker ?? defaultOpenFilePicker,
 		probeAudioDurationMs: overrides?.probeAudioDurationMs ?? defaultProbeAudioDurationMs,
-		reportError: overrides?.reportError ?? defaultReportError,
+		reportError: overrides?.reportError ?? timelineNotifications.error,
 	};
 }
 
 export function useTimelineAudioActions({
-	videoDuration,
-	totalMs,
-	currentTimeMs,
-	audioRegions,
+	timeline,
+	regions,
 	onAudioAdded,
 	deps: depsOverrides,
 }: UseTimelineAudioActionsParams) {
+	const { videoDuration, totalMs, currentTimeMs } = timeline;
+	const { audio: audioRegions } = regions;
 	const deps = useMemo(() => buildTimelineAudioActionsDeps(depsOverrides), [depsOverrides]);
 
 	const handleAddAudio = useCallback(
@@ -110,8 +104,7 @@ export function useTimelineAudioActions({
 			}
 
 			const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
-			const maxRemainingDuration = totalMs - startPos;
-			if (maxRemainingDuration <= 0) {
+			if (totalMs - startPos <= 0) {
 				deps.reportError(
 					"Cannot place audio here",
 					"There is no remaining space at the current playhead position.",
@@ -119,63 +112,14 @@ export function useTimelineAudioActions({
 				return;
 			}
 
-			const desiredDuration = Math.min(audioDurationMs, maxRemainingDuration);
-			const normalizedPreferredTrackIndex = Number.isFinite(preferredTrackIndex)
-				? Math.max(0, Math.floor(preferredTrackIndex ?? 0))
-				: null;
-			const maxTrackIndex = audioRegions.reduce(
-				(max, region) => Math.max(max, region.trackIndex ?? 0),
-				-1,
-			);
-			const candidateTrackIndexes =
-				normalizedPreferredTrackIndex === null
-					? Array.from({ length: maxTrackIndex + 2 }, (_, index) => index)
-					: [normalizedPreferredTrackIndex];
-
-			const getGapForTrack = (trackIndex: number) => {
-				const trackRegions = audioRegions
-					.filter((region) => (region.trackIndex ?? 0) === trackIndex)
-					.sort((left, right) => left.startMs - right.startMs);
-				const desiredSpan = {
-					start: startPos,
-					end: startPos + desiredDuration,
-				};
-
-				const overlappingRegion = trackRegions.find((region) =>
-					spansOverlap(desiredSpan, { start: region.startMs, end: region.endMs }),
-				);
-				if (overlappingRegion) {
-					return 0;
-				}
-
-				const nextRegion = trackRegions.find((region) => region.startMs > startPos);
-				return nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
-			};
-
-			let selectedTrackIndex: number | null = null;
-			let availableGap = 0;
-
-			for (const trackIndex of candidateTrackIndexes) {
-				const gap = getGapForTrack(trackIndex);
-				if (gap >= desiredDuration) {
-					selectedTrackIndex = trackIndex;
-					availableGap = gap;
-					break;
-				}
-			}
-
-			if (selectedTrackIndex === null && normalizedPreferredTrackIndex === null) {
-				for (const trackIndex of candidateTrackIndexes) {
-					const gap = getGapForTrack(trackIndex);
-					if (gap > 0) {
-						selectedTrackIndex = trackIndex;
-						availableGap = gap;
-						break;
-					}
-				}
-			}
-
-			if (selectedTrackIndex === null || availableGap <= 0) {
+			const placement = resolveAudioPlacement({
+				audioRegions,
+				startPos,
+				totalMs,
+				audioDurationMs,
+				preferredTrackIndex,
+			});
+			if (!placement) {
 				deps.reportError(
 					"Cannot place audio here",
 					"Audio region already exists at this location or not enough space available.",
@@ -183,8 +127,11 @@ export function useTimelineAudioActions({
 				return;
 			}
 
-			const actualDuration = Math.min(audioDurationMs, availableGap, totalMs - startPos);
-			onAudioAdded({ start: startPos, end: startPos + actualDuration }, audioPath, selectedTrackIndex);
+			onAudioAdded(
+				{ start: startPos, end: startPos + placement.durationMs },
+				audioPath,
+				placement.trackIndex,
+			);
 		},
 		[videoDuration, totalMs, onAudioAdded, deps, currentTimeMs, audioRegions],
 	);
