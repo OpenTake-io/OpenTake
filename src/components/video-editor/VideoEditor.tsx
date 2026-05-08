@@ -76,6 +76,10 @@ import {
 	VideoExporter,
 } from "@/lib/exporter";
 import { getMp4ExportBitrate, getSourceQualityBitrate } from "@/lib/exporter/exportBitrate";
+import {
+	canUseInMemoryExportSaveFallback,
+	describeBlockedInMemoryExportSave,
+} from "@/lib/exporter/exportSavePolicy";
 import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
 import { resolveSourceAudioFallbackPaths } from "@/lib/exporter/sourceAudioFallback";
 import {
@@ -1485,6 +1489,12 @@ export default function VideoEditor() {
 	const saveBlobExport = useCallback(
 		async (blob: Blob, fileName: string, outputPath: string | null = null) => {
 			const extension = fileName.split(".").pop()?.toLowerCase() || "bin";
+			const hasExportStreamApi =
+				typeof window !== "undefined" &&
+				typeof window.electronAPI?.openExportStream === "function" &&
+				typeof window.electronAPI?.writeExportStreamChunk === "function" &&
+				typeof window.electronAPI?.closeExportStream === "function";
+			let streamError: unknown = null;
 
 			try {
 				const tempFilePath = await streamExportBlobToTempFile(blob, extension);
@@ -1502,9 +1512,37 @@ export default function VideoEditor() {
 					};
 				}
 			} catch (error) {
-				console.warn("[export] Falling back to in-memory blob save", error);
+				streamError = error;
+				console.warn("[export] Temp-file blob save failed", error);
 			}
 
+			if (
+				!canUseInMemoryExportSaveFallback({
+					blobSize: blob.size,
+					extension,
+					hasExportStreamApi,
+				})
+			) {
+				const message = describeBlockedInMemoryExportSave({
+					blobSize: blob.size,
+					extension,
+				});
+				console.error("[export] Refusing in-memory blob save fallback", {
+					fileName,
+					blobSize: blob.size,
+					extension,
+					hasExportStreamApi,
+					streamError,
+				});
+				throw new Error(message);
+			}
+
+			console.warn("[export] Falling back to in-memory blob save", {
+				fileName,
+				blobSize: blob.size,
+				extension,
+				hasExportStreamApi,
+			});
 			const arrayBuffer = await blob.arrayBuffer();
 			return {
 				saveResult: outputPath
