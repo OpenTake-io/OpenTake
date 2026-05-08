@@ -20,12 +20,18 @@ describe("timeline core/spans", () => {
 	it("clamps start when requested end exceeds total", () => {
 		expect(
 			normalizeRegionSpan({ startMs: 980, endMs: 1200, totalMs: 1000, minDurationMs: 100 }),
-		).toEqual({ start: 900, end: 1080 });
+		).toEqual({ start: 900, end: 1000 });
 	});
 
 	it("keeps already valid spans unchanged", () => {
 		expect(
 			normalizeRegionSpan({ startMs: 100, endMs: 300, totalMs: 1000, minDurationMs: 50 }),
 		).toEqual({ start: 100, end: 300 });
+	});
+
+	it("never exceeds total when min duration is larger than total", () => {
+		expect(
+			normalizeRegionSpan({ startMs: 100, endMs: 300, totalMs: 80, minDurationMs: 100 }),
+		).toEqual({ start: 0, end: 80 });
 	});
 });
