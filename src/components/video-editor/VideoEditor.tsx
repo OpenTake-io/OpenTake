@@ -3409,7 +3409,7 @@ export default function VideoEditor() {
 		setAutoSuggestZoomsTrigger(0);
 	}, []);
 
-	function handleSeek(time: number, options: { pause?: boolean } = {}) {
+	const handleSeek = useCallback((time: number, options: { pause?: boolean } = {}) => {
 		const playback = videoPlaybackRef.current;
 		const video = playback?.video;
 		if (!video) return;
@@ -3419,11 +3419,11 @@ export default function VideoEditor() {
 		}
 
 		video.currentTime = mapTimelineTimeToSourceTime(time * 1000) / 1000;
-	}
+	}, [mapTimelineTimeToSourceTime]);
 
 	const handleTimelineSeek = useCallback((time: number) => {
 		handleSeek(time, { pause: true });
-	}, []);
+	}, [handleSeek]);
 
 	const handleSelectZoom = useCallback((id: string | null) => {
 		setSelectedZoomId(id);
