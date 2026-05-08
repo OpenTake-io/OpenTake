@@ -1,15 +1,17 @@
 import { useEffect, type RefObject } from "react";
-import { matchesShortcut } from "@/lib/shortcuts";
+import { matchesShortcut, type ShortcutBinding } from "@/lib/shortcuts";
+
+interface TimelineShortcutBindings {
+	addKeyframe: ShortcutBinding;
+	addZoom: ShortcutBinding;
+	splitClip: ShortcutBinding;
+	addAnnotation: ShortcutBinding;
+	deleteSelected: ShortcutBinding;
+}
 
 interface UseTimelineKeyboardShortcutsParams {
 	isMac: boolean;
-	keyShortcuts: {
-		addKeyframe: unknown;
-		addZoom: unknown;
-		splitClip: unknown;
-		addAnnotation: unknown;
-		deleteSelected: unknown;
-	};
+	keyShortcuts: TimelineShortcutBindings;
 	isTimelineFocusedRef: RefObject<boolean>;
 	hasAnyTimelineBlocks: boolean;
 	annotationCount: number;
@@ -76,10 +78,10 @@ export function useTimelineKeyboardShortcuts({
 				return;
 			}
 
-			if (matchesShortcut(e, keyShortcuts.addKeyframe as never, isMac)) addKeyframe();
-			if (matchesShortcut(e, keyShortcuts.addZoom as never, isMac)) handleAddZoom();
-			if (matchesShortcut(e, keyShortcuts.splitClip as never, isMac)) handleSplitClip();
-			if (matchesShortcut(e, keyShortcuts.addAnnotation as never, isMac)) {
+			if (matchesShortcut(e, keyShortcuts.addKeyframe, isMac)) addKeyframe();
+			if (matchesShortcut(e, keyShortcuts.addZoom, isMac)) handleAddZoom();
+			if (matchesShortcut(e, keyShortcuts.splitClip, isMac)) handleSplitClip();
+			if (matchesShortcut(e, keyShortcuts.addAnnotation, isMac)) {
 				handleAddAnnotation();
 			}
 
@@ -92,7 +94,7 @@ export function useTimelineKeyboardShortcuts({
 			if (
 				e.key === "Delete" ||
 				e.key === "Backspace" ||
-				matchesShortcut(e, keyShortcuts.deleteSelected as never, isMac)
+				matchesShortcut(e, keyShortcuts.deleteSelected, isMac)
 			) {
 				if (selectAllBlocksActive) {
 					e.preventDefault();
