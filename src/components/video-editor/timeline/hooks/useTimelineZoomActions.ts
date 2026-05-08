@@ -1,17 +1,23 @@
 import type { Span } from "dnd-timeline";
 import { useCallback, useEffect, useMemo } from "react";
-import { toast } from "sonner";
 import type { CursorTelemetryPoint, ZoomFocus, ZoomRegion } from "../../types";
 import { buildInteractionZoomSuggestions } from "../zoomSuggestionUtils";
+import { timelineNotifications } from "./timelineNotifications";
 
 interface UseTimelineZoomActionsParams {
-	videoDuration: number;
-	totalMs: number;
-	currentTimeMs: number;
-	zoomRegions: ZoomRegion[];
-	clipRegions: { startMs: number; endMs: number }[];
+	timeline: {
+		videoDuration: number;
+		totalMs: number;
+		currentTimeMs: number;
+	};
+	regions: {
+		zoom: ZoomRegion[];
+		clip: { startMs: number; endMs: number }[];
+	};
 	cursorTelemetry: CursorTelemetryPoint[];
-	disableSuggestedZooms: boolean;
+	options: {
+		disableSuggestedZooms: boolean;
+	};
 	autoSuggestZoomsTrigger: number;
 	onAutoSuggestZoomsConsumed?: () => void;
 	onZoomAdded: (span: Span) => void;
@@ -19,18 +25,18 @@ interface UseTimelineZoomActionsParams {
 }
 
 export function useTimelineZoomActions({
-	videoDuration,
-	totalMs,
-	currentTimeMs,
-	zoomRegions,
-	clipRegions,
+	timeline,
+	regions,
 	cursorTelemetry,
-	disableSuggestedZooms,
+	options,
 	autoSuggestZoomsTrigger,
 	onAutoSuggestZoomsConsumed,
 	onZoomAdded,
 	onZoomSuggested,
 }: UseTimelineZoomActionsParams) {
+	const { videoDuration, totalMs, currentTimeMs } = timeline;
+	const { zoom: zoomRegions, clip: clipRegions } = regions;
+	const { disableSuggestedZooms } = options;
 	const defaultRegionDurationMs = useMemo(() => Math.min(1000, totalMs), [totalMs]);
 
 	const canPlaceZoomAtMs = useCallback(
@@ -81,10 +87,10 @@ export function useTimelineZoomActions({
 
 			const startPos = Math.max(0, Math.min(startMs, totalMs));
 			if (!canPlaceZoomAtMs(startPos)) {
-				toast.error("Cannot place zoom here", {
-					description:
-						"Zoom already exists here or there is not enough room before the next zoom or clip end.",
-				});
+				timelineNotifications.error(
+					"Cannot place zoom here",
+					"Zoom already exists here or there is not enough room before the next zoom or clip end.",
+				);
 				return;
 			}
 
@@ -107,19 +113,20 @@ export function useTimelineZoomActions({
 		}
 
 		if (disableSuggestedZooms) {
-			toast.info("Suggested zooms are unavailable while cursor looping is enabled.");
+			timelineNotifications.info("Suggested zooms are unavailable while cursor looping is enabled.");
 			return;
 		}
 
 		if (!onZoomSuggested) {
-			toast.error("Zoom suggestion handler unavailable");
+			timelineNotifications.error("Zoom suggestion handler unavailable");
 			return;
 		}
 
 		if (cursorTelemetry.length < 2) {
-			toast.info("No cursor telemetry available", {
-				description: "Record a screencast first to generate cursor-based suggestions.",
-			});
+			timelineNotifications.info(
+				"No cursor telemetry available",
+				"Record a screencast first to generate cursor-based suggestions.",
+			);
 			return;
 		}
 
@@ -138,23 +145,26 @@ export function useTimelineZoomActions({
 		});
 
 		if (result.status === "no-telemetry") {
-			toast.info("No usable cursor telemetry", {
-				description: "The recording does not include enough cursor movement data.",
-			});
+			timelineNotifications.info(
+				"No usable cursor telemetry",
+				"The recording does not include enough cursor movement data.",
+			);
 			return;
 		}
 
 		if (result.status === "no-interactions") {
-			toast.info("No clear interaction moments found", {
-				description: "Try a recording with pauses or clicks around important actions.",
-			});
+			timelineNotifications.info(
+				"No clear interaction moments found",
+				"Try a recording with pauses or clicks around important actions.",
+			);
 			return;
 		}
 
 		if (result.status === "no-slots" || result.suggestions.length === 0) {
-			toast.info("No auto-zoom slots available", {
-				description: "Detected dwell points overlap existing zoom regions.",
-			});
+			timelineNotifications.info(
+				"No auto-zoom slots available",
+				"Detected dwell points overlap existing zoom regions.",
+			);
 			return;
 		}
 
@@ -162,7 +172,7 @@ export function useTimelineZoomActions({
 			onZoomSuggested({ start: region.start, end: region.end }, region.focus);
 		}
 
-		toast.success(
+		timelineNotifications.success(
 			`Added ${result.suggestions.length} interaction-based zoom suggestion${result.suggestions.length === 1 ? "" : "s"}`,
 		);
 	}, [
