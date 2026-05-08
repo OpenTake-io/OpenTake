@@ -14,6 +14,7 @@ import type {
 	ZoomRegion,
 	ZoomTransitionEasing,
 } from "@/components/video-editor/types";
+import { getEffectiveVideoStreamDurationSeconds } from "@/lib/mediaTiming";
 import { AudioProcessor, isAacAudioEncodingSupported } from "./audioEncoder";
 import { buildEditedTrackSourceSegments, classifyEditedTrackStrategy } from "./editedTrackStrategy";
 import {
@@ -191,8 +192,7 @@ export class VideoExporter {
 			const shouldUseFfmpegAudioFallback =
 				!useNativeEncoder &&
 				audioPlan.audioMode !== "none" &&
-				(shouldUsePitchPreservingFfmpegAudio ||
-					!(await isAacAudioEncodingSupported()));
+				(shouldUsePitchPreservingFfmpegAudio || !(await isAacAudioEncodingSupported()));
 
 			if (!useNativeEncoder) {
 				await this.initializeEncoder();
@@ -564,7 +564,12 @@ export class VideoExporter {
 		) {
 			const sourceDurationMs = Math.max(
 				0,
-				Math.round((videoInfo.streamDuration ?? videoInfo.duration) * 1000),
+				Math.round(
+					getEffectiveVideoStreamDurationSeconds({
+						duration: videoInfo.duration,
+						streamDuration: videoInfo.streamDuration,
+					}) * 1000,
+				),
 			);
 			const trimRegions = this.config.trimRegions ?? [];
 			const canUsePrimaryAudioFiltergraph =
@@ -575,17 +580,16 @@ export class VideoExporter {
 				typeof primaryAudioSourceSampleRate === "number" &&
 				Number.isFinite(primaryAudioSourceSampleRate) &&
 				primaryAudioSourceSampleRate > 0;
-			const strategy =
-				canUsePrimaryAudioFiltergraph
-					? classifyEditedTrackStrategy({
-							primaryAudioSourcePath,
-							sourceDurationMs,
-							trimRegions,
-							speedRegions,
-							audioRegions,
-							sourceAudioFallbackPaths,
-						})
-					: "offline-render-fallback";
+			const strategy = canUsePrimaryAudioFiltergraph
+				? classifyEditedTrackStrategy({
+						primaryAudioSourcePath,
+						sourceDurationMs,
+						trimRegions,
+						speedRegions,
+						audioRegions,
+						sourceAudioFallbackPaths,
+					})
+				: "offline-render-fallback";
 
 			if (strategy === "filtergraph-fast-path") {
 				const audioSourcePath = primaryAudioSourcePath;
@@ -626,7 +630,12 @@ export class VideoExporter {
 		if ((this.config.trimRegions ?? []).length > 0) {
 			const sourceDurationMs = Math.max(
 				0,
-				Math.round((videoInfo.streamDuration ?? videoInfo.duration) * 1000),
+				Math.round(
+					getEffectiveVideoStreamDurationSeconds({
+						duration: videoInfo.duration,
+						streamDuration: videoInfo.streamDuration,
+					}) * 1000,
+				),
 			);
 			const trimSegments = this.buildNativeTrimSegments(sourceDurationMs);
 			if (trimSegments.length === 0) {

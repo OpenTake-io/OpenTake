@@ -1172,7 +1172,12 @@ export class ModernVideoExporter {
 		) {
 			const sourceDurationMs = Math.max(
 				0,
-				Math.round((videoInfo.streamDuration ?? videoInfo.duration) * 1000),
+				Math.round(
+					getEffectiveVideoStreamDurationSeconds({
+						duration: videoInfo.duration,
+						streamDuration: videoInfo.streamDuration,
+					}) * 1000,
+				),
 			);
 			const trimRegions = this.config.trimRegions ?? [];
 			const canUsePrimaryAudioFiltergraph =
@@ -1234,7 +1239,12 @@ export class ModernVideoExporter {
 		if ((this.config.trimRegions ?? []).length > 0) {
 			const sourceDurationMs = Math.max(
 				0,
-				Math.round((videoInfo.streamDuration ?? videoInfo.duration) * 1000),
+				Math.round(
+					getEffectiveVideoStreamDurationSeconds({
+						duration: videoInfo.duration,
+						streamDuration: videoInfo.streamDuration,
+					}) * 1000,
+				),
 			);
 			const trimSegments = this.buildNativeTrimSegments(sourceDurationMs);
 			if (trimSegments.length === 0) {
