@@ -26,9 +26,9 @@ import type {
 	ZoomFocus,
 	ZoomRegion,
 } from "../types";
-import KeyframeMarkers from "./KeyframeMarkers";
-import TimelineWrapper from "./TimelineWrapper";
-import { useAudioPeaks } from "./useAudioPeaks";
+import KeyframeMarkers from "./components/markers/KeyframeMarkers";
+import TimelineWrapper from "./components/wrapper/TimelineWrapper";
+import { useTimelineAudioPeaks } from "./hooks/useTimelineAudioPeaks";
 import { calculateTimelineScale } from "./core/time";
 import { useTimelineEditorRuntime } from "./hooks/useTimelineEditorRuntime";
 import { useTimelineRange } from "./hooks/useTimelineRange";
@@ -177,7 +177,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			zoom: "Ctrl + Scroll",
 		});
 		const { shortcuts: keyShortcuts, isMac } = useShortcuts();
-		const audioPeaks = useAudioPeaks(videoPath);
+		const audioPeaks = useTimelineAudioPeaks(videoPath);
 
 		useEffect(() => {
 			if (aspectRatio === "native") {

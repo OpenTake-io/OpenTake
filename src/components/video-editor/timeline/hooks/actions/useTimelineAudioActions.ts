@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from "react";
 import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
-import type { TimelineAudioRegion } from "../core/timelineTypes";
-import { resolveAudioPlacement } from "./timelineAudioPlacement";
-import { timelineNotifications } from "./timelineNotifications";
+import type { TimelineAudioRegion } from "../../core/timelineTypes";
+import { resolveAudioPlacement } from "../utils/timelineAudioPlacement";
+import { timelineNotifications } from "../utils/timelineNotifications";
 
 interface AudioFilePickerResult {
 	success: boolean;

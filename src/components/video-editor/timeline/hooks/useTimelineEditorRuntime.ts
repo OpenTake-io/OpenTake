@@ -3,12 +3,12 @@ import { useCallback, useImperativeHandle } from "react";
 import type { ForwardedRef, RefObject } from "react";
 import type { TimelineShortcutBindings } from "../core/timelineTypes";
 import { useTimelineDndBindings } from "./useTimelineDndBindings";
-import { useTimelineAnnotationsActions } from "./useTimelineAnnotationsActions";
-import { useTimelineAudioActions } from "./useTimelineAudioActions";
+import { useTimelineAnnotationsActions } from "./actions/useTimelineAnnotationsActions";
+import { useTimelineAudioActions } from "./actions/useTimelineAudioActions";
 import { useTimelineKeyboardShortcuts } from "./useTimelineKeyboardShortcuts";
 import { useTimelineNormalization } from "./useTimelineNormalization";
 import { useTimelineSelection } from "./useTimelineSelection";
-import { useTimelineZoomActions } from "./useTimelineZoomActions";
+import { useTimelineZoomActions } from "./actions/useTimelineZoomActions";
 import type {
 	AnnotationRegion,
 	AudioRegion,

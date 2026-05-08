@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AudioPeaksData } from "./core/timelineTypes";
+import type { AudioPeaksData } from "../core/timelineTypes";
 
 /** Number of peak bins to produce — enough for smooth display at any zoom. */
 const TARGET_PEAK_COUNT = 2048;
@@ -10,7 +10,7 @@ const TARGET_PEAK_COUNT = 2048;
  *
  * Returns `null` while loading or if the file has no decodeable audio.
  */
-export function useAudioPeaks(fileUrl: string | null | undefined): AudioPeaksData | null {
+export function useTimelineAudioPeaks(fileUrl: string | null | undefined): AudioPeaksData | null {
 	const [data, setData] = useState<AudioPeaksData | null>(null);
 	const urlRef = useRef(fileUrl);
 
