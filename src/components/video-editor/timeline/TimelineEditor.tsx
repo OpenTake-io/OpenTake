@@ -293,6 +293,12 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			keyShortcuts,
 			isTimelineFocusedRef,
 		});
+		const handleToolbarAddAnnotation = useCallback(() => {
+			handleAddAnnotation();
+		}, [handleAddAnnotation]);
+		const handleToolbarAddAudio = useCallback(() => {
+			void handleAddAudio();
+		}, [handleAddAudio]);
 
 		return (
 			<TimelineEditorShell
@@ -313,10 +319,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 						onOpenCropEditor={onOpenCropEditor}
 						onAddZoom={handleAddZoom}
 						onSuggestZooms={handleSuggestZooms}
-						onAddAnnotation={() => handleAddAnnotation()}
-						onAddAudio={() => {
-							void handleAddAudio();
-						}}
+						onAddAnnotation={handleToolbarAddAnnotation}
+						onAddAudio={handleToolbarAddAudio}
 						onSplitClip={handleSplitClip}
 						cropLabel={t("sections.crop", "Crop")}
 					/>

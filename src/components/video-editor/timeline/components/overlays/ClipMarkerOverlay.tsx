@@ -1,12 +1,12 @@
 import { useTimelineContext } from "dnd-timeline";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { calculateAxisScale } from "../../core/time";
 
 interface ClipMarkerOverlayProps {
 	videoDurationMs: number;
 }
 
-export default function ClipMarkerOverlay({ videoDurationMs }: ClipMarkerOverlayProps) {
+function ClipMarkerOverlayComponent({ videoDurationMs }: ClipMarkerOverlayProps) {
 	const { direction, range, valueToPixels } = useTimelineContext();
 	const sideProperty = direction === "rtl" ? "right" : "left";
 
@@ -51,3 +51,5 @@ export default function ClipMarkerOverlay({ videoDurationMs }: ClipMarkerOverlay
 		</div>
 	);
 }
+
+export default memo(ClipMarkerOverlayComponent);

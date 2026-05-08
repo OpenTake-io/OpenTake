@@ -1,5 +1,5 @@
 import { Plus } from "@phosphor-icons/react";
-import { useMemo, type MouseEventHandler } from "react";
+import { memo, useMemo, type MouseEventHandler } from "react";
 import { cn } from "@/lib/utils";
 import AudioWaveform from "../../AudioWaveform";
 import glassStyles from "../../ItemGlass.module.css";
@@ -46,7 +46,7 @@ interface TimelineCanvasRowsProps {
 	onZoomRowClick: MouseEventHandler<HTMLDivElement>;
 }
 
-export function TimelineCanvasRows({
+function TimelineCanvasRowsComponent({
 	items,
 	videoDurationMs,
 	selectAllBlocksActive,
@@ -69,32 +69,56 @@ export function TimelineCanvasRows({
 	onZoomRowMouseLeave,
 	onZoomRowClick,
 }: TimelineCanvasRowsProps) {
-	const zoomItems = useMemo(() => items.filter((item) => item.rowId === ZOOM_ROW_ID), [items]);
-	const clipItems = useMemo(() => items.filter((item) => item.rowId === CLIP_ROW_ID), [items]);
-	const annotationItems = useMemo(
-		() => items.filter((item) => isAnnotationTrackRowId(item.rowId)),
-		[items],
-	);
-	const audioItems = useMemo(() => items.filter((item) => isAudioTrackRowId(item.rowId)), [items]);
+	const { clipItems, zoomItems, annotationRows, audioRows } = useMemo(() => {
+		const nextClipItems: TimelineRenderItem[] = [];
+		const nextZoomItems: TimelineRenderItem[] = [];
+		const annotationBuckets = new Map<number, TimelineRenderItem[]>();
+		const audioBuckets = new Map<number, TimelineRenderItem[]>();
 
-	const audioRowIds = useMemo(
-		() =>
-			Array.from(
-				new Set(audioItems.map((item) => getAudioTrackRowId(getAudioTrackIndex(item.rowId)))),
-			).sort((left, right) => getAudioTrackIndex(left) - getAudioTrackIndex(right)),
-		[audioItems],
-	);
-	const annotationRowIds = useMemo(
-		() =>
-			Array.from(
-				new Set(
-					annotationItems.map((item) =>
-						getAnnotationTrackRowId(getAnnotationTrackIndex(item.rowId)),
-					),
-				),
-			).sort((left, right) => getAnnotationTrackIndex(left) - getAnnotationTrackIndex(right)),
-		[annotationItems],
-	);
+		for (const item of items) {
+			if (item.rowId === CLIP_ROW_ID) {
+				nextClipItems.push(item);
+				continue;
+			}
+			if (item.rowId === ZOOM_ROW_ID) {
+				nextZoomItems.push(item);
+				continue;
+			}
+			if (isAnnotationTrackRowId(item.rowId)) {
+				const trackIndex = getAnnotationTrackIndex(item.rowId);
+				const bucket = annotationBuckets.get(trackIndex);
+				if (bucket) bucket.push(item);
+				else annotationBuckets.set(trackIndex, [item]);
+				continue;
+			}
+			if (isAudioTrackRowId(item.rowId)) {
+				const trackIndex = getAudioTrackIndex(item.rowId);
+				const bucket = audioBuckets.get(trackIndex);
+				if (bucket) bucket.push(item);
+				else audioBuckets.set(trackIndex, [item]);
+			}
+		}
+
+		const annotationRowsSorted = Array.from(annotationBuckets.entries())
+			.sort(([left], [right]) => left - right)
+			.map(([trackIndex, rowItems]) => ({
+				rowId: getAnnotationTrackRowId(trackIndex),
+				items: rowItems,
+			}));
+		const audioRowsSorted = Array.from(audioBuckets.entries())
+			.sort(([left], [right]) => left - right)
+			.map(([trackIndex, rowItems]) => ({
+				rowId: getAudioTrackRowId(trackIndex),
+				items: rowItems,
+			}));
+
+		return {
+			clipItems: nextClipItems,
+			zoomItems: nextZoomItems,
+			annotationRows: annotationRowsSorted,
+			audioRows: audioRowsSorted,
+		};
+	}, [items]);
 
 	return (
 		<>
@@ -166,10 +190,7 @@ export function TimelineCanvasRows({
 				))}
 			</Row>
 
-			{annotationRowIds.map((rowId, index) => {
-				const rowItems = annotationItems.filter(
-					(item) => getAnnotationTrackRowId(getAnnotationTrackIndex(item.rowId)) === rowId,
-				);
+			{annotationRows.map(({ rowId, items: rowItems }, index) => {
 				return (
 					<Row
 						key={rowId}
@@ -194,10 +215,7 @@ export function TimelineCanvasRows({
 				);
 			})}
 
-			{audioRowIds.map((rowId, index) => {
-				const rowItems = audioItems.filter(
-					(item) => getAudioTrackRowId(getAudioTrackIndex(item.rowId)) === rowId,
-				);
+			{audioRows.map(({ rowId, items: rowItems }, index) => {
 				return (
 					<Row
 						key={rowId}
@@ -224,3 +242,5 @@ export function TimelineCanvasRows({
 		</>
 	);
 }
+
+export const TimelineCanvasRows = memo(TimelineCanvasRowsComponent);
