@@ -8,8 +8,8 @@ import {
 	TIMELINE_AXIS_HEIGHT_PX,
 } from "../../timelineLayout";
 import type { AudioPeaksData } from "../../useAudioPeaks";
+import type { TimelineRenderItem } from "../../core/timelineTypes";
 import { isAnnotationTrackRowId, isAudioTrackRowId } from "../../core/rows";
-import type { TimelineRenderItem } from "../../model/timelineModel";
 import TimelineAxis from "../axis/TimelineAxis";
 import PlaybackCursor from "../playhead/PlaybackCursor";
 import { TimelineCanvasRows } from "./TimelineCanvasRows";

@@ -1,11 +1,5 @@
 import type { Range, Span } from "dnd-timeline";
-
-export interface TimelineRegionSpan {
-	id: string;
-	start: number;
-	end: number;
-	rowId: string;
-}
+import type { TimelineRegionSpan } from "../core/timelineTypes";
 
 export interface DndEngineConfig {
 	totalMs: number;

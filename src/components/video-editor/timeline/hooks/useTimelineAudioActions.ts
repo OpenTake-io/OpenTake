@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
+import type { TimelineAudioRegion } from "../core/timelineTypes";
 import { resolveAudioPlacement } from "./timelineAudioPlacement";
-import type { AudioRegionLite } from "./timelineHookTypes";
 import { timelineNotifications } from "./timelineNotifications";
 
 interface AudioFilePickerResult {
@@ -22,7 +22,7 @@ interface UseTimelineAudioActionsParams {
 		currentTimeMs: number;
 	};
 	regions: {
-		audio: AudioRegionLite[];
+		audio: TimelineAudioRegion[];
 	};
 	onAudioAdded?: (span: { start: number; end: number }, audioPath: string, trackIndex?: number) => void;
 	deps?: Partial<TimelineAudioActionsDeps>;

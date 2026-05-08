@@ -6,6 +6,7 @@ import glassStyles from "../../ItemGlass.module.css";
 import Item from "../../Item";
 import Row from "../../Row";
 import { CLIP_ROW_ID, ZOOM_ROW_ID } from "../../core/constants";
+import type { TimelineRenderItem } from "../../core/timelineTypes";
 import {
 	getAnnotationTrackIndex,
 	getAnnotationTrackRowId,
@@ -14,7 +15,6 @@ import {
 	isAnnotationTrackRowId,
 	isAudioTrackRowId,
 } from "../../core/rows";
-import type { TimelineRenderItem } from "../../model/timelineModel";
 import type { AudioPeaksData } from "../../useAudioPeaks";
 import ClipMarkerOverlay from "../overlays/ClipMarkerOverlay";
 

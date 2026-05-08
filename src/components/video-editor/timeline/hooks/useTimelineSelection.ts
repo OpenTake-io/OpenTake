@@ -1,19 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-
-interface RegionId {
-	id: string;
-	startMs: number;
-	endMs: number;
-}
+import type { TimelineRegion } from "../core/timelineTypes";
 
 interface UseTimelineSelectionParams {
 	totalMs: number;
 	currentTimeMs: number;
-	zoomRegions: RegionId[];
-	clipRegions: RegionId[];
-	annotationRegions: (RegionId & { zIndex: number })[];
-	audioRegions: RegionId[];
+	zoomRegions: TimelineRegion[];
+	clipRegions: TimelineRegion[];
+	annotationRegions: (TimelineRegion & { zIndex: number })[];
+	audioRegions: TimelineRegion[];
 	selectedZoomId: string | null;
 	selectedClipId?: string | null;
 	selectedAnnotationId?: string | null;
