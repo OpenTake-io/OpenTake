@@ -74,6 +74,31 @@ function getContributedCursorStylesSignature() {
 		.join("|");
 }
 
+function getRegisteredFramesSignature() {
+	return extensionHost
+		.getFrames()
+		.map(
+			(frame) =>
+				`${frame.id}:${frame.filePath}:${frame.thumbnailPath}:${frame.appearance ?? ""}`,
+		)
+		.sort()
+		.join("|");
+}
+
+function getExtensionSettingsSignature() {
+	return extensionHost
+		.getSettingsPanels()
+		.flatMap((registeredPanel) => {
+			const { extensionId, panel } = registeredPanel;
+			return panel.fields.map((field) => {
+				const value = extensionHost.getExtensionSetting(extensionId, field.id);
+				return `${extensionId}:${panel.id}:${field.id}:${JSON.stringify(value)}`;
+			});
+		})
+		.sort()
+		.join("|");
+}
+
 import { extensionHost } from "@/lib/extensions";
 import {
 	mapCursorToCanvasNormalized,
@@ -433,7 +458,19 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const [frameUpdateCounter, setFrameUpdateCounter] = useState(0);
 
 		useEffect(() => {
+			let framesSignature = getRegisteredFramesSignature();
+			let settingsSignature = getExtensionSettingsSignature();
 			return extensionHost.onChange(() => {
+				const nextFramesSignature = getRegisteredFramesSignature();
+				const nextSettingsSignature = getExtensionSettingsSignature();
+				if (
+					nextFramesSignature === framesSignature &&
+					nextSettingsSignature === settingsSignature
+				) {
+					return;
+				}
+				framesSignature = nextFramesSignature;
+				settingsSignature = nextSettingsSignature;
 				setFrameUpdateCounter((c) => c + 1);
 			});
 		}, []);
@@ -1077,7 +1114,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			return () => {
 				cancelled = true;
 			};
-		}, [frame, frameUpdateCounter]);
+		}, [aspectRatio, borderRadius, cropRegion, frame, frameUpdateCounter, padding]);
 
 		const selectedZoom = useMemo(() => {
 			if (!selectedZoomId) return null;
