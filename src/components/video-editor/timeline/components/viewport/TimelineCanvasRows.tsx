@@ -18,6 +18,10 @@ import type { TimelineRenderItem } from "../../model/timelineModel";
 import type { AudioPeaksData } from "../../useAudioPeaks";
 import ClipMarkerOverlay from "../overlays/ClipMarkerOverlay";
 
+const HINT_CLIP = "Press C to split clip";
+const HINT_ANNOTATION = "Press A to add annotation";
+const HINT_AUDIO = "Click music icon to add audio";
+
 interface TimelineCanvasRowsProps {
 	items: TimelineRenderItem[];
 	videoDurationMs: number;
@@ -94,7 +98,7 @@ export function TimelineCanvasRows({
 
 	return (
 		<>
-			<Row id={CLIP_ROW_ID} isEmpty={clipItems.length === 0} hint="Press C to split clip">
+			<Row id={CLIP_ROW_ID} isEmpty={clipItems.length === 0} hint={HINT_CLIP}>
 				{audioPeaks && <AudioWaveform peaks={audioPeaks} />}
 				<ClipMarkerOverlay videoDurationMs={videoDurationMs} />
 				{clipItems.map((item) => (
@@ -104,7 +108,7 @@ export function TimelineCanvasRows({
 						rowId={item.rowId}
 						span={item.span}
 						isSelected={selectAllBlocksActive || item.id === selectedClipId}
-						onSelect={() => onSelectClip?.(item.id)}
+						onSelectId={onSelectClip}
 						variant="clip"
 					>
 						{item.label}
@@ -152,7 +156,7 @@ export function TimelineCanvasRows({
 						rowId={item.rowId}
 						span={item.span}
 						isSelected={selectAllBlocksActive || item.id === selectedZoomId}
-						onSelect={() => onSelectZoom?.(item.id)}
+						onSelectId={onSelectZoom}
 						zoomDepth={item.zoomDepth}
 						zoomMode={item.zoomMode}
 						variant="zoom"
@@ -171,7 +175,7 @@ export function TimelineCanvasRows({
 						key={rowId}
 						id={rowId}
 						isEmpty={rowItems.length === 0}
-						hint={index === 0 ? "Press A to add annotation" : undefined}
+						hint={index === 0 ? HINT_ANNOTATION : undefined}
 					>
 						{rowItems.map((item) => (
 							<Item
@@ -180,7 +184,7 @@ export function TimelineCanvasRows({
 								rowId={item.rowId}
 								span={item.span}
 								isSelected={selectAllBlocksActive || item.id === selectedAnnotationId}
-								onSelect={() => onSelectAnnotation?.(item.id)}
+								onSelectId={onSelectAnnotation}
 								variant="annotation"
 							>
 								{item.label}
@@ -199,7 +203,7 @@ export function TimelineCanvasRows({
 						key={rowId}
 						id={rowId}
 						isEmpty={rowItems.length === 0}
-						hint={index === 0 ? "Click music icon to add audio" : undefined}
+						hint={index === 0 ? HINT_AUDIO : undefined}
 					>
 						{rowItems.map((item) => (
 							<Item
@@ -208,7 +212,7 @@ export function TimelineCanvasRows({
 								rowId={item.rowId}
 								span={item.span}
 								isSelected={selectAllBlocksActive || item.id === selectedAudioId}
-								onSelect={() => onSelectAudio?.(item.id)}
+								onSelectId={onSelectAudio}
 								variant="audio"
 							>
 								{item.label}
