@@ -397,7 +397,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Wait for stop signal while pausing/resuming audio tracks in lockstep.
-    while (!g_stopRequested) {
+    while (!g_stopRequested && !session.hasFatalError()) {
         if (g_pauseRequested) {
             if (audioActive) loopback.pause();
             if (micActive) micCapture.pause();
@@ -415,6 +415,13 @@ int main(int argc, char* argv[]) {
     session.stopCapture();
     if (audioActive) loopback.stop();
     if (micActive) micCapture.stop();
+
+    if (session.hasFatalError()) {
+        std::cerr << "ERROR: WGC capture session failed during recording" << std::endl;
+        encoder.finalize();
+        DeleteFileW(outputPathW.c_str());
+        return 1;
+    }
 
     if (audioActive) {
         writeCompanionAudioTimingMetadata(
