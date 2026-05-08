@@ -9,7 +9,7 @@ import {
 	MagicWand as WandSparkles,
 	MagnifyingGlassPlus as ZoomIn,
 } from "@phosphor-icons/react";
-import type { Range, Span } from "dnd-timeline";
+import type { Span } from "dnd-timeline";
 import { useTimelineContext } from "dnd-timeline";
 import {
 	forwardRef,
@@ -20,10 +20,8 @@ import {
 	useMemo,
 	useRef,
 	useState,
-	type WheelEvent,
 } from "react";
 import { toast } from "sonner";
-import { v4 as uuidv4 } from "uuid";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -33,8 +31,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
-import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
-import { matchesShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import {
 	ASPECT_RATIOS,
@@ -67,12 +63,18 @@ import {
 	TIMELINE_AXIS_HEIGHT_PX,
 } from "./timelineLayout";
 import { type AudioPeaksData, useAudioPeaks } from "./useAudioPeaks";
-import { buildInteractionZoomSuggestions } from "./zoomSuggestionUtils";
 import { CLIP_ROW_ID, ZOOM_ROW_ID } from "./core/constants";
 import { getAnnotationTrackIndex, getAnnotationTrackRowId, getAudioTrackIndex, getAudioTrackRowId, isAnnotationTrackRowId, isAudioTrackRowId } from "./core/rows";
-import { normalizeRegionSpan, spansOverlap } from "./core/spans";
-import { calculateAxisScale, calculateTimelineScale, createInitialRange, formatPlayheadTime, formatTimeLabel, normalizeWheelDeltaToPixels } from "./core/time";
+import { spansOverlap } from "./core/spans";
+import { calculateAxisScale, calculateTimelineScale, formatPlayheadTime, formatTimeLabel } from "./core/time";
 import { buildAllRegionSpans, buildTimelineItems, resolveDropRowId, type TimelineRenderItem } from "./model/timelineModel";
+import { useTimelineAnnotationsActions } from "./hooks/useTimelineAnnotationsActions";
+import { useTimelineAudioActions } from "./hooks/useTimelineAudioActions";
+import { useTimelineKeyboardShortcuts } from "./hooks/useTimelineKeyboardShortcuts";
+import { useTimelineNormalization } from "./hooks/useTimelineNormalization";
+import { useTimelineRange } from "./hooks/useTimelineRange";
+import { useTimelineSelection } from "./hooks/useTimelineSelection";
+import { useTimelineZoomActions } from "./hooks/useTimelineZoomActions";
 
 export interface TimelineEditorProps {
 	videoDuration: number;
@@ -939,10 +941,12 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			[timelineScale.minItemDurationMs, totalMs],
 		);
 
-		const [range, setRange] = useState<Range>(() => createInitialRange(totalMs));
-		const [keyframes, setKeyframes] = useState<{ id: string; time: number }[]>([]);
-		const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null);
-		const [selectAllBlocksActive, setSelectAllBlocksActive] = useState(false);
+		const timelineContainerRef = useRef<HTMLDivElement>(null);
+		const isTimelineFocusedRef = useRef(false);
+		const { setRange, clampedRange, handleTimelineWheel } = useTimelineRange({
+			totalMs,
+			timelineContainerRef,
+		});
 		const [customAspectWidth, setCustomAspectWidth] = useState(
 			initialEditorPreferences.customAspectWidth,
 		);
@@ -953,14 +957,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			pan: "Shift + Ctrl + Scroll",
 			zoom: "Ctrl + Scroll",
 		});
-		const isTimelineFocusedRef = useRef(false);
-		const timelineContainerRef = useRef<HTMLDivElement>(null);
 		const { shortcuts: keyShortcuts, isMac } = useShortcuts();
 		const audioPeaks = useAudioPeaks(videoPath);
-
-		useEffect(() => {
-			setRange(createInitialRange(totalMs));
-		}, [totalMs]);
 
 		useEffect(() => {
 			if (aspectRatio === "native") {
@@ -1009,213 +1007,60 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 				});
 			});
 		}, []);
-
-		// Add keyframe at current playhead position
-		const addKeyframe = useCallback(() => {
-			if (totalMs === 0) return;
-			const time = Math.max(0, Math.min(currentTimeMs, totalMs));
-			if (keyframes.some((kf) => Math.abs(kf.time - time) < 1)) return;
-			setKeyframes((prev) => [...prev, { id: uuidv4(), time }]);
-		}, [currentTimeMs, totalMs, keyframes]);
-
-		// Delete selected keyframe
-		const deleteSelectedKeyframe = useCallback(() => {
-			if (!selectedKeyframeId) return;
-			setKeyframes((prev) => prev.filter((kf) => kf.id !== selectedKeyframeId));
-			setSelectedKeyframeId(null);
-		}, [selectedKeyframeId]);
-
-		// Move keyframe to new time position
-		const handleKeyframeMove = useCallback(
-			(id: string, newTime: number) => {
-				setKeyframes((prev) =>
-					prev.map((kf) =>
-						kf.id === id
-							? { ...kf, time: Math.max(0, Math.min(newTime, totalMs)) }
-							: kf,
-					),
-				);
-			},
-			[totalMs],
-		);
-
-		// Delete selected zoom item
-		const deleteSelectedZoom = useCallback(() => {
-			if (!selectedZoomId) return;
-			onZoomDelete(selectedZoomId);
-			onSelectZoom(null);
-		}, [selectedZoomId, onZoomDelete, onSelectZoom]);
-
-		const deleteSelectedClip = useCallback(() => {
-			if (!selectedClipId || !onClipDelete || !onSelectClip) return;
-			onClipDelete(selectedClipId);
-			onSelectClip(null);
-		}, [selectedClipId, onClipDelete, onSelectClip]);
-
-		const deleteSelectedAnnotation = useCallback(() => {
-			if (!selectedAnnotationId || !onAnnotationDelete || !onSelectAnnotation) return;
-			onAnnotationDelete(selectedAnnotationId);
-			onSelectAnnotation(null);
-		}, [selectedAnnotationId, onAnnotationDelete, onSelectAnnotation]);
-
-		const deleteSelectedAudio = useCallback(() => {
-			if (!selectedAudioId || !onAudioDelete || !onSelectAudio) return;
-			onAudioDelete(selectedAudioId);
-			onSelectAudio(null);
-		}, [selectedAudioId, onAudioDelete, onSelectAudio]);
-
-		const clearSelectedBlocks = useCallback(() => {
-			onSelectZoom(null);
-			onSelectClip?.(null);
-			onSelectAnnotation?.(null);
-			onSelectAudio?.(null);
-			setSelectAllBlocksActive(false);
-		}, [onSelectAnnotation, onSelectAudio, onSelectClip, onSelectZoom]);
-
-		const hasAnyTimelineBlocks =
-			zoomRegions.length > 0 ||
-			clipRegions.length > 0 ||
-			annotationRegions.length > 0 ||
-			audioRegions.length > 0;
-
-		const deleteAllBlocks = useCallback(() => {
-			const zoomIds = zoomRegions.map((region) => region.id);
-			const clipIds = clipRegions.map((region) => region.id);
-			const annotationIds = annotationRegions.map((region) => region.id);
-			const audioIds = audioRegions.map((region) => region.id);
-
-			zoomIds.forEach((id) => onZoomDelete(id));
-			clipIds.forEach((id) => onClipDelete?.(id));
-			annotationIds.forEach((id) => onAnnotationDelete?.(id));
-			audioIds.forEach((id) => onAudioDelete?.(id));
-
-			clearSelectedBlocks();
-			setSelectedKeyframeId(null);
-		}, [
+		const {
+			keyframes,
+			selectedKeyframeId,
+			setSelectedKeyframeId,
+			selectAllBlocksActive,
+			setSelectAllBlocksActive,
+			hasAnyTimelineBlocks,
+			addKeyframe,
+			deleteSelectedKeyframe,
+			handleKeyframeMove,
+			deleteSelectedZoom,
+			deleteSelectedClip,
+			deleteSelectedAnnotation,
+			deleteSelectedAudio,
+			clearSelectedBlocks,
+			deleteAllBlocks,
+			handleSelectZoom,
+			handleSelectClip,
+			handleSelectAnnotation,
+			handleSelectAudio,
+			cycleAnnotationsAtCurrentTime,
+		} = useTimelineSelection({
+			totalMs,
+			currentTimeMs,
+			zoomRegions,
+			clipRegions,
 			annotationRegions,
 			audioRegions,
-			clearSelectedBlocks,
-			clipRegions,
+			selectedZoomId,
+			selectedClipId,
+			selectedAnnotationId,
+			selectedAudioId,
+			onZoomDelete,
+			onClipDelete,
 			onAnnotationDelete,
 			onAudioDelete,
-			onClipDelete,
-			onZoomDelete,
-			zoomRegions,
-		]);
+			onSelectZoom,
+			onSelectClip,
+			onSelectAnnotation,
+			onSelectAudio,
+		});
 
-		const handleSelectZoom = useCallback(
-			(id: string | null) => {
-				setSelectAllBlocksActive(false);
-				onSelectZoom(id);
-			},
-			[onSelectZoom],
-		);
-
-		const handleSelectClip = useCallback(
-			(id: string | null) => {
-				setSelectAllBlocksActive(false);
-				onSelectClip?.(id);
-			},
-			[onSelectClip],
-		);
-
-		const handleSelectAnnotation = useCallback(
-			(id: string | null) => {
-				setSelectAllBlocksActive(false);
-				onSelectAnnotation?.(id);
-			},
-			[onSelectAnnotation],
-		);
-
-		const handleSelectAudio = useCallback(
-			(id: string | null) => {
-				setSelectAllBlocksActive(false);
-				onSelectAudio?.(id);
-			},
-			[onSelectAudio],
-		);
-
-		useEffect(() => {
-			setRange(createInitialRange(totalMs));
-		}, [totalMs]);
-
-		// Normalize regions only when timeline bounds change (not on every region edit).
-		// Using refs to read current regions avoids a dependency-loop that re-fires
-		// this effect on every drag/resize and races with dnd-timeline's internal state.
-		const zoomRegionsRef = useRef(zoomRegions);
-		const trimRegionsRef = useRef(trimRegions);
-		const speedRegionsRef = useRef(speedRegions);
-		const audioRegionsRef = useRef(audioRegions);
-		zoomRegionsRef.current = zoomRegions;
-		trimRegionsRef.current = trimRegions;
-		speedRegionsRef.current = speedRegions;
-		audioRegionsRef.current = audioRegions;
-
-		useEffect(() => {
-			if (totalMs === 0 || safeMinDurationMs <= 0) {
-				return;
-			}
-
-			zoomRegionsRef.current.forEach((region) => {
-				const normalized = normalizeRegionSpan({
-					startMs: region.startMs,
-					endMs: region.endMs,
-					totalMs,
-					minDurationMs: safeMinDurationMs,
-				});
-
-				if (normalized.start !== region.startMs || normalized.end !== region.endMs) {
-					onZoomSpanChange(region.id, normalized);
-				}
-			});
-
-			trimRegionsRef.current.forEach((region) => {
-				const normalized = normalizeRegionSpan({
-					startMs: region.startMs,
-					endMs: region.endMs,
-					totalMs,
-					minDurationMs: safeMinDurationMs,
-				});
-
-				if (normalized.start !== region.startMs || normalized.end !== region.endMs) {
-					onTrimSpanChange?.(region.id, normalized);
-				}
-			});
-
-			speedRegionsRef.current.forEach((region) => {
-				const normalized = normalizeRegionSpan({
-					startMs: region.startMs,
-					endMs: region.endMs,
-					totalMs,
-					minDurationMs: safeMinDurationMs,
-				});
-
-				if (normalized.start !== region.startMs || normalized.end !== region.endMs) {
-					onSpeedSpanChange?.(region.id, normalized);
-				}
-			});
-
-			audioRegionsRef.current.forEach((region) => {
-				const normalized = normalizeRegionSpan({
-					startMs: region.startMs,
-					endMs: region.endMs,
-					totalMs,
-					minDurationMs: safeMinDurationMs,
-				});
-
-				if (normalized.start !== region.startMs || normalized.end !== region.endMs) {
-					onAudioSpanChange?.(region.id, normalized);
-				}
-			});
-			// Only re-run when the timeline scale changes, not on every region edit
-		}, [
+		useTimelineNormalization({
 			totalMs,
 			safeMinDurationMs,
+			zoomRegions,
+			trimRegions,
+			speedRegions,
+			audioRegions,
 			onZoomSpanChange,
 			onTrimSpanChange,
 			onSpeedSpanChange,
 			onAudioSpanChange,
-		]);
+		});
 
 		const hasOverlap = useCallback(
 			(newSpan: Span, excludeId?: string, rowId?: string): boolean => {
@@ -1283,163 +1128,25 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 
 		// Keep newly added timeline regions at the original short default instead of
 		// scaling them with the full recording length.
-		const defaultRegionDurationMs = useMemo(() => Math.min(1000, totalMs), [totalMs]);
-
-		const canPlaceZoomAtMs = useCallback(
-			(startMs: number) => {
-				if (!videoDuration || videoDuration === 0 || totalMs === 0) {
-					return false;
-				}
-
-				const defaultDuration = Math.min(defaultRegionDurationMs, totalMs);
-				if (defaultDuration <= 0) {
-					return false;
-				}
-
-				const startPos = Math.max(0, Math.min(startMs, totalMs));
-				const activeClip =
-					clipRegions.length === 0
-						? { startMs: 0, endMs: totalMs }
-						: clipRegions.find(
-								(clip) => startPos >= clip.startMs && startPos < clip.endMs,
-							);
-				if (!activeClip) {
-					return false;
-				}
-
-				const sorted = [...zoomRegions].sort((a, b) => a.startMs - b.startMs);
-				const nextRegion = sorted.find((region) => region.startMs > startPos);
-				const gapToNextClipEdge = activeClip.endMs - startPos;
-				const gapToNextRegion = nextRegion
-					? nextRegion.startMs - startPos
-					: gapToNextClipEdge;
-				const availableDuration = Math.min(gapToNextClipEdge, gapToNextRegion);
-
-				const isOverlapping = sorted.some(
-					(region) => startPos >= region.startMs && startPos < region.endMs,
-				);
-
-				return !isOverlapping && availableDuration >= defaultDuration;
-			},
-			[videoDuration, totalMs, zoomRegions, defaultRegionDurationMs, clipRegions],
-		);
-
-		const addZoomAtMs = useCallback(
-			(startMs: number) => {
-				if (!videoDuration || videoDuration === 0 || totalMs === 0) {
-					return;
-				}
-
-				const defaultDuration = Math.min(defaultRegionDurationMs, totalMs);
-				if (defaultDuration <= 0) {
-					return;
-				}
-
-				const startPos = Math.max(0, Math.min(startMs, totalMs));
-				if (!canPlaceZoomAtMs(startPos)) {
-					toast.error("Cannot place zoom here", {
-						description:
-							"Zoom already exists here or there is not enough room before the next zoom or clip end.",
-					});
-					return;
-				}
-
-				onZoomAdded({ start: startPos, end: startPos + defaultDuration });
-			},
-			[videoDuration, totalMs, onZoomAdded, defaultRegionDurationMs, canPlaceZoomAtMs],
-		);
-
-		const handleAddZoom = useCallback(() => {
-			if (!videoDuration || videoDuration === 0 || totalMs === 0) {
-				return;
-			}
-
-			addZoomAtMs(currentTimeMs);
-		}, [addZoomAtMs, currentTimeMs, totalMs, videoDuration]);
-
-		const handleSuggestZooms = useCallback(() => {
-			if (!videoDuration || videoDuration === 0 || totalMs === 0) {
-				return;
-			}
-
-			if (disableSuggestedZooms) {
-				toast.info("Suggested zooms are unavailable while cursor looping is enabled.");
-				return;
-			}
-
-			if (!onZoomSuggested) {
-				toast.error("Zoom suggestion handler unavailable");
-				return;
-			}
-
-			if (cursorTelemetry.length < 2) {
-				toast.info("No cursor telemetry available", {
-					description: "Record a screencast first to generate cursor-based suggestions.",
-				});
-				return;
-			}
-
-			const defaultDuration = Math.min(defaultRegionDurationMs, totalMs);
-			if (defaultDuration <= 0) {
-				return;
-			}
-
-			const result = buildInteractionZoomSuggestions({
-				cursorTelemetry,
-				totalMs,
-				defaultDurationMs: defaultDuration,
-				reservedSpans: zoomRegions
-					.map((region) => ({ start: region.startMs, end: region.endMs }))
-					.sort((a, b) => a.start - b.start),
-			});
-
-			if (result.status === "no-telemetry") {
-				toast.info("No usable cursor telemetry", {
-					description: "The recording does not include enough cursor movement data.",
-				});
-				return;
-			}
-
-			if (result.status === "no-interactions") {
-				toast.info("No clear interaction moments found", {
-					description: "Try a recording with pauses or clicks around important actions.",
-				});
-				return;
-			}
-
-			if (result.status === "no-slots" || result.suggestions.length === 0) {
-				toast.info("No auto-zoom slots available", {
-					description: "Detected dwell points overlap existing zoom regions.",
-				});
-				return;
-			}
-
-			for (const region of result.suggestions) {
-				onZoomSuggested({ start: region.start, end: region.end }, region.focus);
-			}
-
-			toast.success(
-				`Added ${result.suggestions.length} interaction-based zoom suggestion${result.suggestions.length === 1 ? "" : "s"}`,
-			);
-		}, [
+		const {
+			defaultRegionDurationMs,
+			canPlaceZoomAtMs,
+			addZoomAtMs,
+			handleAddZoom,
+			handleSuggestZooms,
+		} = useTimelineZoomActions({
 			videoDuration,
 			totalMs,
-			defaultRegionDurationMs,
+			currentTimeMs,
 			zoomRegions,
-			disableSuggestedZooms,
-			onZoomSuggested,
+			clipRegions,
 			cursorTelemetry,
-		]);
-
-		useEffect(() => {
-			if (autoSuggestZoomsTrigger <= 0) {
-				return;
-			}
-
-			onAutoSuggestZoomsConsumed?.();
-
-			handleSuggestZooms();
-		}, [autoSuggestZoomsTrigger, handleSuggestZooms, onAutoSuggestZoomsConsumed]);
+			disableSuggestedZooms,
+			autoSuggestZoomsTrigger,
+			onAutoSuggestZoomsConsumed,
+			onZoomAdded,
+			onZoomSuggested,
+		});
 
 		const handleSplitClip = useCallback(() => {
 			if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onClipSplit) {
@@ -1448,280 +1155,48 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onClipSplit(currentTimeMs);
 		}, [videoDuration, totalMs, currentTimeMs, onClipSplit]);
 
-		const handleAddAudio = useCallback(
-			async (preferredTrackIndex?: number) => {
-				if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onAudioAdded) {
-					return;
-				}
+		const { handleAddAudio } = useTimelineAudioActions({
+			videoDuration,
+			totalMs,
+			currentTimeMs,
+			audioRegions,
+			onAudioAdded,
+		});
 
-				const result = await window.electronAPI.openAudioFilePicker();
-				if (!result?.success || !result.path) {
-					return;
-				}
+		const { handleAddAnnotation } = useTimelineAnnotationsActions({
+			videoDuration,
+			totalMs,
+			currentTimeMs,
+			defaultRegionDurationMs,
+			onAnnotationAdded,
+		});
 
-				const audioPath = result.path;
-
-				// Load the audio file through the local-media resolver so local paths work reliably.
-				const audioDurationMs = await new Promise<number>((resolve) => {
-					void (async () => {
-						const resolved = await resolveMediaElementSource(audioPath);
-						const audio = new Audio();
-						const cleanup = () => {
-							audio.removeAttribute("src");
-							audio.load();
-							resolved.revoke();
-						};
-
-						audio.addEventListener(
-							"loadedmetadata",
-							() => {
-								resolve(Math.round(audio.duration * 1000));
-								cleanup();
-							},
-							{ once: true },
-						);
-						audio.addEventListener(
-							"error",
-							() => {
-								resolve(0);
-								cleanup();
-							},
-							{ once: true },
-						);
-						audio.src = resolved.src;
-					})();
-				});
-
-				if (audioDurationMs <= 0) {
-					toast.error("Could not read audio file", {
-						description:
-							"The selected file may be corrupted or in an unsupported format.",
-					});
-					return;
-				}
-
-				const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
-				const maxRemainingDuration = totalMs - startPos;
-				if (maxRemainingDuration <= 0) {
-					toast.error("Cannot place audio here", {
-						description:
-							"There is no remaining space at the current playhead position.",
-					});
-					return;
-				}
-
-				const desiredDuration = Math.min(audioDurationMs, maxRemainingDuration);
-				const normalizedPreferredTrackIndex = Number.isFinite(preferredTrackIndex)
-					? Math.max(0, Math.floor(preferredTrackIndex ?? 0))
-					: null;
-				const maxTrackIndex = audioRegions.reduce(
-					(max, region) => Math.max(max, region.trackIndex ?? 0),
-					-1,
-				);
-				const candidateTrackIndexes =
-					normalizedPreferredTrackIndex === null
-						? Array.from({ length: maxTrackIndex + 2 }, (_, index) => index)
-						: [normalizedPreferredTrackIndex];
-
-				const getGapForTrack = (trackIndex: number) => {
-					const trackRegions = audioRegions
-						.filter((region) => (region.trackIndex ?? 0) === trackIndex)
-						.sort((left, right) => left.startMs - right.startMs);
-					const desiredSpan = {
-						start: startPos,
-						end: startPos + desiredDuration,
-					};
-
-					const overlappingRegion = trackRegions.find((region) =>
-						spansOverlap(desiredSpan, { start: region.startMs, end: region.endMs }),
-					);
-					if (overlappingRegion) {
-						return 0;
-					}
-
-					const nextRegion = trackRegions.find((region) => region.startMs > startPos);
-					return nextRegion ? nextRegion.startMs - startPos : totalMs - startPos;
-				};
-
-				let selectedTrackIndex: number | null = null;
-				let availableGap = 0;
-
-				for (const trackIndex of candidateTrackIndexes) {
-					const gap = getGapForTrack(trackIndex);
-					if (gap >= desiredDuration) {
-						selectedTrackIndex = trackIndex;
-						availableGap = gap;
-						break;
-					}
-				}
-
-				if (selectedTrackIndex === null && normalizedPreferredTrackIndex === null) {
-					for (const trackIndex of candidateTrackIndexes) {
-						const gap = getGapForTrack(trackIndex);
-						if (gap > 0) {
-							selectedTrackIndex = trackIndex;
-							availableGap = gap;
-							break;
-						}
-					}
-				}
-
-				if (selectedTrackIndex === null || availableGap <= 0) {
-					toast.error("Cannot place audio here", {
-						description:
-							"Audio region already exists at this location or not enough space available.",
-					});
-					return;
-				}
-
-				const actualDuration = Math.min(audioDurationMs, availableGap, totalMs - startPos);
-				onAudioAdded(
-					{ start: startPos, end: startPos + actualDuration },
-					result.path,
-					selectedTrackIndex,
-				);
-			},
-			[videoDuration, totalMs, currentTimeMs, audioRegions, onAudioAdded],
-		);
-
-		const handleAddAnnotation = useCallback(
-			(trackIndex = 0) => {
-				if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onAnnotationAdded) {
-					return;
-				}
-
-				const defaultDuration = Math.min(defaultRegionDurationMs, totalMs);
-				if (defaultDuration <= 0) {
-					return;
-				}
-
-				// Multiple annotations can exist at the same timestamp
-				const startPos = Math.max(0, Math.min(currentTimeMs, totalMs));
-				const endPos = Math.min(startPos + defaultDuration, totalMs);
-
-				onAnnotationAdded({ start: startPos, end: endPos }, trackIndex);
-			},
-			[videoDuration, totalMs, currentTimeMs, onAnnotationAdded, defaultRegionDurationMs],
-		);
-
-		useEffect(() => {
-			const handleKeyDown = (e: KeyboardEvent) => {
-				if (
-					e.target instanceof HTMLInputElement ||
-					e.target instanceof HTMLTextAreaElement
-				) {
-					return;
-				}
-
-				if (matchesShortcut(e, { key: "a", ctrl: true }, isMac)) {
-					if (!hasAnyTimelineBlocks || !isTimelineFocusedRef.current) {
-						return;
-					}
-
-					e.preventDefault();
-					setSelectedKeyframeId(null);
-					setSelectAllBlocksActive(true);
-					return;
-				}
-
-				if (matchesShortcut(e, keyShortcuts.addKeyframe, isMac)) {
-					addKeyframe();
-				}
-				if (matchesShortcut(e, keyShortcuts.addZoom, isMac)) {
-					handleAddZoom();
-				}
-				if (matchesShortcut(e, keyShortcuts.splitClip, isMac)) {
-					handleSplitClip();
-				}
-				if (matchesShortcut(e, keyShortcuts.addAnnotation, isMac)) {
-					handleAddAnnotation();
-				}
-
-				// Tab: Cycle through overlapping annotations at current time
-				if (e.key === "Tab" && annotationRegions.length > 0) {
-					const overlapping = annotationRegions
-						.filter((a) => currentTimeMs >= a.startMs && currentTimeMs <= a.endMs)
-						.sort((a, b) => a.zIndex - b.zIndex); // Sort by z-index
-
-					if (overlapping.length > 0) {
-						e.preventDefault();
-
-						if (
-							!selectedAnnotationId ||
-							!overlapping.some((a) => a.id === selectedAnnotationId)
-						) {
-							onSelectAnnotation?.(overlapping[0].id);
-						} else {
-							// Cycle to next annotation
-							const currentIndex = overlapping.findIndex(
-								(a) => a.id === selectedAnnotationId,
-							);
-							const nextIndex = e.shiftKey
-								? (currentIndex - 1 + overlapping.length) % overlapping.length // Shift+Tab = backward
-								: (currentIndex + 1) % overlapping.length; // Tab = forward
-							onSelectAnnotation?.(overlapping[nextIndex].id);
-						}
-					}
-				}
-				// Delete key or Ctrl+D / Cmd+D
-				if (
-					e.key === "Delete" ||
-					e.key === "Backspace" ||
-					matchesShortcut(e, keyShortcuts.deleteSelected, isMac)
-				) {
-					if (selectAllBlocksActive) {
-						e.preventDefault();
-						deleteAllBlocks();
-					} else if (selectedKeyframeId) {
-						deleteSelectedKeyframe();
-					} else if (selectedZoomId) {
-						deleteSelectedZoom();
-					} else if (selectedClipId) {
-						deleteSelectedClip();
-					} else if (selectedAnnotationId) {
-						deleteSelectedAnnotation();
-					} else if (selectedAudioId) {
-						deleteSelectedAudio();
-					}
-				}
-			};
-			window.addEventListener("keydown", handleKeyDown);
-			return () => window.removeEventListener("keydown", handleKeyDown);
-		}, [
+		useTimelineKeyboardShortcuts({
+			isMac,
+			keyShortcuts,
+			isTimelineFocusedRef,
+			hasAnyTimelineBlocks,
+			annotationCount: annotationRegions.length,
+			selectedKeyframeId,
+			selectedZoomId,
+			selectedClipId,
+			selectedAnnotationId,
+			selectedAudioId,
+			selectAllBlocksActive,
+			setSelectAllBlocksActive,
+			setSelectedKeyframeId,
 			addKeyframe,
 			handleAddZoom,
 			handleSplitClip,
-			handleAddAnnotation,
+			handleAddAnnotation: () => handleAddAnnotation(),
 			deleteAllBlocks,
 			deleteSelectedKeyframe,
 			deleteSelectedZoom,
 			deleteSelectedClip,
 			deleteSelectedAnnotation,
 			deleteSelectedAudio,
-			selectedKeyframeId,
-			selectedZoomId,
-			selectedClipId,
-			selectedAnnotationId,
-			selectedAudioId,
-			annotationRegions,
-			currentTimeMs,
-			hasAnyTimelineBlocks,
-			onSelectAnnotation,
-			keyShortcuts,
-			isMac,
-			selectAllBlocksActive,
-		]);
-
-		const clampedRange = useMemo<Range>(() => {
-			if (totalMs === 0) {
-				return range;
-			}
-
-			return {
-				start: Math.max(0, Math.min(range.start, totalMs)),
-				end: Math.min(range.end, totalMs),
-			};
-		}, [range, totalMs]);
+			cycleAnnotationsAtCurrentTime,
+		});
 
 		useImperativeHandle(
 			ref,
@@ -1813,62 +1288,6 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			],
 		);
 
-		const panTimelineRange = useCallback(
-			(deltaMs: number) => {
-				if (!Number.isFinite(deltaMs) || deltaMs === 0 || totalMs <= 0) {
-					return;
-				}
-
-				setRange((previous) => {
-					const visibleSpan = Math.max(1, previous.end - previous.start);
-					const maxStart = Math.max(0, totalMs - visibleSpan);
-					const nextStart = Math.max(0, Math.min(previous.start + deltaMs, maxStart));
-
-					return {
-						start: nextStart,
-						end: nextStart + visibleSpan,
-					};
-				});
-			},
-			[totalMs],
-		);
-
-		const handleTimelineWheel = useCallback(
-			(event: WheelEvent<HTMLDivElement>) => {
-				if (event.ctrlKey || event.metaKey || totalMs <= 0) {
-					return;
-				}
-
-				const rawHorizontalDelta =
-					Math.abs(event.deltaX) > 0
-						? event.deltaX
-						: event.shiftKey && Math.abs(event.deltaY) > 0
-							? event.deltaY
-							: 0;
-
-				if (rawHorizontalDelta === 0) {
-					return;
-				}
-
-				const containerWidth = timelineContainerRef.current?.clientWidth ?? 0;
-				const visibleRangeMs = clampedRange.end - clampedRange.start;
-
-				if (containerWidth <= 0 || visibleRangeMs <= 0) {
-					return;
-				}
-
-				event.preventDefault();
-
-				const horizontalDeltaPx = normalizeWheelDeltaToPixels(
-					rawHorizontalDelta,
-					event.deltaMode,
-				);
-				const deltaMs = (horizontalDeltaPx / containerWidth) * visibleRangeMs;
-
-				panTimelineRange(deltaMs);
-			},
-			[clampedRange.end, clampedRange.start, panTimelineRange, totalMs],
-		);
 
 		if (!videoDuration || videoDuration === 0) {
 			return (
