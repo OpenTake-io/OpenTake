@@ -28,8 +28,8 @@ export default function TimelineAxis({ videoDurationMs, currentTimeMs }: Timelin
 		const markerTimes = new Set<number>();
 		const firstMarker = Math.ceil(visibleStart / intervalMs) * intervalMs;
 
-		for (let time = firstMarker; time <= maxTime; time += intervalMs) {
-			if (time >= visibleStart && time <= visibleEnd) markerTimes.add(Math.round(time));
+		for (let time = firstMarker; time <= visibleEnd; time += intervalMs) {
+			markerTimes.add(Math.round(time));
 		}
 
 		if (visibleStart <= maxTime) markerTimes.add(Math.round(visibleStart));
@@ -41,11 +41,9 @@ export default function TimelineAxis({ videoDurationMs, currentTimeMs }: Timelin
 
 		const minorTicks: number[] = [];
 		const minorInterval = intervalMs / 5;
-		for (let time = firstMarker; time <= maxTime; time += minorInterval) {
-			if (time >= visibleStart && time <= visibleEnd) {
-				const isMajor = Math.abs(time % intervalMs) < 1;
-				if (!isMajor) minorTicks.push(time);
-			}
+		for (let time = firstMarker; time <= visibleEnd; time += minorInterval) {
+			const isMajor = Math.abs(time % intervalMs) < 1;
+			if (!isMajor) minorTicks.push(time);
 		}
 
 		return {
@@ -80,7 +78,7 @@ export default function TimelineAxis({ videoDurationMs, currentTimeMs }: Timelin
 					flexDirection: "row",
 					alignItems: "flex-end",
 					[sideProperty]: `${offset}px`,
-					transform: "translateX(-50%)",
+					transform: direction === "rtl" ? "translateX(50%)" : "translateX(-50%)",
 				};
 
 				return (

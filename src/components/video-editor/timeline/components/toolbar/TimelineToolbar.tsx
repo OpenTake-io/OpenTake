@@ -118,7 +118,13 @@ export default function TimelineToolbar({
 					</DropdownMenuContent>
 				</DropdownMenu>
 				<div className="w-[1px] h-4 bg-foreground/10" />
-				<Button variant="ghost" size="sm" onClick={() => onOpenCropEditor?.()} className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-all gap-1.5">
+				<Button
+					variant="ghost"
+					size="sm"
+					onClick={onOpenCropEditor}
+					disabled={!onOpenCropEditor}
+					className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-all gap-1.5"
+				>
 					<Crop className="w-3.5 h-3.5" />
 					<span className="font-medium">{cropLabel}</span>
 					{isCropped ? <span className="h-1.5 w-1.5 rounded-full bg-[#2563EB]" /> : null}
