@@ -156,7 +156,10 @@ const PIXI_RENDERER_INIT_TIMEOUT_MS = 8_000;
 
 function isCanvasRenderer(renderer: Application): boolean {
 	const rendererName = renderer?.renderer?.constructor?.name?.toLowerCase();
-	return Boolean(rendererName && (rendererName.includes("canvasrenderer") || rendererName.includes("canvas")));
+	return Boolean(
+		rendererName &&
+			(rendererName.includes("canvasrenderer") || rendererName.includes("canvas")),
+	);
 }
 
 function toErrorMessage(error: unknown): string {
@@ -357,7 +360,8 @@ export class FrameRenderer {
 					backend,
 				);
 				const elapsed = Math.round(
-					(typeof performance === "undefined" ? Date.now() : performance.now()) - initStarted,
+					(typeof performance === "undefined" ? Date.now() : performance.now()) -
+						initStarted,
 				);
 				if (isCanvasRenderer(app)) {
 					throw new Error(
@@ -367,9 +371,13 @@ export class FrameRenderer {
 				return { app, backend };
 			} catch (error) {
 				const elapsed = Math.round(
-					(typeof performance === "undefined" ? Date.now() : performance.now()) - initStarted,
+					(typeof performance === "undefined" ? Date.now() : performance.now()) -
+						initStarted,
 				);
-				failures.push({ backend, message: `${toErrorMessage(error)} (after ${elapsed}ms)` });
+				failures.push({
+					backend,
+					message: `${toErrorMessage(error)} (after ${elapsed}ms)`,
+				});
 				console.warn(
 					`[FrameRenderer] ${backend} renderer unavailable after ${elapsed}ms; trying next backend.`,
 					error,
@@ -574,44 +582,9 @@ export class FrameRenderer {
 					);
 				}
 
-				const backgroundSource = await resolveMediaElementSource(videoSrc);
-				this.cleanupBackgroundSource = backgroundSource.revoke;
-
-				const video = document.createElement("video");
-				video.muted = true;
-				video.loop = true;
-				video.playsInline = true;
-				video.preload = "auto";
-				video.src = backgroundSource.src;
-				video.load();
-
-				await new Promise<void>((resolve, reject) => {
-					const onReady = () => {
-						if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-							return;
-						}
-						cleanup();
-						resolve();
-					};
-					const onError = () => {
-						cleanup();
-						reject(new Error(`Failed to load video wallpaper: ${wallpaper}`));
-					};
-					const cleanup = () => {
-						video.removeEventListener("loadeddata", onReady);
-						video.removeEventListener("canplay", onReady);
-						video.removeEventListener("error", onError);
-					};
-
-					video.addEventListener("loadeddata", onReady);
-					video.addEventListener("canplay", onReady);
-					video.addEventListener("error", onError);
-					onReady();
-				});
-
-				this.backgroundVideoElement = video;
-				this.lastSyncedBackgroundLoopTimeSec = null;
-				this.drawVideoFrameToBackground();
+				if (!(await this.loadBackgroundMediaElementSource(videoSrc, wallpaper))) {
+					throw new Error(`Failed to load video wallpaper: ${wallpaper}`);
+				}
 				this.backgroundSprite = bgCanvas;
 				return;
 			}
@@ -828,8 +801,20 @@ export class FrameRenderer {
 				}
 			}
 
-			const decodedFrame =
-				await this.backgroundForwardFrameSource.getFrameAtTime(normalizedTargetTime);
+			let decodedFrame: VideoFrame | null = null;
+			try {
+				decodedFrame =
+					await this.backgroundForwardFrameSource.getFrameAtTime(normalizedTargetTime);
+			} catch (error) {
+				console.warn(
+					"[FrameRenderer] Decoder-backed video wallpaper failed during export; falling back to media element sync:",
+					error,
+				);
+				if (await this.fallbackBackgroundForwardFrameSourceToMediaElement()) {
+					await this.syncBackgroundFrame(timeSeconds);
+				}
+				return;
+			}
 			const resolvedDecodedDuration =
 				this.backgroundForwardFrameSource.getResolvedDurationSec();
 			if (
@@ -865,6 +850,10 @@ export class FrameRenderer {
 						"[FrameRenderer] Unable to wrap looping video wallpaper at decoded EOF during export:",
 						error,
 					);
+					if (await this.fallbackBackgroundForwardFrameSourceToMediaElement()) {
+						await this.syncBackgroundFrame(timeSeconds);
+					}
+					return;
 				}
 			}
 			this.closeBackgroundDecodedFrame();
@@ -881,6 +870,92 @@ export class FrameRenderer {
 		}
 
 		await this.syncBackgroundVideo(timeSeconds);
+	}
+
+	private async fallbackBackgroundForwardFrameSourceToMediaElement(): Promise<boolean> {
+		const sourceUrl = this.backgroundForwardFrameSourceUrl;
+		this.backgroundForwardFrameSource?.cancel();
+		void this.backgroundForwardFrameSource?.destroy();
+		this.backgroundForwardFrameSource = null;
+		this.backgroundForwardFrameSourceUrl = null;
+		this.backgroundForwardFrameDurationSec = null;
+		this.closeBackgroundDecodedFrame();
+		this.lastSyncedBackgroundLoopTimeSec = null;
+
+		return sourceUrl ? this.loadBackgroundMediaElementSource(sourceUrl, sourceUrl) : false;
+	}
+
+	private async loadBackgroundMediaElementSource(
+		videoSrc: string,
+		errorLabel: string,
+	): Promise<boolean> {
+		if (this.backgroundVideoElement) {
+			try {
+				this.backgroundVideoElement.pause();
+				this.backgroundVideoElement.src = "";
+				this.backgroundVideoElement.load();
+			} catch {
+				// Ignore media element teardown errors during export fallback.
+			}
+			this.backgroundVideoElement = null;
+		}
+		this.backgroundSeekPromise = null;
+		this.cleanupBackgroundSource?.();
+		this.cleanupBackgroundSource = null;
+
+		let backgroundSource: Awaited<ReturnType<typeof resolveMediaElementSource>>;
+		try {
+			backgroundSource = await resolveMediaElementSource(videoSrc);
+		} catch (error) {
+			console.warn(
+				"[FrameRenderer] Unable to resolve video wallpaper fallback source:",
+				error,
+			);
+			return false;
+		}
+		this.cleanupBackgroundSource = backgroundSource.revoke;
+
+		const video = document.createElement("video");
+		video.muted = true;
+		video.loop = true;
+		video.playsInline = true;
+		video.preload = "auto";
+		video.src = backgroundSource.src;
+		video.load();
+
+		const ready = await new Promise<boolean>((resolve) => {
+			const onReady = () => {
+				if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+					return;
+				}
+				cleanup();
+				resolve(true);
+			};
+			const onError = () => {
+				cleanup();
+				resolve(false);
+			};
+			const cleanup = () => {
+				video.removeEventListener("loadeddata", onReady);
+				video.removeEventListener("canplay", onReady);
+				video.removeEventListener("error", onError);
+			};
+
+			video.addEventListener("loadeddata", onReady);
+			video.addEventListener("canplay", onReady);
+			video.addEventListener("error", onError);
+			onReady();
+		});
+
+		if (!ready) {
+			console.warn(`[FrameRenderer] Failed to load video wallpaper: ${errorLabel}`);
+			return false;
+		}
+
+		this.backgroundVideoElement = video;
+		this.lastSyncedBackgroundLoopTimeSec = null;
+		this.drawVideoFrameToBackground();
+		return true;
 	}
 
 	private async syncBackgroundVideo(timeSeconds: number): Promise<void> {
