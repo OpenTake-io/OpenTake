@@ -269,8 +269,8 @@ function ExtensionSettingsSection({
 								value={typeof value === "number" ? value : (field.defaultValue as number)}
 								defaultValue={field.defaultValue as number}
 								min={field.min ?? 0}
-								max={field.max ?? 100}
-								step={field.step ?? 1}
+								max={field.max ?? 1}
+								step={field.step ?? 0.01}
 								onChange={(v) => {
 									extensionHost.setExtensionSetting(extensionId, field.id, v);
 									forceUpdate((n) => n + 1);
