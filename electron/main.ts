@@ -52,7 +52,7 @@ import {
 	showUpdateToastWindow,
 } from "./windows";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const electronMainDir = path.dirname(fileURLToPath(import.meta.url));
 const IS_SMOKE_EXPORT = process.env.RECORDLY_SMOKE_EXPORT === "1";
 
 function ignoreBrokenConsolePipe(stream: NodeJS.WritableStream | undefined) {
@@ -118,7 +118,7 @@ async function ensureRecordingsDir() {
 // │ │ ├── main.js
 // │ │ └── preload.mjs
 // │
-process.env.APP_ROOT = path.join(__dirname, "..");
+process.env.APP_ROOT = path.join(electronMainDir, "..");
 
 // Use ['ENV_NAME'] avoid vite:define plugin - Vite@2.x
 export const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
