@@ -78,7 +78,7 @@
 		"zoomOutDuration": "Длительность отдаления",
 		"zoomInEasing": "Кривая приближения",
 		"zoomOutEasing": "Кривая отдаления",
-		"connectedZoomGap": "Интервал между зумом",
+		"connectedZoomGap": "Интервал между зумами",
 		"connectedZoomDuration": "Длительность интервала",
 		"connectedZoomEasing": "Кривая панорамирования",
 		"zoomEasingOptions": {
