@@ -154,7 +154,7 @@ const messages: Record<AppLocale, LocaleBundle> = {
 		shortcuts: zhCNShortcuts,
 		extensions: zhCNExtensions,
 	},
-		"zh-TW": {
+	"zh-TW": {
 		common: zhTWCommon,
 		launch: zhTWLaunch,
 		editor: zhTWEditor,
