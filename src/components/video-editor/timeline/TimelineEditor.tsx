@@ -1,6 +1,3 @@
-import {
-	Plus,
-} from "@phosphor-icons/react";
 import type { Span } from "dnd-timeline";
 import {
 	forwardRef,
@@ -33,15 +30,8 @@ import type {
 import KeyframeMarkers from "./KeyframeMarkers";
 import TimelineWrapper from "./TimelineWrapper";
 import { useAudioPeaks } from "./useAudioPeaks";
-import {
-	getAnnotationTrackIndex,
-	getAudioTrackIndex,
-	isAnnotationTrackRowId,
-	isAudioTrackRowId,
-} from "./core/rows";
-import { spansOverlap } from "./core/spans";
 import { calculateTimelineScale } from "./core/time";
-import { buildAllRegionSpans, buildTimelineItems, resolveDropRowId, type TimelineRenderItem } from "./model/timelineModel";
+import { useTimelineDndBindings } from "./hooks/useTimelineDndBindings";
 import { useTimelineAnnotationsActions } from "./hooks/useTimelineAnnotationsActions";
 import { useTimelineAudioActions } from "./hooks/useTimelineAudioActions";
 import { useTimelineKeyboardShortcuts } from "./hooks/useTimelineKeyboardShortcuts";
@@ -49,6 +39,7 @@ import { useTimelineNormalization } from "./hooks/useTimelineNormalization";
 import { useTimelineRange } from "./hooks/useTimelineRange";
 import { useTimelineSelection } from "./hooks/useTimelineSelection";
 import { useTimelineZoomActions } from "./hooks/useTimelineZoomActions";
+import TimelineEditorShell from "./components/editor/TimelineEditorShell";
 import TimelineCanvas from "./components/viewport/TimelineCanvas";
 import TimelineToolbar from "./components/toolbar/TimelineToolbar";
 
@@ -313,69 +304,26 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onAudioSpanChange,
 		});
 
-		const hasOverlap = useCallback(
-			(newSpan: Span, excludeId?: string, rowId?: string): boolean => {
-				// Determine which row the item belongs to
-				const isZoomItem = zoomRegions.some((r) => r.id === excludeId);
-				const isTrimItem = trimRegions.some((r) => r.id === excludeId);
-				const isClipItem = clipRegions.some((r) => r.id === excludeId);
-				const isAnnotationItem = annotationRegions.some((r) => r.id === excludeId);
-				const isSpeedItem = speedRegions.some((r) => r.id === excludeId);
-				const isAudioItem = audioRegions.some((r) => r.id === excludeId);
-
-				if (isAnnotationItem) {
-					return false;
-				}
-
-				// Helper to check overlap against a specific set of regions
-				const checkOverlap = (
-					regions: (ZoomRegion | TrimRegion | ClipRegion | SpeedRegion | AudioRegion)[],
-				) => {
-					return regions.some((region) => {
-						if (region.id === excludeId) return false;
-						// True overlap: regions actually intersect (not just adjacent)
-						return spansOverlap(newSpan, {
-							start: region.startMs,
-							end: region.endMs,
-						});
-					});
-				};
-
-				if (isZoomItem) {
-					return checkOverlap(zoomRegions);
-				}
-
-				if (isTrimItem) {
-					return checkOverlap(trimRegions);
-				}
-
-				if (isClipItem) {
-					return checkOverlap(clipRegions);
-				}
-
-				if (isSpeedItem) {
-					return checkOverlap(speedRegions);
-				}
-
-				if (isAudioItem) {
-					const activeAudioRegion = audioRegions.find(
-						(region) => region.id === excludeId,
-					);
-					const activeTrackIndex =
-						rowId && isAudioTrackRowId(rowId)
-							? getAudioTrackIndex(rowId)
-							: (activeAudioRegion?.trackIndex ?? 0);
-					return checkOverlap(
-						audioRegions.filter(
-							(region) => (region.trackIndex ?? 0) === activeTrackIndex,
-						),
-					);
-				}
-
-				return false;
-			},
-			[zoomRegions, trimRegions, clipRegions, annotationRegions, speedRegions, audioRegions],
-		);
+		const {
+			hasOverlap,
+			timelineItems,
+			allRegionSpans,
+			getResolvedDropRowId,
+			handleItemSpanChange,
+		} = useTimelineDndBindings({
+			zoomRegions,
+			trimRegions,
+			clipRegions,
+			annotationRegions,
+			speedRegions,
+			audioRegions,
+			onZoomSpanChange,
+			onTrimSpanChange,
+			onClipSpanChange,
+			onAnnotationSpanChange,
+			onSpeedSpanChange,
+			onAudioSpanChange,
+		});
 
 		// Keep newly added timeline regions at the original short default instead of
 		// scaling them with the full recording length.
@@ -469,96 +417,11 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			],
 		);
 
-		const timelineItems = useMemo<TimelineRenderItem[]>(
-			() =>
-				buildTimelineItems({
-					zoomRegions,
-					clipRegions,
-					annotationRegions,
-					audioRegions,
-				}),
-			[zoomRegions, clipRegions, annotationRegions, audioRegions],
-		);
-
-		// Flat list of draggable row spans for neighbour-clamping during drag/resize.
-		const allRegionSpans = useMemo(
-			() =>
-				buildAllRegionSpans({
-					zoomRegions,
-					clipRegions,
-					audioRegions,
-				}),
-			[zoomRegions, clipRegions, audioRegions],
-		);
-
-		const getResolvedDropRowId = useCallback(
-			(id: string, proposedRowId: string) =>
-				resolveDropRowId(id, proposedRowId, timelineItems),
-			[timelineItems],
-		);
-
-		const handleItemSpanChange = useCallback(
-			(id: string, span: Span, rowId?: string) => {
-				// Check if it's a zoom, trim, clip, speed, or annotation item
-				if (zoomRegions.some((r) => r.id === id)) {
-					onZoomSpanChange(id, span);
-				} else if (trimRegions.some((r) => r.id === id)) {
-					onTrimSpanChange?.(id, span);
-				} else if (clipRegions.some((r) => r.id === id)) {
-					onClipSpanChange?.(id, span);
-				} else if (annotationRegions.some((r) => r.id === id)) {
-					const nextTrackIndex =
-						rowId && isAnnotationTrackRowId(rowId)
-							? getAnnotationTrackIndex(rowId)
-							: (annotationRegions.find((region) => region.id === id)?.trackIndex ??
-								0);
-					onAnnotationSpanChange?.(id, span, nextTrackIndex);
-				} else if (speedRegions.some((r) => r.id === id)) {
-					onSpeedSpanChange?.(id, span);
-				} else if (audioRegions.some((r) => r.id === id)) {
-					const nextTrackIndex =
-						rowId && isAudioTrackRowId(rowId)
-							? getAudioTrackIndex(rowId)
-							: (audioRegions.find((region) => region.id === id)?.trackIndex ?? 0);
-					onAudioSpanChange?.(id, span, nextTrackIndex);
-				}
-			},
-			[
-				zoomRegions,
-				trimRegions,
-				clipRegions,
-				annotationRegions,
-				speedRegions,
-				audioRegions,
-				onZoomSpanChange,
-				onTrimSpanChange,
-				onClipSpanChange,
-				onAnnotationSpanChange,
-				onSpeedSpanChange,
-				onAudioSpanChange,
-			],
-		);
-
-
-		if (!videoDuration || videoDuration === 0) {
-			return (
-				<div className="flex-1 flex flex-col items-center justify-center rounded-lg bg-editor-surface gap-3">
-					<div className="w-12 h-12 rounded-full bg-foreground/5 flex items-center justify-center">
-						<Plus className="w-6 h-6 text-muted-foreground" />
-					</div>
-					<div className="text-center">
-						<p className="text-sm font-medium text-muted-foreground">No Video Loaded</p>
-						<p className="text-xs text-muted-foreground/70 mt-1">
-							Drag and drop a video to start editing
-						</p>
-					</div>
-				</div>
-			);
-		}
-
 		return (
-			<div className="flex-1 min-h-0 flex flex-col bg-editor-bg overflow-hidden">
-				{hideToolbar ? null : (
+			<TimelineEditorShell
+				videoDuration={videoDuration}
+				hideToolbar={hideToolbar}
+				toolbar={
 					<TimelineToolbar
 						aspectRatio={aspectRatio}
 						isCropped={isCropped}
@@ -580,8 +443,9 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 						onSplitClip={handleSplitClip}
 						cropLabel={t("sections.crop", "Crop")}
 					/>
-				)}
-				<div
+				}
+				timelineViewport={
+					<div
 					ref={timelineContainerRef}
 					className="flex-1 min-h-0 overflow-auto bg-editor-bg relative"
 					tabIndex={0}
@@ -642,7 +506,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 						/>
 					</TimelineWrapper>
 				</div>
-			</div>
+				}
+			/>
 		);
 	},
 );
