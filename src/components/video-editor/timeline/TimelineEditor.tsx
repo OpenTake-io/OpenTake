@@ -52,7 +52,6 @@ import type {
 	SpeedRegion,
 	TrimRegion,
 	ZoomFocus,
-	ZoomMode,
 	ZoomRegion,
 } from "../types";
 import AudioWaveform from "./AudioWaveform";
@@ -69,55 +68,13 @@ import {
 } from "./timelineLayout";
 import { type AudioPeaksData, useAudioPeaks } from "./useAudioPeaks";
 import { buildInteractionZoomSuggestions } from "./zoomSuggestionUtils";
+import { CLIP_ROW_ID, ZOOM_ROW_ID } from "./core/constants";
+import { getAnnotationTrackIndex, getAnnotationTrackRowId, getAudioTrackIndex, getAudioTrackRowId, isAnnotationTrackRowId, isAudioTrackRowId } from "./core/rows";
+import { normalizeRegionSpan, spansOverlap } from "./core/spans";
+import { calculateAxisScale, calculateTimelineScale, createInitialRange, formatPlayheadTime, formatTimeLabel, normalizeWheelDeltaToPixels } from "./core/time";
+import { buildAllRegionSpans, buildTimelineItems, resolveDropRowId, type TimelineRenderItem } from "./model/timelineModel";
 
-const ZOOM_ROW_ID = "row-zoom";
-const CLIP_ROW_ID = "row-clip";
-const ANNOTATION_ROW_ID = "row-annotation";
-const AUDIO_ROW_ID = "row-audio";
-const ANNOTATION_ROW_PREFIX = `${ANNOTATION_ROW_ID}-`;
-const AUDIO_ROW_PREFIX = "row-audio-";
-const FALLBACK_RANGE_MS = 1000;
-const TARGET_MARKER_COUNT = 12;
-
-function getAnnotationTrackRowId(trackIndex: number) {
-	return `${ANNOTATION_ROW_ID}-${Math.max(0, Math.floor(trackIndex))}`;
-}
-
-function isAnnotationTrackRowId(rowId: string) {
-	return rowId === ANNOTATION_ROW_ID || rowId.startsWith(ANNOTATION_ROW_PREFIX);
-}
-
-function getAnnotationTrackIndex(rowId: string) {
-	if (rowId === ANNOTATION_ROW_ID) {
-		return 0;
-	}
-
-	const parsed = Number.parseInt(rowId.slice(ANNOTATION_ROW_PREFIX.length), 10);
-	return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
-}
-
-function getAudioTrackRowId(trackIndex: number) {
-	return `${AUDIO_ROW_PREFIX}${Math.max(0, Math.floor(trackIndex))}`;
-}
-
-function isAudioTrackRowId(rowId: string) {
-	return rowId === AUDIO_ROW_ID || rowId.startsWith(AUDIO_ROW_PREFIX);
-}
-
-function getAudioTrackIndex(rowId: string) {
-	if (rowId === AUDIO_ROW_ID) {
-		return 0;
-	}
-
-	const parsed = Number.parseInt(rowId.slice(AUDIO_ROW_PREFIX.length), 10);
-	return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
-}
-
-function spansOverlap(left: Span, right: Span) {
-	return left.end > right.start && left.start < right.end;
-}
-
-interface TimelineEditorProps {
+export interface TimelineEditorProps {
 	videoDuration: number;
 	currentTime: number;
 	playheadTime?: number;
@@ -180,128 +137,6 @@ export interface TimelineEditorHandle {
 	keyframes: { id: string; time: number }[];
 }
 
-interface TimelineScaleConfig {
-	minItemDurationMs: number;
-	defaultItemDurationMs: number;
-	minVisibleRangeMs: number;
-}
-
-interface TimelineRenderItem {
-	id: string;
-	rowId: string;
-	span: Span;
-	label: string;
-	zoomDepth?: number;
-	zoomMode?: ZoomMode;
-	speedValue?: number;
-	variant: "zoom" | "trim" | "clip" | "annotation" | "speed" | "audio";
-}
-
-const SCALE_CANDIDATES = [
-	{ intervalSeconds: 0.05, gridSeconds: 0.01 },
-	{ intervalSeconds: 0.1, gridSeconds: 0.02 },
-	{ intervalSeconds: 0.25, gridSeconds: 0.05 },
-	{ intervalSeconds: 0.5, gridSeconds: 0.1 },
-	{ intervalSeconds: 1, gridSeconds: 0.25 },
-	{ intervalSeconds: 2, gridSeconds: 0.5 },
-	{ intervalSeconds: 5, gridSeconds: 1 },
-	{ intervalSeconds: 10, gridSeconds: 2 },
-	{ intervalSeconds: 15, gridSeconds: 3 },
-	{ intervalSeconds: 30, gridSeconds: 5 },
-	{ intervalSeconds: 60, gridSeconds: 10 },
-	{ intervalSeconds: 120, gridSeconds: 20 },
-	{ intervalSeconds: 300, gridSeconds: 30 },
-	{ intervalSeconds: 600, gridSeconds: 60 },
-	{ intervalSeconds: 900, gridSeconds: 120 },
-	{ intervalSeconds: 1800, gridSeconds: 180 },
-	{ intervalSeconds: 3600, gridSeconds: 300 },
-];
-
-function calculateAxisScale(visibleRangeMs: number): { intervalMs: number; gridMs: number } {
-	const visibleSeconds = visibleRangeMs / 1000;
-	const candidate =
-		SCALE_CANDIDATES.find((scaleCandidate) => {
-			if (visibleSeconds <= 0) {
-				return true;
-			}
-			return visibleSeconds / scaleCandidate.intervalSeconds <= TARGET_MARKER_COUNT;
-		}) ?? SCALE_CANDIDATES[SCALE_CANDIDATES.length - 1];
-
-	return {
-		intervalMs: Math.round(candidate.intervalSeconds * 1000),
-		gridMs: Math.round(candidate.gridSeconds * 1000),
-	};
-}
-
-function calculateTimelineScale(durationSeconds: number): TimelineScaleConfig {
-	const totalMs = Math.max(0, Math.round(durationSeconds * 1000));
-
-	const minItemDurationMs = 100;
-
-	const defaultItemDurationMs =
-		totalMs > 0
-			? Math.max(minItemDurationMs, Math.min(Math.round(totalMs * 0.05), 30000))
-			: Math.max(minItemDurationMs, 1000);
-
-	const minVisibleRangeMs = 300;
-
-	return {
-		minItemDurationMs,
-		defaultItemDurationMs,
-		minVisibleRangeMs,
-	};
-}
-
-function createInitialRange(totalMs: number): Range {
-	if (totalMs > 0) {
-		return { start: 0, end: totalMs };
-	}
-
-	return { start: 0, end: FALLBACK_RANGE_MS };
-}
-
-function normalizeWheelDeltaToPixels(delta: number, deltaMode: number) {
-	if (deltaMode === 1) {
-		return delta * 16;
-	}
-
-	if (deltaMode === 2) {
-		return delta * 240;
-	}
-
-	return delta;
-}
-
-function formatTimeLabel(milliseconds: number, intervalMs: number) {
-	const totalSeconds = milliseconds / 1000;
-	const hours = Math.floor(totalSeconds / 3600);
-	const minutes = Math.floor((totalSeconds % 3600) / 60);
-	const seconds = totalSeconds % 60;
-
-	const fractionalDigits = intervalMs < 250 ? 2 : intervalMs < 1000 ? 1 : 0;
-
-	if (hours > 0) {
-		const minutesString = minutes.toString().padStart(2, "0");
-		const secondsString = Math.floor(seconds).toString().padStart(2, "0");
-		return `${hours}:${minutesString}:${secondsString}`;
-	}
-
-	if (fractionalDigits > 0) {
-		const secondsWithFraction = seconds.toFixed(fractionalDigits);
-		const [wholeSeconds, fraction] = secondsWithFraction.split(".");
-		return `${minutes}:${wholeSeconds.padStart(2, "0")}.${fraction}`;
-	}
-
-	return `${minutes}:${Math.floor(seconds).toString().padStart(2, "0")}`;
-}
-
-function formatPlayheadTime(ms: number): string {
-	const s = ms / 1000;
-	const min = Math.floor(s / 60);
-	const sec = s % 60;
-	if (min > 0) return `${min}:${sec.toFixed(1).padStart(4, "0")}`;
-	return `${sec.toFixed(1)}s`;
-}
 
 function PlaybackCursor({
 	currentTimeMs,
@@ -1322,62 +1157,54 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			}
 
 			zoomRegionsRef.current.forEach((region) => {
-				const clampedStart = Math.max(0, Math.min(region.startMs, totalMs));
-				const minEnd = clampedStart + safeMinDurationMs;
-				const clampedEnd = Math.min(totalMs, Math.max(minEnd, region.endMs));
-				const normalizedStart = Math.max(
-					0,
-					Math.min(clampedStart, totalMs - safeMinDurationMs),
-				);
-				const normalizedEnd = Math.max(minEnd, Math.min(clampedEnd, totalMs));
+				const normalized = normalizeRegionSpan({
+					startMs: region.startMs,
+					endMs: region.endMs,
+					totalMs,
+					minDurationMs: safeMinDurationMs,
+				});
 
-				if (normalizedStart !== region.startMs || normalizedEnd !== region.endMs) {
-					onZoomSpanChange(region.id, { start: normalizedStart, end: normalizedEnd });
+				if (normalized.start !== region.startMs || normalized.end !== region.endMs) {
+					onZoomSpanChange(region.id, normalized);
 				}
 			});
 
 			trimRegionsRef.current.forEach((region) => {
-				const clampedStart = Math.max(0, Math.min(region.startMs, totalMs));
-				const minEnd = clampedStart + safeMinDurationMs;
-				const clampedEnd = Math.min(totalMs, Math.max(minEnd, region.endMs));
-				const normalizedStart = Math.max(
-					0,
-					Math.min(clampedStart, totalMs - safeMinDurationMs),
-				);
-				const normalizedEnd = Math.max(minEnd, Math.min(clampedEnd, totalMs));
+				const normalized = normalizeRegionSpan({
+					startMs: region.startMs,
+					endMs: region.endMs,
+					totalMs,
+					minDurationMs: safeMinDurationMs,
+				});
 
-				if (normalizedStart !== region.startMs || normalizedEnd !== region.endMs) {
-					onTrimSpanChange?.(region.id, { start: normalizedStart, end: normalizedEnd });
+				if (normalized.start !== region.startMs || normalized.end !== region.endMs) {
+					onTrimSpanChange?.(region.id, normalized);
 				}
 			});
 
 			speedRegionsRef.current.forEach((region) => {
-				const clampedStart = Math.max(0, Math.min(region.startMs, totalMs));
-				const minEnd = clampedStart + safeMinDurationMs;
-				const clampedEnd = Math.min(totalMs, Math.max(minEnd, region.endMs));
-				const normalizedStart = Math.max(
-					0,
-					Math.min(clampedStart, totalMs - safeMinDurationMs),
-				);
-				const normalizedEnd = Math.max(minEnd, Math.min(clampedEnd, totalMs));
+				const normalized = normalizeRegionSpan({
+					startMs: region.startMs,
+					endMs: region.endMs,
+					totalMs,
+					minDurationMs: safeMinDurationMs,
+				});
 
-				if (normalizedStart !== region.startMs || normalizedEnd !== region.endMs) {
-					onSpeedSpanChange?.(region.id, { start: normalizedStart, end: normalizedEnd });
+				if (normalized.start !== region.startMs || normalized.end !== region.endMs) {
+					onSpeedSpanChange?.(region.id, normalized);
 				}
 			});
 
 			audioRegionsRef.current.forEach((region) => {
-				const clampedStart = Math.max(0, Math.min(region.startMs, totalMs));
-				const minEnd = clampedStart + safeMinDurationMs;
-				const clampedEnd = Math.min(totalMs, Math.max(minEnd, region.endMs));
-				const normalizedStart = Math.max(
-					0,
-					Math.min(clampedStart, totalMs - safeMinDurationMs),
-				);
-				const normalizedEnd = Math.max(minEnd, Math.min(clampedEnd, totalMs));
+				const normalized = normalizeRegionSpan({
+					startMs: region.startMs,
+					endMs: region.endMs,
+					totalMs,
+					minDurationMs: safeMinDurationMs,
+				});
 
-				if (normalizedStart !== region.startMs || normalizedEnd !== region.endMs) {
-					onAudioSpanChange?.(region.id, { start: normalizedStart, end: normalizedEnd });
+				if (normalized.start !== region.startMs || normalized.end !== region.endMs) {
+					onAudioSpanChange?.(region.id, normalized);
 				}
 			});
 			// Only re-run when the timeline scale changes, not on every region edit
@@ -1916,109 +1743,31 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			],
 		);
 
-		const timelineItems = useMemo<TimelineRenderItem[]>(() => {
-			const zooms: TimelineRenderItem[] = zoomRegions.map((region, index) => ({
-				id: region.id,
-				rowId: ZOOM_ROW_ID,
-				span: { start: region.startMs, end: region.endMs },
-				label: `Zoom ${index + 1}`,
-				zoomDepth: region.depth,
-				zoomMode: region.mode ?? "auto",
-				variant: "zoom",
-			}));
-
-			const clips: TimelineRenderItem[] = clipRegions.map((region, index) => ({
-				id: region.id,
-				rowId: CLIP_ROW_ID,
-				span: { start: region.startMs, end: region.endMs },
-				label: `Clip ${index + 1}`,
-				variant: "clip",
-			}));
-
-			const annotations: TimelineRenderItem[] = annotationRegions.map((region) => {
-				let label: string;
-
-				if (region.type === "text") {
-					// Show text preview
-					const preview = region.content.trim() || "Empty text";
-					label = preview.length > 20 ? `${preview.substring(0, 20)}...` : preview;
-				} else if (region.type === "image") {
-					label = "Image";
-				} else {
-					label = "Annotation";
-				}
-
-				return {
-					id: region.id,
-					rowId: getAnnotationTrackRowId(region.trackIndex ?? 0),
-					span: { start: region.startMs, end: region.endMs },
-					label,
-					variant: "annotation",
-				};
-			});
-
-			const audios: TimelineRenderItem[] = audioRegions.map((region) => {
-				const fileName =
-					region.audioPath
-						.split(/[\\/]/)
-						.pop()
-						?.replace(/\.[^.]+$/, "") || "Audio";
-				return {
-					id: region.id,
-					rowId: getAudioTrackRowId(region.trackIndex ?? 0),
-					span: { start: region.startMs, end: region.endMs },
-					label: fileName,
-					variant: "audio",
-				};
-			});
-
-			return [...zooms, ...clips, ...annotations, ...audios];
-		}, [zoomRegions, clipRegions, annotationRegions, audioRegions]);
+		const timelineItems = useMemo<TimelineRenderItem[]>(
+			() =>
+				buildTimelineItems({
+					zoomRegions,
+					clipRegions,
+					annotationRegions,
+					audioRegions,
+				}),
+			[zoomRegions, clipRegions, annotationRegions, audioRegions],
+		);
 
 		// Flat list of draggable row spans for neighbour-clamping during drag/resize.
-		const allRegionSpans = useMemo(() => {
-			const zooms = zoomRegions.map((r) => ({
-				id: r.id,
-				start: r.startMs,
-				end: r.endMs,
-				rowId: ZOOM_ROW_ID,
-			}));
-			const clips = clipRegions.map((r) => ({
-				id: r.id,
-				start: r.startMs,
-				end: r.endMs,
-				rowId: CLIP_ROW_ID,
-			}));
-			const audios = audioRegions.map((r) => ({
-				id: r.id,
-				start: r.startMs,
-				end: r.endMs,
-				rowId: getAudioTrackRowId(r.trackIndex ?? 0),
-			}));
-			return [...zooms, ...clips, ...audios];
-		}, [zoomRegions, clipRegions, audioRegions]);
+		const allRegionSpans = useMemo(
+			() =>
+				buildAllRegionSpans({
+					zoomRegions,
+					clipRegions,
+					audioRegions,
+				}),
+			[zoomRegions, clipRegions, audioRegions],
+		);
 
 		const getResolvedDropRowId = useCallback(
-			(id: string, proposedRowId: string) => {
-				const currentRowId = timelineItems.find((item) => item.id === id)?.rowId;
-				if (!currentRowId) {
-					return proposedRowId;
-				}
-
-				if (isAnnotationTrackRowId(currentRowId)) {
-					return isAnnotationTrackRowId(proposedRowId)
-						? getAnnotationTrackRowId(getAnnotationTrackIndex(proposedRowId))
-						: currentRowId;
-				}
-
-				if (isAudioTrackRowId(currentRowId)) {
-					return isAudioTrackRowId(proposedRowId)
-						? getAudioTrackRowId(getAudioTrackIndex(proposedRowId))
-						: currentRowId;
-				}
-
-				return currentRowId;
-			},
+			(id: string, proposedRowId: string) =>
+				resolveDropRowId(id, proposedRowId, timelineItems),
 			[timelineItems],
 		);
 

@@ -10,6 +10,12 @@ import type {
 import { TimelineContext } from "dnd-timeline";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { useCallback, useRef } from "react";
+import {
+	clampRange,
+	resolveDragEnd,
+	resolveResizeEnd,
+	type TimelineRegionSpan,
+} from "./dnd/engine";
 
 interface TimelineWrapperProps {
 	children: ReactNode;
@@ -22,7 +28,7 @@ interface TimelineWrapperProps {
 	gridSizeMs?: number;
 	onItemSpanChange: (id: string, span: Span, rowId?: string) => void;
 	resolveTargetRowId?: (id: string, proposedRowId: string) => string;
-	allRegionSpans?: { id: string; start: number; end: number; rowId: string }[];
+	allRegionSpans?: TimelineRegionSpan[];
 }
 
 export default function TimelineWrapper({
@@ -40,181 +46,22 @@ export default function TimelineWrapper({
 }: TimelineWrapperProps) {
 	const totalMs = Math.max(0, Math.round(videoDuration * 1000));
 
-	const clampSpanToBounds = useCallback(
-		(span: Span): Span => {
-			const rawDuration = Math.max(span.end - span.start, 0);
-			const normalizedStart = Number.isFinite(span.start) ? span.start : 0;
-
-			if (totalMs === 0) {
-				const minDuration = Math.max(minItemDurationMs, 1);
-				const duration = Math.max(rawDuration, minDuration);
-				const start = Math.max(0, normalizedStart);
-				return {
-					start,
-					end: start + duration,
-				};
-			}
-
-			const minDuration = Math.min(Math.max(minItemDurationMs, 1), totalMs);
-			const duration = Math.min(Math.max(rawDuration, minDuration), totalMs);
-
-			const start = Math.max(0, Math.min(normalizedStart, totalMs - duration));
-			const end = start + duration;
-
-			return { start, end };
-		},
-		[minItemDurationMs, totalMs],
-	);
-
-	const clampRange = useCallback(
-		(candidate: Range): Range => {
-			if (totalMs === 0) {
-				const minSpan = Math.max(minVisibleRangeMs, 1);
-				const span = Math.max(candidate.end - candidate.start, minSpan);
-				const start = Math.max(0, Math.min(candidate.start, candidate.end - span));
-				return { start, end: start + span };
-			}
-
-			const rawStart = Math.max(0, candidate.start);
-			const rawEnd = candidate.end;
-			const clampedEnd = Math.min(rawEnd, totalMs);
-
-			const minSpan = Math.min(Math.max(minVisibleRangeMs, 1), totalMs);
-			const desiredSpan = clampedEnd - rawStart;
-			const span = Math.min(Math.max(desiredSpan, minSpan), totalMs);
-
-			let finalStart = rawStart;
-			let finalEnd = finalStart + span;
-
-			if (finalEnd > totalMs) {
-				finalEnd = totalMs;
-				finalStart = Math.max(0, finalEnd - span);
-			}
-
-			return { start: finalStart, end: finalEnd };
-		},
-		[minVisibleRangeMs, totalMs],
-	);
-
-	const getSiblingSpans = useCallback(
-		(activeItemId: string, rowId?: string) => {
-			const activeItem = allRegionSpans.find((region) => region.id === activeItemId);
-			const resolvedRowId = rowId ?? activeItem?.rowId;
-			if (!resolvedRowId) {
-				return [];
-			}
-
-			return allRegionSpans
-				.filter((region) => region.id !== activeItemId && region.rowId === resolvedRowId)
-				.sort((left, right) => left.start - right.start);
-		},
-		[allRegionSpans],
-	);
-
-	// When a resize overlaps neighbours, clamp the resized edge to the nearest boundary.
-	const clampResizedSpanToNeighbours = useCallback(
-		(span: Span, activeItemId: string): Span => {
-			const siblings = getSiblingSpans(activeItemId);
-			const activeItem = allRegionSpans.find((region) => region.id === activeItemId);
-			let { start, end } = span;
-
-			for (const r of siblings) {
-				// Span's right edge crossed into a region to the right
-				if (end > r.start && start < r.start) {
-					end = r.start;
-				}
-				// Span's left edge crossed into a region to the left
-				if (start < r.end && end > r.end) {
-					start = r.end;
-				}
-			}
-
-			// Ensure minimum duration after clamping
-			const minDur = Math.min(minItemDurationMs, totalMs || minItemDurationMs);
-			if (end - start < minDur) {
-				const resizedLeft = Boolean(
-					activeItem && span.start !== activeItem.start && span.end === activeItem.end,
-				);
-				if (resizedLeft) {
-					start = end - minDur;
-				} else {
-					end = start + minDur;
-				}
-			}
-
-			return { start: Math.max(0, start), end: Math.min(end, totalMs || end) };
-		},
-		[allRegionSpans, getSiblingSpans, minItemDurationMs, totalMs],
-	);
-
-	// When a drag overlaps neighbours, keep duration fixed and stop at the nearest gap boundary.
-	const clampDraggedSpanToNeighbours = useCallback(
-		(span: Span, activeItemId: string, rowId?: string): Span => {
-			const activeItem = allRegionSpans.find((region) => region.id === activeItemId);
-			if (!activeItem) {
-				return clampSpanToBounds(span);
-			}
-
-			const siblings = getSiblingSpans(activeItemId, rowId);
-			const duration = Math.max(
-				activeItem.end - activeItem.start,
-				Math.min(minItemDurationMs, totalMs || minItemDurationMs),
-			);
-			const proposedStart = Number.isFinite(span.start) ? span.start : activeItem.start;
-
-			const previousSibling = [...siblings]
-				.reverse()
-				.find((region) => region.end <= activeItem.start);
-			const nextSibling = siblings.find((region) => region.start >= activeItem.end);
-
-			const minStart = previousSibling ? previousSibling.end : 0;
-			const maxStart = nextSibling
-				? nextSibling.start - duration
-				: totalMs > 0
-					? totalMs - duration
-					: proposedStart;
-
-			const start = Math.max(minStart, Math.min(proposedStart, maxStart));
-			return clampSpanToBounds({ start, end: start + duration });
-		},
-		[allRegionSpans, clampSpanToBounds, getSiblingSpans, minItemDurationMs, totalMs],
-	);
-
 	const onResizeEnd = useCallback(
 		(event: ResizeEndEvent) => {
 			const updatedSpan = event.active.data.current.getSpanFromResizeEvent?.(event);
 			if (!updatedSpan) return;
 
 			const activeItemId = event.active.id as string;
-			let clampedSpan = clampSpanToBounds(updatedSpan);
-
-			const effectiveMinDuration =
-				totalMs > 0 ? Math.min(minItemDurationMs, totalMs) : minItemDurationMs;
-			if (clampedSpan.end - clampedSpan.start < effectiveMinDuration) {
-				return;
-			}
-
-			// Clamp to neighbour boundaries instead of rejecting
-			if (hasOverlap(clampedSpan, activeItemId)) {
-				clampedSpan = clampSpanToBounds(
-					clampResizedSpanToNeighbours(clampedSpan, activeItemId),
-				);
-				// If still overlapping after clamping, fall back to original position
-				if (hasOverlap(clampedSpan, activeItemId)) {
-					return;
-				}
-			}
-
-			onItemSpanChange(activeItemId, clampedSpan);
+			const resolvedSpan = resolveResizeEnd(activeItemId, updatedSpan, {
+				totalMs,
+				minItemDurationMs,
+				allRegionSpans,
+				hasOverlap,
+			});
+			if (!resolvedSpan) return;
+			onItemSpanChange(activeItemId, resolvedSpan);
 		},
-		[
-			clampResizedSpanToNeighbours,
-			clampSpanToBounds,
-			hasOverlap,
-			minItemDurationMs,
-			onItemSpanChange,
-			totalMs,
-		],
+		[allRegionSpans, hasOverlap, minItemDurationMs, onItemSpanChange, totalMs],
 	);
 
 	const onDragEnd = useCallback(
@@ -224,44 +71,28 @@ export default function TimelineWrapper({
 			if (!updatedSpan || !proposedRowId) return;
 
 			const activeItemId = event.active.id as string;
-			const resolvedRowId =
-				resolveTargetRowId?.(activeItemId, proposedRowId) ?? proposedRowId;
-
-			// Drags are pure translations — always preserve the original duration.
-			// The span from getSpanFromDragEvent can drift due to pixel-to-ms
-			// rounding at different zoom levels, so pin to the known duration.
-			const activeItem = allRegionSpans.find((r) => r.id === activeItemId);
-			const originalDuration = activeItem
-				? activeItem.end - activeItem.start
-				: updatedSpan.end - updatedSpan.start;
-			const dragSpan: Span = {
-				start: updatedSpan.start,
-				end: updatedSpan.start + originalDuration,
-			};
-
-			let clampedSpan = clampSpanToBounds(dragSpan);
-
-			// Clamp to neighbour boundaries instead of rejecting
-			if (hasOverlap(clampedSpan, activeItemId, resolvedRowId)) {
-				clampedSpan = clampDraggedSpanToNeighbours(
-					clampedSpan,
-					activeItemId,
-					resolvedRowId,
-				);
-				if (hasOverlap(clampedSpan, activeItemId, resolvedRowId)) {
-					return;
-				}
-			}
-
-			onItemSpanChange(activeItemId, clampedSpan, resolvedRowId);
+			const resolved = resolveDragEnd(
+				activeItemId,
+				updatedSpan,
+				proposedRowId,
+				{
+					allRegionSpans,
+					totalMs,
+					minItemDurationMs,
+					hasOverlap,
+				},
+				resolveTargetRowId,
+			);
+			if (!resolved) return;
+			onItemSpanChange(activeItemId, resolved.span, resolved.rowId);
 		},
 		[
 			allRegionSpans,
-			clampDraggedSpanToNeighbours,
-			clampSpanToBounds,
 			hasOverlap,
+			minItemDurationMs,
 			onItemSpanChange,
 			resolveTargetRowId,
+			totalMs,
 		],
 	);
 
@@ -350,17 +181,18 @@ export default function TimelineWrapper({
 	const handleRangeChange = useCallback(
 		(updater: (previous: Range) => Range) => {
 			onRangeChange((prev) => {
-				const normalized = totalMs > 0 ? clampRange(prev) : prev;
+				const normalized =
+					totalMs > 0 ? clampRange(prev, { totalMs, minVisibleRangeMs }) : prev;
 				const desired = updater(normalized);
 
 				if (totalMs > 0) {
-					return clampRange(desired);
+					return clampRange(desired, { totalMs, minVisibleRangeMs });
 				}
 
 				return desired;
 			});
 		},
-		[clampRange, onRangeChange, totalMs],
+		[minVisibleRangeMs, onRangeChange, totalMs],
 	);
 
 	return (
