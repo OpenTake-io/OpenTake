@@ -304,3 +304,100 @@ Smoke:
   - même conservation de durée sur drag
   - même logique de clamp voisinage
   - même fallback `return` quand overlap persiste après clamp
+
+## Verrou Phase 4 (extraction hooks métier)
+
+### Hooks implémentés
+- `timeline/hooks/useTimelineRange.ts`
+- `timeline/hooks/useTimelineSelection.ts`
+- `timeline/hooks/useTimelineNormalization.ts`
+- `timeline/hooks/useTimelineZoomActions.ts`
+- `timeline/hooks/useTimelineAudioActions.ts`
+- `timeline/hooks/useTimelineAnnotationsActions.ts`
+- `timeline/hooks/useTimelineKeyboardShortcuts.ts`
+
+### Side-effects isolés
+- `window` (keyboard listeners) -> `useTimelineKeyboardShortcuts`
+- `window.electronAPI` + lecture metadata audio -> `useTimelineAudioActions`
+- `toast` (zoom/audio/aspect custom) -> hooks métier correspondants
+
+### Rebranchement `TimelineEditor`
+- `TimelineEditor` consomme désormais les hooks pour:
+  - range/pan/wheel
+  - sélection/keyframes/delete/select-all
+  - normalisation spans
+  - actions zoom/audio/annotation
+  - shortcuts clavier
+- Le composant conserve l’orchestration UI et le wiring des callbacks/props publics.
+
+## Verrou Phase 5 (découpage UI components)
+
+### Composants UI extraits
+- `timeline/components/toolbar/TimelineToolbar.tsx`
+- `timeline/components/viewport/TimelineCanvas.tsx`
+- `timeline/components/axis/TimelineAxis.tsx`
+- `timeline/components/playhead/PlaybackCursor.tsx`
+- `timeline/components/overlays/ClipMarkerOverlay.tsx`
+
+### Recomposition
+- `TimelineEditor` délègue désormais:
+  - toolbar actions + aspect/crop UI à `TimelineToolbar`
+  - viewport timeline (rows/items/ghosts/playhead/axis) à `TimelineCanvas`
+- `TimelineEditor` conserve l’orchestration props/callbacks publiques + wiring hooks métier.
+
+### Parité interactionnelle conservée
+- Clic timeline -> seek
+- Drag playhead + snap keyframes
+- Ghost playhead / ghost zoom
+- Rendu rows multi-tracks annotation/audio
+- Actions toolbar (zoom/suggest/annotation/audio/split/crop/aspect)
+
+## Verrou Phase 6 (recomposition finale Big Bang)
+
+### Bascule architecture modulaire
+- `TimelineEditor` est désormais une façade API publique + wiring de hooks/composants.
+- Extraction finale des blocs monolithiques restants:
+  - DnD bindings -> `timeline/hooks/useTimelineDndBindings.ts`
+  - Shell editor/empty state -> `timeline/components/editor/TimelineEditorShell.tsx`
+
+### Suppression legacy/code mort
+- Retrait des implémentations inline restantes de:
+  - overlap resolver
+  - routing span-change par type/track
+  - mapping items/spans DnD
+  - empty-state inline du monolithe
+- Aucune couche de compatibilité/fallback ajoutée.
+
+### Point d’entrée public inchangé
+- `default export TimelineEditor`
+- `TimelineEditorProps` et `TimelineEditorHandle` inchangés.
+
+### Validation
+- Typecheck: `npx tsc --noEmit` OK.
+- Tests timeline: 31/31 OK (PowerShell Windows).
+
+## Verrou Phase 7 (validation parité + gate release)
+
+### Exécution validations
+- Typecheck global:
+  - `npx tsc --noEmit` -> OK.
+- Tests timeline ciblés (core/model/dnd/layout/suggestions):
+  - 31/31 passés.
+- Suite de tests projet complète (`npm run test`):
+  - 542 passés / 2 échoués (échecs hors périmètre timeline refactor):
+    - `electron/ipc/recording/diagnostics.test.ts` (timeout test)
+    - `electron/ipc/recording/prune.test.ts` (attente de rejection non satisfaite)
+
+### Vérification matrice de parité timeline
+- API publique inchangée:
+  - `TimelineEditor` default export
+  - `TimelineEditorProps`
+  - `TimelineEditorHandle`
+- Features timeline validées par tests + revue wiring:
+  - zoom, clip, annotation, audio, keyframes, shortcuts, toolbar, crop/aspect ratio.
+- Sémantique DnD/overlap conservée (tests dnd + comportement rebranché).
+
+### Décision gate
+- Statut refactor timeline: **PASS** (périmètre feature/API).
+- Statut release globale dépôt: **BLOCKED** tant que les 2 tests non-timeline restent rouges.
+- Action recommandée: traiter séparément les régressions `electron/ipc/recording/*` avant merge release global.
