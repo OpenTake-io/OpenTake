@@ -11,11 +11,14 @@ export function normalizeRegionSpan(params: {
 	minDurationMs: number;
 }) {
 	const { startMs, endMs, totalMs, minDurationMs } = params;
-	const clampedStart = Math.max(0, Math.min(startMs, totalMs));
-	const minEnd = clampedStart + minDurationMs;
-	const clampedEnd = Math.min(totalMs, Math.max(minEnd, endMs));
-	const normalizedStart = Math.max(0, Math.min(clampedStart, totalMs - minDurationMs));
-	const normalizedEnd = Math.max(minEnd, Math.min(clampedEnd, totalMs));
+	const safeTotalMs = Math.max(0, totalMs);
+	const safeMinDurationMs = Math.max(0, Math.min(minDurationMs, safeTotalMs));
+	const clampedStart = Math.max(0, Math.min(startMs, safeTotalMs));
+	const normalizedStart = Math.max(0, Math.min(clampedStart, safeTotalMs - safeMinDurationMs));
+	const normalizedEnd = Math.min(
+		safeTotalMs,
+		Math.max(endMs, normalizedStart + safeMinDurationMs),
+	);
 
 	return { start: normalizedStart, end: normalizedEnd };
 }
