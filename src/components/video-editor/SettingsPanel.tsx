@@ -45,7 +45,11 @@ import { useI18n, useScopedT } from "../../contexts/I18nContext";
 import type { AppLocale } from "../../i18n/config";
 import { SUPPORTED_LOCALES } from "../../i18n/config";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
-import { CURSOR_MOTION_PRESETS, type CursorMotionPresetId } from "./cursorMotionPresets";
+import {
+	CURSOR_MOTION_PRESETS,
+	type CursorMotionPresetId,
+	getMatchingCursorMotionPresetId,
+} from "./cursorMotionPresets";
 import { loadEditorPreferences, saveEditorPreferences } from "./editorPreferences";
 import { SliderControl } from "./SliderControl";
 import { KeyboardShortcutsDialog } from "./TutorialHelp";
@@ -1486,9 +1490,7 @@ export function SettingsPanel({
 		onCameraSpringDampingMultiplierChange?.(
 			initialEditorPreferences.cameraSpringDampingMultiplier,
 		);
-		onCameraSpringMassMultiplierChange?.(
-			initialEditorPreferences.cameraSpringMassMultiplier,
-		);
+		onCameraSpringMassMultiplierChange?.(initialEditorPreferences.cameraSpringMassMultiplier);
 		onZoomInDurationMsChange?.(initialEditorPreferences.zoomInDurationMs);
 		onZoomOutDurationMsChange?.(initialEditorPreferences.zoomOutDurationMs);
 		onZoomClassicModeChange?.(false);
@@ -1515,21 +1517,18 @@ export function SettingsPanel({
 
 	const activeMotionPresetId = useMemo(() => {
 		return (
-			MOTION_PRESET_ORDER.find((presetId) => {
-				const preset = CURSOR_MOTION_PRESETS[presetId];
-				return (
-					preset.zoomInDurationMs === zoomInDurationMs &&
-					preset.zoomOutDurationMs === zoomOutDurationMs &&
-					preset.cursorSize === cursorSize &&
-					preset.cursorSmoothing === cursorSmoothing &&
-					preset.cursorSpringStiffnessMultiplier === cursorSpringStiffnessMultiplier &&
-					preset.cursorSpringDampingMultiplier === cursorSpringDampingMultiplier &&
-					preset.cursorSpringMassMultiplier === cursorSpringMassMultiplier &&
-					preset.cursorMotionBlur === cursorMotionBlur &&
-					preset.cursorClickBounce === cursorClickBounce &&
-					preset.cursorClickBounceDuration === cursorClickBounceDuration
-				);
-			}) ?? null
+			getMatchingCursorMotionPresetId({
+				zoomInDurationMs,
+				zoomOutDurationMs,
+				cursorSize,
+				cursorSmoothing,
+				cursorSpringStiffnessMultiplier,
+				cursorSpringDampingMultiplier,
+				cursorSpringMassMultiplier,
+				cursorMotionBlur,
+				cursorClickBounce,
+				cursorClickBounceDuration,
+			}) ?? "focused"
 		);
 	}, [
 		cursorClickBounce,
@@ -3003,21 +3002,21 @@ export function SettingsPanel({
 						)}
 					</div>
 				)}
-					<div className="rounded-lg border border-foreground/10 bg-foreground/[0.03] px-3 py-2">
-						<div className="text-[10px] text-muted-foreground">
-							{showDevMotionControls
-								? tSettings(
-										"effects.exportBlurMovedToDev",
-										"Export blur tuning is available in Settings > Dev.",
-									)
-								: tSettings(
-										"effects.exportBlurLocked",
-										"Export blur is fixed for this build.",
-									)}
-						</div>
-						<div className="mt-1 text-[12px] font-medium text-foreground">
-							{`${TEMPORAL_MOTION_BLUR_DEFAULT_SAMPLE_COUNT} samples · ${Math.round(TEMPORAL_MOTION_BLUR_DEFAULT_SHUTTER_FRACTION * 100)}% shutter`}
-						</div>
+				<div className="rounded-lg border border-foreground/10 bg-foreground/[0.03] px-3 py-2">
+					<div className="text-[10px] text-muted-foreground">
+						{showDevMotionControls
+							? tSettings(
+									"effects.exportBlurMovedToDev",
+									"Export blur tuning is available in Settings > Dev.",
+								)
+							: tSettings(
+									"effects.exportBlurLocked",
+									"Export blur is fixed for this build.",
+								)}
+					</div>
+					<div className="mt-1 text-[12px] font-medium text-foreground">
+						{`${TEMPORAL_MOTION_BLUR_DEFAULT_SAMPLE_COUNT} samples · ${Math.round(TEMPORAL_MOTION_BLUR_DEFAULT_SHUTTER_FRACTION * 100)}% shutter`}
+					</div>
 				</div>
 				{selectedZoomId && (
 					<Button
