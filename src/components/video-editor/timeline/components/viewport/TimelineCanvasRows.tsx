@@ -1,7 +1,7 @@
 import { Plus } from "@phosphor-icons/react";
 import { memo, useMemo, type MouseEventHandler } from "react";
 import { cn } from "@/lib/utils";
-import AudioWaveform from "../../AudioWaveform";
+import AudioWaveform from "../waveform/AudioWaveform";
 import glassStyles from "../../ItemGlass.module.css";
 import Item from "../../Item";
 import Row from "../../Row";

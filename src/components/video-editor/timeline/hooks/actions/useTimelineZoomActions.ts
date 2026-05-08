@@ -1,8 +1,8 @@
 import type { Span } from "dnd-timeline";
 import { useCallback, useEffect, useMemo } from "react";
-import type { CursorTelemetryPoint, ZoomFocus, ZoomRegion } from "../../types";
-import { buildInteractionZoomSuggestions } from "../zoomSuggestionUtils";
-import { timelineNotifications } from "./timelineNotifications";
+import type { CursorTelemetryPoint, ZoomFocus, ZoomRegion } from "../../../types";
+import { buildInteractionZoomSuggestions } from "../../zoomSuggestionUtils";
+import { timelineNotifications } from "../utils/timelineNotifications";
 
 interface UseTimelineZoomActionsParams {
 	timeline: {
