@@ -3,8 +3,6 @@ import type {
 	AnnotationRegion,
 	AudioRegion,
 	ClipRegion,
-	SpeedRegion,
-	TrimRegion,
 	ZoomMode,
 	ZoomRegion,
 } from "../../types";
