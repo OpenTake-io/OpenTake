@@ -989,36 +989,61 @@ export class ExtensionHost {
 				let path = host.iconPathCache.get(cacheKey);
 
 				if (!path) {
-					// 1. Get the Icon component from the project's library
-					const Icon = (PhosphorIcons as any)[name];
-					if (!Icon) return;
+					const iconLibrary = PhosphorIcons as Record<string, unknown>;
+					const resolvedIconName =
+						typeof iconLibrary[name] !== "undefined"
+							? name
+							: typeof iconLibrary[`${name}Icon`] !== "undefined"
+								? `${name}Icon`
+								: null;
+					const Icon = resolvedIconName
+						? (iconLibrary[resolvedIconName] as {
+								render?: (props: { weight: string }, ref: unknown) => unknown;
+							})
+						: null;
+					if (!Icon) {
+						console.warn(`[extensions] Icon ${name} not found in Phosphor library`);
+						return;
+					}
 
 					try {
-						// 2. Extract path data by dry-running the component
-						const Icon = (PhosphorIcons as any)[name];
-						if (!Icon) {
-							console.warn(`[extensions] Icon ${name} not found in Phosphor library`);
-							return;
-						}
-
-						const element = (Icon as any).render?.({ weight }, null);
+						const element = Icon.render?.({ weight }, null) as
+							| { props?: { weights?: Map<string, { props?: { children?: unknown } }> } }
+							| undefined;
 						const weights = element?.props?.weights;
 						const definition = weights?.get(weight);
 						const children = definition?.props?.children;
-						
-						// Handle both single path and array of paths
+
 						let pathElement = children;
 						if (Array.isArray(children)) {
-							pathElement = children.find((c: any) => c?.type === 'path' || c?.props?.d);
+							pathElement = children.find(
+								(c: unknown) =>
+									typeof c === "object" &&
+									c !== null &&
+									(("type" in c && (c as { type?: unknown }).type === "path") ||
+										("props" in c &&
+											typeof (c as { props?: unknown }).props === "object" &&
+											(c as { props?: { d?: unknown } }).props?.d)),
+							);
 						}
 
-						const pathData = pathElement?.props?.d;
+						const pathData =
+							typeof pathElement === "object" &&
+							pathElement !== null &&
+							"props" in pathElement &&
+							typeof (pathElement as { props?: unknown }).props === "object"
+								? (pathElement as { props?: { d?: string } }).props?.d
+								: undefined;
 
 						if (pathData) {
 							path = new Path2D(pathData);
 							host.iconPathCache.set(cacheKey, path);
 						} else {
-							console.warn(`[extensions] No path data found for ${name}:${weight}`, { element, children });
+							console.warn(`[extensions] No path data found for ${name}:${weight}`, {
+								iconName: resolvedIconName,
+								element,
+								children,
+							});
 						}
 					} catch (err) {
 						console.error(`[extensions] Failed to extract path for icon ${name}:`, err);
