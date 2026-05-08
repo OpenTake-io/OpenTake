@@ -246,10 +246,14 @@ type PixiRendererAttempt = {
 const CANVAS_RENDERER_NOT_IMPLEMENTED_HINT = "CanvasRenderer is not yet implemented";
 const NO_RENDERER_HINT = "no available renderer";
 const PIXI_RENDERER_INIT_TIMEOUT_MS = 8_000;
+const WEBCAM_MEDIA_ELEMENT_READY_TIMEOUT_MS = 5_000;
 
 function isCanvasRenderer(application: Application): boolean {
 	const rendererName = application?.renderer?.constructor?.name?.toLowerCase();
-	return Boolean(rendererName && (rendererName.includes("canvasrenderer") || rendererName.includes("canvas")));
+	return Boolean(
+		rendererName &&
+			(rendererName.includes("canvasrenderer") || rendererName.includes("canvas")),
+	);
 }
 
 function toErrorMessage(error: unknown): string {
@@ -681,7 +685,8 @@ export class FrameRenderer {
 					backend,
 				);
 				const elapsed = Math.round(
-					(typeof performance === "undefined" ? Date.now() : performance.now()) - initStarted,
+					(typeof performance === "undefined" ? Date.now() : performance.now()) -
+						initStarted,
 				);
 				if (isCanvasRenderer(app)) {
 					throw new Error(
@@ -691,7 +696,8 @@ export class FrameRenderer {
 				return { app, backend };
 			} catch (error) {
 				const elapsed = Math.round(
-					(typeof performance === "undefined" ? Date.now() : performance.now()) - initStarted,
+					(typeof performance === "undefined" ? Date.now() : performance.now()) -
+						initStarted,
 				);
 				failures.push({
 					backend,
@@ -894,7 +900,9 @@ export class FrameRenderer {
 		}
 
 		const cachedTimestamp =
-			kind === "scene" ? this.retainedSceneBitmapTimestamp : this.retainedBackgroundBitmapTimestamp;
+			kind === "scene"
+				? this.retainedSceneBitmapTimestamp
+				: this.retainedBackgroundBitmapTimestamp;
 		const cachedBitmap =
 			kind === "scene" ? this.retainedSceneBitmap : this.retainedBackgroundBitmap;
 		if (cachedTimestamp === frame.timestamp && cachedBitmap) {
@@ -924,8 +932,8 @@ export class FrameRenderer {
 	private resolveRetainedVideoFrameSource(
 		frame: VideoFrame,
 		kind: "scene" | "background" | "webcam",
-		_fallbackWidth: number,
-		_fallbackHeight: number,
+		fallbackWidth: number,
+		fallbackHeight: number,
 	): CanvasImageSource | VideoFrame {
 		if (this.rendererBackend !== "webgpu") {
 			return frame;
@@ -948,12 +956,7 @@ export class FrameRenderer {
 				`[ModernFrameRenderer] Failed to retain ${kind} VideoFrame, falling back to staging canvas:`,
 				error,
 			);
-			return this.stageVideoFrameForTexture(
-				frame,
-				"scene",
-				this.config.videoWidth,
-				this.config.videoHeight,
-			);
+			return this.stageVideoFrameOnCanvas(frame, kind, fallbackWidth, fallbackHeight);
 		}
 	}
 
@@ -1010,21 +1013,12 @@ export class FrameRenderer {
 		return { canvas, context };
 	}
 
-	private stageVideoFrameForTexture(
+	private stageVideoFrameOnCanvas(
 		frame: VideoFrame,
 		kind: "scene" | "background" | "webcam",
 		fallbackWidth: number,
 		fallbackHeight: number,
 	): CanvasImageSource | VideoFrame {
-		if (this.rendererBackend === "webgpu") {
-			return this.resolveRetainedVideoFrameSource(
-				frame,
-				kind,
-				fallbackWidth,
-				fallbackHeight,
-			);
-		}
-
 		const width = Math.max(1, frame.displayWidth || fallbackWidth);
 		const height = Math.max(1, frame.displayHeight || fallbackHeight);
 		const staging = this.ensureVideoFrameStagingCanvas(kind, width, height);
@@ -1035,6 +1029,19 @@ export class FrameRenderer {
 		staging.context.clearRect(0, 0, staging.canvas.width, staging.canvas.height);
 		staging.context.drawImage(frame, 0, 0, staging.canvas.width, staging.canvas.height);
 		return staging.canvas;
+	}
+
+	private stageVideoFrameForTexture(
+		frame: VideoFrame,
+		kind: "scene" | "background" | "webcam",
+		fallbackWidth: number,
+		fallbackHeight: number,
+	): CanvasImageSource | VideoFrame {
+		if (this.rendererBackend === "webgpu") {
+			return this.resolveRetainedVideoFrameSource(frame, kind, fallbackWidth, fallbackHeight);
+		}
+
+		return this.stageVideoFrameOnCanvas(frame, kind, fallbackWidth, fallbackHeight);
 	}
 
 	private replaceSpriteTexture(
@@ -2085,6 +2092,99 @@ export class FrameRenderer {
 		return getRenderableAssetUrl(wallpaperAsset);
 	}
 
+	private disposeWebcamMediaElement(video: HTMLVideoElement): void {
+		try {
+			video.pause();
+			video.src = "";
+			video.load();
+		} catch {
+			// Ignore media element teardown errors during export fallback.
+		}
+	}
+
+	private clearWebcamMediaElement(): void {
+		if (this.webcamVideoElement) {
+			this.disposeWebcamMediaElement(this.webcamVideoElement);
+		}
+
+		this.webcamVideoElement = null;
+		this.webcamSeekPromise = null;
+		this.cleanupWebcamSource?.();
+		this.cleanupWebcamSource = null;
+	}
+
+	private async loadWebcamMediaElementSource(webcamUrl: string): Promise<boolean> {
+		this.clearWebcamMediaElement();
+
+		let webcamSource: Awaited<ReturnType<typeof resolveMediaElementSource>>;
+		try {
+			webcamSource = await resolveMediaElementSource(webcamUrl);
+		} catch (error) {
+			console.warn("[FrameRenderer] Unable to resolve webcam media element source:", error);
+			return false;
+		}
+		this.cleanupWebcamSource = webcamSource.revoke;
+
+		const video = document.createElement("video");
+		video.src = webcamSource.src;
+		video.muted = true;
+		video.preload = "auto";
+		video.playsInline = true;
+		video.load();
+
+		const ready = await new Promise<boolean>((resolve) => {
+			let readyTimeout: number | null = null;
+			const onReady = () => {
+				if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+					return;
+				}
+				cleanup();
+				resolve(true);
+			};
+			const onError = () => {
+				cleanup();
+				resolve(false);
+			};
+			const cleanup = () => {
+				video.removeEventListener("loadeddata", onReady);
+				video.removeEventListener("canplay", onReady);
+				video.removeEventListener("canplaythrough", onReady);
+				video.removeEventListener("error", onError);
+				if (readyTimeout !== null) {
+					window.clearTimeout(readyTimeout);
+					readyTimeout = null;
+				}
+			};
+
+			if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+				resolve(true);
+				return;
+			}
+
+			video.addEventListener("loadeddata", onReady, { once: true });
+			video.addEventListener("canplay", onReady, { once: true });
+			video.addEventListener("canplaythrough", onReady, { once: true });
+			video.addEventListener("error", onError, { once: true });
+			readyTimeout = window.setTimeout(() => {
+				console.warn(
+					`[FrameRenderer] Webcam media element fallback did not become ready within ${WEBCAM_MEDIA_ELEMENT_READY_TIMEOUT_MS}ms`,
+				);
+				onError();
+			}, WEBCAM_MEDIA_ELEMENT_READY_TIMEOUT_MS);
+		});
+
+		if (ready && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+			this.webcamVideoElement = video;
+			this.lastSyncedWebcamTime = null;
+			return true;
+		}
+
+		console.warn("[FrameRenderer] Webcam overlay unavailable during export");
+		this.disposeWebcamMediaElement(video);
+		this.clearWebcamMediaElement();
+		return false;
+	}
+
 	private async setupWebcamSource(): Promise<void> {
 		const webcamUrl = this.config.webcamUrl;
 		if (!this.config.webcam?.enabled || !webcamUrl) {
@@ -2092,9 +2192,7 @@ export class FrameRenderer {
 			void this.webcamForwardFrameSource?.destroy();
 			this.webcamForwardFrameSource = null;
 			this.closeWebcamDecodedFrame();
-			this.cleanupWebcamSource?.();
-			this.cleanupWebcamSource = null;
-			this.webcamVideoElement = null;
+			this.clearWebcamMediaElement();
 			this.webcamFrameCacheCanvas = null;
 			this.webcamFrameCacheCtx = null;
 			this.lastSyncedWebcamTime = null;
@@ -2108,8 +2206,7 @@ export class FrameRenderer {
 		void this.webcamForwardFrameSource?.destroy();
 		this.webcamForwardFrameSource = null;
 		this.closeWebcamDecodedFrame();
-		this.cleanupWebcamSource?.();
-		this.cleanupWebcamSource = null;
+		this.clearWebcamMediaElement();
 		this.webcamFrameCacheCanvas = null;
 		this.webcamFrameCacheCtx = null;
 		this.lastWebcamCacheRefreshTime = null;
@@ -2132,55 +2229,7 @@ export class FrameRenderer {
 			);
 		}
 
-		const webcamSource = await resolveMediaElementSource(webcamUrl);
-		this.cleanupWebcamSource = webcamSource.revoke;
-
-		const video = document.createElement("video");
-		video.src = webcamSource.src;
-		video.muted = true;
-		video.preload = "auto";
-		video.playsInline = true;
-		video.load();
-
-		await new Promise<void>((resolve, reject) => {
-			const onReady = () => {
-				if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
-					return;
-				}
-				cleanup();
-				resolve();
-			};
-			const onError = () => {
-				cleanup();
-				reject(new Error("Failed to load webcam source for export"));
-			};
-			const cleanup = () => {
-				video.removeEventListener("loadeddata", onReady);
-				video.removeEventListener("canplay", onReady);
-				video.removeEventListener("canplaythrough", onReady);
-				video.removeEventListener("error", onError);
-			};
-
-			if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-				resolve();
-				return;
-			}
-
-			video.addEventListener("loadeddata", onReady, { once: true });
-			video.addEventListener("canplay", onReady, { once: true });
-			video.addEventListener("canplaythrough", onReady, { once: true });
-			video.addEventListener("error", onError, { once: true });
-		}).catch((error) => {
-			console.warn("[FrameRenderer] Webcam overlay unavailable during export:", error);
-			this.webcamVideoElement = null;
-		});
-
-		if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-			this.webcamVideoElement = video;
-			return;
-		}
-
-		this.webcamVideoElement = null;
+		await this.loadWebcamMediaElementSource(webcamUrl);
 		this.lastSyncedWebcamTime = null;
 	}
 
@@ -2457,13 +2506,30 @@ export class FrameRenderer {
 
 		if (this.webcamForwardFrameSource) {
 			const clampedTime = clampMediaTimeToDuration(webcamTargetTime, null);
-			const decodedFrame = await this.webcamForwardFrameSource.getFrameAtTime(clampedTime);
-			this.closeWebcamDecodedFrame();
-			this.webcamDecodedFrame = decodedFrame;
-			if (decodedFrame) {
-				this.lastSyncedWebcamTime = clampedTime;
+			try {
+				const decodedFrame =
+					await this.webcamForwardFrameSource.getFrameAtTime(clampedTime);
+				this.closeWebcamDecodedFrame();
+				this.webcamDecodedFrame = decodedFrame;
+				if (decodedFrame) {
+					this.lastSyncedWebcamTime = clampedTime;
+				}
+				return;
+			} catch (error) {
+				console.warn(
+					"[FrameRenderer] Decoder-backed webcam source failed during export; falling back to media element sync:",
+					error,
+				);
+				this.webcamForwardFrameSource.cancel();
+				void this.webcamForwardFrameSource.destroy();
+				this.webcamForwardFrameSource = null;
+				this.closeWebcamDecodedFrame();
+				this.lastSyncedWebcamTime = null;
+				const webcamUrl = this.config.webcamUrl;
+				if (!webcamUrl || !(await this.loadWebcamMediaElementSource(webcamUrl))) {
+					return;
+				}
 			}
-			return;
 		}
 
 		const webcamVideo = this.webcamVideoElement;
