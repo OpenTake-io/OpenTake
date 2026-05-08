@@ -1,0 +1,116 @@
+# Refonte Totale de timeline avec Parité Fonctionnelle (Big Bang)                             
+                                                                                                
+  ## Résumé                                                                                     
+                                                                                                
+  Objectif: remplacer l’implémentation actuelle de TimelineEditor.tsx (2372 lignes) par une     
+  architecture modulaire, lisible et testable, sans perte de fonctionnalités.                   
+  Stratégie retenue: big bang sans couche de compatibilité, avec conservation stricte du        
+  contrat externe (TimelineEditor props + TimelineEditorHandle).                                
+                                                                                                
+  ## Changements d’implémentation                                                               
+                                                                                                
+  1. Nouvelle architecture par dossiers (feature-first)                                         
+                                                                                                
+  - timeline/core/: constantes, types internes, utilitaires temporels (scale, range, format,    
+    rowId, overlap).                                                                            
+  - timeline/model/: mapping régions -> items timeline, labels, calculs de spans, sélection.    
+  - timeline/hooks/: hooks métier découplés:                                                    
+      - useTimelineRange                                                                        
+      - useTimelineSelection                                                                    
+      - useTimelineKeyboardShortcuts                                                            
+      - useTimelineZoomActions                                                                  
+      - useTimelineAudioActions                                                                 
+      - useTimelineAnnotationsActions                                                           
+      - useTimelineNormalization                                                                
+  - timeline/dnd/: adaptation dnd-timeline (clamp drag/resize, voisinage, row resolve),         
+    extraction de la logique actuelle de TimelineWrapper.                                       
+  - timeline/components/:                                                                       
+      - editor/TimelineEditorShell (orchestration haut niveau)                                  
+      - toolbar/TimelineToolbar                                                                 
+      - viewport/TimelineViewport                                                               
+      - axis/TimelineAxis                                                                       
+      - playhead/PlaybackCursor                                                                 
+      - rows/{ClipRow,ZoomRow,AnnotationRows,AudioRows}                                         
+      - overlays/{ClipMarkerOverlay,GhostPlayhead,GhostZoom}                                    
+      - keyframes/KeyframeMarkers                                                               
+  - timeline/services/:                                                                         
+      - audioFilePlacementService (picker + metadata + track fit)                               
+      - zoomSuggestionService (wrapping buildInteractionZoomSuggestions)                        
+                                                                                                
+  2. Découpage de TimelineEditor.tsx                                                            
+                                                                                                
+  - Garder uniquement:                                                                          
+      - API publique (TimelineEditorProps, TimelineEditorHandle)                                
+      - composition des hooks/composants                                                        
+      - useImperativeHandle                                                                     
+  - Déplacer tout le reste:                                                                     
+      - handlers clavier/souris                                                                 
+      - logique add/delete/select (zoom/clip/annotation/audio/keyframes)                        
+      - logique de normalisation spans                                                          
+      - logique pan/zoom range                                                                  
+      - logique ghost/hover rows                                                                
+      - logique auto-suggest zooms                                                              
+      - logique audio placement multi-track                                                     
+                                                                                                
+  3. Contrats publics et interfaces                                                             
+                                                                                                
+  - Inchangés:                                                                                  
+      - export default TimelineEditor                                                           
+      - export TimelineEditorHandle                                                             
+      - signature complète des props actuelles                                                  
+      - comportement des callbacks (onZoomAdded, onAudioAdded, onItemSpanChange, etc.)          
+  - Ajouts internes uniquement:                                                                 
+      - types internes (TimelineItemViewModel, RowDescriptor, SelectionState,                   
+        TimelineActionContext)                                                                  
+      - interfaces de services purs pour tests unitaires                                        
+                                                                                                
+  4. Nettoyage qualité                                                                          
+                                                                                                
+  - Éliminer duplications (ex: setRange(createInitialRange(totalMs)) présent 2 fois).           
+  - Centraliser constantes magiques (1000, 150, labels clavier, etc.).                          
+  - Isoler tous les side-effects (window.addEventListener, electronAPI, toast) dans hooks       
+    dédiés.                                                                                     
+  - Séparer strictement:                                                                        
+      - logique pure (testable sans DOM)                                                        
+      - logique React/UI                                                                        
+      - I/O plateforme (Electron/audio)                                                         
+                                                                                                
+  ## Plan de tests (parité de features)                                                         
+                                                                                                
+  1. Tests unitaires (logique pure)                                                             
+                                                                                                
+  - placement zoom: disponibilité, clip boundaries, overlap rules.                              
+  - placement audio: choix de piste, gap computation, fallback track.                           
+  - clamping drag/resize + minDuration + voisins.                                               
+  - normalisation régions au changement de durée totale.                                        
+  - formatters temps/axis scale/row id resolvers.                                               
+                                                                                                
+  2. Tests d’intégration React                                                                  
+                                                                                                
+  - timeline click -> seek.                                                                     
+  - drag playhead + snap keyframe.                                                              
+  - drag/resize item par row (zoom/clip/audio).                                                 
+  - ghost playhead + ghost zoom apparition/disparition.                                         
+  - keyboard shortcuts (A, Z, C, delete, select all timeline blocks).                           
+  - cycle annotations Tab/Shift+Tab.                                                            
+  - auto-suggest zooms (cas succès + cas toast d’erreur).                                       
+                                                                                                
+  3. Scénarios e2e ciblés (smoke)                                                               
+                                                                                                
+  - session complète: add zoom, split clip, add annotation, add audio, move/resize/delete,      
+    crop action, aspect ratio custom.                                                           
+  - validation “avant/après refacto” sur jeu de données identique (snapshot d’état timeline et  
+    callbacks attendus).                                                                        
+                                                                                                
+  4. Critères d’acceptation                                                                     
+  - API publique strictement identique.
+  - composants/fichiers courts avec responsabilité unique.
+  - couverture forte sur logique timeline + interactions critiques.
+
+  ## Hypothèses et choix verrouillés
+
+  - Refonte en big bang (pas de couche compatibilité intermédiaire).
+  - Approche hooks modulaires (pas de reducer global/state machine).
+  - Niveau de validation: forte couverture + scénarios UI.
+  - Le périmètre visuel reste aligné au design actuel; priorité à la séparation propre et à la  
+    maintenabilité.
