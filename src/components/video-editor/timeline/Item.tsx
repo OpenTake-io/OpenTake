@@ -133,7 +133,6 @@ export default function Item({
 					}}
 					onClick={(event) => {
 						event.stopPropagation();
-						handleSelect();
 					}}
 				>
 					<div
