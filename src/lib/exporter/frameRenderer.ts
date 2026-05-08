@@ -11,6 +11,7 @@ import type {
 	Padding,
 	SpeedRegion,
 	WebcamOverlaySettings,
+	ZoomMotionBlurTuning,
 	ZoomRegion,
 	ZoomTransitionEasing,
 } from "@/components/video-editor/types";
@@ -49,6 +50,7 @@ import {
 	type MotionBlurState,
 } from "@/components/video-editor/videoPlayback/zoomTransform";
 import {
+	getWebcamCropSourceRect,
 	getWebcamOverlayPosition,
 	getWebcamOverlaySizePx,
 } from "@/components/video-editor/webcamOverlay";
@@ -74,10 +76,9 @@ import { renderAnnotations } from "./annotationRenderer";
 import { renderCaptions } from "./captionRenderer";
 import { ForwardFrameSource } from "./forwardFrameSource";
 import { resolveMediaElementSource } from "./localMediaSource";
-import {
-	buildTemporalSamplePlanUs,
-	getTemporalMotionBlurConfig,
-} from "./temporalMotionBlur";
+import { buildTemporalSamplePlanUs, getTemporalMotionBlurConfig } from "./temporalMotionBlur";
+
+const TEMPORAL_ZOOM_MOTION_BLUR_ENABLED = false;
 
 interface FrameRenderConfig {
 	width: number;
@@ -89,6 +90,7 @@ interface FrameRenderConfig {
 	shadowIntensity: number;
 	backgroundBlur: number;
 	zoomMotionBlur?: number;
+	zoomMotionBlurTuning?: ZoomMotionBlurTuning;
 	zoomTemporalMotionBlur?: number;
 	zoomMotionBlurSampleCount?: number | null;
 	zoomMotionBlurShutterFraction?: number | null;
@@ -122,6 +124,9 @@ interface FrameRenderConfig {
 	cursorSpringStiffnessMultiplier?: number;
 	cursorSpringDampingMultiplier?: number;
 	cursorSpringMassMultiplier?: number;
+	cameraSpringStiffnessMultiplier?: number;
+	cameraSpringDampingMultiplier?: number;
+	cameraSpringMassMultiplier?: number;
 	zoomSmoothness?: number;
 	zoomClassicMode?: boolean;
 	cursorMotionBlur?: number;
@@ -139,6 +144,52 @@ interface AnimationState {
 	progress: number;
 	x: number;
 	y: number;
+}
+
+type ExportRenderBackend = "webgl" | "webgpu";
+type PixiRendererAttempt = {
+	backend: ExportRenderBackend;
+	message: string;
+};
+
+const PIXI_RENDERER_INIT_TIMEOUT_MS = 8_000;
+
+function isCanvasRenderer(renderer: Application): boolean {
+	const rendererName = renderer?.renderer?.constructor?.name?.toLowerCase();
+	return Boolean(rendererName && (rendererName.includes("canvasrenderer") || rendererName.includes("canvas")));
+}
+
+function toErrorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error ?? "Unknown renderer init error");
+}
+
+type PixiInitOptions = Parameters<Application["init"]>[0];
+
+async function initApplicationWithTimeout(
+	app: Application,
+	options: PixiInitOptions,
+	backend: ExportRenderBackend,
+): Promise<void> {
+	const timeoutErrorMessage = `Initialization timed out after ${PIXI_RENDERER_INIT_TIMEOUT_MS}ms for ${backend} renderer`;
+	let timeoutId: ReturnType<typeof setTimeout> | undefined;
+	const timeoutPromise = new Promise<never>((_, reject) => {
+		timeoutId = setTimeout(() => {
+			reject(new Error(timeoutErrorMessage));
+		}, PIXI_RENDERER_INIT_TIMEOUT_MS);
+	});
+
+	try {
+		await Promise.race([app.init(options), timeoutPromise]);
+	} finally {
+		if (timeoutId !== undefined) {
+			clearTimeout(timeoutId);
+		}
+	}
+}
+
+function summarizeRendererAttempts(attempts: readonly PixiRendererAttempt[]): string {
+	const details = attempts.map((attempt) => `${attempt.backend}: ${attempt.message}`).join(" | ");
+	return `No supported Pixi export backend was available. Attempted: ${details}`;
 }
 
 interface VideoTextureSource {
@@ -228,7 +279,6 @@ export class FrameRenderer {
 	private motionBlurState: MotionBlurState;
 	private layoutCache: LayoutCache | null = null;
 	private currentVideoTime = 0;
-	private lastMotionVector = { x: 0, y: 0 };
 	private springScale: SpringState;
 	private springX: SpringState;
 	private springY: SpringState;
@@ -260,6 +310,77 @@ export class FrameRenderer {
 		this.cursorFollowCamera = createCursorFollowCameraState();
 	}
 
+	private async createPixiApplication(
+		canvas: HTMLCanvasElement,
+	): Promise<{ app: Application; backend: ExportRenderBackend }> {
+		const baseOptions = {
+			canvas,
+			width: this.config.width,
+			height: this.config.height,
+			backgroundAlpha: 0,
+			antialias: true,
+			failIfMajorPerformanceCaveat: false,
+			resolution: 1,
+			autoDensity: true,
+			autoStart: false,
+			sharedTicker: false,
+			powerPreference: "high-performance" as const,
+		};
+
+		const preferredRenderBackend = this.config.preferredRenderBackend;
+		const backendOrder =
+			preferredRenderBackend === "webgpu"
+				? (["webgpu", "webgl"] as const)
+				: preferredRenderBackend === "webgl"
+					? (["webgl", "webgpu"] as const)
+					: (["webgl", "webgpu"] as const);
+		const failures: PixiRendererAttempt[] = [];
+
+		for (const backend of backendOrder) {
+			if (backend === "webgpu" && !(typeof navigator !== "undefined" && "gpu" in navigator)) {
+				failures.push({
+					backend,
+					message: "WebGPU runtime is unavailable in this environment.",
+				});
+				continue;
+			}
+
+			const app = new Application();
+			const initStarted = typeof performance === "undefined" ? Date.now() : performance.now();
+			try {
+				await initApplicationWithTimeout(
+					app,
+					{
+						...baseOptions,
+						preference: backend,
+					},
+					backend,
+				);
+				const elapsed = Math.round(
+					(typeof performance === "undefined" ? Date.now() : performance.now()) - initStarted,
+				);
+				if (isCanvasRenderer(app)) {
+					throw new Error(
+						`Renderer initialized with unsupported fallback backend after ${elapsed}ms: ${app.renderer.constructor?.name ?? "unknown"}`,
+					);
+				}
+				return { app, backend };
+			} catch (error) {
+				const elapsed = Math.round(
+					(typeof performance === "undefined" ? Date.now() : performance.now()) - initStarted,
+				);
+				failures.push({ backend, message: `${toErrorMessage(error)} (after ${elapsed}ms)` });
+				console.warn(
+					`[FrameRenderer] ${backend} renderer unavailable after ${elapsed}ms; trying next backend.`,
+					error,
+				);
+				app.destroy(true);
+			}
+		}
+
+		throw new Error(summarizeRendererAttempts(failures));
+	}
+
 	async initialize(): Promise<void> {
 		let cursorOverlayEnabled = true;
 		try {
@@ -288,23 +409,9 @@ export class FrameRenderer {
 		}
 
 		// Initialize PixiJS with optimized settings for export performance
-		this.app = new Application();
-		await this.app.init({
-			canvas,
-			width: this.config.width,
-			height: this.config.height,
-			backgroundAlpha: 0,
-			antialias: true,
-			failIfMajorPerformanceCaveat: false,
-			resolution: 1,
-			autoDensity: true,
-			autoStart: false,
-			sharedTicker: false,
-			powerPreference: "high-performance",
-			...(this.config.preferredRenderBackend
-				? { preference: this.config.preferredRenderBackend }
-				: {}),
-		});
+		const { app, backend } = await this.createPixiApplication(canvas);
+		this.app = app;
+		console.log(`[FrameRenderer] Export renderer backend: ${backend}`);
 
 		// Setup containers
 		this.cameraContainer = new Container();
@@ -340,7 +447,7 @@ export class FrameRenderer {
 		await this.setupFrame();
 
 		if ((this.config.zoomMotionBlur ?? 0) > 0) {
-			this.zoomBlurFilter = new ZoomBlurFilter({ strength: 0 });
+			this.zoomBlurFilter = new ZoomBlurFilter({ strength: 0, maxKernelSize: 13 });
 			this.motionBlurFilter = new MotionBlurFilter([0, 0], 5, 0);
 			this.videoContainer.filterArea = new Rectangle(
 				0,
@@ -348,7 +455,7 @@ export class FrameRenderer {
 				this.config.width,
 				this.config.height,
 			);
-			this.videoContainer.filters = [this.zoomBlurFilter, this.motionBlurFilter];
+			this.videoContainer.filters = [this.motionBlurFilter, this.zoomBlurFilter];
 		} else {
 			this.videoContainer.filters = null;
 		}
@@ -1274,7 +1381,10 @@ export class FrameRenderer {
 		}
 
 		const temporalSnapshot =
-			typeof frameDurationUs === "number" && frameDurationUs > 0
+			TEMPORAL_ZOOM_MOTION_BLUR_ENABLED &&
+			(this.config.zoomTemporalMotionBlur ?? 0) > 0 &&
+			typeof frameDurationUs === "number" &&
+			frameDurationUs > 0
 				? await this.renderTemporalMotionBlurFrame(
 						timestamp,
 						cursorTimestamp,
@@ -1441,13 +1551,10 @@ export class FrameRenderer {
 
 		const TICKS_PER_FRAME = 1;
 
-		let maxMotionIntensity = 0;
 		for (let i = 0; i < TICKS_PER_FRAME; i++) {
-			const motionIntensity = this.updateAnimationState(timeMs);
-			maxMotionIntensity = Math.max(maxMotionIntensity, motionIntensity);
+			this.updateAnimationState(timeMs);
 		}
 
-		// Apply transform once with maximum motion intensity from all ticks
 		applyZoomTransform({
 			cameraContainer: this.cameraContainer,
 			zoomBlurFilter: this.zoomBlurFilter,
@@ -1458,10 +1565,9 @@ export class FrameRenderer {
 			zoomProgress: this.animationState.progress,
 			focusX: this.animationState.focusX,
 			focusY: this.animationState.focusY,
-			motionIntensity: maxMotionIntensity,
-			motionVector: this.lastMotionVector,
 			isPlaying: true,
 			motionBlurAmount: this.config.zoomMotionBlur ?? 0,
+			motionBlurTuning: this.config.zoomMotionBlurTuning,
 			transformOverride: {
 				scale: this.animationState.appliedScale,
 				x: this.animationState.x,
@@ -1833,7 +1939,11 @@ export class FrameRenderer {
 			this.lastContentTimeMs !== null ? timeMs - this.lastContentTimeMs : 1000 / 60;
 		this.lastContentTimeMs = timeMs;
 
-		const zoomSpringConfig = getZoomSpringConfig(this.config.zoomSmoothness);
+		const zoomSpringConfig = getZoomSpringConfig(this.config.zoomSmoothness, {
+			stiffnessMultiplier: this.config.cameraSpringStiffnessMultiplier,
+			dampingMultiplier: this.config.cameraSpringDampingMultiplier,
+			massMultiplier: this.config.cameraSpringMassMultiplier,
+		});
 
 		if (this.config.zoomClassicMode) {
 			state.appliedScale = projectedTransform.scale;
@@ -1862,11 +1972,6 @@ export class FrameRenderer {
 				zoomSpringConfig,
 			);
 		}
-
-		this.lastMotionVector = {
-			x: state.x - prevX,
-			y: state.y - prevY,
-		};
 
 		return Math.max(
 			Math.abs(state.appliedScale - prevScale),
@@ -1918,7 +2023,7 @@ export class FrameRenderer {
 			},
 		);
 
-		const motionIntensity = this.updateAnimationState(timeMs);
+		this.updateAnimationState(timeMs);
 
 		applyZoomTransform({
 			cameraContainer: this.cameraContainer,
@@ -1930,10 +2035,9 @@ export class FrameRenderer {
 			zoomProgress: this.animationState.progress,
 			focusX: this.animationState.focusX,
 			focusY: this.animationState.focusY,
-			motionIntensity,
-			motionVector: this.lastMotionVector,
 			isPlaying: true,
 			motionBlurAmount: useVelocityMotionBlur ? (this.config.zoomMotionBlur ?? 0) : 0,
+			motionBlurTuning: this.config.zoomMotionBlurTuning,
 			transformOverride: {
 				scale: this.animationState.appliedScale,
 				x: this.animationState.x,
@@ -1971,21 +2075,14 @@ export class FrameRenderer {
 		frameDurationUs: number,
 		layoutCache: LayoutCache,
 	): Promise<RenderSnapshot | null> {
-		if (
-			!this.compositeCanvas ||
-			!this.compositeCtx ||
-			!this.temporalAccumulationCtx
-		) {
+		if (!this.compositeCanvas || !this.compositeCtx || !this.temporalAccumulationCtx) {
 			return null;
 		}
 
-		const blurConfig = getTemporalMotionBlurConfig(
-			this.config.zoomTemporalMotionBlur ?? this.config.zoomMotionBlur,
-			{
-				sampleCount: this.config.zoomMotionBlurSampleCount,
-				shutterFraction: this.config.zoomMotionBlurShutterFraction,
-			},
-		);
+		const blurConfig = getTemporalMotionBlurConfig(this.config.zoomTemporalMotionBlur, {
+			sampleCount: this.config.zoomMotionBlurSampleCount,
+			shutterFraction: this.config.zoomMotionBlurShutterFraction,
+		});
 		if (!blurConfig) {
 			return null;
 		}
@@ -2269,9 +2366,14 @@ export class FrameRenderer {
 				: "videoHeight" in webcamFrameSource
 					? webcamFrameSource.videoHeight
 					: webcamFrameSource.height) || size;
-		const coverScale = Math.max(size / sourceWidth, size / sourceHeight);
-		const drawWidth = sourceWidth * coverScale;
-		const drawHeight = sourceHeight * coverScale;
+		const { sx, sy, sw, sh } = getWebcamCropSourceRect(
+			webcam.cropRegion,
+			sourceWidth,
+			sourceHeight,
+		);
+		const coverScale = Math.max(size / sw, size / sh);
+		const drawWidth = sw * coverScale;
+		const drawHeight = sh * coverScale;
 		const drawX = (size - drawWidth) / 2;
 		const drawY = (size - drawHeight) / 2;
 
@@ -2282,10 +2384,30 @@ export class FrameRenderer {
 			bubbleCtx.save();
 			bubbleCtx.translate(size, 0);
 			bubbleCtx.scale(-1, 1);
-			bubbleCtx.drawImage(webcamFrameSource, drawX, drawY, drawWidth, drawHeight);
+			bubbleCtx.drawImage(
+				webcamFrameSource,
+				sx,
+				sy,
+				sw,
+				sh,
+				drawX,
+				drawY,
+				drawWidth,
+				drawHeight,
+			);
 			bubbleCtx.restore();
 		} else {
-			bubbleCtx.drawImage(webcamFrameSource, drawX, drawY, drawWidth, drawHeight);
+			bubbleCtx.drawImage(
+				webcamFrameSource,
+				sx,
+				sy,
+				sw,
+				sh,
+				drawX,
+				drawY,
+				drawWidth,
+				drawHeight,
+			);
 		}
 		bubbleCtx.restore();
 
