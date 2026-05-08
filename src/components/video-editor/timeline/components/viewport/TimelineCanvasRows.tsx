@@ -31,7 +31,7 @@ interface TimelineCanvasRowsProps {
 	onSelectAnnotation?: (id: string | null) => void;
 	onSelectAudio?: (id: string | null) => void;
 	audioPeaks?: AudioPeaksData | null;
-	direction: "ltr" | "rtl";
+	direction: string;
 	canShowGhostZoom: boolean;
 	ghostStartMs: number | null;
 	ghostStartOffsetPx: number;

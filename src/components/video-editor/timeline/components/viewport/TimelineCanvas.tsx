@@ -1,5 +1,6 @@
 import { useTimelineContext } from "dnd-timeline";
 import { useCallback, useMemo, useRef } from "react";
+import type { MouseEvent } from "react";
 import {
 	getTimelineContentMinHeightPx,
 	getTimelineRowsMinHeightPx,
@@ -75,7 +76,7 @@ export default function TimelineCanvas({
 	);
 
 	const handleTimelineClick = useCallback(
-		(e: React.MouseEvent<HTMLDivElement>) => {
+		(e: MouseEvent<HTMLDivElement>) => {
 			if (!onSeek || videoDurationMs <= 0) return;
 
 			onSelectZoom?.(null);

@@ -1,7 +1,7 @@
 import { useCallback, useState, type MouseEvent } from "react";
 
 interface UseTimelineCanvasHoverParams {
-	direction: "ltr" | "rtl";
+	direction: string;
 	sidebarWidth: number;
 	rangeStart: number;
 	rangeEnd: number;
