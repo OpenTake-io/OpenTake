@@ -41,14 +41,14 @@ Platform notes:
 Recordly can automatically emphasize activity with zoom suggestions, smooth cursor movement, add motion effects, and place the final composition inside a styled frame with wallpapers, colors, gradients, blur, padding, and shadows.
 
 <p>
-  <img src="./feature1.gif" width="450" alt="Recordly cursor and zoom demo video">
+  <img src="./docs/media/feature1.gif" width="450" alt="Recordly cursor and zoom demo video">
 </p>
 
 ## Dynamic webcam bubble overlays
 Add webcam footage as an overlay bubble, position it with presets or custom coordinates, mirror it, control shadow and roundness, and optionally make it react to zoom so it stays visually balanced during motion.
 
 <p>
-  <img src="./feature2.gif" width="450" alt="Recordly webcam overlay demo video">
+  <img src="./docs/media/feature2.gif" width="450" alt="Recordly webcam overlay demo video">
 </p>
 
 ## Timeline editing built for demos
@@ -397,4 +397,3 @@ Created by
 [@webadderall](https://x.com/webadderall)
 
 ---
-

@@ -2,7 +2,7 @@ import { Assets, BlurFilter, Container, Graphics, Sprite, Texture } from "pixi.j
 import { MotionBlurFilter } from "pixi-filters/motion-blur";
 import { getRenderableAssetUrl } from "@/lib/assetPath";
 import { extensionHost } from "@/lib/extensions";
-import minimalCursorUrl from "../../../../Minimal Cursor.svg";
+import minimalCursorUrl from "@/assets/cursors/custom/minimal-cursor.svg";
 import {
 	type CursorStyle,
 	type CursorTelemetryPoint,
