@@ -64,6 +64,7 @@ export type EditorEffectSection =
 	| "crop"
 	| "extensions"
 	| "clip"
+	| "audio"
 	| `ext:${string}`;
 
 export type ZoomTransitionEasing = "recordly" | "glide" | "smooth" | "snappy" | "linear";
@@ -169,6 +170,7 @@ export interface ClipRegion {
 	endMs: number;
 	speed: number;
 	muted?: boolean;
+	showSourceAudio?: boolean;
 }
 
 export function getClipSourceEndMs(clip: ClipRegion): number {
@@ -464,6 +466,7 @@ export const DEFAULT_PADDING: Padding = {
 	right: 20,
 	linked: true,
 };
+export type { SourceAudioTrackSetting, SourceAudioTrackSettings } from "@/components/video-editor/audio/audioTypes";
 
 export interface AudioRegion {
 	id: string;
@@ -471,6 +474,7 @@ export interface AudioRegion {
 	endMs: number;
 	audioPath: string;
 	volume: number;
+	normalize?: boolean;
 	trackIndex?: number;
 }
 

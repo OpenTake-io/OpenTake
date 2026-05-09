@@ -277,12 +277,6 @@ export async function muxNativeMacRecordingWithAudio(
 
 	await moveFileWithOverwrite(mixedOutputPath, videoPath);
 	console.log("[mux] Successfully muxed audio into video:", videoPath);
-
-	for (const audioPath of [systemAudioPath, microphonePath]) {
-		if (audioPath) {
-			await fs.rm(audioPath, { force: true }).catch(() => undefined);
-		}
-	}
 }
 
 export function attachNativeCaptureLifecycle(process: ChildProcessWithoutNullStreams) {

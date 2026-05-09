@@ -24,7 +24,6 @@ import {
 import type { AudioSyncAdjustment } from "../types";
 import { moveFileWithOverwrite } from "../utils";
 import {
-	RECORDING_AUDIO_SIDECAR_DEBUG_ENV,
 	shouldKeepRecordingAudioSidecars,
 	WINDOWS_NATIVE_MIC_PRE_FILTERS,
 } from "./audioFilters";
@@ -474,30 +473,6 @@ export async function muxNativeWindowsVideoWithAudio(
 		throw error;
 	}
 
-	if (keepAudioSidecars) {
-		console.log(
-			`[mux-win] Keeping native audio sidecars because ${RECORDING_AUDIO_SIDECAR_DEBUG_ENV} is enabled`,
-		);
-		return {
-			muxed: true,
-			videoDurationSeconds: videoDuration,
-			muxTimeoutMs,
-			audioInputs,
-			audio,
-			outputPath: videoPath,
-			keptAudioSidecars: true,
-		};
-	}
-
-	for (const audioPath of [systemAudioPath, micAudioPath]) {
-		if (audioPath) {
-			await Promise.all([
-				fs.rm(audioPath, { force: true }).catch(() => undefined),
-				fs.rm(`${audioPath}.json`, { force: true }).catch(() => undefined),
-			]);
-		}
-	}
-
 	return {
 		muxed: true,
 		videoDurationSeconds: videoDuration,
@@ -505,6 +480,6 @@ export async function muxNativeWindowsVideoWithAudio(
 		audioInputs,
 		audio,
 		outputPath: videoPath,
-		keptAudioSidecars: false,
+		keptAudioSidecars: true,
 	};
 }

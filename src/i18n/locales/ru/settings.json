@@ -19,8 +19,11 @@
 	},
 	"clip": {
 		"title": "Клип",
-		"muteAudio": "Выключить звук",
-		"delete": "Удалить"
+		"mute": "Без звука",
+		"mutedState": "Звук выключен",
+		"unmutedState": "Звук включен",
+		"separateClipFromAudio": "Отделить аудио от клипа",
+		"delete": "Удалить клип"
 	},
 	"effects": {
 		"title": "Эффекты",
@@ -201,5 +204,16 @@
 		"exportVideo": "Экспортировать {{format}}",
 		"reportBug": "Сообщить об ошибке",
 		"starOnGithub": "Оценить на GitHub"
+	},
+	"audio": {
+		"title": "Аудио",
+		"volumeTitle": "Аудио",
+		"volume": "Громкость",
+		"normalize": "Нормализовать",
+		"sourceTracksTitle": "Исходное аудио клипа",
+		"systemLabel": "Системный звук",
+		"micLabel": "Микрофон",
+		"mixedLabel": "Источник",
+		"deleteRegion": "Удалить аудио"
 	}
 }
