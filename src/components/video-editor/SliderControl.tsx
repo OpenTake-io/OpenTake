@@ -69,11 +69,13 @@ export const SliderControl = memo(function SliderControl({
 			const rawValue = min + normalized * (max - min);
 			const nextValue = clamp(quantizeToStep(rawValue, min, step), min, max);
 			const finalValue = Number(nextValue.toFixed(6));
-			const currentPct = (normalized * 100).toFixed(4);
+			const finalPct = (((finalValue - min) / (max - min || 1)) * 100).toFixed(4);
 
 			// Direct DOM update for instant feedback
 			if (rootRef.current) {
-				rootRef.current.style.setProperty("--slider-pct", `${currentPct}%`);
+				rootRef.current.style.setProperty("--slider-pct", `${finalPct}%`);
+				rootRef.current.setAttribute("aria-valuenow", String(finalValue));
+				rootRef.current.setAttribute("aria-valuetext", formatValue(finalValue));
 			}
 			if (valueTextRef.current) {
 				valueTextRef.current.textContent = formatValue(finalValue);
@@ -118,6 +120,11 @@ export const SliderControl = memo(function SliderControl({
 
 				if (requestRef.current) {
 					cancelAnimationFrame(requestRef.current);
+					requestRef.current = null;
+				}
+
+				if (finishEvent.type === "pointerup") {
+					updateValue(finishEvent.clientX);
 				}
 
 				target.releasePointerCapture(pointerId);
