@@ -3,9 +3,9 @@ import { resolveSourceTrackRoutingPolicy } from "@/lib/exporter/sourceTrackRouti
 import type {
 	AudioRegion,
 	ClipRegion,
-	SourceAudioTrackSettings,
 	SpeedRegion,
 } from "../types";
+import type { SourceAudioTrackSettings } from "@/components/video-editor/audio/audioTypes";
 import { getActiveClipIdAtSourceTime, isClipMutedById } from "./clipAudio";
 import { useAudioPreviewSync } from "./useAudioPreviewSync";
 import { useClipAudioSettingsController } from "./useClipAudioSettingsController";

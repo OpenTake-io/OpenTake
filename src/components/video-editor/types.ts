@@ -466,13 +466,7 @@ export const DEFAULT_PADDING: Padding = {
 	right: 20,
 	linked: true,
 };
-
-export interface SourceAudioTrackSetting {
-	volume: number;
-	normalize: boolean;
-}
-
-export type SourceAudioTrackSettings = Record<string, SourceAudioTrackSetting>;
+export type { SourceAudioTrackSetting, SourceAudioTrackSettings } from "@/components/video-editor/audio/audioTypes";
 
 export interface AudioRegion {
 	id: string;

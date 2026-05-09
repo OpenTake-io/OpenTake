@@ -1,7 +1,8 @@
 import React, { useCallback, useMemo, useState } from "react";
-import type { SourceAudioTrackSettings } from "../types";
-
-export type SourceAudioTrackMeta = Array<{ id: string; label: string }>;
+import type {
+	SourceAudioTrackMeta,
+	SourceAudioTrackSettings,
+} from "@/components/video-editor/audio/audioTypes";
 
 interface UseSourceAudioTrackSettingsParams {
   selectedClipId: string | null;
