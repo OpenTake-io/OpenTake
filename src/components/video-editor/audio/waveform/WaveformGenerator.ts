@@ -1,6 +1,6 @@
 import WorkerConstructor from "./waveform.worker?worker";
-import type { AudioPeaksData } from "../../core/timelineTypes";
-import { WAVEFORM_DEFAULT_PEAK_COUNT } from "../../core/constants";
+import type { AudioPeaksData } from "../../timeline/core/timelineTypes";
+import { WAVEFORM_DEFAULT_PEAK_COUNT } from "../../timeline/core/constants";
 
 export class WaveformGenerator {
 	private audioContext: AudioContext;

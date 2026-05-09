@@ -17,6 +17,7 @@ import {
 } from "@/utils/aspectRatioUtils";
 import { formatShortcut } from "@/utils/platformUtils";
 import { loadEditorPreferences, saveEditorPreferences } from "../editorPreferences";
+import { fromFileUrl } from "../projectPersistence";
 import type {
 	AnnotationRegion,
 	AudioRegion,
@@ -35,6 +36,7 @@ import { useTimelineEditorRuntime } from "./hooks/useTimelineEditorRuntime";
 import { useTimelineRange } from "./hooks/useTimelineRange";
 import TimelineCanvas from "./components/viewport/TimelineCanvas";
 import TimelineToolbar from "./components/toolbar/TimelineToolbar";
+import type { AudioPeaksData } from "./core/timelineTypes";
 
 export interface TimelineEditorProps {
 	videoDuration: number;
@@ -80,6 +82,35 @@ export interface TimelineEditorProps {
 	isCropped?: boolean;
 	videoPath?: string | null;
 	hideToolbar?: boolean;
+	showSourceAudioTrack?: boolean;
+	onSourceAudioAvailabilityChange?: (available: boolean) => void;
+	sourceAudioTrackSettings?: Record<string, { volume: number; normalize: boolean }>;
+	onSourceAudioTracksMetaChange?: (tracks: Array<{ id: string; label: string }>) => void;
+}
+
+function extractLocalPathFromMediaServerUrl(input: string | null | undefined): string | null {
+	if (!input) return null;
+	try {
+		const url = new URL(input);
+		const isLocalMediaServer =
+			(url.protocol === "http:" || url.protocol === "https:") &&
+			(url.hostname === "127.0.0.1" || url.hostname === "localhost") &&
+			url.pathname === "/video";
+		if (!isLocalMediaServer) return null;
+		return url.searchParams.get("path");
+	} catch {
+		return null;
+	}
+}
+
+function buildSourceSidecarPath(source: string, suffix: "mic" | "system"): string {
+	const normalized = source.replace(/\\/g, "/");
+	const lastSlash = normalized.lastIndexOf("/");
+	const dir = lastSlash >= 0 ? normalized.slice(0, lastSlash + 1) : "";
+	const fileName = lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized;
+	const dotIndex = fileName.lastIndexOf(".");
+	const baseName = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
+	return `${dir}${baseName}.${suffix}.wav`;
 }
 
 export interface TimelineEditorHandle {
@@ -138,6 +169,10 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			isCropped = false,
 			videoPath,
 			hideToolbar = false,
+			showSourceAudioTrack = false,
+			onSourceAudioAvailabilityChange,
+			sourceAudioTrackSettings = {},
+			onSourceAudioTracksMetaChange,
 		},
 		ref,
 	) {
@@ -229,9 +264,65 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			return { previewSpans, hiddenZoomIds };
 		}, [clipRegions, liveSpanPreviewById, zoomRegions]);
 		const { shortcuts: keyShortcuts, isMac } = useShortcuts();
-		const audioPeaks = useTimelineAudioPeaks(videoPath, {
+		const sourceAudioPeaks = useTimelineAudioPeaks(videoPath, {
 			enableSourceSidecarFallback: true,
 		});
+		const localSourcePath = useMemo(() => {
+			if (!videoPath) return null;
+			return (
+				extractLocalPathFromMediaServerUrl(videoPath) ||
+				(/^file:\/\//i.test(videoPath) ? fromFileUrl(videoPath) : videoPath)
+			);
+		}, [videoPath]);
+		const micSidecarPath = useMemo(
+			() => (localSourcePath ? buildSourceSidecarPath(localSourcePath, "mic") : null),
+			[localSourcePath],
+		);
+		const systemSidecarPath = useMemo(
+			() => (localSourcePath ? buildSourceSidecarPath(localSourcePath, "system") : null),
+			[localSourcePath],
+		);
+		const micSidecarPeaks = useTimelineAudioPeaks(micSidecarPath);
+		const systemSidecarPeaks = useTimelineAudioPeaks(systemSidecarPath);
+		const sourceAudioTracks = useMemo<Array<{ id: string; label: string; peaks: AudioPeaksData }>>(() => {
+			if (systemSidecarPeaks || micSidecarPeaks) {
+				const tracks: Array<{ id: string; label: string; peaks: AudioPeaksData }> = [];
+				if (systemSidecarPeaks) tracks.push({ id: "system", label: "Source System", peaks: systemSidecarPeaks });
+				if (micSidecarPeaks) tracks.push({ id: "mic", label: "Source Mic", peaks: micSidecarPeaks });
+				return tracks;
+			}
+			return sourceAudioPeaks ? [{ id: "mixed", label: "Source", peaks: sourceAudioPeaks }] : [];
+		}, [micSidecarPeaks, sourceAudioPeaks, systemSidecarPeaks]);
+		useEffect(() => {
+			onSourceAudioTracksMetaChange?.(sourceAudioTracks.map((t) => ({ id: t.id, label: t.label })));
+		}, [onSourceAudioTracksMetaChange, sourceAudioTracks]);
+		const displaySourceAudioTracks = useMemo(() => {
+			return sourceAudioTracks.map((track) => {
+				const settings = sourceAudioTrackSettings[track.id] ?? { volume: 1, normalize: false };
+				const volume = Math.max(0, Math.min(2, settings.volume));
+				const normalize = settings.normalize;
+				const input = track.peaks.peaks;
+				const adjusted = new Float32Array(input.length);
+				for (let i = 0; i < input.length; i++) {
+					let amp = input[i];
+					if (normalize) {
+						amp = Math.sqrt(amp);
+					}
+					adjusted[i] = Math.max(0, Math.min(1, amp * volume));
+				}
+				return {
+					id: track.id,
+					label: track.label,
+					peaks: {
+						durationMs: track.peaks.durationMs,
+						peaks: adjusted,
+					} satisfies AudioPeaksData,
+				};
+			});
+		}, [sourceAudioTrackSettings, sourceAudioTracks]);
+		useEffect(() => {
+			onSourceAudioAvailabilityChange?.(sourceAudioTracks.length > 0);
+		}, [onSourceAudioAvailabilityChange, sourceAudioTracks.length]);
 
 		useEffect(() => {
 			if (aspectRatio === "native") {
@@ -474,7 +565,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							selectAllBlocksActive={selectAllBlocksActive}
 							onClearBlockSelection={clearSelectedBlocks}
 							keyframes={keyframes}
-							audioPeaks={audioPeaks}
+							sourceAudioTracks={displaySourceAudioTracks}
+							showSourceAudioTrack={showSourceAudioTrack}
 							liveSpanPreviewById={liveZoomPreview.previewSpans}
 							liveHiddenItemIds={Array.from(liveZoomPreview.hiddenZoomIds)}
 						/>
