@@ -2182,6 +2182,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 						baseMaskRef.current,
 						showCursorRef.current,
 						!isPlayingRef.current || isSeekingRef.current,
+						animationStateRef.current.appliedScale || 1,
 					);
 
 					smoothedCursorForHooks = mapSmoothedCursorToCanvasNormalized(
