@@ -23,6 +23,7 @@ function AudioWaveformComponent({
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const { range } = useTimelineContext();
 	const [resizeKey, setResizeKey] = useState(0);
+	const lastDrawAtRef = useRef(0);
 
 	// Bump resizeKey when the canvas element changes size.
 	const observerRef = useRef<ResizeObserver | null>(null);
@@ -42,57 +43,66 @@ function AudioWaveformComponent({
 	useEffect(() => {
 		const canvas = canvasRef.current;
 		if (!canvas) return;
+		let rafId = 0;
 
-		const ctx = canvas.getContext("2d");
-		if (!ctx) return;
+		const draw = () => {
+			const now = performance.now();
+			if (now - lastDrawAtRef.current < 33) return;
+			lastDrawAtRef.current = now;
 
-		const rect = canvas.getBoundingClientRect();
-		const dpr = window.devicePixelRatio || 1;
-		const width = Math.round(rect.width * dpr);
-		const height = Math.round(rect.height * dpr);
+			const ctx = canvas.getContext("2d");
+			if (!ctx) return;
 
-		if (width === 0 || height === 0) return;
+			const rect = canvas.getBoundingClientRect();
+			const dpr = window.devicePixelRatio || 1;
+			const width = Math.round(rect.width * dpr);
+			const height = Math.round(rect.height * dpr);
 
-		canvas.width = width;
-		canvas.height = height;
+			if (width === 0 || height === 0) return;
 
-		ctx.clearRect(0, 0, width, height);
+			canvas.width = width;
+			canvas.height = height;
 
-		const { peaks: peakData, durationMs } = peaks;
-		if (durationMs <= 0 || peakData.length === 0) return;
+			ctx.clearRect(0, 0, width, height);
 
-		const rawVisibleStartMs = segmentStartMs ?? range.start;
-		const rawVisibleEndMs = segmentEndMs ?? range.end;
-		const msPerBin = durationMs / peakData.length;
-		const visibleStartMs =
-			msPerBin > 0 ? Math.round(rawVisibleStartMs / msPerBin) * msPerBin : rawVisibleStartMs;
-		const visibleEndMs =
-			msPerBin > 0 ? Math.round(rawVisibleEndMs / msPerBin) * msPerBin : rawVisibleEndMs;
-		const visibleDurationMs = visibleEndMs - visibleStartMs;
-		if (visibleDurationMs <= 0) return;
+			const { peaks: peakData, durationMs } = peaks;
+			if (durationMs <= 0 || peakData.length === 0) return;
 
-		const midY = height / 2;
+			const rawVisibleStartMs = segmentStartMs ?? range.start;
+			const rawVisibleEndMs = segmentEndMs ?? range.end;
+			const msPerBin = durationMs / peakData.length;
+			const visibleStartMs =
+				msPerBin > 0 ? Math.round(rawVisibleStartMs / msPerBin) * msPerBin : rawVisibleStartMs;
+			const visibleEndMs =
+				msPerBin > 0 ? Math.round(rawVisibleEndMs / msPerBin) * msPerBin : rawVisibleEndMs;
+			const visibleDurationMs = visibleEndMs - visibleStartMs;
+			if (visibleDurationMs <= 0) return;
 
-		ctx.beginPath();
-		for (let px = 0; px < width; px++) {
-			const t = visibleStartMs + (px / width) * visibleDurationMs;
-			const exactIndex = Math.max(
-				0,
-				Math.min(peakData.length - 1, (t / durationMs) * (peakData.length - 1)),
-			);
-			const leftIndex = Math.floor(exactIndex);
-			const rightIndex = Math.min(peakData.length - 1, leftIndex + 1);
-			const mix = exactIndex - leftIndex;
-			const amplitude = peakData[leftIndex] * (1 - mix) + peakData[rightIndex] * mix;
-			const barHeight = amplitude * midY * 0.85;
+			const midY = height / 2;
 
-			ctx.moveTo(px, midY - barHeight);
-			ctx.lineTo(px, midY + barHeight);
-		}
+			ctx.beginPath();
+			for (let px = 0; px < width; px++) {
+				const t = visibleStartMs + (px / width) * visibleDurationMs;
+				const exactIndex = Math.max(
+					0,
+					Math.min(peakData.length - 1, (t / durationMs) * (peakData.length - 1)),
+				);
+				const leftIndex = Math.floor(exactIndex);
+				const rightIndex = Math.min(peakData.length - 1, leftIndex + 1);
+				const mix = exactIndex - leftIndex;
+				const amplitude = peakData[leftIndex] * (1 - mix) + peakData[rightIndex] * mix;
+				const barHeight = amplitude * midY * 0.85;
 
-		ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
-		ctx.lineWidth = dpr;
-		ctx.stroke();
+				ctx.moveTo(px, midY - barHeight);
+				ctx.lineTo(px, midY + barHeight);
+			}
+
+			ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+			ctx.lineWidth = dpr;
+			ctx.stroke();
+		};
+		rafId = requestAnimationFrame(draw);
+		return () => cancelAnimationFrame(rafId);
 	}, [peaks, range.start, range.end, resizeKey, segmentStartMs, segmentEndMs]);
 
 	return (

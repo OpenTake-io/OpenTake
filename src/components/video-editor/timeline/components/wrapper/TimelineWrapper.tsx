@@ -134,9 +134,8 @@ export default function TimelineWrapper({
 		(event: DragStartEvent) => {
 			const span = event.active.data.current.getSpanFromDragEvent?.(event);
 			if (span) showTooltip(span);
-			onLiveSpanPreviewChange?.(event.active.id as string, span ?? null);
 		},
-		[onLiveSpanPreviewChange, showTooltip],
+		[showTooltip],
 	);
 
 	const onDragMove = useCallback(
@@ -147,7 +146,10 @@ export default function TimelineWrapper({
 					? (event.activatorEvent as PointerEvent).clientX + (event.delta?.x ?? 0)
 					: undefined;
 			if (span) showTooltip(span, screenX);
-			onLiveSpanPreviewChange?.(event.active.id as string, span ?? null);
+			const moved = Math.abs(event.delta?.x ?? 0) > 0.01;
+			if (moved) {
+				onLiveSpanPreviewChange?.(event.active.id as string, span ?? null);
+			}
 		},
 		[onLiveSpanPreviewChange, showTooltip],
 	);
