@@ -57,7 +57,8 @@ interface TimelineCanvasProps {
 	selectAllBlocksActive?: boolean;
 	onClearBlockSelection?: () => void;
 	keyframes?: { id: string; time: number }[];
-	audioPeaks?: AudioPeaksData | null;
+	sourceAudioTracks?: Array<{ id: string; label: string; peaks: AudioPeaksData }>;
+	showSourceAudioTrack?: boolean;
 	liveSpanPreviewById?: Record<string, { start: number; end: number }>;
 	liveHiddenItemIds?: string[];
 }
@@ -220,7 +221,8 @@ interface TimelineCanvasRowsProps {
 	onSelectClip?: (id: string | null) => void;
 	onSelectAnnotation?: (id: string | null) => void;
 	onSelectAudio?: (id: string | null) => void;
-	audioPeaks?: AudioPeaksData | null;
+	sourceAudioTracks?: Array<{ id: string; label: string; peaks: AudioPeaksData }>;
+	showSourceAudioTrack?: boolean;
 	liveSpanPreviewById?: Record<string, { start: number; end: number }>;
 	liveHiddenItemIds?: string[];
 	direction: string;
@@ -282,7 +284,8 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 	onSelectClip,
 	onSelectAnnotation,
 	onSelectAudio,
-	audioPeaks,
+	sourceAudioTracks = [],
+	showSourceAudioTrack = false,
 	liveSpanPreviewById,
 	liveHiddenItemIds,
 	direction,
@@ -365,26 +368,27 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 					</Item>
 				))}
 			</Row>
-			{audioPeaks && (
-				<Row id={SOURCE_AUDIO_ROW_ID}>
-					{clipItems.map((item) => (
-						<Item
-							key={`source-audio-${item.id}`}
-							id={`source-audio-${item.id}`}
-							rowId={SOURCE_AUDIO_ROW_ID}
-							span={liveSpanPreviewById?.[item.id] ?? item.span}
-							disabled
-							isSelected={selectAllBlocksActive || item.id === selectedClipId}
-							onSelect={() => onSelectClip?.(item.id)}
-							variant="audio"
-							waveformPeaks={audioPeaks}
-							waveformSegmentSpan={liveSpanPreviewById?.[item.id] ?? item.span}
-						>
-							Source
-						</Item>
-					))}
-				</Row>
-			)}
+			{showSourceAudioTrack &&
+				sourceAudioTracks.map((track) => (
+					<Row key={track.id} id={`${SOURCE_AUDIO_ROW_ID}-${track.id}`}>
+						{clipItems.map((item) => (
+							<Item
+								key={`source-audio-${track.id}-${item.id}`}
+								id={`source-audio-${track.id}-${item.id}`}
+								rowId={`${SOURCE_AUDIO_ROW_ID}-${track.id}`}
+								span={liveSpanPreviewById?.[item.id] ?? item.span}
+								disabled
+								isSelected={selectAllBlocksActive || item.id === selectedClipId}
+								onSelect={() => onSelectClip?.(item.id)}
+								variant="audio"
+								waveformPeaks={track.peaks}
+								waveformSegmentSpan={liveSpanPreviewById?.[item.id] ?? item.span}
+							>
+								{track.label}
+							</Item>
+						))}
+					</Row>
+				))}
 
 			<Row
 				id={ZOOM_ROW_ID}
@@ -492,7 +496,8 @@ export default function TimelineCanvas({
 	selectAllBlocksActive = false,
 	onClearBlockSelection,
 	keyframes = [],
-	audioPeaks,
+	sourceAudioTracks = [],
+	showSourceAudioTrack = false,
 	liveSpanPreviewById,
 	liveHiddenItemIds,
 }: TimelineCanvasProps) {
@@ -646,9 +651,9 @@ export default function TimelineCanvas({
 			if (isAnnotationTrackRowId(item.rowId)) annotationRowIds.add(item.rowId);
 			if (isAudioTrackRowId(item.rowId)) audioRowIds.add(item.rowId);
 		}
-		const sourceAudioRows = audioPeaks ? 1 : 0;
+		const sourceAudioRows = showSourceAudioTrack ? sourceAudioTracks.length : 0;
 		return 2 + sourceAudioRows + annotationRowIds.size + audioRowIds.size;
-	}, [items, audioPeaks]);
+	}, [items, showSourceAudioTrack, sourceAudioTracks.length]);
 	const timelineRowsMinHeightPx = getTimelineRowsMinHeightPx(timelineRowCount);
 	const timelineContentMinHeightPx = getTimelineContentMinHeightPx(timelineRowCount);
 	const timelineViewportStretchFactor = getTimelineViewportStretchFactor(timelineRowCount);
@@ -724,7 +729,8 @@ export default function TimelineCanvas({
 					onSelectClip={onSelectClip}
 					onSelectAnnotation={onSelectAnnotation}
 					onSelectAudio={onSelectAudio}
-					audioPeaks={audioPeaks}
+					sourceAudioTracks={sourceAudioTracks}
+					showSourceAudioTrack={showSourceAudioTrack}
 					liveSpanPreviewById={liveSpanPreviewById}
 					liveHiddenItemIds={liveHiddenItemIds}
 					direction={direction}

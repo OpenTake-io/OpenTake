@@ -469,8 +469,15 @@ interface SettingsPanelProps {
 	selectedClipId?: string | null;
 	selectedClipSpeed?: number | null;
 	selectedClipMuted?: boolean | null;
+	hasClipSourceAudio?: boolean;
+	showClipSourceAudioTrack?: boolean;
 	onClipSpeedChange?: (speed: number) => void;
 	onClipMutedChange?: (muted: boolean) => void;
+	onShowClipSourceAudioTrackChange?: (show: boolean) => void;
+	sourceAudioTrackMeta?: Array<{ id: string; label: string }>;
+	sourceAudioTrackSettings?: Record<string, { volume: number; normalize: boolean }>;
+	onSourceAudioTrackVolumeChange?: (id: string, volume: number) => void;
+	onSourceAudioTrackNormalizeChange?: (id: string, normalize: boolean) => void;
 	onClipDelete?: (id: string) => void;
 	selectedAudioId?: string | null;
 	selectedAudioVolume?: number | null;
@@ -862,8 +869,15 @@ export function SettingsPanel({
 	selectedClipId,
 	selectedClipSpeed,
 	selectedClipMuted,
+	hasClipSourceAudio = false,
+	showClipSourceAudioTrack = false,
 	onClipSpeedChange,
 	onClipMutedChange,
+	onShowClipSourceAudioTrackChange,
+	sourceAudioTrackMeta = [],
+	sourceAudioTrackSettings = {},
+	onSourceAudioTrackVolumeChange,
+	onSourceAudioTrackNormalizeChange,
 	onClipDelete,
 	selectedAudioId,
 	selectedAudioVolume,
@@ -3049,12 +3063,38 @@ export function SettingsPanel({
 					<span className="text-[10px] text-muted-foreground">
 						{tSettings("clip.muteAudio", "Mute Audio")}
 					</span>
-					<Switch
-						checked={selectedClipMuted ?? false}
-						onCheckedChange={(v) => onClipMutedChange?.(v)}
-						className="data-[state=checked]:bg-[#06b6d4] scale-75"
-					/>
+					<div className="flex items-center gap-2">
+						<span
+							className={cn(
+								"rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider",
+								selectedClipMuted
+									? "bg-red-500/15 text-red-300"
+									: "bg-emerald-500/15 text-emerald-300",
+							)}
+						>
+							{selectedClipMuted
+								? tSettings("clip.mutedState", "Muted")
+								: tSettings("clip.audioOnState", "Audio On")}
+						</span>
+						<Switch
+							checked={!(selectedClipMuted ?? false)}
+							onCheckedChange={(v) => onClipMutedChange?.(!v)}
+							className="data-[state=checked]:bg-[#06b6d4] scale-75"
+						/>
+					</div>
 				</div>
+				{hasClipSourceAudio && (
+					<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+						<span className="text-[10px] text-muted-foreground">
+							{tSettings("clip.separateSourceAudio", "Separate Clip Audio")}
+						</span>
+						<Switch
+							checked={showClipSourceAudioTrack}
+							onCheckedChange={(v) => onShowClipSourceAudioTrackChange?.(v)}
+							className="data-[state=checked]:bg-[#06b6d4] scale-75"
+						/>
+					</div>
+				)}
 				<div className="flex items-center gap-3">
 					<SectionLabel>{tSettings("speed.label", "Speed")}</SectionLabel>
 				</div>
@@ -3562,10 +3602,12 @@ export function SettingsPanel({
 			<div
 				className={cn(
 					"flex-shrink-0 border-t border-foreground/10 bg-editor-header p-4 pt-3",
-					!selectedAudioId && "hidden",
+					!selectedAudioId &&
+						!(selectedClipId && hasClipSourceAudio && showClipSourceAudioTrack) &&
+						"hidden",
 				)}
 			>
-				{selectedAudioId && (
+				{selectedAudioId ? (
 					<div>
 						<div className="mb-3 flex items-center justify-between">
 							<span className="text-sm font-medium text-foreground">
@@ -3596,7 +3638,57 @@ export function SettingsPanel({
 							{tSettings("audio.deleteRegion", "Delete Audio")}
 						</Button>
 					</div>
-				)}
+				) : selectedClipId && hasClipSourceAudio && showClipSourceAudioTrack ? (
+					<div className="flex flex-col gap-3">
+						<div className="text-sm font-medium text-foreground">
+							{tSettings("audio.sourceTracksTitle", "Clip Source Audio")}
+						</div>
+						{sourceAudioTrackMeta.map((track) => {
+							const settings = sourceAudioTrackSettings[track.id] ?? {
+								volume: 1,
+								normalize: false,
+							};
+							return (
+								<div
+									key={track.id}
+									className="rounded-lg border border-foreground/10 bg-foreground/[0.03] px-3 py-2"
+								>
+									<div className="mb-2 flex items-center justify-between">
+										<span className="text-[11px] font-medium text-foreground">
+											{track.label}
+										</span>
+										<span className="text-[10px] text-muted-foreground">
+											{Math.round(settings.volume * 100)}%
+										</span>
+									</div>
+									<div className="mb-2 flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+										<span className="text-[10px] text-muted-foreground">
+											{tSettings("audio.normalize", "Normalize")}
+										</span>
+										<Switch
+											checked={settings.normalize}
+											onCheckedChange={(v) =>
+												onSourceAudioTrackNormalizeChange?.(track.id, v)
+											}
+											className="data-[state=checked]:bg-[#2563EB] scale-75"
+										/>
+									</div>
+									<SliderControl
+										label={tSettings("audio.volume", "Volume")}
+										value={settings.volume}
+										defaultValue={1}
+										min={0}
+										max={2}
+										step={0.01}
+										onChange={(v) => onSourceAudioTrackVolumeChange?.(track.id, v)}
+										formatValue={(v) => `${Math.round(v * 100)}%`}
+										parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100}
+									/>
+								</div>
+							);
+						})}
+					</div>
+				) : null}
 			</div>
 		</div>
 	);

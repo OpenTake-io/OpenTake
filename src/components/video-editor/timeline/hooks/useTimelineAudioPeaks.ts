@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { resolveMediaResourceUrl } from "@/lib/exporter/localMediaSource";
 import { fromFileUrl } from "../../projectPersistence";
-import { waveformGenerator } from "../components/waveform/WaveformGenerator";
+import { waveformGenerator } from "../../audio/waveform/WaveformGenerator";
 import { WAVEFORM_DEFAULT_PEAK_COUNT } from "../core/constants";
 import type { AudioPeaksData } from "../core/timelineTypes";
 
