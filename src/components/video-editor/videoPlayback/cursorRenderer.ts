@@ -745,15 +745,6 @@ function getCursorViewportScale(viewport: CursorViewportRect) {
 	return Math.max(MIN_CURSOR_VIEWPORT_SCALE, viewport.width / REFERENCE_WIDTH);
 }
 
-export function resolveCursorDrawHeight(
-	viewport: CursorViewportRect,
-	dotRadius: number,
-	parentScale = 1,
-) {
-	const safeParentScale = Number.isFinite(parentScale) && parentScale > 0 ? parentScale : 1;
-	return (dotRadius * getCursorViewportScale(viewport)) / safeParentScale;
-}
-
 function getCursorSwaySpringConfig(
 	smoothingFactor: number,
 	springTuning: CursorSpringTuning,
@@ -1070,7 +1061,6 @@ export class PixiCursorOverlay {
 		viewport: CursorViewportRect,
 		visible: boolean,
 		freeze = false,
-		parentScale = 1,
 	): void {
 		if (!visible || samples.length === 0 || viewport.width <= 0 || viewport.height <= 0) {
 			this.container.visible = false;
@@ -1117,7 +1107,7 @@ export class PixiCursorOverlay {
 
 		const px = viewport.x + this.state.x * viewport.width;
 		const py = viewport.y + this.state.y * viewport.height;
-		const h = resolveCursorDrawHeight(viewport, this.config.dotRadius, parentScale);
+		const h = this.config.dotRadius * getCursorViewportScale(viewport);
 		const { cursorType, clickBounceProgress } = getCursorVisualState(
 			samples,
 			timeMs,
@@ -1313,7 +1303,6 @@ export function drawCursorOnCanvas(
 	viewport: CursorViewportRect,
 	smoothedState: SmoothedCursorState,
 	config: CursorRenderConfig = DEFAULT_CURSOR_CONFIG,
-	parentScale = 1,
 ): void {
 	if (samples.length === 0 || viewport.width <= 0 || viewport.height <= 0) return;
 
@@ -1327,7 +1316,7 @@ export function drawCursorOnCanvas(
 
 	const px = viewport.x + smoothedState.x * viewport.width;
 	const py = viewport.y + smoothedState.y * viewport.height;
-	const h = resolveCursorDrawHeight(viewport, config.dotRadius, parentScale);
+	const h = config.dotRadius * getCursorViewportScale(viewport);
 	const { cursorType, clickBounceProgress } = getCursorVisualState(
 		samples,
 		timeMs,
