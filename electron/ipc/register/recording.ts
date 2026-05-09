@@ -19,7 +19,7 @@ import { startInteractionCapture, stopInteractionCapture } from "../cursor/inter
 import { startNativeCursorMonitor, stopNativeCursorMonitor } from "../cursor/monitor";
 import {
 	normalizeCursorTelemetrySamples,
-	pauseCursorCapture,
+	pauseCursorCaptureAtBoundary,
 	resetCursorCaptureClock,
 	resumeCursorCapture,
 	sampleCursorPoint,
@@ -190,6 +190,15 @@ function pickPrimitiveRecord(value: unknown) {
 	);
 
 	return entries.length > 0 ? Object.fromEntries(entries) : null;
+}
+
+function normalizeRendererTimestampMs(value: unknown) {
+	const nowMs = Date.now();
+	if (typeof value !== "number" || !Number.isFinite(value)) {
+		return nowMs;
+	}
+
+	return Math.min(Math.max(0, Math.round(value)), nowMs);
 }
 
 function pickMicrophoneChunkEvents(value: unknown): MicrophoneChunkTimingEvent[] | null {
@@ -1715,14 +1724,13 @@ export function registerRecordingHandlers(
 		}
 	});
 
-	ipcMain.handle("pause-cursor-capture", () => {
-		sampleCursorPoint();
-		pauseCursorCapture(Date.now());
+	ipcMain.handle("pause-cursor-capture", (_, pausedAtMs?: unknown) => {
+		pauseCursorCaptureAtBoundary(normalizeRendererTimestampMs(pausedAtMs));
 		return { success: true };
 	});
 
-	ipcMain.handle("resume-cursor-capture", () => {
-		resumeCursorCapture(Date.now());
+	ipcMain.handle("resume-cursor-capture", (_, resumedAtMs?: unknown) => {
+		resumeCursorCapture(normalizeRendererTimestampMs(resumedAtMs));
 		sampleCursorPoint();
 		return { success: true };
 	});
