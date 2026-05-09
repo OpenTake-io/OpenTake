@@ -35,7 +35,7 @@ describe("resolveSourceTrackRoutingPolicy", () => {
 		]);
 
 		expect(policy.playbackPaths).toEqual(["/tmp/recording.mic.wav"]);
-		expect(policy.muteEmbeddedPreview).toBe(true);
+		expect(policy.muteEmbeddedPreview).toBe(false);
 		expect(policy.includeEmbeddedInExport).toBe(true);
 	});
 });

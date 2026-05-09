@@ -121,7 +121,7 @@ export function buildResolvedAudioPlan(input: {
 		hasEmbeddedSourceAudio,
 		pathsByTrack,
 		playbackPaths,
-		muteEmbeddedPreview: hasDedicatedTracks,
+		muteEmbeddedPreview: hasDedicatedTracks && !includeEmbeddedInExport,
 		includeEmbeddedInExport,
 		tracks,
 		masterGain: clampGain(input.masterGain ?? 1, 1),
