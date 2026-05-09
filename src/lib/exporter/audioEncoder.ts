@@ -47,6 +47,7 @@ interface PreparedOfflineRender {
 	mainBufferEntry: { buffer: AudioBuffer; gain: number } | null;
 	companionEntries: Array<{ buffer: AudioBuffer; startDelaySec: number; gain: number }>;
 	regionEntries: Array<{ buffer: AudioBuffer; region: AudioRegion }>;
+	mutedSourceOutputRangesSec: Array<{ startSec: number; endSec: number }>;
 	slices: TimelineSlice[];
 	outputDurationMs: number;
 	numChannels: number;
@@ -163,6 +164,7 @@ export class AudioProcessor {
 		sourceAudioFallbackPaths?: string[],
 		sourceAudioFallbackStartDelayMsByPath?: Record<string, number>,
 		sourceAudioTrackSettings?: SourceAudioTrackSettings,
+		clipRegions?: ClipRegion[],
 	): Promise<void> {
 		const sortedTrims = trimRegions
 			? [...trimRegions].sort((a, b) => a.startMs - b.startMs)
@@ -206,6 +208,7 @@ export class AudioProcessor {
 				sortedSourceAudioFallbackPaths,
 				sourceAudioFallbackStartDelayMsByPath,
 				sourceAudioTrackSettings,
+				clipRegions,
 				muxer,
 			);
 			return;
@@ -238,6 +241,7 @@ export class AudioProcessor {
 				routingPolicy.playbackPaths,
 				sourceAudioFallbackStartDelayMsByPath,
 				sourceAudioTrackSettings,
+				clipRegions,
 				muxer,
 			);
 			return;
@@ -285,6 +289,7 @@ export class AudioProcessor {
 		sourceAudioFallbackPaths?: string[],
 		sourceAudioFallbackStartDelayMsByPath?: Record<string, number>,
 		sourceAudioTrackSettings?: SourceAudioTrackSettings,
+		clipRegions?: ClipRegion[],
 	): Promise<Blob> {
 		const sortedTrims = trimRegions
 			? [...trimRegions].sort((a, b) => a.startMs - b.startMs)
@@ -311,6 +316,7 @@ export class AudioProcessor {
 			sortedSourceAudioFallbackPaths,
 			sourceAudioFallbackStartDelayMsByPath,
 			sourceAudioTrackSettings,
+			clipRegions,
 		);
 		return this.renderToWavBlobChunked(prepared);
 	}
@@ -587,6 +593,7 @@ export class AudioProcessor {
 		sourceAudioFallbackPaths: string[],
 		sourceAudioFallbackStartDelayMsByPath: Record<string, number> | undefined,
 		sourceAudioTrackSettings: SourceAudioTrackSettings | undefined,
+		clipRegions: ClipRegion[] | undefined,
 		muxer: VideoMuxer,
 	): Promise<void> {
 		const prepared = await this.prepareOfflineRender(
@@ -597,6 +604,7 @@ export class AudioProcessor {
 			sourceAudioFallbackPaths,
 			sourceAudioFallbackStartDelayMsByPath,
 			sourceAudioTrackSettings,
+			clipRegions,
 		);
 		if (this.cancelled) return;
 		await this.renderAndEncodeChunked(prepared, muxer);
@@ -610,6 +618,7 @@ export class AudioProcessor {
 		sourceAudioFallbackPaths: string[],
 		sourceAudioFallbackStartDelayMsByPath?: Record<string, number>,
 		sourceAudioTrackSettings?: SourceAudioTrackSettings,
+		clipRegions?: ClipRegion[],
 	): Promise<PreparedOfflineRender> {
 		if (this.cancelled) throw new Error("Export cancelled");
 		this.onProgress?.(0);
@@ -711,11 +720,24 @@ export class AudioProcessor {
 		}
 
 		const numChannels = Math.min(primaryBuffer?.numberOfChannels ?? 2, 2);
+		const mutedSourceOutputRangesSec = (clipRegions ?? [])
+			.filter(
+				(clip) =>
+					Boolean(clip.muted) &&
+					Number.isFinite(clip.startMs) &&
+					Number.isFinite(clip.endMs) &&
+					clip.endMs > clip.startMs,
+			)
+			.map((clip) => ({
+				startSec: Math.max(0, clip.startMs / 1000),
+				endSec: Math.max(0, clip.endMs / 1000),
+			}));
 
 		return {
 			mainBufferEntry,
 			companionEntries,
 			regionEntries,
+			mutedSourceOutputRangesSec,
 			slices,
 			outputDurationMs,
 			numChannels,
@@ -849,6 +871,7 @@ export class AudioProcessor {
 					prepared.mainBufferEntry.gain,
 					outputOffsetSec,
 					chunkSec,
+					prepared.mutedSourceOutputRangesSec,
 				);
 			}
 
@@ -862,6 +885,7 @@ export class AudioProcessor {
 					entry.gain,
 					outputOffsetSec,
 					chunkSec,
+					prepared.mutedSourceOutputRangesSec,
 				);
 			}
 
@@ -1323,6 +1347,7 @@ export class AudioProcessor {
 		gain = 1,
 		chunkOutputStartSec = 0,
 		chunkDurationSec = Number.POSITIVE_INFINITY,
+		mutedOutputRangesSec: Array<{ startSec: number; endSec: number }> = [],
 	): void {
 		let outputOffsetSec = 0;
 
@@ -1386,15 +1411,51 @@ export class AudioProcessor {
 				continue;
 			}
 
-			const source = ctx.createBufferSource();
-			const gainNode = ctx.createGain();
-			gainNode.gain.value = Math.max(0, Math.min(2, gain));
-			source.buffer = buffer;
-			source.playbackRate.value = slice.speed;
-			source.connect(gainNode);
-			gainNode.connect(ctx.destination);
+			const audibleRanges: Array<{ startSec: number; endSec: number }> = [
+				{
+					startSec: localOutputStartSec + chunkOutputStartSec,
+					endSec:
+						localOutputStartSec + chunkOutputStartSec + effectiveSourceDurationSec / slice.speed,
+				},
+			];
+			for (const mutedRange of mutedOutputRangesSec) {
+				for (let rangeIndex = audibleRanges.length - 1; rangeIndex >= 0; rangeIndex -= 1) {
+					const current = audibleRanges[rangeIndex];
+					const overlapStart = Math.max(current.startSec, mutedRange.startSec);
+					const overlapEnd = Math.min(current.endSec, mutedRange.endSec);
+					if (overlapEnd <= overlapStart) {
+						continue;
+					}
+					audibleRanges.splice(rangeIndex, 1);
+					if (current.startSec < overlapStart) {
+						audibleRanges.push({ startSec: current.startSec, endSec: overlapStart });
+					}
+					if (overlapEnd < current.endSec) {
+						audibleRanges.push({ startSec: overlapEnd, endSec: current.endSec });
+					}
+				}
+			}
 
-			source.start(localOutputStartSec, effectiveBufferStartSec, effectiveSourceDurationSec);
+			for (const audibleRange of audibleRanges) {
+				const audibleDurationSec = audibleRange.endSec - audibleRange.startSec;
+				if (audibleDurationSec <= 0.001) {
+					continue;
+				}
+				const source = ctx.createBufferSource();
+				const gainNode = ctx.createGain();
+				gainNode.gain.value = Math.max(0, Math.min(2, gain));
+				source.buffer = buffer;
+				source.playbackRate.value = slice.speed;
+				source.connect(gainNode);
+				gainNode.connect(ctx.destination);
+
+				const sourceOffsetSec =
+					effectiveBufferStartSec +
+					(audibleRange.startSec - (localOutputStartSec + chunkOutputStartSec)) * slice.speed;
+				const localStartSec = audibleRange.startSec - chunkOutputStartSec;
+				const sourceDurationSec = audibleDurationSec * slice.speed;
+				source.start(localStartSec, sourceOffsetSec, sourceDurationSec);
+			}
 
 			outputOffsetSec += sliceOutputDurationSec;
 		}

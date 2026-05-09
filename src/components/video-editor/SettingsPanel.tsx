@@ -3148,14 +3148,19 @@ export function SettingsPanel({
 					<SectionLabel>{tSettings("audio.title", "Audio")}</SectionLabel>
 
 					<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
-						<span className="text-[10px] text-muted-foreground">
-							{selectedClipMuted
-								? tSettings("clip.unmuteAudio", "Unmute Audio")
-								: tSettings("clip.muteAudio", "Mute Audio")}
-						</span>
+						<div>
+							<span className="text-[10px] text-muted-foreground">
+								{tSettings("clip.mute", "Mute")}
+							</span>
+							<p className="text-[9px] text-muted-foreground/50 mt-0.5">
+								{selectedClipMuted
+									? tSettings("clip.mutedState", "Audio is muted")
+									: tSettings("clip.unmutedState", "Audio is playing")}
+							</p>
+						</div>
 						<Switch
-							checked={!(selectedClipMuted ?? false)}
-							onCheckedChange={(v) => onClipMutedChange?.(!v)}
+							checked={selectedClipMuted ?? false}
+							onCheckedChange={(v) => onClipMutedChange?.(v)}
 							className="data-[state=checked]:bg-[#06b6d4] scale-75"
 						/>
 					</div>

@@ -3,6 +3,7 @@ import type {
 	AudioRegion,
 	AutoCaptionSettings,
 	CaptionCue,
+	ClipRegion,
 	CropRegion,
 	CursorStyle,
 	CursorTelemetryPoint,
@@ -91,6 +92,7 @@ interface VideoExporterConfig extends ExportConfig {
 	zoomSmoothness?: number;
 	frame?: string | null;
 	audioRegions?: AudioRegion[];
+	clipRegions?: ClipRegion[];
 	sourceAudioFallbackPaths?: string[];
 	sourceAudioFallbackStartDelayMsByPath?: Record<string, number>;
 	sourceAudioTrackSettings?: SourceAudioTrackSettings;
@@ -574,7 +576,8 @@ export class VideoExporter {
 			audioRegions.length > 0 ||
 			sourceAudioFallbackPaths.length > 1 ||
 			hasTimedSourceAudioFallback ||
-			hasNonDefaultSourceTrackSettings(this.config.sourceAudioTrackSettings)
+			hasNonDefaultSourceTrackSettings(this.config.sourceAudioTrackSettings) ||
+			(this.config.clipRegions ?? []).some((clip) => Boolean(clip.muted))
 		) {
 			const sourceDurationMs = Math.max(
 				0,
@@ -862,6 +865,7 @@ export class VideoExporter {
 						this.config.sourceAudioFallbackPaths,
 						this.config.sourceAudioFallbackStartDelayMsByPath,
 						this.config.sourceAudioTrackSettings,
+						this.config.clipRegions,
 					),
 					"native edited audio rendering",
 					"audio",
@@ -959,6 +963,7 @@ export class VideoExporter {
 						this.config.sourceAudioFallbackPaths,
 						this.config.sourceAudioFallbackStartDelayMsByPath,
 						this.config.sourceAudioTrackSettings,
+						this.config.clipRegions,
 					),
 					"ffmpeg edited audio rendering",
 					"audio",
