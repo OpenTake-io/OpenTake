@@ -169,6 +169,16 @@ type NativeAudioPlan =
 	  };
 
 const FILTERGRAPH_FALLBACK_AUDIO_SAMPLE_RATE = 48_000;
+
+function hasNonDefaultSourceTrackSettings(sourceAudioTrackSettings?: SourceAudioTrackSettings) {
+	if (!sourceAudioTrackSettings) {
+		return false;
+	}
+	return Object.values(sourceAudioTrackSettings).some(
+		(settings) =>
+			Math.abs((settings?.volume ?? 1) - 1) > 0.0005 || Boolean(settings?.normalize),
+	);
+}
 const MIN_NATIVE_STATIC_LAYOUT_SPEED = 0.25;
 const MAX_NATIVE_STATIC_LAYOUT_SPEED = 30;
 
@@ -1184,7 +1194,8 @@ export class ModernVideoExporter {
 			speedRegions.length > 0 ||
 			audioRegions.length > 0 ||
 			sourceAudioFallbackPaths.length > 1 ||
-			hasTimedSourceAudioFallback
+			hasTimedSourceAudioFallback ||
+			hasNonDefaultSourceTrackSettings(this.config.sourceAudioTrackSettings)
 		) {
 			const sourceDurationMs = Math.max(
 				0,
