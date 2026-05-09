@@ -6,7 +6,8 @@ self.onmessage = (e: MessageEvent) => {
 	};
 
 	if (!channelData || samples <= 0) {
-		self.postMessage({ requestId, peaks: new Float32Array(0) });
+		const empty = new Float32Array(0);
+		(self as any).postMessage({ requestId, peaks: empty }, [empty.buffer]);
 		return;
 	}
 
@@ -25,8 +26,9 @@ self.onmessage = (e: MessageEvent) => {
 			result[i] = max;
 		}
 
-		self.postMessage({ requestId, peaks: result });
+		(self as any).postMessage({ requestId, peaks: result }, [result.buffer]);
 	} catch {
-		self.postMessage({ requestId, peaks: new Float32Array(0) });
+		const empty = new Float32Array(0);
+		(self as any).postMessage({ requestId, peaks: empty }, [empty.buffer]);
 	}
 };
