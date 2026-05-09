@@ -43,4 +43,28 @@ describe("Electron main CJS normalizer", () => {
 			{ line: 1, text: "export default MAIN_DIST;" },
 		]);
 	});
+
+	it("preserves an unsupported export block exactly while normalizing other syntax", () => {
+		const source = [
+			'import fs from "node:fs";',
+			"export {",
+			'  MAIN_DIST as "main-dist",',
+			"};",
+		].join("\n");
+
+		const result = normalizeElectronMainCjsSource(source);
+
+		expect(result.changed).toBe(true);
+		expect(result.source).toBe(
+			[
+				'const fs = require("node:fs");',
+				"export {",
+				'  MAIN_DIST as "main-dist",',
+				"};",
+			].join("\n"),
+		);
+		expect(findElectronMainCjsEsmSyntax(result.source)).toEqual([
+			{ line: 2, text: "export {" },
+		]);
+	});
 });

@@ -86,7 +86,7 @@ function convertExportLine(line) {
 
 	const blockStartMatch = line.match(/^([ \t]*)export\s*\{\s*$/);
 	if (blockStartMatch) {
-		return { indent: blockStartMatch[1], specifiers: [] };
+		return { indent: blockStartMatch[1], specifiers: [], rawLines: [line] };
 	}
 
 	return null;
@@ -349,7 +349,7 @@ export function normalizeElectronMainCjsSource(source) {
 					exportBlock.indent,
 				);
 				if (statements === null) {
-					normalizedLines.push(`export {\n${exportBlock.specifiers.join("\n")}\n};`);
+					normalizedLines.push(...exportBlock.rawLines, line);
 				} else {
 					normalizedLines.push(...statements);
 					changed = true;
@@ -359,6 +359,7 @@ export function normalizeElectronMainCjsSource(source) {
 			}
 
 			exportBlock.specifiers.push(line.trim().replace(/,$/, ""));
+			exportBlock.rawLines.push(line);
 			continue;
 		}
 
