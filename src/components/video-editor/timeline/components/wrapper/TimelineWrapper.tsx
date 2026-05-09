@@ -146,7 +146,7 @@ export default function TimelineWrapper({
 					? (event.activatorEvent as PointerEvent).clientX + (event.delta?.x ?? 0)
 					: undefined;
 			if (span) showTooltip(span, screenX);
-			const moved = Math.abs(event.delta?.x ?? 0) > 0.01;
+			const moved = Math.hypot(event.delta?.x ?? 0, event.delta?.y ?? 0) > 0.01;
 			if (moved) {
 				onLiveSpanPreviewChange?.(event.active.id as string, span ?? null);
 			}

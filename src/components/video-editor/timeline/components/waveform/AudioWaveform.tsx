@@ -51,7 +51,10 @@ function AudioWaveformComponent({
 
 		const draw = () => {
 			const now = performance.now();
-			if (now - lastDrawAtRef.current < 33) return;
+			if (now - lastDrawAtRef.current < 33) {
+				rafId = requestAnimationFrame(draw);
+				return;
+			}
 			lastDrawAtRef.current = now;
 
 			const ctx = canvas.getContext("2d");

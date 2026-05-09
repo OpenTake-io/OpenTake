@@ -110,47 +110,59 @@ export function useSourceAudioTrackSettings({
     [defaultSourceAudioTrackSettings, sourceAudioTrackSettingsByClip],
   );
 
-  const onSelectedClipSourceAudioTrackVolumeChange = useCallback(
-    (id: string, volume: number) => {
-      if (!selectedClipId) return;
-      setSourceAudioTrackSettingsByClip((prev) => {
-        const prevClip = prev[selectedClipId] ?? defaultSourceAudioTrackSettings;
-        return {
-          ...prev,
-          [selectedClipId]: {
-            ...prevClip,
-            [id]: {
-              volume: Number.isFinite(volume)
-                ? Math.max(0, Math.min(2, volume))
-                : (prevClip[id]?.volume ?? 1),
-              normalize: prevClip[id]?.normalize ?? false,
-            },
-          },
-        };
-      });
-    },
-    [defaultSourceAudioTrackSettings, selectedClipId],
-  );
+	const onSelectedClipSourceAudioTrackVolumeChange = useCallback(
+		(id: string, volume: number) => {
+			if (!selectedClipId) return;
+			setSourceAudioTrackSettingsByClip((prev) => {
+				const prevClip = prev[selectedClipId] ?? defaultSourceAudioTrackSettings;
+				const nextVolume = Number.isFinite(volume)
+					? Math.max(0, Math.min(2, volume))
+					: (prevClip[id]?.volume ?? 1);
+				const prevNormalize = prevClip[id]?.normalize ?? false;
+				if (
+					prevClip[id]?.volume === nextVolume &&
+					prevClip[id]?.normalize === prevNormalize
+				) {
+					return prev;
+				}
+				return {
+					...prev,
+					[selectedClipId]: {
+						...prevClip,
+						[id]: {
+							volume: nextVolume,
+							normalize: prevNormalize,
+						},
+					},
+				};
+			});
+		},
+		[defaultSourceAudioTrackSettings, selectedClipId],
+	);
 
-  const onSelectedClipSourceAudioTrackNormalizeChange = useCallback(
-    (id: string, normalize: boolean) => {
-      if (!selectedClipId) return;
-      setSourceAudioTrackSettingsByClip((prev) => {
-        const prevClip = prev[selectedClipId] ?? defaultSourceAudioTrackSettings;
-        return {
-          ...prev,
-          [selectedClipId]: {
-            ...prevClip,
-            [id]: {
-              volume: prevClip[id]?.volume ?? 1,
-              normalize,
-            },
-          },
-        };
-      });
-    },
-    [defaultSourceAudioTrackSettings, selectedClipId],
-  );
+	const onSelectedClipSourceAudioTrackNormalizeChange = useCallback(
+		(id: string, normalize: boolean) => {
+			if (!selectedClipId) return;
+			setSourceAudioTrackSettingsByClip((prev) => {
+				const prevClip = prev[selectedClipId] ?? defaultSourceAudioTrackSettings;
+				const prevVolume = prevClip[id]?.volume ?? 1;
+				if (prevClip[id]?.normalize === normalize) {
+					return prev;
+				}
+				return {
+					...prev,
+					[selectedClipId]: {
+						...prevClip,
+						[id]: {
+							volume: prevVolume,
+							normalize,
+						},
+					},
+				};
+			});
+		},
+		[defaultSourceAudioTrackSettings, selectedClipId],
+	);
 
   return {
     sourceAudioTrackMeta,

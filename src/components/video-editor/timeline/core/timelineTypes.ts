@@ -31,6 +31,7 @@ export interface TimelineRenderItem {
 	id: string;
 	rowId: string;
 	span: Span;
+	sourceSpan?: Span;
 	label: string;
 	audioPath?: string;
 	audioGain?: number;
