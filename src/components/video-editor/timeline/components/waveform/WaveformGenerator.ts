@@ -8,29 +8,40 @@ export class WaveformGenerator {
 	private worker: Worker;
 	private peaksCache = new Map<string, AudioPeaksData>();
 	private pending = new Map<string, Promise<AudioPeaksData>>();
+	private workerRequestSeq = 0;
+	private workerResolvers = new Map<number, (peaks: Float32Array) => void>();
 
 	constructor() {
 		this.audioContext = new (window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)();
 		this.worker = new WorkerConstructor();
+		this.worker.addEventListener(
+			"message",
+			(event: MessageEvent<{ requestId: number; peaks: Float32Array }>) => {
+				const { requestId, peaks } = event.data;
+				const resolve = this.workerResolvers.get(requestId);
+				if (!resolve) return;
+				this.workerResolvers.delete(requestId);
+				resolve(peaks);
+			},
+		);
 	}
 
 	private computePeaksWithWorker(channelData: Float32Array, samples: number): Promise<Float32Array> {
 		return new Promise((resolve, reject) => {
-			const onMessage = (event: MessageEvent<Float32Array>) => {
-				this.worker.removeEventListener("message", onMessage);
-				this.worker.removeEventListener("error", onError);
-				resolve(event.data);
-			};
+			const requestId = ++this.workerRequestSeq;
 			const onError = (error: ErrorEvent) => {
-				this.worker.removeEventListener("message", onMessage);
 				this.worker.removeEventListener("error", onError);
+				this.workerResolvers.delete(requestId);
 				reject(error.error ?? new Error(error.message));
 			};
-
-			this.worker.addEventListener("message", onMessage);
-			this.worker.addEventListener("error", onError);
+			this.worker.addEventListener("error", onError, { once: true });
+			this.workerResolvers.set(requestId, (peaks) => {
+				this.worker.removeEventListener("error", onError);
+				resolve(peaks);
+			});
 			this.worker.postMessage(
 				{
+					requestId,
 					channelData,
 					samples,
 				},
