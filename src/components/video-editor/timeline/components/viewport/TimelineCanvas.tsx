@@ -1,6 +1,15 @@
 import { Plus } from "@phosphor-icons/react";
 import { useTimelineContext } from "dnd-timeline";
-import { memo, useCallback, useMemo, useRef, useState, type MouseEvent, type MouseEventHandler } from "react";
+import {
+	memo,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type MouseEvent,
+	type MouseEventHandler,
+} from "react";
 import { cn } from "@/lib/utils";
 import {
 	getTimelineContentMinHeightPx,
@@ -427,6 +436,9 @@ export default function TimelineCanvas({
 	const { setTimelineRef, style, sidebarWidth, direction, range, valueToPixels, pixelsToValue } =
 		useTimelineContext();
 	const localTimelineRef = useRef<HTMLDivElement | null>(null);
+	const [isSeeking, setIsSeeking] = useState(false);
+	const seekRafRef = useRef<number | null>(null);
+	const pendingSeekClientXRef = useRef<number | null>(null);
 
 	const setRefs = useCallback(
 		(node: HTMLDivElement | null) => {
@@ -438,6 +450,7 @@ export default function TimelineCanvas({
 
 	const handleTimelineClick = useCallback(
 		(e: MouseEvent<HTMLDivElement>) => {
+			if (isSeeking) return;
 			if (!onSeek || videoDurationMs <= 0) return;
 
 			if (onClearBlockSelection) {
@@ -460,6 +473,7 @@ export default function TimelineCanvas({
 			onSeek(absoluteMs / 1000);
 		},
 		[
+			isSeeking,
 			onSeek,
 			onSelectZoom,
 			onSelectClip,
@@ -473,6 +487,94 @@ export default function TimelineCanvas({
 			pixelsToValue,
 		],
 	);
+
+	const getAbsoluteMsFromClientX = useCallback(
+		(clientX: number, rect: DOMRect) => {
+			const clickX =
+				direction === "rtl"
+					? rect.right - sidebarWidth - clientX
+					: clientX - rect.left - sidebarWidth;
+			const relativeMs = pixelsToValue(clickX);
+			return Math.max(0, Math.min(range.start + relativeMs, videoDurationMs));
+		},
+		[direction, pixelsToValue, range.start, sidebarWidth, videoDurationMs],
+	);
+
+	const handleTimelineMouseDown = useCallback(
+		(e: MouseEvent<HTMLDivElement>) => {
+			if (e.button !== 0 || !onSeek || videoDurationMs <= 0 || !localTimelineRef.current) return;
+			if ((e.target as HTMLElement).closest("[data-timeline-item]")) {
+				return;
+			}
+
+			if (onClearBlockSelection) {
+				onClearBlockSelection();
+			} else {
+				onSelectZoom?.(null);
+				onSelectClip?.(null);
+				onSelectAnnotation?.(null);
+				onSelectAudio?.(null);
+			}
+
+			const rect = localTimelineRef.current.getBoundingClientRect();
+			onSeek(getAbsoluteMsFromClientX(e.clientX, rect) / 1000);
+			setIsSeeking(true);
+			e.preventDefault();
+		},
+		[
+			getAbsoluteMsFromClientX,
+			onClearBlockSelection,
+			onSeek,
+			onSelectAnnotation,
+			onSelectAudio,
+			onSelectClip,
+			onSelectZoom,
+			videoDurationMs,
+		],
+	);
+
+	useEffect(() => {
+		if (!isSeeking) return;
+
+		const flushSeek = () => {
+			seekRafRef.current = null;
+			if (!onSeek || !localTimelineRef.current || pendingSeekClientXRef.current === null) return;
+			const rect = localTimelineRef.current.getBoundingClientRect();
+			onSeek(getAbsoluteMsFromClientX(pendingSeekClientXRef.current, rect) / 1000);
+		};
+
+		const handleMouseMove = (event: globalThis.MouseEvent) => {
+			pendingSeekClientXRef.current = event.clientX;
+			if (seekRafRef.current === null) {
+				seekRafRef.current = requestAnimationFrame(flushSeek);
+			}
+		};
+
+		const handleMouseUp = () => {
+			if (seekRafRef.current !== null) {
+				cancelAnimationFrame(seekRafRef.current);
+				seekRafRef.current = null;
+			}
+			if (pendingSeekClientXRef.current !== null) {
+				flushSeek();
+			}
+			pendingSeekClientXRef.current = null;
+			setIsSeeking(false);
+		};
+
+		window.addEventListener("mousemove", handleMouseMove);
+		window.addEventListener("mouseup", handleMouseUp);
+
+		return () => {
+			if (seekRafRef.current !== null) {
+				cancelAnimationFrame(seekRafRef.current);
+				seekRafRef.current = null;
+			}
+			pendingSeekClientXRef.current = null;
+			window.removeEventListener("mousemove", handleMouseMove);
+			window.removeEventListener("mouseup", handleMouseUp);
+		};
+	}, [getAbsoluteMsFromClientX, isSeeking, onSeek]);
 
 	const timelineRowCount = useMemo(() => {
 		const annotationRowIds = new Set<string>();
@@ -520,6 +622,7 @@ export default function TimelineCanvas({
 				height: `max(100%, ${timelineContentMinHeightPx}px, calc(${TIMELINE_AXIS_HEIGHT_PX}px + (100% - ${TIMELINE_AXIS_HEIGHT_PX}px) * ${timelineViewportStretchFactor}))`,
 			}}
 			className="select-none bg-editor-bg relative cursor-pointer group flex flex-col"
+			onMouseDown={handleTimelineMouseDown}
 			onClick={handleTimelineClick}
 			onMouseEnter={handleTimelineMouseEnter}
 			onMouseMove={handleTimelineMouseMove}
