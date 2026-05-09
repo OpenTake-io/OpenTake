@@ -4405,6 +4405,7 @@ export default function VideoEditor() {
 						sourceAudioFallbackPaths: audio.sourceAudioFallbackPaths,
 						sourceAudioFallbackStartDelayMsByPath:
 							audio.sourceAudioFallbackStartDelayMsByPath,
+						sourceAudioTrackSettings: audio.activeSourceAudioTrackSettings,
 						previewWidth,
 						previewHeight,
 						onProgress: (progress: ExportProgress) => {
@@ -6064,7 +6065,7 @@ export default function VideoEditor() {
 												}
 												cursorSway={cursorSway}
 												volume={
-													audio.isCurrentClipMuted
+													audio.shouldMutePreviewVideo || audio.isCurrentClipMuted
 														? 0
 														: Math.max(
 																0,

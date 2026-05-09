@@ -8,6 +8,7 @@ import type {
 	CursorTelemetryPoint,
 	Padding,
 	SpeedRegion,
+	SourceAudioTrackSettings,
 	TrimRegion,
 	WebcamOverlaySettings,
 	ZoomMotionBlurTuning,
@@ -92,6 +93,7 @@ interface VideoExporterConfig extends ExportConfig {
 	audioRegions?: AudioRegion[];
 	sourceAudioFallbackPaths?: string[];
 	sourceAudioFallbackStartDelayMsByPath?: Record<string, number>;
+	sourceAudioTrackSettings?: SourceAudioTrackSettings;
 	previewWidth?: number;
 	previewHeight?: number;
 	onProgress?: (progress: ExportProgress) => void;
@@ -398,6 +400,7 @@ export class VideoExporter {
 								this.config.audioRegions,
 								this.config.sourceAudioFallbackPaths,
 								this.config.sourceAudioFallbackStartDelayMsByPath,
+								this.config.sourceAudioTrackSettings,
 							),
 							"audio processing",
 							"audio",
@@ -847,6 +850,7 @@ export class VideoExporter {
 						this.config.audioRegions,
 						this.config.sourceAudioFallbackPaths,
 						this.config.sourceAudioFallbackStartDelayMsByPath,
+						this.config.sourceAudioTrackSettings,
 					),
 					"native edited audio rendering",
 					"audio",

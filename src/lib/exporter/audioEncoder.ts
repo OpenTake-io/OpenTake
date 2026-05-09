@@ -3,12 +3,16 @@ import type {
 	AudioRegion,
 	ClipRegion,
 	SpeedRegion,
+	SourceAudioTrackSettings,
 	TrimRegion,
 } from "@/components/video-editor/types";
 import { estimateCompanionAudioStartDelaySeconds } from "@/lib/mediaTiming";
 import { resolveMediaElementSource } from "./localMediaSource";
 import type { VideoMuxer } from "./muxer";
-import { resolveSourceAudioFallbackPaths } from "./sourceAudioFallback";
+import {
+	getSourceTrackIdFromPath,
+	resolveSourceTrackRoutingPolicy,
+} from "./sourceTrackRoutingPolicy";
 
 const AUDIO_BITRATE = 128_000;
 const DECODE_BACKPRESSURE_LIMIT = 20;
@@ -26,8 +30,8 @@ interface TimelineSlice {
 }
 
 interface PreparedOfflineRender {
-	mainBuffer: AudioBuffer | null;
-	companionEntries: Array<{ buffer: AudioBuffer; startDelaySec: number }>;
+	mainBufferEntry: { buffer: AudioBuffer; gain: number } | null;
+	companionEntries: Array<{ buffer: AudioBuffer; startDelaySec: number; gain: number }>;
 	regionEntries: Array<{ buffer: AudioBuffer; region: AudioRegion }>;
 	slices: TimelineSlice[];
 	outputDurationMs: number;
@@ -144,6 +148,7 @@ export class AudioProcessor {
 		audioRegions?: AudioRegion[],
 		sourceAudioFallbackPaths?: string[],
 		sourceAudioFallbackStartDelayMsByPath?: Record<string, number>,
+		sourceAudioTrackSettings?: SourceAudioTrackSettings,
 	): Promise<void> {
 		const sortedTrims = trimRegions
 			? [...trimRegions].sort((a, b) => a.startMs - b.startMs)
@@ -161,16 +166,16 @@ export class AudioProcessor {
 					(audioPath) => typeof audioPath === "string" && audioPath.trim().length > 0,
 				)
 			: [];
-		const { hasEmbeddedSourceAudio, externalAudioPaths } = resolveSourceAudioFallbackPaths(
+		const routingPolicy = resolveSourceTrackRoutingPolicy(
 			videoUrl,
 			sortedSourceAudioFallbackPaths,
 		);
-		const hasTimedCompanionAudio = externalAudioPaths.some(
+		const hasTimedCompanionAudio = routingPolicy.playbackPaths.some(
 			(audioPath) => (sourceAudioFallbackStartDelayMsByPath?.[audioPath] ?? 0) > 0,
 		);
 		const needsSourceAudioMixing =
-			externalAudioPaths.length > 1 ||
-			(hasEmbeddedSourceAudio && externalAudioPaths.length > 0) ||
+			routingPolicy.playbackPaths.length > 1 ||
+			(routingPolicy.hasEmbeddedSourceAudio && routingPolicy.playbackPaths.length > 0) ||
 			hasTimedCompanionAudio;
 
 		// When speed edits, audio regions, or multiple audio sources need mixing, use offline AudioContext pipeline.
@@ -186,14 +191,15 @@ export class AudioProcessor {
 				sortedAudioRegions,
 				sortedSourceAudioFallbackPaths,
 				sourceAudioFallbackStartDelayMsByPath,
+				sourceAudioTrackSettings,
 				muxer,
 			);
 			return;
 		}
 
 		// Single sidecar audio with no speed/audio edits: demux directly (skips slow real-time rendering).
-		if (!hasEmbeddedSourceAudio && externalAudioPaths.length === 1) {
-			const sidecarDemuxer = await this.loadAudioFileDemuxer(externalAudioPaths[0]);
+		if (!routingPolicy.hasEmbeddedSourceAudio && routingPolicy.playbackPaths.length === 1) {
+			const sidecarDemuxer = await this.loadAudioFileDemuxer(routingPolicy.playbackPaths[0]);
 			if (sidecarDemuxer) {
 				try {
 					await this.processTrimOnlyAudio(sidecarDemuxer, muxer, sortedTrims);
@@ -215,8 +221,9 @@ export class AudioProcessor {
 				sortedTrims,
 				[],
 				[],
-				externalAudioPaths,
+				routingPolicy.playbackPaths,
 				sourceAudioFallbackStartDelayMsByPath,
+				sourceAudioTrackSettings,
 				muxer,
 			);
 			return;
@@ -263,6 +270,7 @@ export class AudioProcessor {
 		audioRegions?: AudioRegion[],
 		sourceAudioFallbackPaths?: string[],
 		sourceAudioFallbackStartDelayMsByPath?: Record<string, number>,
+		sourceAudioTrackSettings?: SourceAudioTrackSettings,
 	): Promise<Blob> {
 		const sortedTrims = trimRegions
 			? [...trimRegions].sort((a, b) => a.startMs - b.startMs)
@@ -288,6 +296,7 @@ export class AudioProcessor {
 			sortedAudioRegions,
 			sortedSourceAudioFallbackPaths,
 			sourceAudioFallbackStartDelayMsByPath,
+			sourceAudioTrackSettings,
 		);
 		return this.renderToWavBlobChunked(prepared);
 	}
@@ -563,6 +572,7 @@ export class AudioProcessor {
 		audioRegions: AudioRegion[],
 		sourceAudioFallbackPaths: string[],
 		sourceAudioFallbackStartDelayMsByPath: Record<string, number> | undefined,
+		sourceAudioTrackSettings: SourceAudioTrackSettings | undefined,
 		muxer: VideoMuxer,
 	): Promise<void> {
 		const prepared = await this.prepareOfflineRender(
@@ -572,6 +582,7 @@ export class AudioProcessor {
 			audioRegions,
 			sourceAudioFallbackPaths,
 			sourceAudioFallbackStartDelayMsByPath,
+			sourceAudioTrackSettings,
 		);
 		if (this.cancelled) return;
 		await this.renderAndEncodeChunked(prepared, muxer);
@@ -584,31 +595,45 @@ export class AudioProcessor {
 		audioRegions: AudioRegion[],
 		sourceAudioFallbackPaths: string[],
 		sourceAudioFallbackStartDelayMsByPath?: Record<string, number>,
+		sourceAudioTrackSettings?: SourceAudioTrackSettings,
 	): Promise<PreparedOfflineRender> {
 		if (this.cancelled) throw new Error("Export cancelled");
 		this.onProgress?.(0);
 
-		const { externalAudioPaths } = resolveSourceAudioFallbackPaths(
+		const routingPolicy = resolveSourceTrackRoutingPolicy(
 			videoUrl,
 			sourceAudioFallbackPaths,
 		);
 
 		// Decode embedded source audio separately from companion sidecars.
-		const mainBuffer = await this.decodeAudioFromUrl(videoUrl);
+		const mainBuffer = routingPolicy.includeEmbeddedInExport
+			? await this.decodeAudioFromUrl(videoUrl)
+			: null;
+		const mainBufferGainSettings =
+			sourceAudioTrackSettings?.mixed ?? sourceAudioTrackSettings?.system ?? null;
+		const mainBufferGain = mainBufferGainSettings
+			? Math.max(0, Math.min(2, mainBufferGainSettings.volume))
+			: 1;
+		const mainBufferEntry = mainBuffer ? { buffer: mainBuffer, gain: mainBufferGain } : null;
 		if (this.cancelled) throw new Error("Export cancelled");
 
 		// Decode companion / sidecar audio files
-		const companionEntries: Array<{ buffer: AudioBuffer; startDelaySec: number }> = [];
+		const companionEntries: Array<{ buffer: AudioBuffer; startDelaySec: number; gain: number }> =
+			[];
 		const refDuration =
 			mainBuffer?.duration ??
-			(externalAudioPaths.length > 0 ? await this.getMediaDurationSec(videoUrl) : 0);
-		for (const audioPath of externalAudioPaths) {
+			(routingPolicy.playbackPaths.length > 0 ? await this.getMediaDurationSec(videoUrl) : 0);
+		for (const audioPath of routingPolicy.playbackPaths) {
 			if (this.cancelled) throw new Error("Export cancelled");
 			const buffer = await this.decodeAudioFromUrl(audioPath);
 			if (!buffer) continue;
 
 			companionEntries.push({
 				buffer,
+				gain: Math.max(
+					0,
+					Math.min(2, sourceAudioTrackSettings?.[getSourceTrackIdFromPath(audioPath)]?.volume ?? 1),
+				),
 				startDelaySec: estimateCompanionAudioStartDelaySeconds(
 					refDuration,
 					buffer.duration,
@@ -629,15 +654,15 @@ export class AudioProcessor {
 		this.onProgress?.(0.2);
 
 		// Determine source duration for timeline calculation
-		const primaryBuffer = mainBuffer ?? companionEntries[0]?.buffer ?? null;
+		const primaryBuffer = mainBufferEntry?.buffer ?? companionEntries[0]?.buffer ?? null;
 		if (!primaryBuffer && regionEntries.length === 0) {
 			throw new Error("No decodable audio sources found");
 		}
 
 		let sourceDurationSec: number;
-		if (mainBuffer) {
-			sourceDurationSec = mainBuffer.duration;
-		} else if (externalAudioPaths.length > 0 || regionEntries.length > 0) {
+		if (mainBufferEntry?.buffer) {
+			sourceDurationSec = mainBufferEntry.buffer.duration;
+		} else if (routingPolicy.playbackPaths.length > 0 || regionEntries.length > 0) {
 			sourceDurationSec = await this.getMediaDurationSec(videoUrl);
 		} else {
 			sourceDurationSec = primaryBuffer?.duration ?? 0;
@@ -661,7 +686,7 @@ export class AudioProcessor {
 		const numChannels = Math.min(primaryBuffer?.numberOfChannels ?? 2, 2);
 
 		return {
-			mainBuffer,
+			mainBufferEntry,
 			companionEntries,
 			regionEntries,
 			slices,
@@ -788,12 +813,13 @@ export class AudioProcessor {
 			);
 
 			// Schedule main audio
-			if (prepared.mainBuffer) {
+			if (prepared.mainBufferEntry) {
 				this.scheduleBufferThroughTimeline(
 					offlineCtx,
-					prepared.mainBuffer,
+					prepared.mainBufferEntry.buffer,
 					slices,
 					0,
+					prepared.mainBufferEntry.gain,
 					outputOffsetSec,
 					chunkSec,
 				);
@@ -806,6 +832,7 @@ export class AudioProcessor {
 					entry.buffer,
 					slices,
 					entry.startDelaySec,
+					entry.gain,
 					outputOffsetSec,
 					chunkSec,
 				);
@@ -1265,6 +1292,7 @@ export class AudioProcessor {
 		buffer: AudioBuffer,
 		slices: TimelineSlice[],
 		sourceStartDelaySec: number,
+		gain = 1,
 		chunkOutputStartSec = 0,
 		chunkDurationSec = Number.POSITIVE_INFINITY,
 	): void {
@@ -1331,9 +1359,12 @@ export class AudioProcessor {
 			}
 
 			const source = ctx.createBufferSource();
+			const gainNode = ctx.createGain();
+			gainNode.gain.value = Math.max(0, Math.min(2, gain));
 			source.buffer = buffer;
 			source.playbackRate.value = slice.speed;
-			source.connect(ctx.destination);
+			source.connect(gainNode);
+			gainNode.connect(ctx.destination);
 
 			source.start(localOutputStartSec, effectiveBufferStartSec, effectiveSourceDurationSec);
 

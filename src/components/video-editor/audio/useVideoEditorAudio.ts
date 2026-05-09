@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { resolveSourceAudioFallbackPaths } from "@/lib/exporter/sourceAudioFallback";
+import { resolveSourceTrackRoutingPolicy } from "@/lib/exporter/sourceTrackRoutingPolicy";
 import type {
 	AudioRegion,
 	ClipRegion,
@@ -78,16 +78,12 @@ export function useVideoEditorAudio({
 			summarizeErrorMessage,
 		});
 
-	const { hasEmbeddedSourceAudio, externalAudioPaths: previewSourceAudioFallbackPaths } = useMemo(
-		() => resolveSourceAudioFallbackPaths(currentSourcePath, sourceAudioFallbackPaths),
+	const sourceTrackRoutingPolicy = useMemo(
+		() => resolveSourceTrackRoutingPolicy(currentSourcePath, sourceAudioFallbackPaths),
 		[currentSourcePath, sourceAudioFallbackPaths],
 	);
-	const hasSystemCompanionPreviewTrack = previewSourceAudioFallbackPaths.some((audioPath) =>
-		audioPath.toLowerCase().includes(".system."),
-	);
-	const shouldMutePreviewVideo =
-		previewSourceAudioFallbackPaths.length > 0 &&
-		(!hasEmbeddedSourceAudio || hasSystemCompanionPreviewTrack);
+	const previewSourceAudioFallbackPaths = sourceTrackRoutingPolicy.playbackPaths;
+	const shouldMutePreviewVideo = sourceTrackRoutingPolicy.muteEmbeddedPreview;
 
 	const activeClipIdAtCurrentTime = useMemo(
 		() => getActiveClipIdAtSourceTime(currentTime, clipRegions),
