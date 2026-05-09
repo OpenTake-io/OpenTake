@@ -19,6 +19,7 @@ interface UseAudioPreviewSyncParams {
   previewVolume: number;
   isPlaying: boolean;
   currentTime: number;
+  timelineTime: number;
   duration: number;
   effectiveSpeedRegions: SpeedRegion[];
   previewSourceAudioFallbackPaths: string[];
@@ -33,6 +34,7 @@ export function useAudioPreviewSync({
   previewVolume,
   isPlaying,
   currentTime,
+  timelineTime,
   duration,
   effectiveSpeedRegions,
   previewSourceAudioFallbackPaths,
@@ -219,7 +221,7 @@ export function useAudioPreviewSync({
   }, []);
 
   useEffect(() => {
-    const currentTimeMs = currentTime * 1000;
+    const currentTimeMs = timelineTime * 1000;
     const activeSpeedRegion = effectiveSpeedRegions.find(
       (region) => currentTimeMs >= region.startMs && currentTimeMs < region.endMs,
     );
@@ -252,7 +254,7 @@ export function useAudioPreviewSync({
         audio.pause();
       }
     }
-  }, [audioRegions, currentTime, effectiveSpeedRegions, isPlaying]);
+  }, [audioRegions, timelineTime, effectiveSpeedRegions, isPlaying]);
 
   useEffect(() => {
     if (previewSourceAudioFallbackPaths.length === 0) {

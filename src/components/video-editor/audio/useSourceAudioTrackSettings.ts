@@ -13,6 +13,7 @@ export interface UseSourceAudioTrackSettingsResult {
   sourceAudioTrackMeta: SourceAudioTrackMeta;
   activeSourceAudioTrackSettings: SourceAudioTrackSettings;
   selectedClipSourceAudioTrackSettings: SourceAudioTrackSettings;
+  getSourceAudioTrackSettingsForClip: (clipId: string | null) => SourceAudioTrackSettings;
   onSourceAudioTracksMetaChange: (tracks: SourceAudioTrackMeta) => void;
   onSelectedClipSourceAudioTrackVolumeChange: (id: string, volume: number) => void;
   onSelectedClipSourceAudioTrackNormalizeChange: (id: string, normalize: boolean) => void;
@@ -61,6 +62,19 @@ export function useSourceAudioTrackSettings({
     });
   }, []);
 
+  const getSourceAudioTrackSettingsForClip = useCallback(
+    (clipId: string | null): SourceAudioTrackSettings => {
+      if (!clipId) {
+        return defaultSourceAudioTrackSettings;
+      }
+      return {
+        ...defaultSourceAudioTrackSettings,
+        ...(sourceAudioTrackSettingsByClip[clipId] ?? {}),
+      };
+    },
+    [defaultSourceAudioTrackSettings, sourceAudioTrackSettingsByClip],
+  );
+
   const onSelectedClipSourceAudioTrackVolumeChange = useCallback(
     (id: string, volume: number) => {
       if (!selectedClipId) return;
@@ -105,6 +119,7 @@ export function useSourceAudioTrackSettings({
     sourceAudioTrackMeta,
     activeSourceAudioTrackSettings,
     selectedClipSourceAudioTrackSettings,
+    getSourceAudioTrackSettingsForClip,
     onSourceAudioTracksMetaChange,
     onSelectedClipSourceAudioTrackVolumeChange,
     onSelectedClipSourceAudioTrackNormalizeChange,

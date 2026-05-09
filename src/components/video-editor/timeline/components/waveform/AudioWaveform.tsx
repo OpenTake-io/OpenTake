@@ -6,6 +6,8 @@ interface AudioWaveformProps {
 	peaks: AudioPeaksData;
 	segmentStartMs?: number;
 	segmentEndMs?: number;
+	gain?: number;
+	normalize?: boolean;
 	className?: string;
 }
 
@@ -18,6 +20,8 @@ function AudioWaveformComponent({
 	peaks,
 	segmentStartMs,
 	segmentEndMs,
+	gain = 1,
+	normalize = false,
 	className,
 }: AudioWaveformProps) {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -90,7 +94,9 @@ function AudioWaveformComponent({
 				const leftIndex = Math.floor(exactIndex);
 				const rightIndex = Math.min(peakData.length - 1, leftIndex + 1);
 				const mix = exactIndex - leftIndex;
-				const amplitude = peakData[leftIndex] * (1 - mix) + peakData[rightIndex] * mix;
+				let amplitude = peakData[leftIndex] * (1 - mix) + peakData[rightIndex] * mix;
+				if (normalize) amplitude = Math.sqrt(Math.max(0, amplitude));
+				amplitude = Math.max(0, Math.min(1, amplitude * gain));
 				const barHeight = amplitude * midY * 0.85;
 
 				ctx.moveTo(px, midY - barHeight);
@@ -103,7 +109,7 @@ function AudioWaveformComponent({
 		};
 		rafId = requestAnimationFrame(draw);
 		return () => cancelAnimationFrame(rafId);
-	}, [peaks, range.start, range.end, resizeKey, segmentStartMs, segmentEndMs]);
+	}, [gain, normalize, peaks, range.start, range.end, resizeKey, segmentStartMs, segmentEndMs]);
 
 	return (
 		<canvas
