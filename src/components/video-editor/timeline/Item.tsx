@@ -11,6 +11,8 @@ import type { Span } from "dnd-timeline";
 import { useItem } from "dnd-timeline";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import AudioWaveform from "./components/waveform/AudioWaveform";
+import type { AudioPeaksData } from "./core/timelineTypes";
 import glassStyles from "./ItemGlass.module.css";
 
 interface ItemProps {
@@ -24,6 +26,8 @@ interface ItemProps {
 	zoomDepth?: number;
 	zoomMode?: "auto" | "manual";
 	speedValue?: number;
+	waveformPeaks?: AudioPeaksData | null;
+	waveformSegmentSpan?: Span;
 	variant?: "zoom" | "trim" | "clip" | "annotation" | "speed" | "audio";
 }
 
@@ -57,6 +61,8 @@ export default function Item({
 	zoomDepth = 1,
 	zoomMode = "auto",
 	speedValue,
+	waveformPeaks = null,
+	waveformSegmentSpan,
 	variant = "zoom",
 	children,
 }: ItemProps) {
@@ -71,6 +77,7 @@ export default function Item({
 	const isClip = variant === "clip";
 	const isSpeed = variant === "speed";
 	const isAudio = variant === "audio";
+	const showAudioWaveform = isAudio && Boolean(waveformPeaks);
 
 	const glassClass = isZoom
 		? glassStyles.glassPurple
@@ -146,6 +153,14 @@ export default function Item({
 						style={{ cursor: "col-resize", pointerEvents: "auto" }}
 						title="Resize right"
 					/>
+					{showAudioWaveform && waveformPeaks && (
+						<AudioWaveform
+							peaks={waveformPeaks}
+							segmentStartMs={waveformSegmentSpan?.start ?? span.start}
+							segmentEndMs={waveformSegmentSpan?.end ?? span.end}
+							className="absolute inset-0 w-full h-full pointer-events-none opacity-45"
+						/>
+					)}
 					{/* Content */}
 					<div className="relative z-10 flex flex-col items-center justify-center text-black/70 dark:text-white/90 opacity-80 group-hover:opacity-100 transition-opacity select-none overflow-hidden">
 						<div className="flex items-center gap-1.5">
