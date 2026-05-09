@@ -254,12 +254,12 @@ interface Window {
 			message?: string;
 			error?: string;
 		}>;
-		pauseCursorCapture: () => Promise<{
+		pauseCursorCapture: (pausedAtMs?: number) => Promise<{
 			success: boolean;
 			message?: string;
 			error?: string;
 		}>;
-		resumeCursorCapture: () => Promise<{
+		resumeCursorCapture: (resumedAtMs?: number) => Promise<{
 			success: boolean;
 			message?: string;
 			error?: string;

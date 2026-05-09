@@ -177,6 +177,18 @@ export function getClipSourceEndMs(clip: ClipRegion): number {
 	return Math.round(clip.startMs + displayDurationMs * speed);
 }
 
+export function getTimelineDurationMs(clips: ClipRegion[], sourceDurationMs: number): number {
+	const baseDurationMs = Math.max(0, Math.round(sourceDurationMs));
+	if (clips.length === 0) {
+		return baseDurationMs;
+	}
+
+	return clips.reduce(
+		(durationMs, clip) => Math.max(durationMs, Math.max(0, Math.round(clip.endMs))),
+		baseDurationMs,
+	);
+}
+
 export function sortClipRegions(clips: ClipRegion[]): ClipRegion[] {
 	return [...clips].sort((left, right) => left.startMs - right.startMs);
 }
