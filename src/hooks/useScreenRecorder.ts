@@ -1092,7 +1092,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				}
 			}
 			pendingWebcamPathPromise.current = stopWebcamRecorder();
-			cleanupCapturedMedia();
+			try {
+				recorder.requestData();
+			} catch (error) {
+				console.warn("Failed to flush recorder before stopping:", error);
+			}
 			recorder.stop();
 			setRecording(false);
 			setFinalizing(true);
@@ -1777,7 +1781,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				markRecordingPaused(boundaryMs);
 				setPaused(true);
 				try {
-					await window.electronAPI.pauseCursorCapture();
+					await window.electronAPI.pauseCursorCapture(boundaryMs);
 				} catch (error) {
 					console.warn("Failed to pause cursor capture:", error);
 				}
@@ -1794,7 +1798,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				markRecordingPaused(boundaryMs);
 				setPaused(true);
 				try {
-					await window.electronAPI.pauseCursorCapture();
+					await window.electronAPI.pauseCursorCapture(boundaryMs);
 				} catch (error) {
 					console.warn("Failed to pause cursor capture:", error);
 				}
@@ -1823,7 +1827,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				markRecordingResumed(boundaryMs);
 				setPaused(false);
 				try {
-					await window.electronAPI.resumeCursorCapture();
+					await window.electronAPI.resumeCursorCapture(boundaryMs);
 				} catch (error) {
 					console.warn("Failed to resume cursor capture:", error);
 				}
@@ -1840,7 +1844,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				markRecordingResumed(boundaryMs);
 				setPaused(false);
 				try {
-					await window.electronAPI.resumeCursorCapture();
+					await window.electronAPI.resumeCursorCapture(boundaryMs);
 				} catch (error) {
 					console.warn("Failed to resume cursor capture:", error);
 				}

@@ -107,6 +107,7 @@ export default function Item({
 			style={safeItemStyle}
 			{...listeners}
 			{...attributes}
+			data-timeline-item="true"
 			onPointerDownCapture={handleSelect}
 			className="group h-full"
 		>
