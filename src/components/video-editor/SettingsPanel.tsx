@@ -110,6 +110,15 @@ const tahoeCursorUrl = cursorSetAssets.tahoe.arrow.url;
 const BUILTIN_CURSOR_PREVIEW_SIZE = 28;
 const BUILTIN_CURSOR_PREVIEW_FRAME_SIZE = 48;
 
+function getStepPrecision(step: number): number {
+	if (!Number.isFinite(step) || step <= 0) return 0;
+	const [mantissa = "0", exponentPart = "0"] = step.toExponential().split("e");
+	const exponent = Number.parseInt(exponentPart, 10);
+	const mantissaDecimals = (mantissa.split(".")[1] ?? "").replace(/0+$/, "").length;
+	const precision = exponent < 0 ? Math.max(0, -exponent + mantissaDecimals) : mantissaDecimals;
+	return Math.min(12, precision);
+}
+
 const GRADIENTS = [
 	"linear-gradient( 111.6deg,  rgba(114,167,232,1) 9.4%, rgba(253,129,82,1) 43.9%, rgba(253,129,82,1) 54.8%, rgba(249,202,86,1) 86.3% )",
 	"linear-gradient(120deg, #d4fc79 0%, #96e6a1 100%)",
@@ -262,42 +271,24 @@ function ExtensionSettingsSection({
 				}
 
 				if (field.type === "slider") {
+					const step = field.step ?? 0.01;
+					const precision = getStepPrecision(step);
 					return (
-						<div
-							key={field.id}
-							className="flex items-center justify-between gap-2 rounded-lg bg-foreground/[0.03] px-2.5 py-1.5"
-						>
-							<span className="text-[11px] text-muted-foreground flex-shrink-0">
-								{field.label}
-							</span>
-							<div className="flex items-center gap-1.5">
-								<input
-									type="range"
-									min={field.min ?? 0}
-									max={field.max ?? 1}
-									step={field.step ?? 0.01}
-									value={
-										typeof value === "number"
-											? value
-											: (field.defaultValue as number)
-									}
-									onChange={(e) => {
-										extensionHost.setExtensionSetting(
-											extensionId,
-											field.id,
-											parseFloat(e.target.value),
-										);
-										forceUpdate((n) => n + 1);
-									}}
-									className="w-20 h-1 accent-[#2563EB]"
-								/>
-								<span className="text-[10px] text-muted-foreground/70 w-8 text-right font-mono">
-									{(typeof value === "number"
-										? value
-										: (field.defaultValue as number)
-									).toFixed(1)}
-								</span>
-							</div>
+						<div key={field.id} className="mt-1">
+							<SliderControl
+								label={field.label}
+								value={typeof value === "number" ? value : (field.defaultValue as number)}
+								defaultValue={field.defaultValue as number}
+								min={field.min ?? 0}
+								max={field.max ?? 1}
+								step={step}
+								onChange={(v) => {
+									extensionHost.setExtensionSetting(extensionId, field.id, v);
+									forceUpdate((n) => n + 1);
+								}}
+								formatValue={(v) => v.toFixed(precision)}
+								parseInput={(text) => parseFloat(text)}
+							/>
 						</div>
 					);
 				}
@@ -1233,9 +1224,12 @@ export function SettingsPanel({
 		if (GRADIENTS.includes(selected)) {
 			setGradient(selected);
 		}
+	}, [selected]);
 
-		if (selected.startsWith("data:image") && !customImages.includes(selected)) {
-			setCustomImages((prev) => [selected, ...prev]);
+	useEffect(() => {
+		if (selected.startsWith("data:image")) {
+			setCustomImages((prev) => (prev.includes(selected) ? prev : [selected, ...prev]));
+			return;
 		}
 
 		const isKnownWallpaper =
@@ -1243,16 +1237,11 @@ export function SettingsPanel({
 			wallpaperPreviewPaths.includes(selected) ||
 			extensionWallpaperPaths.includes(selected);
 
-		if (
-			!isKnownWallpaper &&
-			isVideoWallpaperSource(selected) &&
-			!customImages.includes(selected)
-		) {
-			setCustomImages((prev) => [selected, ...prev]);
+		if (!isKnownWallpaper && isVideoWallpaperSource(selected)) {
+			setCustomImages((prev) => (prev.includes(selected) ? prev : [selected, ...prev]));
 		}
 	}, [
 		builtInWallpaperPaths,
-		customImages,
 		extensionWallpaperPaths,
 		selected,
 		wallpaperPreviewPaths,
@@ -1498,6 +1487,22 @@ export function SettingsPanel({
 
 	const resetBackgroundSection = () => {
 		onBackgroundBlurChange?.(initialEditorPreferences.backgroundBlur);
+
+		const preferredWallpaper = initialEditorPreferences.wallpaper;
+		const hasPreferredWallpaper =
+			(preferredWallpaper && builtInWallpaperPaths.includes(preferredWallpaper)) ||
+			(preferredWallpaper && extensionWallpaperPaths.includes(preferredWallpaper)) ||
+			(preferredWallpaper && customImages.includes(preferredWallpaper)) ||
+			(preferredWallpaper && isHexWallpaper(preferredWallpaper)) ||
+			(preferredWallpaper && GRADIENTS.includes(preferredWallpaper));
+
+		onWallpaperChange(
+			(hasPreferredWallpaper ? preferredWallpaper : "") ||
+				builtInWallpaperPaths[0] ||
+				extensionWallpaperPaths[0] ||
+				BUILT_IN_WALLPAPERS[0]?.publicPath ||
+				"",
+		);
 	};
 
 	const resetZoomSection = () => {
@@ -1576,7 +1581,17 @@ export function SettingsPanel({
 	};
 
 	const resetFrameSection = () => {
+		const preferredFrame = initialEditorPreferences.frame;
+		const resolvedFrame = preferredFrame
+			? availableFrames.some((candidate) => candidate.id === preferredFrame)
+				? preferredFrame
+				: null
+			: null;
+		onShadowChange?.(initialEditorPreferences.shadowIntensity);
+		onBorderRadiusChange?.(initialEditorPreferences.borderRadius);
 		onAspectRatioChange?.(initialEditorPreferences.aspectRatio);
+		onPaddingChange?.({ ...initialEditorPreferences.padding });
+		onFrameChange?.(resolvedFrame);
 		removeBackgroundStateRef.current = null;
 	};
 
