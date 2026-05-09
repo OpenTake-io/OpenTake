@@ -110,6 +110,15 @@ const tahoeCursorUrl = cursorSetAssets.tahoe.arrow.url;
 const BUILTIN_CURSOR_PREVIEW_SIZE = 28;
 const BUILTIN_CURSOR_PREVIEW_FRAME_SIZE = 48;
 
+function getStepPrecision(step: number): number {
+	if (!Number.isFinite(step) || step <= 0) return 0;
+	const [mantissa = "0", exponentPart = "0"] = step.toExponential().split("e");
+	const exponent = Number.parseInt(exponentPart, 10);
+	const mantissaDecimals = (mantissa.split(".")[1] ?? "").replace(/0+$/, "").length;
+	const precision = exponent < 0 ? Math.max(0, -exponent + mantissaDecimals) : mantissaDecimals;
+	return Math.min(12, precision);
+}
+
 const GRADIENTS = [
 	"linear-gradient( 111.6deg,  rgba(114,167,232,1) 9.4%, rgba(253,129,82,1) 43.9%, rgba(253,129,82,1) 54.8%, rgba(249,202,86,1) 86.3% )",
 	"linear-gradient(120deg, #d4fc79 0%, #96e6a1 100%)",
@@ -261,21 +270,18 @@ function ExtensionSettingsSection({
 					);
 				}
 
-					if (field.type === "slider") {
-						const step = field.step ?? 0.01;
-					const stepText = String(step);
-					const precision = stepText.includes(".")
-						? stepText.split(".")[1]?.length ?? 0
-						: 0;
+				if (field.type === "slider") {
+					const step = field.step ?? 0.01;
+					const precision = getStepPrecision(step);
 					return (
 						<div key={field.id} className="mt-1">
-								<SliderControl
-									label={field.label}
-									value={typeof value === "number" ? value : (field.defaultValue as number)}
-									defaultValue={field.defaultValue as number}
-									min={field.min ?? 0}
-									max={field.max ?? 1}
-									step={step}
+							<SliderControl
+								label={field.label}
+								value={typeof value === "number" ? value : (field.defaultValue as number)}
+								defaultValue={field.defaultValue as number}
+								min={field.min ?? 0}
+								max={field.max ?? 1}
+								step={step}
 								onChange={(v) => {
 									extensionHost.setExtensionSetting(extensionId, field.id, v);
 									forceUpdate((n) => n + 1);
