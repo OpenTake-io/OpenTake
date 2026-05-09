@@ -54,7 +54,7 @@ export const SliderControl = memo(function SliderControl({
 	// Sync initial and prop-driven changes to CSS variable
 	useEffect(() => {
 		if (rootRef.current) {
-			rootRef.current.style.setProperty("--slider-pct", `${pct}%`);
+			rootRef.current.style.setProperty("--slider-pct", String(pct / 100));
 		}
 	}, [pct]);
 
@@ -73,7 +73,7 @@ export const SliderControl = memo(function SliderControl({
 
 			// Direct DOM update for instant feedback
 			if (rootRef.current) {
-				rootRef.current.style.setProperty("--slider-pct", `${finalPct}%`);
+				rootRef.current.style.setProperty("--slider-pct", String(Number(finalPct) / 100));
 				rootRef.current.setAttribute("aria-valuenow", String(finalValue));
 				rootRef.current.setAttribute("aria-valuetext", formatValue(finalValue));
 			}
@@ -166,14 +166,14 @@ export const SliderControl = memo(function SliderControl({
 			className="relative flex h-10 w-full select-none items-center overflow-hidden rounded-xl bg-editor-bg/80 px-1.5 outline-none focus-visible:ring-1 focus-visible:ring-[#2563EB]/40"
 			style={
 				{
-					"--slider-pct": `${pct}%`,
+					"--slider-pct": String(pct / 100),
 				} as React.CSSProperties
 			}
 		>
 			<div
 				className="pointer-events-none absolute inset-y-[3px] left-[3px] right-auto rounded-[10px] bg-foreground/[0.08] shadow-[0_4px_10px_0_rgba(0,0,0,0.18)] transition-none"
 				style={{
-					width: "calc(var(--slider-pct) - (var(--slider-pct) * 6px / 100%))",
+					width: "calc(var(--slider-pct) * (100% - 6px))",
 				}}
 			/>
 			<div
@@ -182,7 +182,7 @@ export const SliderControl = memo(function SliderControl({
 					dividerClass,
 				)}
 				style={{
-					left: "calc(2px + var(--slider-pct) - (var(--slider-pct) * 6px / 100%))",
+					left: "calc(2px + var(--slider-pct) * (100% - 6px))",
 				}}
 			/>
 			<span className="pointer-events-none relative z-10 flex-1 pl-3 text-[12px] font-medium text-muted-foreground">
