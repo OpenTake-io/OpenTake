@@ -767,6 +767,7 @@ export class ModernVideoExporter {
 								this.config.sourceAudioFallbackPaths,
 								this.config.sourceAudioFallbackStartDelayMsByPath,
 								this.config.sourceAudioTrackSettings,
+								this.config.clipRegions,
 							),
 							"audio processing",
 							"audio",
@@ -1218,16 +1219,20 @@ export class ModernVideoExporter {
 				typeof primaryAudioSourceSampleRate === "number" &&
 				Number.isFinite(primaryAudioSourceSampleRate) &&
 				primaryAudioSourceSampleRate > 0;
-			const strategy = canUsePrimaryAudioFiltergraph
-				? classifyEditedTrackStrategy({
-						primaryAudioSourcePath,
-						sourceDurationMs,
-						trimRegions,
-						speedRegions,
-						audioRegions,
-						sourceAudioFallbackPaths,
-					})
-				: "offline-render-fallback";
+			const requiresRenderedEditedTrack =
+				hasNonDefaultSourceTrackSettings(this.config.sourceAudioTrackSettings) ||
+				(this.config.clipRegions ?? []).some((clip) => Boolean(clip.muted));
+			const strategy =
+				canUsePrimaryAudioFiltergraph && !requiresRenderedEditedTrack
+					? classifyEditedTrackStrategy({
+							primaryAudioSourcePath,
+							sourceDurationMs,
+							trimRegions,
+							speedRegions,
+							audioRegions,
+							sourceAudioFallbackPaths,
+						})
+					: "offline-render-fallback";
 
 			if (strategy === "filtergraph-fast-path") {
 				const audioSourcePath = primaryAudioSourcePath;
