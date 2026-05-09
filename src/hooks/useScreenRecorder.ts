@@ -1092,7 +1092,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				}
 			}
 			pendingWebcamPathPromise.current = stopWebcamRecorder();
-			cleanupCapturedMedia();
+			try {
+				recorder.requestData();
+			} catch (error) {
+				console.warn("Failed to flush recorder before stopping:", error);
+			}
 			recorder.stop();
 			setRecording(false);
 			setFinalizing(true);
