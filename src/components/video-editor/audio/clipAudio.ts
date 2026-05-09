@@ -1,14 +1,13 @@
-import { mapSourceTimeToTimelineTime } from "../types";
+import { getClipSourceEndMs, sortClipRegions } from "../types";
 import type { ClipRegion } from "../types";
 
 export function getActiveClipIdAtSourceTime(
   sourceTimeSeconds: number,
   clipRegions: ClipRegion[],
 ): string | null {
-  const sourceMs = sourceTimeSeconds * 1000;
-  const timelineMs = mapSourceTimeToTimelineTime(sourceMs, clipRegions);
-  const activeClip = clipRegions.find(
-    (clip) => timelineMs >= clip.startMs && timelineMs < clip.endMs,
+  const sourceMs = Math.round(sourceTimeSeconds * 1000);
+  const activeClip = sortClipRegions(clipRegions).find(
+    (clip) => sourceMs >= clip.startMs && sourceMs < getClipSourceEndMs(clip),
   );
   return activeClip?.id ?? null;
 }

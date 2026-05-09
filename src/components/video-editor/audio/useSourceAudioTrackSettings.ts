@@ -120,7 +120,9 @@ export function useSourceAudioTrackSettings({
           [selectedClipId]: {
             ...prevClip,
             [id]: {
-              volume: Math.max(0, Math.min(2, volume)),
+              volume: Number.isFinite(volume)
+                ? Math.max(0, Math.min(2, volume))
+                : (prevClip[id]?.volume ?? 1),
               normalize: prevClip[id]?.normalize ?? false,
             },
           },

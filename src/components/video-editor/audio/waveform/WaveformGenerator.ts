@@ -8,43 +8,52 @@ export class WaveformGenerator {
 	private peaksCache = new Map<string, AudioPeaksData>();
 	private pending = new Map<string, Promise<AudioPeaksData>>();
 	private workerRequestSeq = 0;
-	private workerResolvers = new Map<number, (peaks: Float32Array) => void>();
+	private workerResolvers = new Map<number, { resolve: (peaks: Float32Array) => void; reject: (err: Error) => void }>();
 
 	constructor() {
 		this.audioContext = new (window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)();
 		this.worker = new WorkerConstructor();
+		
 		this.worker.addEventListener(
 			"message",
-			(event: MessageEvent<{ requestId: number; peaks: Float32Array }>) => {
-				const { requestId, peaks } = event.data;
-				const resolve = this.workerResolvers.get(requestId);
-				if (!resolve) return;
+			(event: MessageEvent<{ requestId: number; peaks?: Float32Array; error?: string }>) => {
+				const { requestId, peaks, error } = event.data;
+				const resolver = this.workerResolvers.get(requestId);
+				if (!resolver) return;
+				
 				this.workerResolvers.delete(requestId);
-				resolve(peaks);
+				if (error) {
+					resolver.reject(new Error(error));
+				} else if (peaks) {
+					resolver.resolve(peaks);
+				}
 			},
 		);
+
+		this.worker.addEventListener("error", (error: ErrorEvent) => {
+			console.error("[WaveformGenerator] Worker fatal error:", error);
+			const fatalError = error.error ?? new Error(error.message || "Worker crashed");
+			
+			// Reject all pending requests if the worker itself crashes
+			for (const resolver of this.workerResolvers.values()) {
+				resolver.reject(fatalError);
+			}
+			this.workerResolvers.clear();
+		});
 	}
 
-	private computePeaksWithWorker(channelData: Float32Array, samples: number): Promise<Float32Array> {
+	private computePeaksWithWorker(channels: Float32Array[], samples: number): Promise<Float32Array> {
 		return new Promise((resolve, reject) => {
 			const requestId = ++this.workerRequestSeq;
-			const onError = (error: ErrorEvent) => {
-				this.worker.removeEventListener("error", onError);
-				this.workerResolvers.delete(requestId);
-				reject(error.error ?? new Error(error.message));
-			};
-			this.worker.addEventListener("error", onError, { once: true });
-			this.workerResolvers.set(requestId, (peaks) => {
-				this.worker.removeEventListener("error", onError);
-				resolve(peaks);
-			});
+			this.workerResolvers.set(requestId, { resolve, reject });
+			
 			this.worker.postMessage(
 				{
 					requestId,
-					channelData,
+					channels,
 					samples,
 				},
-				[channelData.buffer],
+				channels.map(c => c.buffer),
 			);
 		});
 	}
@@ -65,8 +74,14 @@ export class WaveformGenerator {
 
 			const arrayBuffer = await response.arrayBuffer();
 			const decoded = await this.audioContext.decodeAudioData(arrayBuffer);
-			const channelData = decoded.getChannelData(0).slice();
-			const peaks = await this.computePeaksWithWorker(channelData, peakCount);
+			
+			const channels: Float32Array[] = [];
+			for (let i = 0; i < decoded.numberOfChannels; i++) {
+				// We slice to transfer the underlying buffer to the worker
+				channels.push(decoded.getChannelData(i).slice());
+			}
+			
+			const peaks = await this.computePeaksWithWorker(channels, peakCount);
 
 			let max = 0;
 			for (let i = 0; i < peaks.length; i++) {
