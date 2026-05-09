@@ -398,6 +398,7 @@ export class FrameRenderer {
 	private cameraContainer: Container | null = null;
 	private videoEffectsContainer: Container | null = null;
 	private videoContainer: Container | null = null;
+	private frameContainer: Container | null = null;
 	private cursorContainer: Container | null = null;
 	private overlayContainer: Container | null = null;
 	private annotationContainer: Container | null = null;
@@ -447,6 +448,14 @@ export class FrameRenderer {
 	private captionSprite: Sprite | null = null;
 	private captionTextureSource: MutableVideoTextureSource | null = null;
 	private captionRenderKey: string | null = null;
+	private frameSprite: Sprite | null = null;
+	private frameImage: HTMLImageElement | null = null;
+	private frameDraw: ((ctx: CanvasRenderingContext2D, width: number, height: number) => void) | null =
+		null;
+	private frameInsets: { top: number; right: number; bottom: number; left: number } | null = null;
+	private frameRasterCanvas: HTMLCanvasElement | null = null;
+	private frameRasterWidth = 0;
+	private frameRasterHeight = 0;
 	private exportCompositeCanvas: ExportCompositeCanvasState | null = null;
 	private temporalCompositeCanvas: ExportCompositeCanvasState | null = null;
 	private outputCanvasOverride: HTMLCanvasElement | null = null;
@@ -541,6 +550,7 @@ export class FrameRenderer {
 		this.cameraContainer = new Container();
 		this.videoEffectsContainer = new Container();
 		this.videoContainer = new Container();
+		this.frameContainer = new Container();
 		this.cursorContainer = new Container();
 		this.overlayContainer = new Container();
 		this.annotationContainer = new Container();
@@ -558,6 +568,7 @@ export class FrameRenderer {
 		);
 
 		this.cameraContainer.addChild(this.videoEffectsContainer);
+		this.cameraContainer.addChild(this.frameContainer);
 		this.cameraContainer.addChild(this.cursorContainer);
 		this.videoEffectsContainer.addChild(this.videoContainer);
 		this.videoEffectsContainer.filterArea = new Rectangle(
@@ -608,6 +619,7 @@ export class FrameRenderer {
 		}
 
 		await this.setupBackground();
+		await this.setupFrame();
 		await this.setupWebcamSource();
 
 		this.annotationScaleFactor = this.calculateAnnotationScaleFactor();
@@ -2074,6 +2086,37 @@ export class FrameRenderer {
 		return getRenderableAssetUrl(wallpaperAsset);
 	}
 
+	private async setupFrame(): Promise<void> {
+		const frameId = this.config.frame;
+		if (!frameId) {
+			return;
+		}
+
+		const frames = extensionHost.getFrames();
+		const frame = frames.find((candidate) => candidate.id === frameId);
+		if (!frame) {
+			console.warn(`[ModernFrameRenderer] Device frame "${frameId}" not found`);
+			return;
+		}
+
+		this.frameInsets = frame.screenInsets;
+
+		if (frame.draw) {
+			this.frameDraw = frame.draw;
+			return;
+		}
+
+		const image = new Image();
+		image.crossOrigin = "anonymous";
+		await new Promise<void>((resolve, reject) => {
+			image.onload = () => resolve();
+			image.onerror = () =>
+				reject(new Error(`[ModernFrameRenderer] Failed to load device frame image: ${frameId}`));
+			image.src = frame.filePath;
+		});
+		this.frameImage = image;
+	}
+
 	private async fallbackBackgroundForwardFrameSourceToMediaElement(): Promise<boolean> {
 		const sourceUrl = this.backgroundForwardFrameSourceUrl;
 		this.backgroundForwardFrameSource?.cancel();
@@ -3437,6 +3480,7 @@ export class FrameRenderer {
 			width,
 			height,
 			padding,
+			frameInsets: this.frameInsets,
 			cropRegion,
 			videoWidth,
 			videoHeight,
@@ -3484,6 +3528,85 @@ export class FrameRenderer {
 				sourceCrop: cropRegion,
 			},
 		};
+
+		this.updateFrameLayout();
+	}
+
+	private updateFrameLayout(): void {
+		if (!this.frameContainer || !this.layoutCache) {
+			return;
+		}
+
+		if (!this.frameImage && !this.frameDraw) {
+			if (this.frameSprite) {
+				const texture = this.frameSprite.texture;
+				this.frameContainer.removeChild(this.frameSprite);
+				this.frameSprite.destroy();
+				texture.destroy(true);
+				this.frameSprite = null;
+			}
+			return;
+		}
+
+		const maskRect = this.layoutCache.maskRect;
+		const insets = this.frameInsets;
+		let frameX = maskRect.x;
+		let frameY = maskRect.y;
+		let frameWidth = maskRect.width;
+		let frameHeight = maskRect.height;
+
+		if (insets) {
+			const screenWidth = maskRect.width;
+			const screenHeight = maskRect.height;
+			frameWidth = screenWidth / (1 - insets.left - insets.right);
+			frameHeight = screenHeight / (1 - insets.top - insets.bottom);
+			frameX = maskRect.x - insets.left * frameWidth;
+			frameY = maskRect.y - insets.top * frameHeight;
+		}
+
+		if (this.frameDraw) {
+			const targetWidth = Math.max(1, Math.round(frameWidth));
+			const targetHeight = Math.max(1, Math.round(frameHeight));
+			if (
+				!this.frameRasterCanvas ||
+				this.frameRasterWidth !== targetWidth ||
+				this.frameRasterHeight !== targetHeight
+			) {
+				const canvas = document.createElement("canvas");
+				canvas.width = targetWidth;
+				canvas.height = targetHeight;
+				const context = configureHighQuality2DContext(canvas.getContext("2d"));
+				if (!context) {
+					return;
+				}
+				this.frameDraw(context, targetWidth, targetHeight);
+				this.frameRasterCanvas = canvas;
+				this.frameRasterWidth = targetWidth;
+				this.frameRasterHeight = targetHeight;
+
+				const texture = Texture.from(canvas);
+				if (!this.frameSprite) {
+					this.frameSprite = new Sprite(texture);
+					this.frameContainer.addChild(this.frameSprite);
+				} else {
+					const previousTexture = this.frameSprite.texture;
+					this.frameSprite.texture = texture;
+					previousTexture.destroy(true);
+				}
+			}
+		} else if (this.frameImage && !this.frameSprite) {
+			const texture = Texture.from(this.frameImage);
+			this.frameSprite = new Sprite(texture);
+			this.frameContainer.addChild(this.frameSprite);
+		}
+
+		if (!this.frameSprite) {
+			return;
+		}
+
+		this.frameSprite.position.set(frameX, frameY);
+		this.frameSprite.width = frameWidth;
+		this.frameSprite.height = frameHeight;
 	}
 
 	private updateVideoShadowLayout(layout: {
@@ -3724,6 +3847,9 @@ export class FrameRenderer {
 		if (this.captionSprite?.texture) {
 			texturesToDestroy.add(this.captionSprite.texture);
 		}
+		if (this.frameSprite?.texture) {
+			texturesToDestroy.add(this.frameSprite.texture);
+		}
 		for (const layer of this.videoShadowLayers) {
 			if (layer.sprite?.texture) {
 				texturesToDestroy.add(layer.sprite.texture);
@@ -3772,6 +3898,7 @@ export class FrameRenderer {
 		this.cameraContainer = null;
 		this.videoEffectsContainer = null;
 		this.videoContainer = null;
+		this.frameContainer = null;
 		this.cursorContainer = null;
 		this.overlayContainer = null;
 		this.annotationContainer = null;
@@ -3841,6 +3968,13 @@ export class FrameRenderer {
 		this.captionSprite = null;
 		this.captionTextureSource = null;
 		this.captionRenderKey = null;
+		this.frameSprite = null;
+		this.frameImage = null;
+		this.frameDraw = null;
+		this.frameInsets = null;
+		this.frameRasterCanvas = null;
+		this.frameRasterWidth = 0;
+		this.frameRasterHeight = 0;
 		this.exportCompositeCanvas = null;
 		this.temporalCompositeCanvas = null;
 		this.outputCanvasOverride = null;
