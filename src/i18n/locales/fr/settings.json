@@ -186,6 +186,9 @@
 	},
 	"audio": {
 		"sourceTracksTitle": "Audio source du clip",
+		"systemLabel": "Son Système",
+		"micLabel": "Microphone",
+		"mixedLabel": "Source",
 		"volumeTitle": "Volume",
 		"normalize": "Normaliser",
 		"deleteRegion": "Supprimer l'audio"

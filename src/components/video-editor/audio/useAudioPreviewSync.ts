@@ -274,13 +274,27 @@ export function useAudioPreviewSync({
       : SOURCE_AUDIO_PREVIEW_PAUSED_SEEK_DRIFT_SECONDS;
 
     for (const audio of sourceAudioElementsRef.current.values()) {
+      const sourceAudioPath = audio.dataset.sourceAudioPath ?? "";
+      audio.volume = isCurrentClipMuted
+        ? 0
+        : Math.max(0, Math.min(1, previewVolume * getSourceTrackPreviewGain(sourceAudioPath)));
+
       enablePitchPreservingPlayback(audio);
       const audioDuration = Number.isFinite(audio.duration) ? audio.duration : null;
-      const startDelaySeconds = estimateCompanionAudioStartDelaySeconds(
+      const isMicCompanionTrack = /\.mic\./i.test(sourceAudioPath);
+      const rawStartDelaySeconds = estimateCompanionAudioStartDelaySeconds(
         duration,
         audioDuration,
-        sourceAudioFallbackStartDelayMsByPath[audio.dataset.sourceAudioPath ?? ""],
+        sourceAudioFallbackStartDelayMsByPath[sourceAudioPath],
       );
+      const maxPreviewStartDelaySeconds = isMicCompanionTrack ? 2 : 5;
+      const startDelaySeconds = isMicCompanionTrack
+        ? 0
+        : Number.isFinite(duration) &&
+              (rawStartDelaySeconds >= Math.max(0, duration - 0.01) ||
+                rawStartDelaySeconds > Math.max(maxPreviewStartDelaySeconds, duration * 0.9))
+            ? 0
+            : rawStartDelaySeconds;
       const beforeAudioStart = currentTime + 0.001 < startDelaySeconds;
       const targetTime = clampMediaTimeToDuration(currentTime - startDelaySeconds, audioDuration);
 
@@ -317,7 +331,10 @@ export function useAudioPreviewSync({
     currentTime,
     duration,
     effectiveSpeedRegions,
+    getSourceTrackPreviewGain,
+    isCurrentClipMuted,
     isPlaying,
+    previewVolume,
     previewSourceAudioFallbackPaths,
     sourceAudioFallbackStartDelayMsByPath,
   ]);

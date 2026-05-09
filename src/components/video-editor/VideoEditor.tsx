@@ -197,6 +197,7 @@ import {
 	type ZoomMotionBlurTuning,
 	type ZoomRegion,
 	type ZoomTransitionEasing,
+	type SourceAudioTrackSettings,
 } from "./types";
 import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
 import {
@@ -664,6 +665,12 @@ export default function VideoEditor() {
 	const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
 	const [audioRegions, setAudioRegions] = useState<AudioRegion[]>([]);
 	const [selectedAudioId, setSelectedAudioId] = useState<string | null>(null);
+	const [sourceAudioTrackSettingsByClip, setSourceAudioTrackSettingsByClip] = useState<
+		Record<string, SourceAudioTrackSettings>
+	>({});
+	const [defaultSourceAudioTrackSettings, setDefaultSourceAudioTrackSettings] = useState<
+		SourceAudioTrackSettings
+	>({});
 	const [hasClipSourceAudio, setHasClipSourceAudio] = useState(false);
 	const [autoCaptions, setAutoCaptions] = useState<CaptionCue[]>([]);
 	const [autoCaptionSettings, setAutoCaptionSettings] = useState<AutoCaptionSettings>(
@@ -1752,6 +1759,8 @@ export default function VideoEditor() {
 				gifFrameRate: GifFrameRate;
 				gifLoop: boolean;
 				gifSizePreset: GifSizePreset;
+				sourceAudioTrackSettingsByClip: Record<string, SourceAudioTrackSettings>;
+				defaultSourceAudioTrackSettings: SourceAudioTrackSettings;
 			}>,
 		) => {
 			return editor;
@@ -1853,6 +1862,8 @@ export default function VideoEditor() {
 				gifFrameRate,
 				gifLoop,
 				gifSizePreset,
+				sourceAudioTrackSettingsByClip,
+				defaultSourceAudioTrackSettings,
 			}),
 		[
 			buildPersistedEditorState,
@@ -1913,6 +1924,8 @@ export default function VideoEditor() {
 			gifLoop,
 			gifSizePreset,
 			frame,
+			sourceAudioTrackSettingsByClip,
+			defaultSourceAudioTrackSettings,
 		],
 	);
 
@@ -2098,6 +2111,10 @@ export default function VideoEditor() {
 			setSpeedRegions(normalizedEditor.speedRegions);
 			setAnnotationRegions(normalizedEditor.annotationRegions);
 			setAudioRegions(normalizedEditor.audioRegions);
+			setSourceAudioTrackSettingsByClip(normalizedEditor.sourceAudioTrackSettingsByClip ?? {});
+			setDefaultSourceAudioTrackSettings(
+				normalizedEditor.defaultSourceAudioTrackSettings ?? {},
+			);
 			setAutoCaptions(normalizedEditor.autoCaptions);
 			setAutoCaptionSettings(normalizedEditor.autoCaptionSettings);
 			setAspectRatio(normalizedEditor.aspectRatio);
@@ -3314,6 +3331,10 @@ export default function VideoEditor() {
 		clipRegions,
 		audioRegions,
 		effectiveSpeedRegions,
+		sourceAudioTrackSettingsByClip,
+		setSourceAudioTrackSettingsByClip,
+		defaultSourceAudioTrackSettings,
+		setDefaultSourceAudioTrackSettings,
 		currentTime,
 		timelineTime: timelinePlayheadTime,
 		duration,
@@ -3751,6 +3772,7 @@ export default function VideoEditor() {
 		if (id) {
 			setSelectedZoomId(null);
 			setSelectedAnnotationId(null);
+			setActiveEffectSection("audio");
 		}
 	}, []);
 
@@ -3768,6 +3790,7 @@ export default function VideoEditor() {
 		setSelectedAudioId(id);
 		setSelectedZoomId(null);
 		setSelectedAnnotationId(null);
+		setActiveEffectSection("audio");
 	}, []);
 
 	const handleAudioSpanChange = useCallback((id: string, span: Span, trackIndex?: number) => {

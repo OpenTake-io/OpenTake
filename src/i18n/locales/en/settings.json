@@ -206,6 +206,9 @@
 	},
 	"audio": {
 		"sourceTracksTitle": "Clip Source Audio",
+		"systemLabel": "Source System",
+		"micLabel": "Source Mic",
+		"mixedLabel": "Source",
 		"volumeTitle": "Volume",
 		"normalize": "Normalize",
 		"deleteRegion": "Delete Audio"
