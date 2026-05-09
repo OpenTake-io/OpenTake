@@ -1,6 +1,6 @@
 import { useTimelineContext } from "dnd-timeline";
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { AudioPeaksData } from "./useAudioPeaks";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import type { AudioPeaksData } from "../../core/timelineTypes";
 
 interface AudioWaveformProps {
 	peaks: AudioPeaksData;
@@ -11,7 +11,7 @@ interface AudioWaveformProps {
  * Automatically syncs with the timeline's visible range so the waveform
  * scrolls and zooms together with the clip items above it.
  */
-export default function AudioWaveform({ peaks }: AudioWaveformProps) {
+function AudioWaveformComponent({ peaks }: AudioWaveformProps) {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const { range } = useTimelineContext();
 	const [resizeKey, setResizeKey] = useState(0);
@@ -87,3 +87,5 @@ export default function AudioWaveform({ peaks }: AudioWaveformProps) {
 		/>
 	);
 }
+
+export default memo(AudioWaveformComponent);

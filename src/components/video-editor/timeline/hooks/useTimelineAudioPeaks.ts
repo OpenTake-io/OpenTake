@@ -1,14 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import type { AudioPeaksData } from "../core/timelineTypes";
 
 /** Number of peak bins to produce — enough for smooth display at any zoom. */
 const TARGET_PEAK_COUNT = 2048;
-
-export interface AudioPeaksData {
-	/** One normalised amplitude value (0–1) per bin, covering the full duration. */
-	peaks: Float32Array;
-	/** Total duration of the decoded audio in milliseconds. */
-	durationMs: number;
-}
 
 /**
  * Decode audio from a media file URL and produce a fixed-length array of peak
@@ -16,7 +10,7 @@ export interface AudioPeaksData {
  *
  * Returns `null` while loading or if the file has no decodeable audio.
  */
-export function useAudioPeaks(fileUrl: string | null | undefined): AudioPeaksData | null {
+export function useTimelineAudioPeaks(fileUrl: string | null | undefined): AudioPeaksData | null {
 	const [data, setData] = useState<AudioPeaksData | null>(null);
 	const urlRef = useRef(fileUrl);
 
