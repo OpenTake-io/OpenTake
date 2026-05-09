@@ -412,6 +412,9 @@ export function registerRecordingHandlers(
 					let orphanedMicAudioPath: string | null = null;
 					const browserMicFallbackRequested =
 						shouldStartWindowsBrowserMicrophoneFallback(options);
+					const windowId = parseWindowId(source?.id);
+					const isWindowCapture = Boolean(windowId && source?.id?.startsWith("window:"));
+
 					const resolvedDisplay = resolveWindowsCaptureDisplay(
 						source,
 						getScreen().getAllDisplays(),
@@ -423,12 +426,17 @@ export function registerRecordingHandlers(
 					const config: Record<string, unknown> = {
 						outputPath,
 						fps: 60,
-						displayId: resolvedDisplay.displayId,
-						displayX: Math.round(resolvedDisplay.bounds.x),
-						displayY: Math.round(resolvedDisplay.bounds.y),
-						displayW: Math.round(resolvedDisplay.bounds.width),
-						displayH: Math.round(resolvedDisplay.bounds.height),
 					};
+
+					if (isWindowCapture) {
+						config.windowHandle = windowId;
+					} else {
+						config.displayId = resolvedDisplay.displayId;
+						config.displayX = Math.round(resolvedDisplay.bounds.x);
+						config.displayY = Math.round(resolvedDisplay.bounds.y);
+						config.displayW = Math.round(resolvedDisplay.bounds.width);
+						config.displayH = Math.round(resolvedDisplay.bounds.height);
+					}
 
 					if (options?.capturesSystemAudio) {
 						systemAudioPath = path.join(
