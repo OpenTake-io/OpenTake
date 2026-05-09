@@ -68,6 +68,7 @@ export function buildTimelineItems(params: {
 		rowId: getAudioTrackRowId(region.trackIndex ?? 0),
 		span: { start: region.startMs, end: region.endMs },
 		label: getAudioLabel(region),
+		audioPath: region.audioPath,
 		variant: "audio",
 	}));
 

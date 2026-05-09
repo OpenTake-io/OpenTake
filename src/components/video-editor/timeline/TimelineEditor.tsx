@@ -229,7 +229,9 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			return { previewSpans, hiddenZoomIds };
 		}, [clipRegions, liveSpanPreviewById, zoomRegions]);
 		const { shortcuts: keyShortcuts, isMac } = useShortcuts();
-		const audioPeaks = useTimelineAudioPeaks(videoPath);
+		const audioPeaks = useTimelineAudioPeaks(videoPath, {
+			enableSourceSidecarFallback: true,
+		});
 
 		useEffect(() => {
 			if (aspectRatio === "native") {

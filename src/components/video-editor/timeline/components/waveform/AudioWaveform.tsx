@@ -61,8 +61,13 @@ function AudioWaveformComponent({
 		const { peaks: peakData, durationMs } = peaks;
 		if (durationMs <= 0 || peakData.length === 0) return;
 
-		const visibleStartMs = segmentStartMs ?? range.start;
-		const visibleEndMs = segmentEndMs ?? range.end;
+		const rawVisibleStartMs = segmentStartMs ?? range.start;
+		const rawVisibleEndMs = segmentEndMs ?? range.end;
+		const msPerBin = durationMs / peakData.length;
+		const visibleStartMs =
+			msPerBin > 0 ? Math.round(rawVisibleStartMs / msPerBin) * msPerBin : rawVisibleStartMs;
+		const visibleEndMs =
+			msPerBin > 0 ? Math.round(rawVisibleEndMs / msPerBin) * msPerBin : rawVisibleEndMs;
 		const visibleDurationMs = visibleEndMs - visibleStartMs;
 		if (visibleDurationMs <= 0) return;
 
@@ -71,11 +76,14 @@ function AudioWaveformComponent({
 		ctx.beginPath();
 		for (let px = 0; px < width; px++) {
 			const t = visibleStartMs + (px / width) * visibleDurationMs;
-			const binIndex = Math.min(
-				peakData.length - 1,
-				Math.max(0, Math.floor((t / durationMs) * peakData.length)),
+			const exactIndex = Math.max(
+				0,
+				Math.min(peakData.length - 1, (t / durationMs) * (peakData.length - 1)),
 			);
-			const amplitude = peakData[binIndex];
+			const leftIndex = Math.floor(exactIndex);
+			const rightIndex = Math.min(peakData.length - 1, leftIndex + 1);
+			const mix = exactIndex - leftIndex;
+			const amplitude = peakData[leftIndex] * (1 - mix) + peakData[rightIndex] * mix;
 			const barHeight = amplitude * midY * 0.85;
 
 			ctx.moveTo(px, midY - barHeight);

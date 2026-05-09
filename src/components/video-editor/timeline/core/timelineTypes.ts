@@ -32,6 +32,7 @@ export interface TimelineRenderItem {
 	rowId: string;
 	span: Span;
 	label: string;
+	audioPath?: string;
 	zoomDepth?: number;
 	zoomMode?: ZoomMode;
 	speedValue?: number;

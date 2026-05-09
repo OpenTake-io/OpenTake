@@ -33,6 +33,7 @@ import {
 import TimelineAxis from "../axis/TimelineAxis";
 import ClipMarkerOverlay from "../overlays/ClipMarkerOverlay";
 import PlaybackCursor from "../playhead/PlaybackCursor";
+import { useTimelineAudioPeaks } from "../../hooks/useTimelineAudioPeaks";
 
 const HINT_CLIP = "Press C to split clip";
 const HINT_ANNOTATION = "Press A to add annotation";
@@ -234,6 +235,38 @@ interface TimelineCanvasRowsProps {
 	onZoomRowClick: MouseEventHandler<HTMLDivElement>;
 }
 
+interface AudioItemWithWaveformProps {
+	item: TimelineRenderItem;
+	span: { start: number; end: number };
+	waveformSpan: { start: number; end: number };
+	isSelected: boolean;
+	onSelectAudio?: (id: string | null) => void;
+}
+
+function AudioItemWithWaveform({
+	item,
+	span,
+	waveformSpan,
+	isSelected,
+	onSelectAudio,
+}: AudioItemWithWaveformProps) {
+	const peaks = useTimelineAudioPeaks(item.audioPath ?? null);
+	return (
+		<Item
+			id={item.id}
+			rowId={item.rowId}
+			span={span}
+			isSelected={isSelected}
+			onSelectId={onSelectAudio}
+			variant="audio"
+			waveformPeaks={peaks}
+			waveformSegmentSpan={waveformSpan}
+		>
+			{item.label}
+		</Item>
+	);
+}
+
 const TimelineCanvasRows = memo(function TimelineCanvasRows({
 	items,
 	videoDurationMs,
@@ -422,17 +455,14 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 			{audioRows.map(({ rowId, items: rowItems }, index) => (
 				<Row key={rowId} id={rowId} isEmpty={rowItems.length === 0} hint={index === 0 ? HINT_AUDIO : undefined}>
 					{rowItems.map((item) => (
-						<Item
-							id={item.id}
+						<AudioItemWithWaveform
 							key={item.id}
-							rowId={item.rowId}
+							item={item}
 							span={item.span}
+							waveformSpan={liveSpanPreviewById?.[item.id] ?? item.span}
 							isSelected={selectAllBlocksActive || item.id === selectedAudioId}
-							onSelectId={onSelectAudio}
-							variant="audio"
-						>
-							{item.label}
-						</Item>
+							onSelectAudio={onSelectAudio}
+						/>
 					))}
 				</Row>
 			))}
