@@ -80,14 +80,6 @@ import {
 	canUseInMemoryExportSaveFallback,
 	describeBlockedInMemoryExportSave,
 } from "@/lib/exporter/exportSavePolicy";
-import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
-import { resolveSourceAudioFallbackPaths } from "@/lib/exporter/sourceAudioFallback";
-import {
-	clampMediaTimeToDuration,
-	enablePitchPreservingPlayback,
-	estimateCompanionAudioStartDelaySeconds,
-	getMediaSyncPlaybackRate,
-} from "@/lib/mediaTiming";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import {
@@ -147,6 +139,7 @@ import {
 	validateProjectData,
 } from "./projectPersistence";
 import { SettingsPanel } from "./SettingsPanel";
+import { useVideoEditorAudio } from "./audio/useVideoEditorAudio";
 import {
 	APP_HEADER_ICON_BUTTON_CLASS,
 	DiscordLinkButton,
@@ -156,6 +149,7 @@ import {
 } from "./TutorialHelp";
 import TimelineEditor, { type TimelineEditorHandle } from "./timeline/TimelineEditor";
 import { normalizeCursorTelemetry } from "./timeline/zoomSuggestionUtils";
+import type { SourceAudioTrackSettings } from "@/components/video-editor/audio/audioTypes";
 import {
 	type AnnotationRegion,
 	type AudioRegion,
@@ -347,12 +341,6 @@ async function writeSmokeExportReport(
 
 const SMOKE_EXPORT_READY_TIMEOUT_MS = 30_000;
 const DEFAULT_MP4_EXPORT_FRAME_RATE: ExportMp4FrameRate = 30;
-const SOURCE_AUDIO_FALLBACK_TOAST_ID = "source-audio-fallback-error";
-const SOURCE_AUDIO_PREVIEW_PLAYING_SEEK_DRIFT_SECONDS = 0.18;
-const SOURCE_AUDIO_PREVIEW_PAUSED_SEEK_DRIFT_SECONDS = 0.01;
-const SOURCE_AUDIO_PREVIEW_RATE_TOLERANCE_SECONDS = 0.08;
-const SOURCE_AUDIO_PREVIEW_RATE_CORRECTION_WINDOW_SECONDS = 8;
-const SOURCE_AUDIO_PREVIEW_MAX_RATE_ADJUSTMENT = 0.015;
 const PROJECT_AUTOSAVE_DELAY_MS = 1000;
 const EXPORT_ERROR_TOAST_DURATION_MS = 20000;
 
@@ -677,6 +665,13 @@ export default function VideoEditor() {
 	const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
 	const [audioRegions, setAudioRegions] = useState<AudioRegion[]>([]);
 	const [selectedAudioId, setSelectedAudioId] = useState<string | null>(null);
+	const [sourceAudioTrackSettingsByClip, setSourceAudioTrackSettingsByClip] = useState<
+		Record<string, SourceAudioTrackSettings>
+	>({});
+	const [defaultSourceAudioTrackSettings, setDefaultSourceAudioTrackSettings] = useState<
+		SourceAudioTrackSettings
+	>({});
+	const [hasClipSourceAudio, setHasClipSourceAudio] = useState(false);
 	const [autoCaptions, setAutoCaptions] = useState<CaptionCue[]>([]);
 	const [autoCaptionSettings, setAutoCaptionSettings] = useState<AutoCaptionSettings>(
 		DEFAULT_AUTO_CAPTION_SETTINGS,
@@ -700,9 +695,6 @@ export default function VideoEditor() {
 	const [exportError, setExportError] = useState<string | null>(null);
 	const [showExportDropdown, setShowExportDropdown] = useState(false);
 	const [previewVolume, setPreviewVolume] = useState(1);
-	const [sourceAudioFallbackPaths, setSourceAudioFallbackPaths] = useState<string[]>([]);
-	const [sourceAudioFallbackStartDelayMsByPath, setSourceAudioFallbackStartDelayMsByPath] =
-		useState<Record<string, number>>({});
 	const applySessionPresentation = useCallback(
 		(
 			session:
@@ -1767,6 +1759,8 @@ export default function VideoEditor() {
 				gifFrameRate: GifFrameRate;
 				gifLoop: boolean;
 				gifSizePreset: GifSizePreset;
+				sourceAudioTrackSettingsByClip: Record<string, SourceAudioTrackSettings>;
+				defaultSourceAudioTrackSettings: SourceAudioTrackSettings;
 			}>,
 		) => {
 			return editor;
@@ -1778,63 +1772,6 @@ export default function VideoEditor() {
 		() => videoSourcePath ?? (videoPath ? fromFileUrl(videoPath) : null),
 		[videoPath, videoSourcePath],
 	);
-	const { hasEmbeddedSourceAudio, externalAudioPaths: previewSourceAudioFallbackPaths } = useMemo(
-		() => resolveSourceAudioFallbackPaths(currentSourcePath, sourceAudioFallbackPaths),
-		[currentSourcePath, sourceAudioFallbackPaths],
-	);
-	const shouldMutePreviewVideo =
-		!hasEmbeddedSourceAudio && previewSourceAudioFallbackPaths.length > 0;
-
-	useEffect(() => {
-		let cancelled = false;
-		setSourceAudioFallbackPaths([]);
-		setSourceAudioFallbackStartDelayMsByPath({});
-
-		if (!currentSourcePath) {
-			return () => {
-				cancelled = true;
-			};
-		}
-
-		void (async () => {
-			try {
-				const result =
-					await window.electronAPI.getVideoAudioFallbackPaths(currentSourcePath);
-				if (cancelled) {
-					return;
-				}
-				if (!result.success) {
-					setSourceAudioFallbackPaths([]);
-					setSourceAudioFallbackStartDelayMsByPath({});
-					toast.warning(
-						result.error
-							? `Could not load companion audio sources: ${summarizeErrorMessage(result.error)}`
-							: "Could not load companion audio sources. Playback and export may miss microphone audio.",
-						{ id: SOURCE_AUDIO_FALLBACK_TOAST_ID, duration: 10000 },
-					);
-					return;
-				}
-
-				toast.dismiss(SOURCE_AUDIO_FALLBACK_TOAST_ID);
-				setSourceAudioFallbackPaths(result.paths ?? []);
-				setSourceAudioFallbackStartDelayMsByPath(result.startDelayMsByPath ?? {});
-			} catch (error) {
-				if (!cancelled) {
-					setSourceAudioFallbackPaths([]);
-					setSourceAudioFallbackStartDelayMsByPath({});
-					toast.warning(
-						`Could not load companion audio sources: ${summarizeErrorMessage(String(error))}`,
-						{ id: SOURCE_AUDIO_FALLBACK_TOAST_ID, duration: 10000 },
-					);
-				}
-			}
-		})();
-
-		return () => {
-			cancelled = true;
-		};
-	}, [currentSourcePath]);
-
 	const projectDisplayName = useMemo(() => {
 		const fileName =
 			currentProjectPath?.split(/[\\/]/).pop() ??
@@ -1925,6 +1862,8 @@ export default function VideoEditor() {
 				gifFrameRate,
 				gifLoop,
 				gifSizePreset,
+				sourceAudioTrackSettingsByClip,
+				defaultSourceAudioTrackSettings,
 			}),
 		[
 			buildPersistedEditorState,
@@ -1985,6 +1924,8 @@ export default function VideoEditor() {
 			gifLoop,
 			gifSizePreset,
 			frame,
+			sourceAudioTrackSettingsByClip,
+			defaultSourceAudioTrackSettings,
 		],
 	);
 
@@ -2170,6 +2111,10 @@ export default function VideoEditor() {
 			setSpeedRegions(normalizedEditor.speedRegions);
 			setAnnotationRegions(normalizedEditor.annotationRegions);
 			setAudioRegions(normalizedEditor.audioRegions);
+			setSourceAudioTrackSettingsByClip(normalizedEditor.sourceAudioTrackSettingsByClip ?? {});
+			setDefaultSourceAudioTrackSettings(
+				normalizedEditor.defaultSourceAudioTrackSettings ?? {},
+			);
 			setAutoCaptions(normalizedEditor.autoCaptions);
 			setAutoCaptionSettings(normalizedEditor.autoCaptionSettings);
 			setAspectRatio(normalizedEditor.aspectRatio);
@@ -3380,6 +3325,29 @@ export default function VideoEditor() {
 		}
 		return result;
 	}, [clipRegions, speedRegions]);
+	const audio = useVideoEditorAudio({
+		currentSourcePath,
+		selectedClipId,
+		clipRegions,
+		audioRegions,
+		effectiveSpeedRegions,
+		sourceAudioTrackSettingsByClip,
+		setSourceAudioTrackSettingsByClip,
+		defaultSourceAudioTrackSettings,
+		setDefaultSourceAudioTrackSettings,
+		currentTime,
+		timelineTime: timelinePlayheadTime,
+		duration,
+		isPlaying,
+		previewVolume,
+		summarizeErrorMessage,
+		onSourceFallbackLoadError: (error) => {
+			toast.warning(
+				`Could not load companion audio source: ${summarizeErrorMessage(getErrorMessage(error))}`,
+				{ duration: 10000 },
+			);
+		},
+	});
 
 	function togglePlayPause() {
 		const playback = videoPlaybackRef.current;
@@ -3761,6 +3729,18 @@ export default function VideoEditor() {
 		[selectedClipId],
 	);
 
+	const handleClipShowSourceAudioChange = useCallback(
+		(showSourceAudio: boolean) => {
+			if (!selectedClipId) return;
+			setClipRegions((prev) =>
+				prev.map((clip) =>
+					clip.id === selectedClipId ? { ...clip, showSourceAudio } : clip,
+				),
+			);
+		},
+		[selectedClipId],
+	);
+
 	const handleClipDelete = useCallback(
 		(id: string) => {
 			const deletedClip = clipRegions.find((clip) => clip.id === id);
@@ -3792,23 +3772,26 @@ export default function VideoEditor() {
 		if (id) {
 			setSelectedZoomId(null);
 			setSelectedAnnotationId(null);
+			setActiveEffectSection("audio");
 		}
 	}, []);
 
-	const handleAudioAdded = useCallback((span: Span, audioPath: string, trackIndex?: number) => {
-		const id = `audio-${nextAudioIdRef.current++}`;
-		const newRegion: AudioRegion = {
-			id,
-			startMs: Math.round(span.start),
-			endMs: Math.round(span.end),
-			audioPath,
-			volume: 1,
-			trackIndex,
-		};
+		const handleAudioAdded = useCallback((span: Span, audioPath: string, trackIndex?: number) => {
+			const id = `audio-${nextAudioIdRef.current++}`;
+			const newRegion: AudioRegion = {
+				id,
+				startMs: Math.round(span.start),
+				endMs: Math.round(span.end),
+				audioPath,
+				volume: 1,
+				normalize: false,
+				trackIndex,
+			};
 		setAudioRegions((prev) => [...prev, newRegion]);
 		setSelectedAudioId(id);
 		setSelectedZoomId(null);
 		setSelectedAnnotationId(null);
+		setActiveEffectSection("audio");
 	}, []);
 
 	const handleAudioSpanChange = useCallback((id: string, span: Span, trackIndex?: number) => {
@@ -3853,15 +3836,29 @@ export default function VideoEditor() {
 		[selectedAudioId],
 	);
 
-	const handleAudioDelete = useCallback(
-		(id: string) => {
+		const handleAudioDelete = useCallback(
+			(id: string) => {
 			setAudioRegions((prev) => prev.filter((region) => region.id !== id));
 			if (selectedAudioId === id) {
 				setSelectedAudioId(null);
 			}
 		},
-		[selectedAudioId],
-	);
+			[selectedAudioId],
+		);
+
+		const handleAudioNormalizeChange = useCallback(
+			(normalize: boolean) => {
+				if (!selectedAudioId) {
+					return;
+				}
+				setAudioRegions((prev) =>
+					prev.map((region) =>
+						region.id === selectedAudioId ? { ...region, normalize } : region,
+					),
+				);
+			},
+			[selectedAudioId],
+		);
 
 	const handleAnnotationAdded = useCallback((span: Span, trackIndex = 0) => {
 		const id = `annotation-${nextAnnotationIdRef.current++}`;
@@ -4095,290 +4092,6 @@ export default function VideoEditor() {
 			setSelectedAudioId(null);
 		}
 	}, [selectedAudioId, audioRegions]);
-
-	// Audio playback sync: manage Audio elements that play in sync with video
-	const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
-	const audioElementRevokersRef = useRef<Map<string, () => void>>(new Map());
-	const audioElementResourcesRef = useRef<Map<string, string>>(new Map());
-	const sourceAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
-	const sourceAudioElementRevokersRef = useRef<Map<string, () => void>>(new Map());
-	const sourceAudioElementResourcesRef = useRef<Map<string, string>>(new Map());
-	const lastSourceAudioSyncTimeRef = useRef<number | null>(null);
-
-	useEffect(() => {
-		let cancelled = false;
-		const existing = audioElementsRef.current;
-		const currentIds = new Set(audioRegions.map((r) => r.id));
-
-		// Remove old audio elements
-		for (const [id, audio] of existing) {
-			if (!currentIds.has(id)) {
-				audio.pause();
-				audio.src = "";
-				audioElementRevokersRef.current.get(id)?.();
-				audioElementRevokersRef.current.delete(id);
-				audioElementResourcesRef.current.delete(id);
-				existing.delete(id);
-			}
-		}
-
-		// Create/update audio elements
-		for (const region of audioRegions) {
-			let audio = existing.get(region.id);
-			if (!audio) {
-				audio = new Audio();
-				audio.preload = "auto";
-				existing.set(region.id, audio);
-			}
-
-			if (audioElementResourcesRef.current.get(region.id) !== region.audioPath) {
-				audio.pause();
-				audio.src = "";
-				audioElementRevokersRef.current.get(region.id)?.();
-				audioElementRevokersRef.current.delete(region.id);
-				audioElementResourcesRef.current.set(region.id, region.audioPath);
-
-				void (async () => {
-					const resolved = await resolveMediaElementSource(region.audioPath);
-					const latestAudio = existing.get(region.id);
-
-					if (
-						cancelled ||
-						latestAudio !== audio ||
-						audioElementResourcesRef.current.get(region.id) !== region.audioPath
-					) {
-						resolved.revoke();
-						return;
-					}
-
-					audioElementRevokersRef.current.set(region.id, resolved.revoke);
-					latestAudio.src = resolved.src;
-				})();
-			}
-
-			audio.volume = Math.max(0, Math.min(1, region.volume * previewVolume));
-		}
-
-		return () => {
-			cancelled = true;
-		};
-	}, [audioRegions, previewVolume]);
-
-	useEffect(() => {
-		let cancelled = false;
-		const existing = sourceAudioElementsRef.current;
-		const currentIds = new Set(previewSourceAudioFallbackPaths);
-
-		for (const [id, audio] of existing) {
-			if (!currentIds.has(id)) {
-				audio.pause();
-				audio.src = "";
-				sourceAudioElementRevokersRef.current.get(id)?.();
-				sourceAudioElementRevokersRef.current.delete(id);
-				sourceAudioElementResourcesRef.current.delete(id);
-				existing.delete(id);
-			}
-		}
-
-		for (const audioPath of previewSourceAudioFallbackPaths) {
-			let audio = existing.get(audioPath);
-			if (!audio) {
-				audio = new Audio();
-				audio.preload = "auto";
-				existing.set(audioPath, audio);
-			}
-			audio.dataset.sourceAudioPath = audioPath;
-
-			if (sourceAudioElementResourcesRef.current.get(audioPath) !== audioPath) {
-				audio.pause();
-				audio.src = "";
-				sourceAudioElementRevokersRef.current.get(audioPath)?.();
-				sourceAudioElementRevokersRef.current.delete(audioPath);
-				sourceAudioElementResourcesRef.current.set(audioPath, audioPath);
-
-				void (async () => {
-					try {
-						const resolved = await resolveMediaElementSource(audioPath);
-						const latestAudio = existing.get(audioPath);
-
-						if (
-							cancelled ||
-							latestAudio !== audio ||
-							sourceAudioElementResourcesRef.current.get(audioPath) !== audioPath
-						) {
-							resolved.revoke();
-							return;
-						}
-
-						sourceAudioElementRevokersRef.current.set(audioPath, resolved.revoke);
-						latestAudio.src = resolved.src;
-					} catch (error) {
-						if (cancelled) {
-							return;
-						}
-
-						sourceAudioElementRevokersRef.current.get(audioPath)?.();
-						sourceAudioElementRevokersRef.current.delete(audioPath);
-						sourceAudioElementResourcesRef.current.delete(audioPath);
-						const latestAudio = existing.get(audioPath);
-						if (latestAudio === audio) {
-							latestAudio.pause();
-							latestAudio.src = "";
-						}
-						toast.warning(
-							`Could not load companion audio source: ${summarizeErrorMessage(getErrorMessage(error))}`,
-							{ id: SOURCE_AUDIO_FALLBACK_TOAST_ID, duration: 10000 },
-						);
-					}
-				})();
-			}
-
-			audio.volume = Math.max(0, Math.min(1, previewVolume));
-		}
-
-		if (previewSourceAudioFallbackPaths.length === 0) {
-			lastSourceAudioSyncTimeRef.current = null;
-		}
-
-		return () => {
-			cancelled = true;
-		};
-	}, [previewSourceAudioFallbackPaths, previewVolume]);
-
-	useEffect(() => {
-		return () => {
-			for (const audio of audioElementsRef.current.values()) {
-				audio.pause();
-				audio.src = "";
-			}
-			for (const revoke of audioElementRevokersRef.current.values()) {
-				revoke();
-			}
-			audioElementsRef.current.clear();
-			audioElementRevokersRef.current.clear();
-			audioElementResourcesRef.current.clear();
-			for (const audio of sourceAudioElementsRef.current.values()) {
-				audio.pause();
-				audio.src = "";
-			}
-			for (const revoke of sourceAudioElementRevokersRef.current.values()) {
-				revoke();
-			}
-			sourceAudioElementsRef.current.clear();
-			sourceAudioElementRevokersRef.current.clear();
-			sourceAudioElementResourcesRef.current.clear();
-			lastSourceAudioSyncTimeRef.current = null;
-		};
-	}, []);
-
-	// Sync audio playback with video currentTime and isPlaying state
-	useEffect(() => {
-		const currentTimeMs = currentTime * 1000;
-		const activeSpeedRegion = effectiveSpeedRegions.find(
-			(region) => currentTimeMs >= region.startMs && currentTimeMs < region.endMs,
-		);
-		const targetPlaybackRate = activeSpeedRegion ? activeSpeedRegion.speed : 1;
-
-		for (const region of audioRegions) {
-			const audio = audioElementsRef.current.get(region.id);
-			if (!audio) continue;
-
-			const isInRegion = currentTimeMs >= region.startMs && currentTimeMs < region.endMs;
-
-			if (isPlaying && isInRegion) {
-				enablePitchPreservingPlayback(audio);
-				const audioOffset = (currentTimeMs - region.startMs) / 1000;
-				// Only seek if significantly out of sync (> 200ms)
-				if (Math.abs(audio.currentTime - audioOffset) > 0.2) {
-					audio.currentTime = audioOffset;
-				}
-				const syncedPlaybackRate = getMediaSyncPlaybackRate({
-					basePlaybackRate: targetPlaybackRate,
-					currentTime: audio.currentTime,
-					targetTime: audioOffset,
-				});
-				if (Math.abs(audio.playbackRate - syncedPlaybackRate) > 0.001) {
-					audio.playbackRate = syncedPlaybackRate;
-				}
-				if (audio.paused) {
-					audio.play().catch(() => undefined);
-				}
-			} else {
-				if (!audio.paused) {
-					audio.pause();
-				}
-			}
-		}
-	}, [isPlaying, currentTime, audioRegions, effectiveSpeedRegions]);
-
-	useEffect(() => {
-		if (previewSourceAudioFallbackPaths.length === 0) {
-			lastSourceAudioSyncTimeRef.current = null;
-			return;
-		}
-
-		const activeSpeedRegion = effectiveSpeedRegions.find(
-			(region) => currentTime * 1000 >= region.startMs && currentTime * 1000 < region.endMs,
-		);
-		const targetPlaybackRate = activeSpeedRegion ? activeSpeedRegion.speed : 1;
-		const previousTimelineTime = lastSourceAudioSyncTimeRef.current;
-		const timelineJumped =
-			previousTimelineTime === null || Math.abs(currentTime - previousTimelineTime) > 0.25;
-		const driftThreshold = isPlaying
-			? SOURCE_AUDIO_PREVIEW_PLAYING_SEEK_DRIFT_SECONDS
-			: SOURCE_AUDIO_PREVIEW_PAUSED_SEEK_DRIFT_SECONDS;
-
-		for (const audio of sourceAudioElementsRef.current.values()) {
-			enablePitchPreservingPlayback(audio);
-			const audioDuration = Number.isFinite(audio.duration) ? audio.duration : null;
-			const startDelaySeconds = estimateCompanionAudioStartDelaySeconds(
-				duration,
-				audioDuration,
-				sourceAudioFallbackStartDelayMsByPath[audio.dataset.sourceAudioPath ?? ""],
-			);
-			const beforeAudioStart = currentTime + 0.001 < startDelaySeconds;
-			const targetTime = clampMediaTimeToDuration(
-				currentTime - startDelaySeconds,
-				audioDuration,
-			);
-
-			if (timelineJumped || Math.abs(audio.currentTime - targetTime) > driftThreshold) {
-				try {
-					audio.currentTime = targetTime;
-				} catch {
-					// no-op
-				}
-			}
-
-			const syncedPlaybackRate = getMediaSyncPlaybackRate({
-				basePlaybackRate: targetPlaybackRate,
-				currentTime: audio.currentTime,
-				targetTime,
-				toleranceSeconds: SOURCE_AUDIO_PREVIEW_RATE_TOLERANCE_SECONDS,
-				correctionWindowSeconds: SOURCE_AUDIO_PREVIEW_RATE_CORRECTION_WINDOW_SECONDS,
-				maxAdjustment: SOURCE_AUDIO_PREVIEW_MAX_RATE_ADJUSTMENT,
-			});
-			if (Math.abs(audio.playbackRate - syncedPlaybackRate) > 0.001) {
-				audio.playbackRate = syncedPlaybackRate;
-			}
-
-			const atEnd = audioDuration !== null && targetTime >= audioDuration;
-			if (isPlaying && !beforeAudioStart && !atEnd) {
-				audio.play().catch(() => undefined);
-			} else if (!audio.paused) {
-				audio.pause();
-			}
-		}
-
-		lastSourceAudioSyncTimeRef.current = currentTime;
-	}, [
-		currentTime,
-		duration,
-		isPlaying,
-		previewSourceAudioFallbackPaths,
-		sourceAudioFallbackStartDelayMsByPath,
-		effectiveSpeedRegions,
-	]);
 
 	const showExportSuccessToast = useCallback((filePath: string) => {
 		toast.success(`Exported successfully to ${filePath}`, {
@@ -4639,6 +4352,10 @@ export default function VideoEditor() {
 						encodingMode,
 						useModernNativeStaticLayout: useExperimentalNativeExport,
 					});
+					const sourceAudioTrackSettingsForExport =
+						selectedClipId !== null
+							? audio.selectedClipSourceAudioTrackSettings
+							: audio.activeSourceAudioTrackSettings;
 
 					const exporterConfig = {
 						videoUrl: videoPath,
@@ -4704,8 +4421,11 @@ export default function VideoEditor() {
 						cursorSway,
 						frame,
 						audioRegions,
-						sourceAudioFallbackPaths,
-						sourceAudioFallbackStartDelayMsByPath,
+						clipRegions,
+						sourceAudioFallbackPaths: audio.sourceAudioFallbackPaths,
+						sourceAudioFallbackStartDelayMsByPath:
+							audio.sourceAudioFallbackStartDelayMsByPath,
+						sourceAudioTrackSettings: sourceAudioTrackSettingsForExport,
 						previewWidth,
 						previewHeight,
 						onProgress: (progress: ExportProgress) => {
@@ -4952,8 +4672,10 @@ export default function VideoEditor() {
 			cursorClickBounceDuration,
 			cursorSway,
 			audioRegions,
-			sourceAudioFallbackPaths,
-			sourceAudioFallbackStartDelayMsByPath,
+			audio.sourceAudioFallbackPaths,
+			audio.sourceAudioFallbackStartDelayMsByPath,
+			audio.activeSourceAudioTrackSettings,
+			audio.selectedClipSourceAudioTrackSettings,
 			exportEncodingMode,
 			exportBackendPreference,
 			exportPipelineModel,
@@ -4985,6 +4707,7 @@ export default function VideoEditor() {
 			smokeExportConfig.shadowIntensity,
 			effectiveSpeedRegions,
 			frame,
+			selectedClipId,
 			smokeExportConfig.encodingMode,
 			smokeExportConfig.fps,
 			smokeExportConfig.quality,
@@ -6032,32 +5755,50 @@ export default function VideoEditor() {
 								selectedClipId={selectedClipId}
 								selectedClipSpeed={
 									selectedClipId
-										? (clipRegions.find((c) => c.id === selectedClipId)
-												?.speed ?? 1)
+										? clipRegions.find((c) => c.id === selectedClipId)?.speed ?? 1
 										: null
 								}
 								selectedClipMuted={
 									selectedClipId
-										? (clipRegions.find((c) => c.id === selectedClipId)
-												?.muted ?? false)
+										? clipRegions.find((c) => c.id === selectedClipId)?.muted ??
+											false
 										: null
 								}
-								onClipSpeedChange={(speed) =>
-									selectedClipId && handleClipSpeedChange(speed)
+								selectedClipShowSourceAudio={
+									selectedClipId
+										? clipRegions.find((c) => c.id === selectedClipId)
+												?.showSourceAudio ?? false
+										: null
 								}
-								onClipMutedChange={(muted) =>
-									selectedClipId && handleClipMutedChange(muted)
-								}
+								onClipSpeedChange={handleClipSpeedChange}
+								onClipMutedChange={handleClipMutedChange}
+								onClipShowSourceAudioChange={handleClipShowSourceAudioChange}
 								onClipDelete={handleClipDelete}
-								selectedAudioId={selectedAudioId}
-								selectedAudioVolume={
-									selectedAudioId
-										? (audioRegions.find((r) => r.id === selectedAudioId)
-												?.volume ?? null)
-										: null
+								hasClipSourceAudio={hasClipSourceAudio}
+								sourceAudioTrackMeta={audio.sourceAudioTrackMeta}
+								sourceAudioTrackSettings={audio.selectedClipSourceAudioTrackSettings}
+								onSourceAudioTrackVolumeChange={
+									audio.onSelectedClipSourceAudioTrackVolumeChange
 								}
-								onAudioVolumeChange={handleAudioVolumeChange}
-								onAudioDelete={handleAudioDelete}
+								onSourceAudioTrackNormalizeChange={
+									audio.onSelectedClipSourceAudioTrackNormalizeChange
+								}
+								selectedAudioId={selectedAudioId}
+									selectedAudioVolume={
+										selectedAudioId
+											? (audioRegions.find((r) => r.id === selectedAudioId)
+													?.volume ?? null)
+											: null
+									}
+									selectedAudioNormalize={
+										selectedAudioId
+											? (audioRegions.find((r) => r.id === selectedAudioId)
+													?.normalize ?? false)
+											: null
+									}
+									onAudioVolumeChange={handleAudioVolumeChange}
+									onAudioNormalizeChange={handleAudioNormalizeChange}
+									onAudioDelete={handleAudioDelete}
 								shadowIntensity={shadowIntensity}
 								onShadowChange={setShadowIntensity}
 								backgroundBlur={backgroundBlur}
@@ -6353,7 +6094,17 @@ export default function VideoEditor() {
 													cursorClickBounceDuration
 												}
 												cursorSway={cursorSway}
-												volume={shouldMutePreviewVideo ? 0 : previewVolume}
+												volume={
+													audio.shouldMutePreviewVideo || audio.isCurrentClipMuted
+														? 0
+														: Math.max(
+																0,
+																Math.min(
+																	1,
+																	previewVolume * audio.embeddedSourcePreviewGain,
+																),
+															)
+												}
 												suspendRendering={shouldSuspendPreviewRendering}
 											/>
 										</div>
@@ -6628,6 +6379,17 @@ export default function VideoEditor() {
 						selectedAnnotationId={selectedAnnotationId}
 						onSelectAnnotation={handleSelectAnnotation}
 						aspectRatio={aspectRatio}
+						showSourceAudioTrack={clipRegions.some((c) => c.showSourceAudio)}
+						sourceAudioTrackSettings={audio.activeSourceAudioTrackSettings}
+						getSourceAudioTrackSettingsForClip={
+							audio.getSourceAudioTrackSettingsForClip
+						}
+						onSourceAudioAvailabilityChange={(available) => {
+							setHasClipSourceAudio(available);
+						}}
+						onSourceAudioTracksMetaChange={(tracks) => {
+							audio.onSourceAudioTracksMetaChange(tracks);
+						}}
 					/>
 				</div>
 			</div>
