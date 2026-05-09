@@ -31,10 +31,16 @@ export interface TimelineRenderItem {
 	id: string;
 	rowId: string;
 	span: Span;
+	sourceSpan?: Span;
 	label: string;
+	audioPath?: string;
+	audioGain?: number;
+	audioNormalize?: boolean;
 	zoomDepth?: number;
 	zoomMode?: ZoomMode;
 	speedValue?: number;
+	showSourceAudio?: boolean;
+	muted?: boolean;
 	variant: "zoom" | "trim" | "clip" | "annotation" | "speed" | "audio";
 }
 
