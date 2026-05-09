@@ -378,7 +378,7 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 			{showSourceAudioTrack &&
 				sourceAudioTracks.map((track) => (
 					<Row key={track.id} id={`${SOURCE_AUDIO_ROW_ID}-${track.id}`}>
-						{clipItems.map((item) => {
+						{clipItems.filter(item => item.showSourceAudio).map((item) => {
 							const settings = getSourceAudioTrackSettingsForClip?.(item.id)?.[
 								track.id
 							] ?? { volume: 1, normalize: false };

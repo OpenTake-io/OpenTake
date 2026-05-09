@@ -20,6 +20,8 @@
 	"clip": {
 		"title": "Клип",
 		"muteAudio": "Выключить звук",
+		"unmuteAudio": "Включить звук",
+		"separateClipFromAudio": "Отделить клип от аудио",
 		"delete": "Удалить"
 	},
 	"effects": {
