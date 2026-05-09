@@ -32,6 +32,27 @@ describe("calculateMp4SourceDimensions", () => {
 });
 
 describe("calculateMp4ExportDimensions", () => {
+	it("normalizes odd source dimensions to even export dimensions", () => {
+		const sourceDimensions = calculateMp4SourceDimensions(1919, 1079, "native");
+
+		expect(sourceDimensions).toEqual({
+			width: 1918,
+			height: 1078,
+		});
+		expect(
+			calculateMp4ExportDimensions(sourceDimensions.width, sourceDimensions.height, "source"),
+		).toEqual({
+			width: 1918,
+			height: 1078,
+		});
+		expect(
+			calculateMp4ExportDimensions(sourceDimensions.width, sourceDimensions.height, "high"),
+		).toEqual({
+			width: 1726,
+			height: 970,
+		});
+	});
+
 	it("scales portrait output dimensions from the aspect target", () => {
 		const sourceDimensions = calculateMp4SourceDimensions(1920, 1080, "9:16");
 
