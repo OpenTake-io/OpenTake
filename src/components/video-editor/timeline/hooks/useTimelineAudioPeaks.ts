@@ -1,81 +1,100 @@
 import { useEffect, useRef, useState } from "react";
+import { resolveMediaResourceUrl } from "@/lib/exporter/localMediaSource";
+import { fromFileUrl } from "../../projectPersistence";
+import { waveformGenerator } from "../../audio/waveform/WaveformGenerator";
+import { WAVEFORM_DEFAULT_PEAK_COUNT } from "../core/constants";
 import type { AudioPeaksData } from "../core/timelineTypes";
 
-/** Number of peak bins to produce — enough for smooth display at any zoom. */
-const TARGET_PEAK_COUNT = 2048;
+function buildSidecarAudioCandidates(sourcePath: string): string[] {
+	const normalized = sourcePath.replace(/\\/g, "/");
+	const lastSlash = normalized.lastIndexOf("/");
+	const dir = lastSlash >= 0 ? normalized.slice(0, lastSlash + 1) : "";
+	const fileName = lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized;
+	const dotIndex = fileName.lastIndexOf(".");
+	const baseName = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
 
-/**
- * Decode audio from a media file URL and produce a fixed-length array of peak
- * amplitudes suitable for waveform visualisation.
- *
- * Returns `null` while loading or if the file has no decodeable audio.
- */
-export function useTimelineAudioPeaks(fileUrl: string | null | undefined): AudioPeaksData | null {
+	return [
+		`${dir}${baseName}.system.wav`,
+		`${dir}${baseName}.mic.wav`,
+		`${dir}${baseName}.system.m4a`,
+		`${dir}${baseName}.mic.m4a`,
+	];
+}
+
+function extractLocalPathFromMediaServerUrl(input: string): string | null {
+	try {
+		const url = new URL(input);
+		const isLocalMediaServer =
+			(url.protocol === "http:" || url.protocol === "https:") &&
+			(url.hostname === "127.0.0.1" || url.hostname === "localhost") &&
+			url.pathname === "/video";
+		if (!isLocalMediaServer) return null;
+		return url.searchParams.get("path");
+	} catch {
+		return null;
+	}
+}
+
+interface TimelineAudioPeaksOptions {
+	enableSourceSidecarFallback?: boolean;
+	peakCount?: number;
+}
+
+export function useTimelineAudioPeaks(
+	mediaResource: string | null | undefined,
+	options: TimelineAudioPeaksOptions = {},
+): AudioPeaksData | null {
 	const [data, setData] = useState<AudioPeaksData | null>(null);
-	const urlRef = useRef(fileUrl);
+	const sourceRef = useRef(mediaResource);
+	const enableSourceSidecarFallback = options.enableSourceSidecarFallback ?? false;
+	const peakCount = options.peakCount ?? WAVEFORM_DEFAULT_PEAK_COUNT;
 
 	useEffect(() => {
-		urlRef.current = fileUrl;
+		sourceRef.current = mediaResource;
 		setData(null);
-
-		if (!fileUrl) {
-			return;
-		}
+		if (!mediaResource) return;
 
 		let cancelled = false;
 
-		(async () => {
+		const run = async () => {
+			const tryGenerate = async (resource: string): Promise<AudioPeaksData> => {
+				const resolvedUrl = await resolveMediaResourceUrl(resource);
+				return waveformGenerator.generate(resolvedUrl, peakCount);
+			};
+
 			try {
-				const response = await fetch(fileUrl);
-				if (cancelled) return;
-
-				const arrayBuffer = await response.arrayBuffer();
-				if (cancelled) return;
-
-				const audioCtx = new OfflineAudioContext(1, 1, 44100);
-				const decoded = await audioCtx.decodeAudioData(arrayBuffer);
-				if (cancelled) return;
-
-				const channelData = decoded.getChannelData(0);
-				const durationMs = decoded.duration * 1000;
-				const binSize = Math.max(1, Math.floor(channelData.length / TARGET_PEAK_COUNT));
-				const peakCount = Math.ceil(channelData.length / binSize);
-				const peaks = new Float32Array(peakCount);
-
-				for (let i = 0; i < peakCount; i++) {
-					const start = i * binSize;
-					const end = Math.min(start + binSize, channelData.length);
-					let max = 0;
-					for (let j = start; j < end; j++) {
-						const abs = Math.abs(channelData[j]);
-						if (abs > max) max = abs;
-					}
-					peaks[i] = max;
-				}
-
-				// Normalise to 0–1 range.
-				let globalMax = 0;
-				for (let i = 0; i < peaks.length; i++) {
-					if (peaks[i] > globalMax) globalMax = peaks[i];
-				}
-				if (globalMax > 0) {
-					for (let i = 0; i < peaks.length; i++) {
-						peaks[i] /= globalMax;
-					}
-				}
-
-				if (!cancelled && urlRef.current === fileUrl) {
-					setData({ peaks, durationMs });
-				}
+				const result = await tryGenerate(mediaResource);
+				if (!cancelled && sourceRef.current === mediaResource) setData(result);
+				return;
 			} catch {
-				// File has no audio or decoding failed — leave as null.
+				// fallthrough
 			}
-		})();
+
+			if (!enableSourceSidecarFallback) return;
+
+			const localPathFromServer = extractLocalPathFromMediaServerUrl(mediaResource);
+			const localSourcePath =
+				localPathFromServer ||
+				(/^file:\/\//i.test(mediaResource) ? fromFileUrl(mediaResource) : mediaResource);
+			if (!localSourcePath) return;
+
+			for (const candidate of buildSidecarAudioCandidates(localSourcePath)) {
+				try {
+					const result = await tryGenerate(candidate);
+					if (!cancelled && sourceRef.current === mediaResource) setData(result);
+					return;
+				} catch {
+					// try next
+				}
+			}
+		};
+
+		void run();
 
 		return () => {
 			cancelled = true;
 		};
-	}, [fileUrl]);
+	}, [mediaResource, enableSourceSidecarFallback, peakCount]);
 
 	return data;
 }

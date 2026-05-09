@@ -469,12 +469,21 @@ interface SettingsPanelProps {
 	selectedClipId?: string | null;
 	selectedClipSpeed?: number | null;
 	selectedClipMuted?: boolean | null;
+	selectedClipShowSourceAudio?: boolean | null;
+	hasClipSourceAudio?: boolean;
 	onClipSpeedChange?: (speed: number) => void;
 	onClipMutedChange?: (muted: boolean) => void;
+	onClipShowSourceAudioChange?: (show: boolean) => void;
+	sourceAudioTrackMeta?: Array<{ id: string; label: string }>;
+	sourceAudioTrackSettings?: Record<string, { volume: number; normalize: boolean }>;
+	onSourceAudioTrackVolumeChange?: (id: string, volume: number) => void;
+	onSourceAudioTrackNormalizeChange?: (id: string, normalize: boolean) => void;
 	onClipDelete?: (id: string) => void;
 	selectedAudioId?: string | null;
 	selectedAudioVolume?: number | null;
+	selectedAudioNormalize?: boolean | null;
 	onAudioVolumeChange?: (volume: number) => void;
+	onAudioNormalizeChange?: (normalize: boolean) => void;
 	onAudioDelete?: (id: string) => void;
 	shadowIntensity?: number;
 	onShadowChange?: (intensity: number) => void;
@@ -862,12 +871,21 @@ export function SettingsPanel({
 	selectedClipId,
 	selectedClipSpeed,
 	selectedClipMuted,
+	selectedClipShowSourceAudio = false,
+	hasClipSourceAudio = false,
 	onClipSpeedChange,
 	onClipMutedChange,
+	onClipShowSourceAudioChange,
+	sourceAudioTrackMeta = [],
+	sourceAudioTrackSettings = {},
+	onSourceAudioTrackVolumeChange,
+	onSourceAudioTrackNormalizeChange,
 	onClipDelete,
 	selectedAudioId,
 	selectedAudioVolume,
+	selectedAudioNormalize,
 	onAudioVolumeChange,
+	onAudioNormalizeChange,
 	onAudioDelete,
 	shadowIntensity = 0.67,
 	onShadowChange,
@@ -3035,6 +3053,45 @@ export function SettingsPanel({
 			</section>
 		);
 
+			const audioSectionContent = (
+				<section className="flex flex-col gap-3">
+				<div className="flex items-center justify-between gap-3">
+					<SectionLabel>{tSettings("audio.volumeTitle", "Audio")}</SectionLabel>
+					<button
+						type="button"
+						onClick={() => {
+							onAudioVolumeChange?.(1);
+							onAudioNormalizeChange?.(false);
+						}}
+						className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80"
+					>
+						{t("common.actions.reset", "Reset")}
+					</button>
+				</div>
+					<SliderControl
+						label={tSettings("audio.volume", "Volume")}
+					value={selectedAudioVolume ?? 1}
+					defaultValue={1}
+					min={0}
+					max={1}
+					step={0.01}
+					onChange={(v) => onAudioVolumeChange?.(v)}
+					formatValue={(v) => `${Math.round(v * 100)}%`}
+						parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100}
+					/>
+					<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+						<span className="text-[10px] text-muted-foreground">
+							{tSettings("audio.normalize", "Normalize")}
+						</span>
+						<Switch
+							checked={Boolean(selectedAudioNormalize)}
+							onCheckedChange={(v) => onAudioNormalizeChange?.(v)}
+							className="data-[state=checked]:bg-[#2563EB] scale-75"
+						/>
+					</div>
+				</section>
+			);
+
 		const clipSectionContent = (
 			<section className="flex flex-col gap-2">
 				<div className="flex items-center justify-between gap-3">
@@ -3045,16 +3102,7 @@ export function SettingsPanel({
 						</span>
 					)}
 				</div>
-				<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
-					<span className="text-[10px] text-muted-foreground">
-						{tSettings("clip.muteAudio", "Mute Audio")}
-					</span>
-					<Switch
-						checked={selectedClipMuted ?? false}
-						onCheckedChange={(v) => onClipMutedChange?.(v)}
-						className="data-[state=checked]:bg-[#06b6d4] scale-75"
-					/>
-				</div>
+
 				<div className="flex items-center gap-3">
 					<SectionLabel>{tSettings("speed.label", "Speed")}</SectionLabel>
 				</div>
@@ -3095,19 +3143,100 @@ export function SettingsPanel({
 						);
 					})}
 				</div>
-				{selectedClipId && (
-					<Button
-						onClick={() => {
-							if (selectedClipId && onClipDelete) onClipDelete(selectedClipId);
-						}}
-						variant="destructive"
-						size="sm"
-						className="mt-1 h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
-					>
-						<Trash2 className="h-3 w-3" />
-						{tSettings("clip.delete", "Delete Clip")}
-					</Button>
-				)}
+
+				<div className="mt-2 flex flex-col gap-2 border-t border-foreground/5 pt-3">
+					<SectionLabel>{tSettings("audio.title", "Audio")}</SectionLabel>
+
+					<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+						<div>
+							<span className="text-[10px] text-muted-foreground">
+								{tSettings("clip.mute", "Mute")}
+							</span>
+							<p className="text-[9px] text-muted-foreground/50 mt-0.5">
+								{selectedClipMuted
+									? tSettings("clip.mutedState", "Audio is muted")
+									: tSettings("clip.unmutedState", "Audio is playing")}
+							</p>
+						</div>
+						<Switch
+							checked={selectedClipMuted ?? false}
+							onCheckedChange={(v) => onClipMutedChange?.(v)}
+							className="data-[state=checked]:bg-[#06b6d4] scale-75"
+						/>
+					</div>
+					{hasClipSourceAudio && (
+						<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+							<span className="text-[10px] text-muted-foreground">
+								{tSettings("clip.separateClipFromAudio", "Separate clip from audio")}
+							</span>
+							<Switch
+								checked={selectedClipShowSourceAudio ?? false}
+								onCheckedChange={(v) => onClipShowSourceAudioChange?.(v)}
+								className="data-[state=checked]:bg-[#06b6d4] scale-75"
+							/>
+						</div>
+					)}
+				</div>
+
+				{selectedClipId &&
+					hasClipSourceAudio &&
+					sourceAudioTrackMeta.length > 0 && (
+						<div className="mt-1 flex flex-col gap-3">
+							{sourceAudioTrackMeta.map((track) => {
+								const settings = sourceAudioTrackSettings[track.id] ?? {
+									volume: 1,
+									normalize: false,
+								};
+								return (
+									<div
+										key={track.id}
+										className="rounded-lg border border-foreground/10 bg-foreground/[0.03] px-3 py-2"
+									>
+										<div className="mb-2 flex items-center justify-between">
+											<span className="text-[11px] font-medium text-foreground">
+												{track.label}
+											</span>
+											<button
+												type="button"
+												onClick={() => {
+													onSourceAudioTrackVolumeChange?.(track.id, 1);
+													onSourceAudioTrackNormalizeChange?.(track.id, false);
+												}}
+												className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80"
+											>
+												{t("common.actions.reset", "Reset")}
+											</button>
+										</div>
+										<div className="mb-2 flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+											<span className="text-[10px] text-muted-foreground">
+												{tSettings("audio.normalize", "Normalize")}
+											</span>
+											<Switch
+												checked={settings.normalize}
+												onCheckedChange={(v) =>
+													onSourceAudioTrackNormalizeChange?.(track.id, v)
+												}
+												className="data-[state=checked]:bg-[#06b6d4] scale-75"
+											/>
+										</div>
+										<SliderControl
+											label={tSettings("audio.volume", "Volume")}
+											value={settings.volume}
+											defaultValue={1}
+											min={0}
+											max={2}
+											step={0.01}
+											onChange={(v) => onSourceAudioTrackVolumeChange?.(track.id, v)}
+											formatValue={(v) => `${Math.round(v * 100)}%`}
+											parseInput={(text) =>
+												parseFloat(text.replace(/%$/, "")) / 100
+											}
+										/>
+									</div>
+								);
+							})}
+						</div>
+					)}
 			</section>
 		);
 
@@ -3120,6 +3249,8 @@ export function SettingsPanel({
 				return zoomItemSectionContent;
 			case "clip":
 				return clipSectionContent;
+			case "audio":
+				return audioSectionContent;
 			case "frame":
 				return sceneSectionContent;
 			case "crop":
@@ -3561,41 +3692,68 @@ export function SettingsPanel({
 
 			<div
 				className={cn(
-					"flex-shrink-0 border-t border-foreground/10 bg-editor-header p-4 pt-3",
-					!selectedAudioId && "hidden",
+					"flex-shrink-0 border-t border-foreground/10 bg-editor-panel p-4 pt-3",
+					(() => {
+						if (activeEffectSection === "clip" && selectedClipId) return false;
+						if (activeEffectSection === "zoom" && selectedZoomId) return false;
+						if (activeEffectSection === "audio" && selectedAudioId) return false;
+						if (selectedAnnotationId) return false; // Annotation editor handles its own but let's see
+						return true;
+					})() && "hidden",
 				)}
 			>
-				{selectedAudioId && (
-					<div>
-						<div className="mb-3 flex items-center justify-between">
-							<span className="text-sm font-medium text-foreground">
-								{tSettings("audio.volumeTitle", "Audio Volume")}
-							</span>
-							<span className="rounded-full bg-[#2563EB]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#2563EB]">
-								{Math.round((selectedAudioVolume ?? 1) * 100)}%
-							</span>
-						</div>
-						<SliderControl
-							label={tSettings("audio.volume", "Volume")}
-							value={selectedAudioVolume ?? 1}
-							defaultValue={1}
-							min={0}
-							max={1}
-							step={0.01}
-							onChange={(v) => onAudioVolumeChange?.(v)}
-							formatValue={(v) => `${Math.round(v * 100)}%`}
-							parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100}
-						/>
-						<Button
-							onClick={() => selectedAudioId && onAudioDelete?.(selectedAudioId)}
-							variant="destructive"
-							size="sm"
-							className="mt-2 h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
-						>
-							<Trash2 className="h-3 w-3" />
-							{tSettings("audio.deleteRegion", "Delete Audio")}
-						</Button>
-					</div>
+				{activeEffectSection === "clip" && selectedClipId && (
+					<Button
+						onClick={() => {
+							if (selectedClipId && onClipDelete) onClipDelete(selectedClipId);
+						}}
+						variant="destructive"
+						size="sm"
+						className="h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
+					>
+						<Trash2 className="h-3 w-3" />
+						{tSettings("clip.delete", "Delete Clip")}
+					</Button>
+				)}
+				{activeEffectSection === "zoom" && selectedZoomId && (
+					<Button
+						onClick={() => {
+							if (selectedZoomId && onZoomDelete) onZoomDelete(selectedZoomId);
+						}}
+						variant="destructive"
+						size="sm"
+						className="h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
+					>
+						<Trash2 className="h-3 w-3" />
+						{tSettings("zoom.deleteZoom", "Delete Zoom")}
+					</Button>
+				)}
+				{activeEffectSection === "audio" && selectedAudioId && (
+					<Button
+						onClick={() => {
+							if (selectedAudioId && onAudioDelete) onAudioDelete(selectedAudioId);
+						}}
+						variant="destructive"
+						size="sm"
+						className="h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
+					>
+						<Trash2 className="h-3 w-3" />
+						{tSettings("audio.deleteRegion", "Delete Audio")}
+					</Button>
+				)}
+				{selectedAnnotationId && (
+					<Button
+						onClick={() => {
+							if (selectedAnnotationId && onAnnotationDelete)
+								onAnnotationDelete(selectedAnnotationId);
+						}}
+						variant="destructive"
+						size="sm"
+						className="h-8 w-full gap-2 border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
+					>
+						<Trash2 className="h-3 w-3" />
+						{tSettings("annotation.delete", "Delete Annotation")}
+					</Button>
 				)}
 			</div>
 		</div>
