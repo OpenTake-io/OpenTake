@@ -2885,8 +2885,6 @@ export class FrameRenderer {
 		const timeMs = this.currentVideoTime * 1000;
 		const cursorTimeMs = cursorTimestamp / 1000;
 
-		this.updateAnimationState(timeMs);
-
 		if (this.cursorOverlay) {
 			this.cursorOverlay.update(
 				this.config.cursorTelemetry ?? [],
@@ -2894,9 +2892,10 @@ export class FrameRenderer {
 				layoutCache.maskRect,
 				this.config.showCursor ?? true,
 				false,
-				this.animationState.appliedScale || 1,
 			);
 		}
+
+		this.updateAnimationState(timeMs);
 
 		applyZoomTransform({
 			cameraContainer: this.cameraContainer,
@@ -3133,8 +3132,6 @@ export class FrameRenderer {
 		const timeMs = this.currentVideoTime * 1000;
 		const cursorTimeMs = cursorTimestamp / 1000;
 
-		this.updateAnimationState(timeMs);
-
 		if (this.cursorOverlay) {
 			this.cursorOverlay.update(
 				this.config.cursorTelemetry ?? [],
@@ -3142,9 +3139,10 @@ export class FrameRenderer {
 				layoutCache.maskRect,
 				this.config.showCursor ?? true,
 				false,
-				this.animationState.appliedScale || 1,
 			);
 		}
+
+		this.updateAnimationState(timeMs);
 
 		applyZoomTransform({
 			cameraContainer: this.cameraContainer,
