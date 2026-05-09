@@ -4417,6 +4417,7 @@ export default function VideoEditor() {
 						cursorSway,
 						frame,
 						audioRegions,
+						clipRegions,
 						sourceAudioFallbackPaths: audio.sourceAudioFallbackPaths,
 						sourceAudioFallbackStartDelayMsByPath:
 							audio.sourceAudioFallbackStartDelayMsByPath,

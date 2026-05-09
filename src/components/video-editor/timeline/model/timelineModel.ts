@@ -53,6 +53,7 @@ export function buildTimelineItems(params: {
 		span: { start: region.startMs, end: region.endMs },
 		label: `Clip ${index + 1}`,
 		showSourceAudio: region.showSourceAudio,
+		muted: Boolean(region.muted),
 		variant: "clip",
 	}));
 

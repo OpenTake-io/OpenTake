@@ -5,6 +5,7 @@ import {
 	MusicNotes as Music,
 	MouseLeftClickIcon as PhMouseLeftClick,
 	Scissors,
+	SpeakerX,
 	MagnifyingGlassPlus as ZoomIn,
 } from "@phosphor-icons/react";
 import type { Span } from "dnd-timeline";
@@ -31,6 +32,7 @@ interface ItemProps {
 	waveformSegmentSpan?: Span;
 	waveformGain?: number;
 	waveformNormalize?: boolean;
+	muted?: boolean;
 	variant?: "zoom" | "trim" | "clip" | "annotation" | "speed" | "audio";
 }
 
@@ -69,6 +71,7 @@ export default function Item({
 	waveformSegmentSpan,
 	waveformGain = 1,
 	waveformNormalize = false,
+	muted = false,
 	variant = "zoom",
 	children,
 }: ItemProps) {
@@ -169,6 +172,12 @@ export default function Item({
 							normalize={waveformNormalize}
 							className="absolute inset-0 w-full h-full pointer-events-none opacity-45"
 						/>
+					)}
+					{/* Muted overlay for source audio track items */}
+					{isAudio && muted && (
+						<div className="absolute inset-0 z-20 flex items-center justify-center gap-1 bg-red-900/40 pointer-events-none">
+							<SpeakerX className="w-3 h-3 text-red-300/90 shrink-0" />
+						</div>
 					)}
 					{/* Content */}
 					<div className="relative z-10 flex flex-col items-center justify-center text-black/70 dark:text-white/90 opacity-80 group-hover:opacity-100 transition-opacity select-none overflow-hidden">
