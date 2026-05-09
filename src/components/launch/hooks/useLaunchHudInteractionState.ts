@@ -12,6 +12,7 @@ export function useLaunchHudInteractionState({
 	webcamPreviewDragStartRef: RefObject<unknown>;
 }) {
 	const isMouseOverHudRef = useRef(false);
+	const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
 	useEffect(() => {
 		if (openId !== null) {
@@ -31,7 +32,7 @@ export function useLaunchHudInteractionState({
 			const target = e.target as HTMLElement | null;
 			if (!target) return;
 			const isInteractive = !!target.closest(
-				'.pointer-events-auto, [data-radix-popper-content-wrapper], [class*="menuCard"], [class*="recordingWebcamPreview"]'
+				".pointer-events-auto, [data-hud-interactive], [data-radix-popper-content-wrapper]"
 			);
 
 			if (isInteractive) {
@@ -68,8 +69,6 @@ export function useLaunchHudInteractionState({
 		if (timeoutRef.current) clearTimeout(timeoutRef.current);
 		window.electronAPI?.hudOverlaySetIgnoreMouse?.(false);
 	}, []);
-
-	const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
 	const handleHudMouseLeave = useCallback((event: MouseEvent<HTMLDivElement>) => {
 		const nextTarget = event.relatedTarget;
