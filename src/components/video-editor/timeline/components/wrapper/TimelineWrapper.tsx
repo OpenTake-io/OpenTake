@@ -29,6 +29,7 @@ interface TimelineWrapperProps {
 	onItemSpanChange: (id: string, span: Span, rowId?: string) => void;
 	resolveTargetRowId?: (id: string, proposedRowId: string) => string;
 	allRegionSpans?: TimelineRegionSpan[];
+	onLiveSpanPreviewChange?: (id: string, span: Span | null) => void;
 }
 
 export default function TimelineWrapper({
@@ -43,6 +44,7 @@ export default function TimelineWrapper({
 	onItemSpanChange,
 	resolveTargetRowId,
 	allRegionSpans = [],
+	onLiveSpanPreviewChange,
 }: TimelineWrapperProps) {
 	const totalMs = Math.max(0, Math.round(videoDuration * 1000));
 
@@ -144,8 +146,12 @@ export default function TimelineWrapper({
 					? (event.activatorEvent as PointerEvent).clientX + (event.delta?.x ?? 0)
 					: undefined;
 			if (span) showTooltip(span, screenX);
+			const moved = Math.hypot(event.delta?.x ?? 0, event.delta?.y ?? 0) > 0.01;
+			if (moved) {
+				onLiveSpanPreviewChange?.(event.active.id as string, span ?? null);
+			}
 		},
-		[showTooltip],
+		[onLiveSpanPreviewChange, showTooltip],
 	);
 
 	const onResizeMove = useCallback(
@@ -156,8 +162,9 @@ export default function TimelineWrapper({
 					? (event.activatorEvent as PointerEvent).clientX + (event.delta?.x ?? 0)
 					: undefined;
 			if (span) showTooltip(span, screenX);
+			onLiveSpanPreviewChange?.(event.active.id as string, span ?? null);
 		},
-		[showTooltip],
+		[onLiveSpanPreviewChange, showTooltip],
 	);
 
 	const hideTooltip = useCallback(() => showTooltip(null), [showTooltip]);
@@ -166,16 +173,18 @@ export default function TimelineWrapper({
 		(event: ResizeEndEvent) => {
 			hideTooltip();
 			onResizeEnd(event);
+			onLiveSpanPreviewChange?.(event.active.id as string, null);
 		},
-		[hideTooltip, onResizeEnd],
+		[hideTooltip, onLiveSpanPreviewChange, onResizeEnd],
 	);
 
 	const onDragEndWithTooltip = useCallback(
 		(event: DragEndEvent) => {
 			hideTooltip();
 			onDragEnd(event);
+			onLiveSpanPreviewChange?.(event.active.id as string, null);
 		},
-		[hideTooltip, onDragEnd],
+		[hideTooltip, onDragEnd, onLiveSpanPreviewChange],
 	);
 
 	const handleRangeChange = useCallback(

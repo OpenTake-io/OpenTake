@@ -499,20 +499,21 @@ export async function getCompanionAudioFallbackInfo(videoPath: string) {
 
 	let paths: string[];
 	if (await hasEmbeddedAudioStream(videoPath)) {
-		const microphoneCompanionPaths = Array.from(
+		const companionPaths = Array.from(
 			new Set(
 				companionCandidates.flatMap((candidate) =>
 					candidate.usablePaths.filter(
-						(companionPath) => companionPath === candidate.micPath,
+						(companionPath) =>
+							companionPath === candidate.micPath || companionPath === candidate.systemPath,
 					),
 				),
 			),
 		);
-		if (microphoneCompanionPaths.length === 0) {
+		if (companionPaths.length === 0) {
 			return { paths: [], startDelayMsByPath: {} };
 		}
 
-		paths = [videoPath, ...microphoneCompanionPaths];
+		paths = [videoPath, ...companionPaths];
 	} else {
 		paths = Array.from(
 			new Set(companionCandidates.flatMap((candidate) => candidate.usablePaths)),

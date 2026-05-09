@@ -17,6 +17,12 @@ import {
 } from "@/utils/aspectRatioUtils";
 import { formatShortcut } from "@/utils/platformUtils";
 import { loadEditorPreferences, saveEditorPreferences } from "../editorPreferences";
+import { fromFileUrl } from "../projectPersistence";
+import type {
+	SourceAudioTrackMeta,
+	SourceAudioTrackSettings,
+	SourceAudioTrackWithPeaks,
+} from "@/components/video-editor/audio/audioTypes";
 import type {
 	AnnotationRegion,
 	AudioRegion,
@@ -80,6 +86,38 @@ export interface TimelineEditorProps {
 	isCropped?: boolean;
 	videoPath?: string | null;
 	hideToolbar?: boolean;
+	showSourceAudioTrack?: boolean;
+	onSourceAudioAvailabilityChange?: (available: boolean) => void;
+	sourceAudioTrackSettings?: SourceAudioTrackSettings;
+	getSourceAudioTrackSettingsForClip?: (
+		clipId: string | null,
+	) => SourceAudioTrackSettings;
+	onSourceAudioTracksMetaChange?: (tracks: SourceAudioTrackMeta) => void;
+}
+
+function extractLocalPathFromMediaServerUrl(input: string | null | undefined): string | null {
+	if (!input) return null;
+	try {
+		const url = new URL(input);
+		const isLocalMediaServer =
+			(url.protocol === "http:" || url.protocol === "https:") &&
+			(url.hostname === "127.0.0.1" || url.hostname === "localhost") &&
+			url.pathname === "/video";
+		if (!isLocalMediaServer) return null;
+		return url.searchParams.get("path");
+	} catch {
+		return null;
+	}
+}
+
+function buildSourceSidecarPath(source: string, suffix: "mic" | "system"): string {
+	const normalized = source.replace(/\\/g, "/");
+	const lastSlash = normalized.lastIndexOf("/");
+	const dir = lastSlash >= 0 ? normalized.slice(0, lastSlash + 1) : "";
+	const fileName = lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized;
+	const dotIndex = fileName.lastIndexOf(".");
+	const baseName = dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
+	return `${dir}${baseName}.${suffix}.wav`;
 }
 
 export interface TimelineEditorHandle {
@@ -138,6 +176,11 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			isCropped = false,
 			videoPath,
 			hideToolbar = false,
+			showSourceAudioTrack = false,
+			onSourceAudioAvailabilityChange,
+			sourceAudioTrackSettings = {},
+			getSourceAudioTrackSettingsForClip,
+			onSourceAudioTracksMetaChange,
 		},
 		ref,
 	) {
@@ -178,8 +221,111 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			pan: "Shift + Ctrl + Scroll",
 			zoom: "Ctrl + Scroll",
 		});
+		const [liveSpanPreviewById, setLiveSpanPreviewById] = useState<Record<string, Span>>({});
+		const liveZoomPreview = useMemo(() => {
+			const previewSpans: Record<string, Span> = { ...liveSpanPreviewById };
+			const hiddenZoomIds = new Set<string>();
+
+			for (const [previewId, previewSpan] of Object.entries(liveSpanPreviewById)) {
+				const oldClip = clipRegions.find((clip) => clip.id === previewId);
+				if (!oldClip) continue;
+
+				const newStart = Math.round(previewSpan.start);
+				const newEnd = Math.round(previewSpan.end);
+				const removedSegments = [
+					...(newStart > oldClip.startMs
+						? [{ startMs: oldClip.startMs, endMs: newStart }]
+						: []),
+					...(newEnd < oldClip.endMs
+						? [{ startMs: newEnd, endMs: oldClip.endMs }]
+						: []),
+				];
+
+				const startDelta = newStart - oldClip.startMs;
+				const endDelta = newEnd - oldClip.endMs;
+				const isMove = Math.abs(startDelta - endDelta) < 1 && Math.abs(startDelta) > 0;
+
+				if (isMove) {
+					const delta = startDelta;
+					for (const zoom of zoomRegions) {
+						const overlaps =
+							zoom.startMs < oldClip.endMs && zoom.endMs > oldClip.startMs;
+						if (!overlaps) continue;
+						previewSpans[zoom.id] = {
+							start: zoom.startMs + delta,
+							end: zoom.endMs + delta,
+						};
+					}
+				}
+
+				if (removedSegments.length > 0) {
+					for (const zoom of zoomRegions) {
+						const removed = removedSegments.some(
+							(segment) =>
+								zoom.startMs < segment.endMs && zoom.endMs > segment.startMs,
+						);
+						if (removed) hiddenZoomIds.add(zoom.id);
+					}
+				}
+			}
+
+			return { previewSpans, hiddenZoomIds };
+		}, [clipRegions, liveSpanPreviewById, zoomRegions]);
 		const { shortcuts: keyShortcuts, isMac } = useShortcuts();
-		const audioPeaks = useTimelineAudioPeaks(videoPath);
+		const sourceAudioPeaks = useTimelineAudioPeaks(videoPath, {
+			enableSourceSidecarFallback: true,
+		});
+		const localSourcePath = useMemo(() => {
+			if (!videoPath) return null;
+			return (
+				extractLocalPathFromMediaServerUrl(videoPath) ||
+				(/^file:\/\//i.test(videoPath) ? fromFileUrl(videoPath) : videoPath)
+			);
+		}, [videoPath]);
+		const micSidecarPath = useMemo(
+			() => (localSourcePath ? buildSourceSidecarPath(localSourcePath, "mic") : null),
+			[localSourcePath],
+		);
+		const systemSidecarPath = useMemo(
+			() => (localSourcePath ? buildSourceSidecarPath(localSourcePath, "system") : null),
+			[localSourcePath],
+		);
+		const micSidecarPeaks = useTimelineAudioPeaks(micSidecarPath);
+		const systemSidecarPeaks = useTimelineAudioPeaks(systemSidecarPath);
+		const sourceAudioTracks = useMemo<SourceAudioTrackWithPeaks[]>(() => {
+			if (systemSidecarPeaks || micSidecarPeaks) {
+				const tracks: SourceAudioTrackWithPeaks[] = [];
+				if (systemSidecarPeaks)
+					tracks.push({
+						id: "system",
+						label: t("audio.systemLabel", "Source System"),
+						peaks: systemSidecarPeaks,
+					});
+				if (micSidecarPeaks)
+					tracks.push({
+						id: "mic",
+						label: t("audio.micLabel", "Source Mic"),
+						peaks: micSidecarPeaks,
+					});
+				return tracks;
+			}
+			return sourceAudioPeaks
+				? [
+						{
+							id: "mixed",
+							label: t("audio.mixedLabel", "Source"),
+							peaks: sourceAudioPeaks,
+						},
+					]
+				: [];
+		}, [micSidecarPeaks, sourceAudioPeaks, systemSidecarPeaks, t]);
+		useEffect(() => {
+			onSourceAudioTracksMetaChange?.(sourceAudioTracks.map((t) => ({ id: t.id, label: t.label })));
+		}, [onSourceAudioTracksMetaChange, sourceAudioTracks]);
+		void sourceAudioTrackSettings;
+		useEffect(() => {
+			onSourceAudioAvailabilityChange?.(sourceAudioTracks.length > 0);
+		}, [onSourceAudioAvailabilityChange, sourceAudioTracks.length]);
 
 		useEffect(() => {
 			if (aspectRatio === "native") {
@@ -376,6 +522,25 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 						onItemSpanChange={handleItemSpanChange}
 						resolveTargetRowId={getResolvedDropRowId}
 						allRegionSpans={allRegionSpans}
+						onLiveSpanPreviewChange={(id, span) => {
+							setLiveSpanPreviewById((prev) => {
+								if (!span) {
+									if (!(id in prev)) return prev;
+									const next = { ...prev };
+									delete next[id];
+									return next;
+								}
+								const current = prev[id];
+								if (
+									current &&
+									current.start === span.start &&
+									current.end === span.end
+								) {
+									return prev;
+								}
+								return { ...prev, [id]: span };
+							});
+						}}
 					>
 						<KeyframeMarkers
 							keyframes={keyframes}
@@ -403,7 +568,11 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							selectAllBlocksActive={selectAllBlocksActive}
 							onClearBlockSelection={clearSelectedBlocks}
 							keyframes={keyframes}
-							audioPeaks={audioPeaks}
+							sourceAudioTracks={sourceAudioTracks}
+							getSourceAudioTrackSettingsForClip={getSourceAudioTrackSettingsForClip}
+							showSourceAudioTrack={showSourceAudioTrack}
+							liveSpanPreviewById={liveZoomPreview.previewSpans}
+							liveHiddenItemIds={Array.from(liveZoomPreview.hiddenZoomIds)}
 						/>
 					</TimelineWrapper>
 				</div>
