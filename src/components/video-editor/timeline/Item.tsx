@@ -20,6 +20,7 @@ interface ItemProps {
 	children: React.ReactNode;
 	isSelected?: boolean;
 	onSelect?: () => void;
+	onSelectId?: (id: string) => void;
 	zoomDepth?: number;
 	zoomMode?: "auto" | "manual";
 	speedValue?: number;
@@ -52,6 +53,7 @@ export default function Item({
 	rowId,
 	isSelected = false,
 	onSelect,
+	onSelectId,
 	zoomDepth = 1,
 	zoomMode = "auto",
 	speedValue,
@@ -88,6 +90,10 @@ export default function Item({
 	);
 
 	const MIN_ITEM_PX = 6;
+	const handleSelect = () => {
+		onSelect?.();
+		onSelectId?.(id);
+	};
 	const safeItemStyle = {
 		...itemStyle,
 		minWidth: MIN_ITEM_PX,
@@ -101,8 +107,8 @@ export default function Item({
 			style={safeItemStyle}
 			{...listeners}
 			{...attributes}
-			onPointerDownCapture={() => onSelect?.()}
 			data-timeline-item="true"
+			onPointerDownCapture={handleSelect}
 			className="group h-full"
 		>
 			<div
@@ -128,7 +134,6 @@ export default function Item({
 					}}
 					onClick={(event) => {
 						event.stopPropagation();
-						onSelect?.();
 					}}
 				>
 					<div
