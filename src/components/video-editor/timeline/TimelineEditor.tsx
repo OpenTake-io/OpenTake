@@ -178,6 +178,56 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			pan: "Shift + Ctrl + Scroll",
 			zoom: "Ctrl + Scroll",
 		});
+		const [liveSpanPreviewById, setLiveSpanPreviewById] = useState<Record<string, Span>>({});
+		const liveZoomPreview = useMemo(() => {
+			const previewSpans: Record<string, Span> = { ...liveSpanPreviewById };
+			const hiddenZoomIds = new Set<string>();
+
+			for (const [previewId, previewSpan] of Object.entries(liveSpanPreviewById)) {
+				const oldClip = clipRegions.find((clip) => clip.id === previewId);
+				if (!oldClip) continue;
+
+				const newStart = Math.round(previewSpan.start);
+				const newEnd = Math.round(previewSpan.end);
+				const removedSegments = [
+					...(newStart > oldClip.startMs
+						? [{ startMs: oldClip.startMs, endMs: newStart }]
+						: []),
+					...(newEnd < oldClip.endMs
+						? [{ startMs: newEnd, endMs: oldClip.endMs }]
+						: []),
+				];
+
+				const startDelta = newStart - oldClip.startMs;
+				const endDelta = newEnd - oldClip.endMs;
+				const isMove = Math.abs(startDelta - endDelta) < 1 && Math.abs(startDelta) > 0;
+
+				if (isMove) {
+					const delta = startDelta;
+					for (const zoom of zoomRegions) {
+						const overlaps =
+							zoom.startMs < oldClip.endMs && zoom.endMs > oldClip.startMs;
+						if (!overlaps) continue;
+						previewSpans[zoom.id] = {
+							start: zoom.startMs + delta,
+							end: zoom.endMs + delta,
+						};
+					}
+				}
+
+				if (removedSegments.length > 0) {
+					for (const zoom of zoomRegions) {
+						const removed = removedSegments.some(
+							(segment) =>
+								zoom.startMs < segment.endMs && zoom.endMs > segment.startMs,
+						);
+						if (removed) hiddenZoomIds.add(zoom.id);
+					}
+				}
+			}
+
+			return { previewSpans, hiddenZoomIds };
+		}, [clipRegions, liveSpanPreviewById, zoomRegions]);
 		const { shortcuts: keyShortcuts, isMac } = useShortcuts();
 		const audioPeaks = useTimelineAudioPeaks(videoPath);
 
@@ -376,6 +426,25 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 						onItemSpanChange={handleItemSpanChange}
 						resolveTargetRowId={getResolvedDropRowId}
 						allRegionSpans={allRegionSpans}
+						onLiveSpanPreviewChange={(id, span) => {
+							setLiveSpanPreviewById((prev) => {
+								if (!span) {
+									if (!(id in prev)) return prev;
+									const next = { ...prev };
+									delete next[id];
+									return next;
+								}
+								const current = prev[id];
+								if (
+									current &&
+									current.start === span.start &&
+									current.end === span.end
+								) {
+									return prev;
+								}
+								return { ...prev, [id]: span };
+							});
+						}}
 					>
 						<KeyframeMarkers
 							keyframes={keyframes}
@@ -404,6 +473,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							onClearBlockSelection={clearSelectedBlocks}
 							keyframes={keyframes}
 							audioPeaks={audioPeaks}
+							liveSpanPreviewById={liveZoomPreview.previewSpans}
+							liveHiddenItemIds={Array.from(liveZoomPreview.hiddenZoomIds)}
 						/>
 					</TimelineWrapper>
 				</div>

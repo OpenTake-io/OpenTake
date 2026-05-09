@@ -4,6 +4,9 @@ import type { AudioPeaksData } from "../../core/timelineTypes";
 
 interface AudioWaveformProps {
 	peaks: AudioPeaksData;
+	segmentStartMs?: number;
+	segmentEndMs?: number;
+	className?: string;
 }
 
 /**
@@ -11,7 +14,12 @@ interface AudioWaveformProps {
  * Automatically syncs with the timeline's visible range so the waveform
  * scrolls and zooms together with the clip items above it.
  */
-function AudioWaveformComponent({ peaks }: AudioWaveformProps) {
+function AudioWaveformComponent({
+	peaks,
+	segmentStartMs,
+	segmentEndMs,
+	className,
+}: AudioWaveformProps) {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const { range } = useTimelineContext();
 	const [resizeKey, setResizeKey] = useState(0);
@@ -53,8 +61,8 @@ function AudioWaveformComponent({ peaks }: AudioWaveformProps) {
 		const { peaks: peakData, durationMs } = peaks;
 		if (durationMs <= 0 || peakData.length === 0) return;
 
-		const visibleStartMs = range.start;
-		const visibleEndMs = range.end;
+		const visibleStartMs = segmentStartMs ?? range.start;
+		const visibleEndMs = segmentEndMs ?? range.end;
 		const visibleDurationMs = visibleEndMs - visibleStartMs;
 		if (visibleDurationMs <= 0) return;
 
@@ -77,12 +85,12 @@ function AudioWaveformComponent({ peaks }: AudioWaveformProps) {
 		ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
 		ctx.lineWidth = dpr;
 		ctx.stroke();
-	}, [peaks, range.start, range.end, resizeKey]);
+	}, [peaks, range.start, range.end, resizeKey, segmentStartMs, segmentEndMs]);
 
 	return (
 		<canvas
 			ref={setCanvasRef}
-			className="absolute inset-0 w-full h-full pointer-events-none"
+			className={className ?? "absolute inset-0 w-full h-full pointer-events-none"}
 			style={{ display: "block" }}
 		/>
 	);
