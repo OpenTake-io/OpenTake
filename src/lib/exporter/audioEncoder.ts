@@ -14,6 +14,7 @@ import { estimateCompanionAudioStartDelaySeconds } from "@/lib/mediaTiming";
 import { resolveMediaElementSource } from "./localMediaSource";
 import type { VideoMuxer } from "./muxer";
 import { resolveSourceTrackRoutingPolicy } from "./sourceTrackRoutingPolicy";
+import { SOURCE_AUDIO_NORMALIZE_GAIN } from "@/components/video-editor/audio/audioTypes";
 
 const AUDIO_BITRATE = 128_000;
 const DECODE_BACKPRESSURE_LIMIT = 20;
@@ -23,7 +24,6 @@ const MP4_AUDIO_CODEC = "mp4a.40.2";
 const OFFLINE_AUDIO_SAMPLE_RATE = 48_000;
 const OFFLINE_ENCODE_CHUNK_FRAMES = 1024;
 const OFFLINE_CHUNK_DURATION_SEC = 30;
-const USER_AUDIO_NORMALIZE_GAIN = 1.35;
 
 function resolveSourceTrackGain(
 	sourceAudioTrackSettings: SourceAudioTrackSettings | undefined,
@@ -33,7 +33,7 @@ function resolveSourceTrackGain(
 	if (!settings) {
 		return 1;
 	}
-	const normalizeGain = settings.normalize ? USER_AUDIO_NORMALIZE_GAIN : 1;
+	const normalizeGain = settings.normalize ? SOURCE_AUDIO_NORMALIZE_GAIN : 1;
 	return Math.max(0, Math.min(2, settings.volume * normalizeGain));
 }
 
@@ -943,7 +943,7 @@ export class AudioProcessor {
 		if (duration <= 0.001) return;
 
 		const gainNode = ctx.createGain();
-		const normalizeGain = region.normalize ? USER_AUDIO_NORMALIZE_GAIN : 1;
+		const normalizeGain = region.normalize ? SOURCE_AUDIO_NORMALIZE_GAIN : 1;
 		gainNode.gain.value = Math.max(0, Math.min(1, region.volume * normalizeGain));
 		gainNode.connect(ctx.destination);
 
