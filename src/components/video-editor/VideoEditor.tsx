@@ -1650,17 +1650,28 @@ export default function VideoEditor() {
 
 	// Extension-contributed standalone section pages (no parentSection)
 	const [extensionSectionButtons, setExtensionSectionButtons] = useState<
-		{ id: EditorEffectSection; label: string; icon: typeof PhPuzzle | string }[]
+		{
+			id: EditorEffectSection;
+			label: string;
+			icon: typeof PhPuzzle | string;
+			extensionPath?: string | null;
+		}[]
 	>([]);
 	useEffect(() => {
 		const update = () => {
 			const panels = extensionHost.getSettingsPanels();
+			const extensionPathById = new Map(
+				extensionHost
+					.getActiveExtensions()
+					.map((extension) => [extension.manifest.id, extension.path]),
+			);
 			const standalone = panels
 				.filter((p) => !p.panel.parentSection)
 				.map((p) => ({
 					id: `ext:${p.extensionId}/${p.panel.id}` as EditorEffectSection,
 					label: p.panel.label,
 					icon: p.panel.icon || (PhPuzzle as typeof PhPuzzle | string),
+					extensionPath: extensionPathById.get(p.extensionId),
 				}));
 			setExtensionSectionButtons(standalone);
 		};
@@ -5958,6 +5969,7 @@ export default function VideoEditor() {
 												{typeof section.icon === "string" ? (
 													<ExtensionIcon
 														icon={section.icon}
+														extensionPath={section.extensionPath}
 														className="h-[27px] w-[27px]"
 													/>
 												) : (
