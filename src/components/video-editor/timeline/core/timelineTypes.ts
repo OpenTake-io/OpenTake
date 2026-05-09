@@ -36,6 +36,7 @@ export interface TimelineRenderItem {
 	zoomDepth?: number;
 	zoomMode?: ZoomMode;
 	speedValue?: number;
+	showSourceAudio?: boolean;
 	variant: "zoom" | "trim" | "clip" | "annotation" | "speed" | "audio";
 }
 

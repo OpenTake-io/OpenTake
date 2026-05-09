@@ -20,6 +20,8 @@
 	"clip": {
 		"title": "Clipe",
 		"muteAudio": "Silenciar áudio",
+		"unmuteAudio": "Ativar som",
+		"separateClipFromAudio": "Separar clipe do áudio",
 		"delete": "Excluir clipe"
 	},
 	"effects": {

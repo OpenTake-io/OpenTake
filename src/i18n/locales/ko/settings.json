@@ -20,6 +20,8 @@
 	"clip": {
 		"title": "클립",
 		"muteAudio": "오디오 음소거",
+		"unmuteAudio": "음소거 해제",
+		"separateClipFromAudio": "클립과 오디오 분리",
 		"delete": "클립 삭제"
 	},
 	"effects": {

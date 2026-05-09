@@ -52,6 +52,7 @@ export function buildTimelineItems(params: {
 		rowId: CLIP_ROW_ID,
 		span: { start: region.startMs, end: region.endMs },
 		label: `Clip ${index + 1}`,
+		showSourceAudio: region.showSourceAudio,
 		variant: "clip",
 	}));
 

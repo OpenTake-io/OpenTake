@@ -169,6 +169,7 @@ export interface ClipRegion {
 	endMs: number;
 	speed: number;
 	muted?: boolean;
+	showSourceAudio?: boolean;
 }
 
 export function getClipSourceEndMs(clip: ClipRegion): number {

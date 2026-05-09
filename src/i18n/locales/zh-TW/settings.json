@@ -20,6 +20,8 @@
 	"clip": {
 		"title": "片段",
 		"muteAudio": "靜音",
+		"unmuteAudio": "取消靜音",
+		"separateClipFromAudio": "將片段與音訊分離",
 		"delete": "刪除片段"
 	},
 	"effects": {

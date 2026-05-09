@@ -20,6 +20,8 @@
 	"clip": {
 		"title": "Clip",
 		"muteAudio": "Silenciar audio",
+		"unmuteAudio": "Activar sonido",
+		"separateClipFromAudio": "Separar clip del audio",
 		"delete": "Eliminar clip"
 	},
 	"effects": {
@@ -181,5 +183,11 @@
 		"exportVideo": "Exportar {{format}}",
 		"reportBug": "Reportar error",
 		"starOnGithub": "Estrella en GitHub"
+	},
+	"audio": {
+		"sourceTracksTitle": "Audio fuente del clip",
+		"volumeTitle": "Volumen",
+		"normalize": "Normalizar",
+		"deleteRegion": "Eliminar audio"
 	}
 }

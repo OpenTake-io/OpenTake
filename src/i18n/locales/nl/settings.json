@@ -20,6 +20,8 @@
 	"clip": {
 		"title": "Clip",
 		"muteAudio": "Audio dempen",
+		"unmuteAudio": "Geluid inschakelen",
+		"separateClipFromAudio": "Clip scheiden van audio",
 		"delete": "Clip verwijderen"
 	},
 	"effects": {

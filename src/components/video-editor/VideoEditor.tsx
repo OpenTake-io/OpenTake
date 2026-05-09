@@ -665,7 +665,6 @@ export default function VideoEditor() {
 	const [audioRegions, setAudioRegions] = useState<AudioRegion[]>([]);
 	const [selectedAudioId, setSelectedAudioId] = useState<string | null>(null);
 	const [hasClipSourceAudio, setHasClipSourceAudio] = useState(false);
-	const [showClipSourceAudioTrack, setShowClipSourceAudioTrack] = useState(false);
 	const [autoCaptions, setAutoCaptions] = useState<CaptionCue[]>([]);
 	const [autoCaptionSettings, setAutoCaptionSettings] = useState<AutoCaptionSettings>(
 		DEFAULT_AUTO_CAPTION_SETTINGS,
@@ -3709,6 +3708,18 @@ export default function VideoEditor() {
 		[selectedClipId],
 	);
 
+	const handleClipShowSourceAudioChange = useCallback(
+		(showSourceAudio: boolean) => {
+			if (!selectedClipId) return;
+			setClipRegions((prev) =>
+				prev.map((clip) =>
+					clip.id === selectedClipId ? { ...clip, showSourceAudio } : clip,
+				),
+			);
+		},
+		[selectedClipId],
+	);
+
 	const handleClipDelete = useCallback(
 		(id: string) => {
 			const deletedClip = clipRegions.find((clip) => clip.id === id);
@@ -5697,26 +5708,26 @@ export default function VideoEditor() {
 								selectedClipId={selectedClipId}
 								selectedClipSpeed={
 									selectedClipId
-										? (clipRegions.find((c) => c.id === selectedClipId)
-												?.speed ?? 1)
+										? clipRegions.find((c) => c.id === selectedClipId)?.speed ?? 1
 										: null
 								}
 								selectedClipMuted={
 									selectedClipId
-										? (clipRegions.find((c) => c.id === selectedClipId)
-												?.muted ?? false)
+										? clipRegions.find((c) => c.id === selectedClipId)?.muted ??
+											false
 										: null
 								}
-								onClipSpeedChange={(speed) =>
-									selectedClipId && handleClipSpeedChange(speed)
+								selectedClipShowSourceAudio={
+									selectedClipId
+										? clipRegions.find((c) => c.id === selectedClipId)
+												?.showSourceAudio ?? false
+										: null
 								}
-								onClipMutedChange={(muted) =>
-									selectedClipId && handleClipMutedChange(muted)
-								}
+								onClipSpeedChange={handleClipSpeedChange}
+								onClipMutedChange={handleClipMutedChange}
+								onClipShowSourceAudioChange={handleClipShowSourceAudioChange}
 								onClipDelete={handleClipDelete}
 								hasClipSourceAudio={hasClipSourceAudio}
-								showClipSourceAudioTrack={showClipSourceAudioTrack}
-								onShowClipSourceAudioTrackChange={setShowClipSourceAudioTrack}
 								sourceAudioTrackMeta={audio.sourceAudioTrackMeta}
 								sourceAudioTrackSettings={audio.selectedClipSourceAudioTrackSettings}
 								onSourceAudioTrackVolumeChange={
@@ -6314,16 +6325,13 @@ export default function VideoEditor() {
 						selectedAnnotationId={selectedAnnotationId}
 						onSelectAnnotation={handleSelectAnnotation}
 						aspectRatio={aspectRatio}
-						showSourceAudioTrack={showClipSourceAudioTrack}
+						showSourceAudioTrack={clipRegions.some((c) => c.showSourceAudio)}
 						sourceAudioTrackSettings={audio.activeSourceAudioTrackSettings}
 						getSourceAudioTrackSettingsForClip={
 							audio.getSourceAudioTrackSettingsForClip
 						}
 						onSourceAudioAvailabilityChange={(available) => {
 							setHasClipSourceAudio(available);
-							if (!available) {
-								setShowClipSourceAudioTrack(false);
-							}
 						}}
 						onSourceAudioTracksMetaChange={(tracks) => {
 							audio.onSourceAudioTracksMetaChange(tracks);
