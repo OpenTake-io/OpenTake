@@ -1781,7 +1781,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				markRecordingPaused(boundaryMs);
 				setPaused(true);
 				try {
-					await window.electronAPI.pauseCursorCapture();
+					await window.electronAPI.pauseCursorCapture(boundaryMs);
 				} catch (error) {
 					console.warn("Failed to pause cursor capture:", error);
 				}
@@ -1798,7 +1798,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				markRecordingPaused(boundaryMs);
 				setPaused(true);
 				try {
-					await window.electronAPI.pauseCursorCapture();
+					await window.electronAPI.pauseCursorCapture(boundaryMs);
 				} catch (error) {
 					console.warn("Failed to pause cursor capture:", error);
 				}
@@ -1827,7 +1827,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				markRecordingResumed(boundaryMs);
 				setPaused(false);
 				try {
-					await window.electronAPI.resumeCursorCapture();
+					await window.electronAPI.resumeCursorCapture(boundaryMs);
 				} catch (error) {
 					console.warn("Failed to resume cursor capture:", error);
 				}
@@ -1844,7 +1844,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				markRecordingResumed(boundaryMs);
 				setPaused(false);
 				try {
-					await window.electronAPI.resumeCursorCapture();
+					await window.electronAPI.resumeCursorCapture(boundaryMs);
 				} catch (error) {
 					console.warn("Failed to resume cursor capture:", error);
 				}
