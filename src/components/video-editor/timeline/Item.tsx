@@ -29,6 +29,8 @@ interface ItemProps {
 	speedValue?: number;
 	waveformPeaks?: AudioPeaksData | null;
 	waveformSegmentSpan?: Span;
+	waveformGain?: number;
+	waveformNormalize?: boolean;
 	variant?: "zoom" | "trim" | "clip" | "annotation" | "speed" | "audio";
 }
 
@@ -65,6 +67,8 @@ export default function Item({
 	speedValue,
 	waveformPeaks = null,
 	waveformSegmentSpan,
+	waveformGain = 1,
+	waveformNormalize = false,
 	variant = "zoom",
 	children,
 }: ItemProps) {
@@ -161,6 +165,8 @@ export default function Item({
 							peaks={waveformPeaks}
 							segmentStartMs={waveformSegmentSpan?.start ?? span.start}
 							segmentEndMs={waveformSegmentSpan?.end ?? span.end}
+							gain={waveformGain}
+							normalize={waveformNormalize}
 							className="absolute inset-0 w-full h-full pointer-events-none opacity-45"
 						/>
 					)}

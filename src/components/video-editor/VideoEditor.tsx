@@ -80,7 +80,6 @@ import {
 	canUseInMemoryExportSaveFallback,
 	describeBlockedInMemoryExportSave,
 } from "@/lib/exporter/exportSavePolicy";
-import { resolveSourceAudioFallbackPaths } from "@/lib/exporter/sourceAudioFallback";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import {
@@ -140,10 +139,7 @@ import {
 	validateProjectData,
 } from "./projectPersistence";
 import { SettingsPanel } from "./SettingsPanel";
-import { useAudioPreviewSync } from "./audio/useAudioPreviewSync";
-import { useClipAudioSettingsController } from "./audio/useClipAudioSettingsController";
-import { useSourceAudioFallback } from "./audio/useSourceAudioFallback";
-import { getActiveClipIdAtSourceTime, isClipMutedById } from "./audio/clipAudio";
+import { useVideoEditorAudio } from "./audio/useVideoEditorAudio";
 import {
 	APP_HEADER_ICON_BUTTON_CLASS,
 	DiscordLinkButton,
@@ -1768,38 +1764,6 @@ export default function VideoEditor() {
 		() => videoSourcePath ?? (videoPath ? fromFileUrl(videoPath) : null),
 		[videoPath, videoSourcePath],
 	);
-	const { sourceAudioFallbackPaths, sourceAudioFallbackStartDelayMsByPath } =
-		useSourceAudioFallback({
-			currentSourcePath,
-			summarizeErrorMessage,
-		});
-	const { hasEmbeddedSourceAudio, externalAudioPaths: previewSourceAudioFallbackPaths } = useMemo(
-		() => resolveSourceAudioFallbackPaths(currentSourcePath, sourceAudioFallbackPaths),
-		[currentSourcePath, sourceAudioFallbackPaths],
-	);
-	const shouldMutePreviewVideo =
-		!hasEmbeddedSourceAudio && previewSourceAudioFallbackPaths.length > 0;
-	const activeClipIdAtCurrentTime = useMemo(
-		() => getActiveClipIdAtSourceTime(currentTime, clipRegions),
-		[clipRegions, currentTime],
-	);
-	const {
-		sourceAudioTrackMeta,
-		activeSourceAudioTrackSettings,
-		selectedClipSourceAudioTrackSettings,
-		onSourceAudioTracksMetaChange,
-		onSelectedClipSourceAudioTrackVolumeChange,
-		onSelectedClipSourceAudioTrackNormalizeChange,
-		embeddedSourcePreviewGain,
-		getSourceTrackPreviewGain,
-	} = useClipAudioSettingsController({
-		selectedClipId,
-		activeClipId: activeClipIdAtCurrentTime,
-	});
-	const isCurrentClipMuted = useMemo(() => {
-		return isClipMutedById(activeClipIdAtCurrentTime, clipRegions);
-	}, [activeClipIdAtCurrentTime, clipRegions]);
-
 	const projectDisplayName = useMemo(() => {
 		const fileName =
 			currentProjectPath?.split(/[\\/]/).pop() ??
@@ -3345,6 +3309,25 @@ export default function VideoEditor() {
 		}
 		return result;
 	}, [clipRegions, speedRegions]);
+	const audio = useVideoEditorAudio({
+		currentSourcePath,
+		selectedClipId,
+		clipRegions,
+		audioRegions,
+		effectiveSpeedRegions,
+		currentTime,
+		timelineTime: timelinePlayheadTime,
+		duration,
+		isPlaying,
+		previewVolume,
+		summarizeErrorMessage,
+		onSourceFallbackLoadError: (error) => {
+			toast.warning(
+				`Could not load companion audio source: ${summarizeErrorMessage(getErrorMessage(error))}`,
+				{ duration: 10000 },
+			);
+		},
+	});
 
 	function togglePlayPause() {
 		const playback = videoPlaybackRef.current;
@@ -4061,25 +4044,6 @@ export default function VideoEditor() {
 		}
 	}, [selectedAudioId, audioRegions]);
 
-	useAudioPreviewSync({
-		audioRegions,
-		previewVolume,
-		isPlaying,
-		currentTime,
-		duration,
-		effectiveSpeedRegions,
-		previewSourceAudioFallbackPaths,
-		sourceAudioFallbackStartDelayMsByPath,
-		isCurrentClipMuted,
-		getSourceTrackPreviewGain,
-		onSourceFallbackLoadError: (error) => {
-			toast.warning(
-				`Could not load companion audio source: ${summarizeErrorMessage(getErrorMessage(error))}`,
-				{ duration: 10000 },
-			);
-		},
-	});
-
 	const showExportSuccessToast = useCallback((filePath: string) => {
 		toast.success(`Exported successfully to ${filePath}`, {
 			action: {
@@ -4404,8 +4368,9 @@ export default function VideoEditor() {
 						cursorSway,
 						frame,
 						audioRegions,
-						sourceAudioFallbackPaths,
-						sourceAudioFallbackStartDelayMsByPath,
+						sourceAudioFallbackPaths: audio.sourceAudioFallbackPaths,
+						sourceAudioFallbackStartDelayMsByPath:
+							audio.sourceAudioFallbackStartDelayMsByPath,
 						previewWidth,
 						previewHeight,
 						onProgress: (progress: ExportProgress) => {
@@ -4652,8 +4617,8 @@ export default function VideoEditor() {
 			cursorClickBounceDuration,
 			cursorSway,
 			audioRegions,
-			sourceAudioFallbackPaths,
-			sourceAudioFallbackStartDelayMsByPath,
+			audio.sourceAudioFallbackPaths,
+			audio.sourceAudioFallbackStartDelayMsByPath,
 			exportEncodingMode,
 			exportBackendPreference,
 			exportPipelineModel,
@@ -5752,13 +5717,13 @@ export default function VideoEditor() {
 								hasClipSourceAudio={hasClipSourceAudio}
 								showClipSourceAudioTrack={showClipSourceAudioTrack}
 								onShowClipSourceAudioTrackChange={setShowClipSourceAudioTrack}
-								sourceAudioTrackMeta={sourceAudioTrackMeta}
-								sourceAudioTrackSettings={selectedClipSourceAudioTrackSettings}
+								sourceAudioTrackMeta={audio.sourceAudioTrackMeta}
+								sourceAudioTrackSettings={audio.selectedClipSourceAudioTrackSettings}
 								onSourceAudioTrackVolumeChange={
-									onSelectedClipSourceAudioTrackVolumeChange
+									audio.onSelectedClipSourceAudioTrackVolumeChange
 								}
 								onSourceAudioTrackNormalizeChange={
-									onSelectedClipSourceAudioTrackNormalizeChange
+									audio.onSelectedClipSourceAudioTrackNormalizeChange
 								}
 								selectedAudioId={selectedAudioId}
 								selectedAudioVolume={
@@ -6065,13 +6030,13 @@ export default function VideoEditor() {
 												}
 												cursorSway={cursorSway}
 												volume={
-													shouldMutePreviewVideo || isCurrentClipMuted
+													audio.isCurrentClipMuted
 														? 0
 														: Math.max(
 																0,
 																Math.min(
 																	1,
-																	previewVolume * embeddedSourcePreviewGain,
+																	previewVolume * audio.embeddedSourcePreviewGain,
 																),
 															)
 												}
@@ -6350,7 +6315,10 @@ export default function VideoEditor() {
 						onSelectAnnotation={handleSelectAnnotation}
 						aspectRatio={aspectRatio}
 						showSourceAudioTrack={showClipSourceAudioTrack}
-						sourceAudioTrackSettings={activeSourceAudioTrackSettings}
+						sourceAudioTrackSettings={audio.activeSourceAudioTrackSettings}
+						getSourceAudioTrackSettingsForClip={
+							audio.getSourceAudioTrackSettingsForClip
+						}
 						onSourceAudioAvailabilityChange={(available) => {
 							setHasClipSourceAudio(available);
 							if (!available) {
@@ -6358,7 +6326,7 @@ export default function VideoEditor() {
 							}
 						}}
 						onSourceAudioTracksMetaChange={(tracks) => {
-							onSourceAudioTracksMetaChange(tracks);
+							audio.onSourceAudioTracksMetaChange(tracks);
 						}}
 					/>
 				</div>

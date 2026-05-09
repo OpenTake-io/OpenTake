@@ -58,6 +58,9 @@ interface TimelineCanvasProps {
 	onClearBlockSelection?: () => void;
 	keyframes?: { id: string; time: number }[];
 	sourceAudioTracks?: Array<{ id: string; label: string; peaks: AudioPeaksData }>;
+	getSourceAudioTrackSettingsForClip?: (
+		clipId: string | null,
+	) => Record<string, { volume: number; normalize: boolean }>;
 	showSourceAudioTrack?: boolean;
 	liveSpanPreviewById?: Record<string, { start: number; end: number }>;
 	liveHiddenItemIds?: string[];
@@ -222,6 +225,9 @@ interface TimelineCanvasRowsProps {
 	onSelectAnnotation?: (id: string | null) => void;
 	onSelectAudio?: (id: string | null) => void;
 	sourceAudioTracks?: Array<{ id: string; label: string; peaks: AudioPeaksData }>;
+	getSourceAudioTrackSettingsForClip?: (
+		clipId: string | null,
+	) => Record<string, { volume: number; normalize: boolean }>;
 	showSourceAudioTrack?: boolean;
 	liveSpanPreviewById?: Record<string, { start: number; end: number }>;
 	liveHiddenItemIds?: string[];
@@ -285,6 +291,7 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 	onSelectAnnotation,
 	onSelectAudio,
 	sourceAudioTracks = [],
+	getSourceAudioTrackSettingsForClip,
 	showSourceAudioTrack = false,
 	liveSpanPreviewById,
 	liveHiddenItemIds,
@@ -371,22 +378,29 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 			{showSourceAudioTrack &&
 				sourceAudioTracks.map((track) => (
 					<Row key={track.id} id={`${SOURCE_AUDIO_ROW_ID}-${track.id}`}>
-						{clipItems.map((item) => (
-							<Item
-								key={`source-audio-${track.id}-${item.id}`}
-								id={`source-audio-${track.id}-${item.id}`}
-								rowId={`${SOURCE_AUDIO_ROW_ID}-${track.id}`}
-								span={liveSpanPreviewById?.[item.id] ?? item.span}
-								disabled
-								isSelected={selectAllBlocksActive || item.id === selectedClipId}
-								onSelect={() => onSelectClip?.(item.id)}
-								variant="audio"
-								waveformPeaks={track.peaks}
-								waveformSegmentSpan={liveSpanPreviewById?.[item.id] ?? item.span}
-							>
-								{track.label}
-							</Item>
-						))}
+						{clipItems.map((item) => {
+							const settings = getSourceAudioTrackSettingsForClip?.(item.id)?.[
+								track.id
+							] ?? { volume: 1, normalize: false };
+							return (
+								<Item
+									key={`source-audio-${track.id}-${item.id}`}
+									id={`source-audio-${track.id}-${item.id}`}
+									rowId={`${SOURCE_AUDIO_ROW_ID}-${track.id}`}
+									span={liveSpanPreviewById?.[item.id] ?? item.span}
+									disabled
+									isSelected={selectAllBlocksActive || item.id === selectedClipId}
+									onSelect={() => onSelectClip?.(item.id)}
+									variant="audio"
+									waveformPeaks={track.peaks}
+									waveformSegmentSpan={liveSpanPreviewById?.[item.id] ?? item.span}
+									waveformGain={Math.max(0, Math.min(2, settings.volume))}
+									waveformNormalize={Boolean(settings.normalize)}
+								>
+									{track.label}
+								</Item>
+							);
+						})}
 					</Row>
 				))}
 
@@ -497,6 +511,7 @@ export default function TimelineCanvas({
 	onClearBlockSelection,
 	keyframes = [],
 	sourceAudioTracks = [],
+	getSourceAudioTrackSettingsForClip,
 	showSourceAudioTrack = false,
 	liveSpanPreviewById,
 	liveHiddenItemIds,
@@ -730,6 +745,7 @@ export default function TimelineCanvas({
 					onSelectAnnotation={onSelectAnnotation}
 					onSelectAudio={onSelectAudio}
 					sourceAudioTracks={sourceAudioTracks}
+					getSourceAudioTrackSettingsForClip={getSourceAudioTrackSettingsForClip}
 					showSourceAudioTrack={showSourceAudioTrack}
 					liveSpanPreviewById={liveSpanPreviewById}
 					liveHiddenItemIds={liveHiddenItemIds}

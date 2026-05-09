@@ -85,6 +85,9 @@ export interface TimelineEditorProps {
 	showSourceAudioTrack?: boolean;
 	onSourceAudioAvailabilityChange?: (available: boolean) => void;
 	sourceAudioTrackSettings?: Record<string, { volume: number; normalize: boolean }>;
+	getSourceAudioTrackSettingsForClip?: (
+		clipId: string | null,
+	) => Record<string, { volume: number; normalize: boolean }>;
 	onSourceAudioTracksMetaChange?: (tracks: Array<{ id: string; label: string }>) => void;
 }
 
@@ -172,6 +175,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			showSourceAudioTrack = false,
 			onSourceAudioAvailabilityChange,
 			sourceAudioTrackSettings = {},
+			getSourceAudioTrackSettingsForClip,
 			onSourceAudioTracksMetaChange,
 		},
 		ref,
@@ -296,30 +300,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 		useEffect(() => {
 			onSourceAudioTracksMetaChange?.(sourceAudioTracks.map((t) => ({ id: t.id, label: t.label })));
 		}, [onSourceAudioTracksMetaChange, sourceAudioTracks]);
-		const displaySourceAudioTracks = useMemo(() => {
-			return sourceAudioTracks.map((track) => {
-				const settings = sourceAudioTrackSettings[track.id] ?? { volume: 1, normalize: false };
-				const volume = Math.max(0, Math.min(2, settings.volume));
-				const normalize = settings.normalize;
-				const input = track.peaks.peaks;
-				const adjusted = new Float32Array(input.length);
-				for (let i = 0; i < input.length; i++) {
-					let amp = input[i];
-					if (normalize) {
-						amp = Math.sqrt(amp);
-					}
-					adjusted[i] = Math.max(0, Math.min(1, amp * volume));
-				}
-				return {
-					id: track.id,
-					label: track.label,
-					peaks: {
-						durationMs: track.peaks.durationMs,
-						peaks: adjusted,
-					} satisfies AudioPeaksData,
-				};
-			});
-		}, [sourceAudioTrackSettings, sourceAudioTracks]);
+		void sourceAudioTrackSettings;
 		useEffect(() => {
 			onSourceAudioAvailabilityChange?.(sourceAudioTracks.length > 0);
 		}, [onSourceAudioAvailabilityChange, sourceAudioTracks.length]);
@@ -565,7 +546,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							selectAllBlocksActive={selectAllBlocksActive}
 							onClearBlockSelection={clearSelectedBlocks}
 							keyframes={keyframes}
-							sourceAudioTracks={displaySourceAudioTracks}
+							sourceAudioTracks={sourceAudioTracks}
+							getSourceAudioTrackSettingsForClip={getSourceAudioTrackSettingsForClip}
 							showSourceAudioTrack={showSourceAudioTrack}
 							liveSpanPreviewById={liveZoomPreview.previewSpans}
 							liveHiddenItemIds={Array.from(liveZoomPreview.hiddenZoomIds)}

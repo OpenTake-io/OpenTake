@@ -18,6 +18,7 @@ export function useClipAudioSettingsController({
 		sourceAudioTrackMeta,
 		activeSourceAudioTrackSettings,
 		selectedClipSourceAudioTrackSettings,
+		getSourceAudioTrackSettingsForClip,
 		onSourceAudioTracksMetaChange,
 		onSelectedClipSourceAudioTrackVolumeChange,
 		onSelectedClipSourceAudioTrackNormalizeChange,
@@ -49,6 +50,7 @@ export function useClipAudioSettingsController({
 		sourceAudioTrackMeta,
 		activeSourceAudioTrackSettings,
 		selectedClipSourceAudioTrackSettings,
+		getSourceAudioTrackSettingsForClip,
 		onSourceAudioTracksMetaChange,
 		onSelectedClipSourceAudioTrackVolumeChange,
 		onSelectedClipSourceAudioTrackNormalizeChange,
@@ -56,4 +58,3 @@ export function useClipAudioSettingsController({
 		getSourceTrackPreviewGain,
 	};
 }
-
