@@ -347,6 +347,24 @@ describe("useScreenRecorder state machine", () => {
 			expect(callOrder).toEqual(["requestData", "stop"]);
 		});
 
+		it("resumes, flushes, then stops from paused state", () => {
+			recorder.pause();
+			const callOrder: string[] = [];
+			recorder.resume.mockImplementation(() => {
+				callOrder.push("resume");
+			});
+			recorder.requestData.mockImplementation(() => {
+				callOrder.push("requestData");
+			});
+			recorder.stop.mockImplementation(() => {
+				callOrder.push("stop");
+			});
+
+			stopRecording(recorder, false);
+
+			expect(callOrder).toEqual(["resume", "requestData", "stop"]);
+		});
+
 		it("still stops when the explicit data flush fails", () => {
 			recorder.requestData.mockImplementation(() => {
 				throw new Error("flush failed");
@@ -356,6 +374,26 @@ describe("useScreenRecorder state machine", () => {
 
 			expect(result.stopped).toBe(true);
 			expect(recorder.stop).toHaveBeenCalled();
+		});
+
+		it("still stops from paused state when the explicit data flush fails", () => {
+			recorder.pause();
+			const callOrder: string[] = [];
+			recorder.resume.mockImplementation(() => {
+				callOrder.push("resume");
+			});
+			recorder.requestData.mockImplementation(() => {
+				callOrder.push("requestData");
+				throw new Error("flush failed");
+			});
+			recorder.stop.mockImplementation(() => {
+				callOrder.push("stop");
+			});
+
+			const result = stopRecording(recorder, false);
+
+			expect(result.stopped).toBe(true);
+			expect(callOrder).toEqual(["resume", "requestData", "stop"]);
 		});
 
 		it("still stops when resume throws from paused state", () => {
