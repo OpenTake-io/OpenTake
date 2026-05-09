@@ -1,7 +1,6 @@
 import WorkerConstructor from "./waveform.worker?worker";
 import type { AudioPeaksData } from "../../core/timelineTypes";
-
-const DEFAULT_PEAK_COUNT = 2048;
+import { WAVEFORM_DEFAULT_PEAK_COUNT } from "../../core/constants";
 
 export class WaveformGenerator {
 	private audioContext: AudioContext;
@@ -50,7 +49,7 @@ export class WaveformGenerator {
 		});
 	}
 
-	public async generate(url: string, peakCount = DEFAULT_PEAK_COUNT): Promise<AudioPeaksData> {
+	public async generate(url: string, peakCount = WAVEFORM_DEFAULT_PEAK_COUNT): Promise<AudioPeaksData> {
 		const cacheKey = `${url}::${peakCount}`;
 		const cached = this.peaksCache.get(cacheKey);
 		if (cached) return cached;

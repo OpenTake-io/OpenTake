@@ -19,6 +19,7 @@ interface ItemProps {
 	id: string;
 	span: Span;
 	rowId: string;
+	disabled?: boolean;
 	children: React.ReactNode;
 	isSelected?: boolean;
 	onSelect?: () => void;
@@ -55,6 +56,7 @@ export default function Item({
 	id,
 	span,
 	rowId,
+	disabled = false,
 	isSelected = false,
 	onSelect,
 	onSelectId,
@@ -69,6 +71,7 @@ export default function Item({
 	const { setNodeRef, attributes, listeners, itemStyle, itemContentStyle } = useItem({
 		id,
 		span,
+		disabled,
 		data: { rowId },
 	});
 

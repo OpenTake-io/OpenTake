@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { resolveMediaResourceUrl } from "@/lib/exporter/localMediaSource";
 import { fromFileUrl } from "../../projectPersistence";
 import { waveformGenerator } from "../components/waveform/WaveformGenerator";
+import { WAVEFORM_DEFAULT_PEAK_COUNT } from "../core/constants";
 import type { AudioPeaksData } from "../core/timelineTypes";
 
 function buildSidecarAudioCandidates(sourcePath: string): string[] {
@@ -36,6 +37,7 @@ function extractLocalPathFromMediaServerUrl(input: string): string | null {
 
 interface TimelineAudioPeaksOptions {
 	enableSourceSidecarFallback?: boolean;
+	peakCount?: number;
 }
 
 export function useTimelineAudioPeaks(
@@ -45,6 +47,7 @@ export function useTimelineAudioPeaks(
 	const [data, setData] = useState<AudioPeaksData | null>(null);
 	const sourceRef = useRef(mediaResource);
 	const enableSourceSidecarFallback = options.enableSourceSidecarFallback ?? false;
+	const peakCount = options.peakCount ?? WAVEFORM_DEFAULT_PEAK_COUNT;
 
 	useEffect(() => {
 		sourceRef.current = mediaResource;
@@ -54,14 +57,9 @@ export function useTimelineAudioPeaks(
 		let cancelled = false;
 
 		const run = async () => {
-			const localPathFromServer = extractLocalPathFromMediaServerUrl(mediaResource);
-			const localSourcePath =
-				localPathFromServer ||
-				(/^file:\/\//i.test(mediaResource) ? fromFileUrl(mediaResource) : mediaResource);
-
 			const tryGenerate = async (resource: string): Promise<AudioPeaksData> => {
 				const resolvedUrl = await resolveMediaResourceUrl(resource);
-				return waveformGenerator.generate(resolvedUrl);
+				return waveformGenerator.generate(resolvedUrl, peakCount);
 			};
 
 			try {
@@ -72,7 +70,13 @@ export function useTimelineAudioPeaks(
 				// fallthrough
 			}
 
-			if (!enableSourceSidecarFallback || !localSourcePath) return;
+			if (!enableSourceSidecarFallback) return;
+
+			const localPathFromServer = extractLocalPathFromMediaServerUrl(mediaResource);
+			const localSourcePath =
+				localPathFromServer ||
+				(/^file:\/\//i.test(mediaResource) ? fromFileUrl(mediaResource) : mediaResource);
+			if (!localSourcePath) return;
 
 			for (const candidate of buildSidecarAudioCandidates(localSourcePath)) {
 				try {
@@ -90,7 +94,7 @@ export function useTimelineAudioPeaks(
 		return () => {
 			cancelled = true;
 		};
-	}, [mediaResource, enableSourceSidecarFallback]);
+	}, [mediaResource, enableSourceSidecarFallback, peakCount]);
 
 	return data;
 }

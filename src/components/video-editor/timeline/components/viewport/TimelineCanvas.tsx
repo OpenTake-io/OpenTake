@@ -20,7 +20,7 @@ import {
 import glassStyles from "../../ItemGlass.module.css";
 import Item from "../../Item";
 import Row from "../../Row";
-import { CLIP_ROW_ID, ZOOM_ROW_ID } from "../../core/constants";
+import { CLIP_ROW_ID, SOURCE_AUDIO_ROW_ID, ZOOM_ROW_ID } from "../../core/constants";
 import type { AudioPeaksData, TimelineRenderItem } from "../../core/timelineTypes";
 import {
 	getAnnotationTrackIndex,
@@ -38,7 +38,6 @@ import { useTimelineAudioPeaks } from "../../hooks/useTimelineAudioPeaks";
 const HINT_CLIP = "Press C to split clip";
 const HINT_ANNOTATION = "Press A to add annotation";
 const HINT_AUDIO = "Click music icon to add audio";
-const SOURCE_AUDIO_ROW_ID = "row-source-audio";
 
 interface TimelineCanvasProps {
 	items: TimelineRenderItem[];
@@ -251,6 +250,10 @@ function AudioItemWithWaveform({
 	onSelectAudio,
 }: AudioItemWithWaveformProps) {
 	const peaks = useTimelineAudioPeaks(item.audioPath ?? null);
+	const normalizedWaveformSpan = useMemo(() => {
+		const duration = Math.max(0, waveformSpan.end - waveformSpan.start);
+		return { start: 0, end: duration };
+	}, [waveformSpan.end, waveformSpan.start]);
 	return (
 		<Item
 			id={item.id}
@@ -260,7 +263,7 @@ function AudioItemWithWaveform({
 			onSelectId={onSelectAudio}
 			variant="audio"
 			waveformPeaks={peaks}
-			waveformSegmentSpan={waveformSpan}
+			waveformSegmentSpan={normalizedWaveformSpan}
 		>
 			{item.label}
 		</Item>
@@ -370,6 +373,7 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 							id={`source-audio-${item.id}`}
 							rowId={SOURCE_AUDIO_ROW_ID}
 							span={liveSpanPreviewById?.[item.id] ?? item.span}
+							disabled
 							isSelected={selectAllBlocksActive || item.id === selectedClipId}
 							onSelect={() => onSelectClip?.(item.id)}
 							variant="audio"
