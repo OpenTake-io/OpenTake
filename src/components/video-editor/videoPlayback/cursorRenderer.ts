@@ -1,8 +1,8 @@
 import { Assets, BlurFilter, Container, Graphics, Sprite, Texture } from "pixi.js";
 import { MotionBlurFilter } from "pixi-filters/motion-blur";
+import minimalCursorUrl from "@/assets/cursors/custom/minimal-cursor.svg";
 import { getRenderableAssetUrl } from "@/lib/assetPath";
 import { extensionHost } from "@/lib/extensions";
-import minimalCursorUrl from "@/assets/cursors/custom/minimal-cursor.svg";
 import {
 	type CursorStyle,
 	type CursorTelemetryPoint,
@@ -12,11 +12,11 @@ import {
 import { computeCursorSwayRotation } from "./cursorSway";
 import { type CursorViewportRect, projectCursorPositionToViewport } from "./cursorViewport";
 import {
+	type CursorSpringTuning,
 	createSpringState,
 	getCursorSpringConfig,
 	resetSpringState,
 	stepSpringValue,
-	type CursorSpringTuning,
 } from "./motionSmoothing";
 import { cursorSetAssets, getCursorStyleSizeMultiplier } from "./uploadedCursorAssets";
 
@@ -745,6 +745,15 @@ function getCursorViewportScale(viewport: CursorViewportRect) {
 	return Math.max(MIN_CURSOR_VIEWPORT_SCALE, viewport.width / REFERENCE_WIDTH);
 }
 
+export function resolveCursorDrawHeight(
+	viewport: CursorViewportRect,
+	dotRadius: number,
+	parentScale = 1,
+) {
+	const safeParentScale = Number.isFinite(parentScale) && parentScale > 0 ? parentScale : 1;
+	return (dotRadius * getCursorViewportScale(viewport)) / safeParentScale;
+}
+
 function getCursorSwaySpringConfig(
 	smoothingFactor: number,
 	springTuning: CursorSpringTuning,
@@ -1061,6 +1070,7 @@ export class PixiCursorOverlay {
 		viewport: CursorViewportRect,
 		visible: boolean,
 		freeze = false,
+		parentScale = 1,
 	): void {
 		if (!visible || samples.length === 0 || viewport.width <= 0 || viewport.height <= 0) {
 			this.container.visible = false;
@@ -1107,7 +1117,7 @@ export class PixiCursorOverlay {
 
 		const px = viewport.x + this.state.x * viewport.width;
 		const py = viewport.y + this.state.y * viewport.height;
-		const h = this.config.dotRadius * getCursorViewportScale(viewport);
+		const h = resolveCursorDrawHeight(viewport, this.config.dotRadius, parentScale);
 		const { cursorType, clickBounceProgress } = getCursorVisualState(
 			samples,
 			timeMs,
@@ -1303,6 +1313,7 @@ export function drawCursorOnCanvas(
 	viewport: CursorViewportRect,
 	smoothedState: SmoothedCursorState,
 	config: CursorRenderConfig = DEFAULT_CURSOR_CONFIG,
+	parentScale = 1,
 ): void {
 	if (samples.length === 0 || viewport.width <= 0 || viewport.height <= 0) return;
 
@@ -1316,7 +1327,7 @@ export function drawCursorOnCanvas(
 
 	const px = viewport.x + smoothedState.x * viewport.width;
 	const py = viewport.y + smoothedState.y * viewport.height;
-	const h = config.dotRadius * getCursorViewportScale(viewport);
+	const h = resolveCursorDrawHeight(viewport, config.dotRadius, parentScale);
 	const { cursorType, clickBounceProgress } = getCursorVisualState(
 		samples,
 		timeMs,
