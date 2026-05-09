@@ -190,10 +190,10 @@
 		"volumeTitle": "Audio",
 		"volume": "Volume",
 		"normalize": "Normaliser",
-		"sourceTracksTitle": "Audio source du clip",
-		"systemLabel": "Son Système",
+		"sourceTracksTitle": "Source audio du clip",
+		"systemLabel": "Son système",
 		"micLabel": "Microphone",
 		"mixedLabel": "Source",
-		"deleteRegion": "Supprimer l'audio"
+		"deleteRegion": "Supprimer la zone audio"
 	}
 }
