@@ -346,7 +346,7 @@ export class ModernVideoExporter {
 			const runtimePlatform = this.getRuntimePlatform();
 			let useNativeEncoder = false;
 			let triedNativeStaticLayoutWithProbe = false;
-			const shouldDeferNativeEncoderStart = backendPreference === "breeze";
+			let shouldDeferNativeEncoderStart = backendPreference === "breeze";
 			this.lastNativeExportError = null;
 
 			let stageStartedAt = this.getNowMs();
@@ -512,10 +512,23 @@ export class ModernVideoExporter {
 				useNativeEncoder = await this.tryStartNativeVideoExport();
 				this.nativeSessionStartTimeMs = this.getNowMs() - stageStartedAt;
 				if (!useNativeEncoder) {
-					throw new Error(
+					const nativeFailure =
 						this.lastNativeExportError ??
-							`${NATIVE_EXPORT_ENGINE_NAME} export is unavailable for this output profile on this system.`,
+						`${NATIVE_EXPORT_ENGINE_NAME} export is unavailable for this output profile on this system.`;
+					console.warn(
+						`[VideoExporter] ${NATIVE_EXPORT_ENGINE_NAME} native export unavailable after static-layout fallback; falling back to WebCodecs.`,
+						nativeFailure,
 					);
+					shouldDeferNativeEncoderStart = false;
+					this.backpressureProfile = getExportBackpressureProfile({
+						encodeBackend: "webcodecs",
+						width: this.config.width,
+						height: this.config.height,
+						frameRate: this.config.frameRate,
+						encodingMode: this.config.encodingMode,
+					});
+					this.maxNativeWriteInFlight = 1;
+					await this.initializeEncoder();
 				}
 			}
 
