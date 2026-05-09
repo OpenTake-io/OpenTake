@@ -3057,9 +3057,16 @@ export function SettingsPanel({
 				<section className="flex flex-col gap-3">
 				<div className="flex items-center justify-between gap-3">
 					<SectionLabel>{tSettings("audio.volumeTitle", "Audio")}</SectionLabel>
-					<span className="rounded-full bg-[#2563EB]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#2563EB]">
-						{Math.round((selectedAudioVolume ?? 1) * 100)}%
-					</span>
+					<button
+						type="button"
+						onClick={() => {
+							onAudioVolumeChange?.(1);
+							onAudioNormalizeChange?.(false);
+						}}
+						className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80"
+					>
+						{t("common.actions.reset", "Reset")}
+					</button>
 				</div>
 					<SliderControl
 						label={tSettings("audio.volume", "Volume")}
@@ -3185,9 +3192,16 @@ export function SettingsPanel({
 											<span className="text-[11px] font-medium text-foreground">
 												{track.label}
 											</span>
-											<span className="text-[10px] text-muted-foreground">
-												{Math.round(settings.volume * 100)}%
-											</span>
+											<button
+												type="button"
+												onClick={() => {
+													onSourceAudioTrackVolumeChange?.(track.id, 1);
+													onSourceAudioTrackNormalizeChange?.(track.id, false);
+												}}
+												className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80"
+											>
+												{t("common.actions.reset", "Reset")}
+											</button>
 										</div>
 										<div className="mb-2 flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
 											<span className="text-[10px] text-muted-foreground">
