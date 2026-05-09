@@ -25,6 +25,18 @@ const OFFLINE_ENCODE_CHUNK_FRAMES = 1024;
 const OFFLINE_CHUNK_DURATION_SEC = 30;
 const USER_AUDIO_NORMALIZE_GAIN = 1.35;
 
+function resolveSourceTrackGain(
+	sourceAudioTrackSettings: SourceAudioTrackSettings | undefined,
+	trackId: "mic" | "system" | "mixed",
+) {
+	const settings = sourceAudioTrackSettings?.[trackId];
+	if (!settings) {
+		return 1;
+	}
+	const normalizeGain = settings.normalize ? USER_AUDIO_NORMALIZE_GAIN : 1;
+	return Math.max(0, Math.min(2, settings.volume * normalizeGain));
+}
+
 interface TimelineSlice {
 	sourceStartMs: number;
 	sourceEndMs: number;
@@ -607,17 +619,19 @@ export class AudioProcessor {
 			sourceAudioFallbackPaths,
 			audioRegions,
 			sourceTrackGainById: {
-				mic: Math.max(0, Math.min(2, sourceAudioTrackSettings?.mic?.volume ?? 1)),
-				system: Math.max(0, Math.min(2, sourceAudioTrackSettings?.system?.volume ?? 1)),
-				mixed: Math.max(0, Math.min(2, sourceAudioTrackSettings?.mixed?.volume ?? 1)),
+				mic: resolveSourceTrackGain(sourceAudioTrackSettings, "mic"),
+				system: resolveSourceTrackGain(sourceAudioTrackSettings, "system"),
+				mixed: resolveSourceTrackGain(sourceAudioTrackSettings, "mixed"),
 			},
 			embeddedGain: Math.max(
 				0,
 				Math.min(
 					2,
-					sourceAudioTrackSettings?.mixed?.volume ??
-						sourceAudioTrackSettings?.system?.volume ??
-						1,
+					sourceAudioTrackSettings?.mixed
+						? resolveSourceTrackGain(sourceAudioTrackSettings, "mixed")
+						: sourceAudioTrackSettings?.system
+							? resolveSourceTrackGain(sourceAudioTrackSettings, "system")
+							: 1,
 				),
 			),
 		});
@@ -626,11 +640,7 @@ export class AudioProcessor {
 		const mainBuffer = resolvedPlan.includeEmbeddedInExport
 			? await this.decodeAudioFromUrl(videoUrl)
 			: null;
-		const mainBufferGainSettings =
-			sourceAudioTrackSettings?.mixed ?? sourceAudioTrackSettings?.system ?? null;
-		const mainBufferGain = mainBufferGainSettings
-			? Math.max(0, Math.min(2, mainBufferGainSettings.volume))
-			: 1;
+		const mainBufferGain = resolveSourceTrackGain(sourceAudioTrackSettings, "mixed");
 		const mainBufferEntry = mainBuffer ? { buffer: mainBuffer, gain: mainBufferGain } : null;
 		if (this.cancelled) throw new Error("Export cancelled");
 
@@ -647,9 +657,9 @@ export class AudioProcessor {
 
 			companionEntries.push({
 				buffer,
-				gain: Math.max(
-					0,
-					Math.min(2, sourceAudioTrackSettings?.[getSourceTrackIdFromPath(audioPath)]?.volume ?? 1),
+				gain: resolveSourceTrackGain(
+					sourceAudioTrackSettings,
+					getSourceTrackIdFromPath(audioPath),
 				),
 				startDelaySec: estimateCompanionAudioStartDelaySeconds(
 					refDuration,

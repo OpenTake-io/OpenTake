@@ -24,7 +24,6 @@ import {
 import type { AudioSyncAdjustment } from "../types";
 import { moveFileWithOverwrite } from "../utils";
 import {
-	RECORDING_AUDIO_SIDECAR_DEBUG_ENV,
 	shouldKeepRecordingAudioSidecars,
 	WINDOWS_NATIVE_MIC_PRE_FILTERS,
 } from "./audioFilters";

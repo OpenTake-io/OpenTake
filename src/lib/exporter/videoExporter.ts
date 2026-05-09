@@ -123,6 +123,16 @@ type NativeAudioPlan =
 
 const FILTERGRAPH_FALLBACK_AUDIO_SAMPLE_RATE = 48_000;
 
+function hasNonDefaultSourceTrackSettings(sourceAudioTrackSettings?: SourceAudioTrackSettings) {
+	if (!sourceAudioTrackSettings) {
+		return false;
+	}
+	return Object.values(sourceAudioTrackSettings).some(
+		(settings) =>
+			Math.abs((settings?.volume ?? 1) - 1) > 0.0005 || Boolean(settings?.normalize),
+	);
+}
+
 export class VideoExporter {
 	private config: VideoExporterConfig;
 	private streamingDecoder: StreamingVideoDecoder | null = null;
@@ -563,7 +573,8 @@ export class VideoExporter {
 			speedRegions.length > 0 ||
 			audioRegions.length > 0 ||
 			sourceAudioFallbackPaths.length > 1 ||
-			hasTimedSourceAudioFallback
+			hasTimedSourceAudioFallback ||
+			hasNonDefaultSourceTrackSettings(this.config.sourceAudioTrackSettings)
 		) {
 			const sourceDurationMs = Math.max(
 				0,
@@ -947,6 +958,7 @@ export class VideoExporter {
 						this.config.audioRegions,
 						this.config.sourceAudioFallbackPaths,
 						this.config.sourceAudioFallbackStartDelayMsByPath,
+						this.config.sourceAudioTrackSettings,
 					),
 					"ffmpeg edited audio rendering",
 					"audio",
