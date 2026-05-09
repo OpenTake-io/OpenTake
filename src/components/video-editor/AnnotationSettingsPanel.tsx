@@ -141,7 +141,7 @@ export function AnnotationSettingsPanel({
 	return (
 		<div className="flex-[2] min-w-0 bg-editor-panel border border-foreground/10 rounded-2xl flex flex-col shadow-xl h-full overflow-hidden">
 			<div className="flex-1 min-h-0 p-4 overflow-y-auto custom-scrollbar">
-			<div className="mb-6">
+				<div className="mb-6">
 				<div className="flex items-center justify-between mb-4">
 					<span className="text-sm font-medium text-foreground">
 						{t("annotations.settings")}
@@ -786,6 +786,7 @@ export function AnnotationSettingsPanel({
 						<li>{t("annotations.tipCycleBackward")}</li>
 					</ul>
 				</div>
+				</div>
 			</div>
 			<div className="flex-shrink-0 border-t border-foreground/10 bg-editor-panel p-4 pt-3">
 				<Button
@@ -797,7 +798,6 @@ export function AnnotationSettingsPanel({
 					<Trash2 className="w-4 h-4" />
 					{t("annotations.deleteAnnotation")}
 				</Button>
-			</div>
 			</div>
 		</div>
 	);
