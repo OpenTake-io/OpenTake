@@ -7,10 +7,10 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { USER_DATA_PATH } from "./appPaths";
 import { getPackagedRendererBaseUrl } from "./rendererServer";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const electronWindowsDir = path.dirname(fileURLToPath(import.meta.url));
 const nodeRequire = createRequire(import.meta.url);
 
-const APP_ROOT = path.join(__dirname, "..");
+const APP_ROOT = path.join(electronWindowsDir, "..");
 const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
 const RENDERER_DIST = path.join(APP_ROOT, "dist");
 const WINDOW_ICON_PATH = path.join(
@@ -374,7 +374,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 		hasShadow: false,
 		show: false,
 		webPreferences: {
-			preload: path.join(__dirname, "preload.mjs"),
+			preload: path.join(electronWindowsDir, "preload.mjs"),
 			nodeIntegration: false,
 			contextIsolation: true,
 			webSecurity: false,
@@ -537,7 +537,7 @@ export function createUpdateToastWindow(): BrowserWindow {
 		...(parentWindow ? { parent: parentWindow } : {}),
 		backgroundColor: useTransparentToastWindow ? "#00000000" : "#101418",
 		webPreferences: {
-			preload: path.join(__dirname, "preload.mjs"),
+			preload: path.join(electronWindowsDir, "preload.mjs"),
 			nodeIntegration: false,
 			contextIsolation: true,
 			backgroundThrottling: false,
@@ -726,7 +726,7 @@ export function createEditorWindow(): BrowserWindow {
 		show: false,
 		backgroundColor: "#000000",
 		webPreferences: {
-			preload: path.join(__dirname, "preload.mjs"),
+			preload: path.join(electronWindowsDir, "preload.mjs"),
 			nodeIntegration: false,
 			contextIsolation: true,
 			webSecurity: false,
@@ -799,7 +799,7 @@ export function createSourceSelectorWindow(): BrowserWindow {
 		}),
 		backgroundColor: "#00000000",
 		webPreferences: {
-			preload: path.join(__dirname, "preload.mjs"),
+			preload: path.join(electronWindowsDir, "preload.mjs"),
 			nodeIntegration: false,
 			contextIsolation: true,
 		},
@@ -846,7 +846,7 @@ export function createCountdownWindow(): BrowserWindow {
 		focusable: true,
 		show: false,
 		webPreferences: {
-			preload: path.join(__dirname, "preload.mjs"),
+			preload: path.join(electronWindowsDir, "preload.mjs"),
 			nodeIntegration: false,
 			contextIsolation: true,
 		},
