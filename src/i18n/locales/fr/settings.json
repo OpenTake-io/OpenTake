@@ -19,8 +19,9 @@
 	},
 	"clip": {
 		"title": "Clip",
-		"muteAudio": "Couper le son",
-		"unmuteAudio": "Réactiver le son",
+		"mute": "Sourdine",
+		"mutedState": "Le son est coupé",
+		"unmutedState": "Le son est activé",
 		"separateClipFromAudio": "Séparer le clip de l'audio",
 		"delete": "Supprimer le clip"
 	},
@@ -185,12 +186,14 @@
 		"starOnGithub": "Mettre une étoile sur GitHub"
 	},
 	"audio": {
+		"title": "Audio",
+		"volumeTitle": "Audio",
+		"volume": "Volume",
+		"normalize": "Normaliser",
 		"sourceTracksTitle": "Audio source du clip",
 		"systemLabel": "Son Système",
 		"micLabel": "Microphone",
 		"mixedLabel": "Source",
-		"volumeTitle": "Volume",
-		"normalize": "Normaliser",
 		"deleteRegion": "Supprimer l'audio"
 	}
 }
