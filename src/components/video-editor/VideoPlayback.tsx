@@ -85,6 +85,19 @@ function getRegisteredFramesSignature() {
 		.join("|");
 }
 
+function serializeExtensionSettingValue(value: unknown): string {
+	try {
+		const serialized = JSON.stringify(value);
+		return serialized ?? "undefined";
+	} catch {
+		try {
+			return String(value);
+		} catch {
+			return "[unserializable]";
+		}
+	}
+}
+
 function getExtensionSettingsSignature() {
 	return extensionHost
 		.getSettingsPanels()
@@ -92,7 +105,7 @@ function getExtensionSettingsSignature() {
 			const { extensionId, panel } = registeredPanel;
 			return panel.fields.map((field) => {
 				const value = extensionHost.getExtensionSetting(extensionId, field.id);
-				return `${extensionId}:${panel.id}:${field.id}:${JSON.stringify(value)}`;
+				return `${extensionId}:${panel.id}:${field.id}:${serializeExtensionSettingValue(value)}`;
 			});
 		})
 		.sort()
@@ -511,6 +524,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const frameSpriteRef = useRef<Sprite | null>(null);
 		const frameContainerRef = useRef<Container | null>(null);
 		const frameIdRef = useRef<string | null>(frame);
+		const frameReloadKeyRef = useRef<string | null>(null);
 		const isPlayingRef = useRef(isPlaying);
 		const suspendRenderingRef = useRef(suspendRendering);
 		const isSeekingRef = useRef(false);
@@ -1042,6 +1056,18 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		useEffect(() => {
 			const frameContainer = frameContainerRef.current;
 			if (!frameContainer) return;
+			const nextFrameReloadKey = `${frame ?? ""}:${frameUpdateCounter}`;
+			const activeFrameData = frame
+				? extensionHost.getFrames().find((registeredFrame) => registeredFrame.id === frame)
+				: null;
+			const shouldRedrawDynamicFrame = Boolean(activeFrameData?.draw && frameSpriteRef.current);
+
+			// Layout-only changes should not force texture/sprite recreation.
+			if (frameReloadKeyRef.current === nextFrameReloadKey && !shouldRedrawDynamicFrame) {
+				layoutVideoContentRef.current?.();
+				return;
+			}
+			frameReloadKeyRef.current = nextFrameReloadKey;
 
 			// Clear existing frame sprite and its texture to free memory
 			if (frameSpriteRef.current) {
@@ -1115,6 +1141,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				cancelled = true;
 			};
 		}, [aspectRatio, borderRadius, cropRegion, frame, frameUpdateCounter, padding]);
+
+		// Always re-run geometric layout when layout props change, even if frame sprite isn't reloaded.
+		useEffect(() => {
+			layoutVideoContentRef.current?.();
+		}, [aspectRatio, borderRadius, cropRegion, padding]);
 
 		const selectedZoom = useMemo(() => {
 			if (!selectedZoomId) return null;
