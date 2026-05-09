@@ -62,6 +62,7 @@ import {
 	DEFAULT_ZOOM_SMOOTHNESS,
 	getDefaultCaptionFontFamily,
 	type Padding,
+	SourceAudioTrackSettings,
 	type SpeedRegion,
 	type TrimRegion,
 	type WebcamOverlaySettings,
@@ -127,6 +128,8 @@ export interface ProjectEditorState {
 	autoCaptionSettings: AutoCaptionSettings;
 	webcam: WebcamOverlaySettings;
 	aspectRatio: AspectRatio;
+	sourceAudioTrackSettingsByClip?: Record<string, SourceAudioTrackSettings>;
+	defaultSourceAudioTrackSettings?: SourceAudioTrackSettings;
 	exportEncodingMode: ExportEncodingMode;
 	exportBackendPreference: ExportBackendPreference;
 	exportPipelineModel: ExportPipelineModel;
@@ -496,6 +499,10 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 						endMs,
 						speed: isFiniteNumber(region.speed) ? region.speed : 1,
 						muted: typeof region.muted === "boolean" ? region.muted : false,
+						showSourceAudio:
+							typeof region.showSourceAudio === "boolean"
+								? region.showSourceAudio
+								: false,
 					};
 				})
 		: [];
@@ -983,6 +990,16 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				? clamp(webcam.margin, 0, 96)
 				: DEFAULT_WEBCAM_MARGIN,
 		},
+		sourceAudioTrackSettingsByClip:
+			editor.sourceAudioTrackSettingsByClip &&
+			typeof editor.sourceAudioTrackSettingsByClip === "object"
+				? editor.sourceAudioTrackSettingsByClip
+				: {},
+		defaultSourceAudioTrackSettings:
+			editor.defaultSourceAudioTrackSettings &&
+			typeof editor.defaultSourceAudioTrackSettings === "object"
+				? editor.defaultSourceAudioTrackSettings
+				: {},
 		aspectRatio:
 			typeof editor.aspectRatio === "string" &&
 			(validAspectRatios.has(editor.aspectRatio as AspectRatio) ||

@@ -1,6 +1,11 @@
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import { resolveSourceAudioFallbackPaths } from "@/lib/exporter/sourceAudioFallback";
-import type { AudioRegion, ClipRegion, SpeedRegion } from "../types";
+import type {
+	AudioRegion,
+	ClipRegion,
+	SourceAudioTrackSettings,
+	SpeedRegion,
+} from "../types";
 import { getActiveClipIdAtSourceTime, isClipMutedById } from "./clipAudio";
 import { useAudioPreviewSync } from "./useAudioPreviewSync";
 import { useClipAudioSettingsController } from "./useClipAudioSettingsController";
@@ -27,6 +32,14 @@ interface UseVideoEditorAudioParams {
 	clipRegions: ClipRegion[];
 	audioRegions: AudioRegion[];
 	effectiveSpeedRegions: SpeedRegion[];
+	sourceAudioTrackSettingsByClip: Record<string, SourceAudioTrackSettings>;
+	setSourceAudioTrackSettingsByClip: React.Dispatch<
+		React.SetStateAction<Record<string, SourceAudioTrackSettings>>
+	>;
+	defaultSourceAudioTrackSettings: SourceAudioTrackSettings;
+	setDefaultSourceAudioTrackSettings: React.Dispatch<
+		React.SetStateAction<SourceAudioTrackSettings>
+	>;
 	currentTime: number;
 	timelineTime: number;
 	duration: number;
@@ -42,6 +55,10 @@ export function useVideoEditorAudio({
 	clipRegions,
 	audioRegions,
 	effectiveSpeedRegions,
+	sourceAudioTrackSettingsByClip,
+	setSourceAudioTrackSettingsByClip,
+	defaultSourceAudioTrackSettings,
+	setDefaultSourceAudioTrackSettings,
 	currentTime,
 	timelineTime,
 	duration,
@@ -65,8 +82,12 @@ export function useVideoEditorAudio({
 		() => resolveSourceAudioFallbackPaths(currentSourcePath, sourceAudioFallbackPaths),
 		[currentSourcePath, sourceAudioFallbackPaths],
 	);
+	const hasSystemCompanionPreviewTrack = previewSourceAudioFallbackPaths.some((audioPath) =>
+		audioPath.toLowerCase().includes(".system."),
+	);
 	const shouldMutePreviewVideo =
-		!hasEmbeddedSourceAudio && previewSourceAudioFallbackPaths.length > 0;
+		previewSourceAudioFallbackPaths.length > 0 &&
+		(!hasEmbeddedSourceAudio || hasSystemCompanionPreviewTrack);
 
 	const activeClipIdAtCurrentTime = useMemo(
 		() => getActiveClipIdAtSourceTime(currentTime, clipRegions),
@@ -90,6 +111,10 @@ export function useVideoEditorAudio({
 	} = useClipAudioSettingsController({
 		selectedClipId,
 		activeClipId: activeClipIdAtCurrentTime,
+		sourceAudioTrackSettingsByClip,
+		setSourceAudioTrackSettingsByClip,
+		defaultSourceAudioTrackSettings,
+		setDefaultSourceAudioTrackSettings,
 	});
 
 	useAudioPreviewSync({

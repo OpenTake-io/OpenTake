@@ -1,12 +1,17 @@
-import { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
+import type { SourceAudioTrackSettings } from "../types";
 
-export type SourceAudioTrackSetting = { volume: number; normalize: boolean };
-export type SourceAudioTrackSettings = Record<string, SourceAudioTrackSetting>;
 export type SourceAudioTrackMeta = Array<{ id: string; label: string }>;
 
 interface UseSourceAudioTrackSettingsParams {
   selectedClipId: string | null;
   activeClipId: string | null;
+  sourceAudioTrackSettingsByClip: Record<string, SourceAudioTrackSettings>;
+  setSourceAudioTrackSettingsByClip: React.Dispatch<
+    React.SetStateAction<Record<string, SourceAudioTrackSettings>>
+  >;
+  defaultSourceAudioTrackSettings: SourceAudioTrackSettings;
+  setDefaultSourceAudioTrackSettings: React.Dispatch<React.SetStateAction<SourceAudioTrackSettings>>;
 }
 
 export interface UseSourceAudioTrackSettingsResult {
@@ -22,14 +27,12 @@ export interface UseSourceAudioTrackSettingsResult {
 export function useSourceAudioTrackSettings({
   selectedClipId,
   activeClipId,
+  sourceAudioTrackSettingsByClip,
+  setSourceAudioTrackSettingsByClip,
+  defaultSourceAudioTrackSettings,
+  setDefaultSourceAudioTrackSettings,
 }: UseSourceAudioTrackSettingsParams): UseSourceAudioTrackSettingsResult {
   const [sourceAudioTrackMeta, setSourceAudioTrackMeta] = useState<SourceAudioTrackMeta>([]);
-  const [sourceAudioTrackSettingsByClip, setSourceAudioTrackSettingsByClip] = useState<
-    Record<string, SourceAudioTrackSettings>
-  >({});
-  const [defaultSourceAudioTrackSettings, setDefaultSourceAudioTrackSettings] = useState<
-    SourceAudioTrackSettings
-  >({});
 
   const activeSourceAudioTrackSettings = useMemo(() => {
     if (!activeClipId) {

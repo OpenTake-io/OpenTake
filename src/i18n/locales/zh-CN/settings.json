@@ -197,6 +197,15 @@
 		"saveProject": "保存项目",
 		"exportVideo": "导出{{format}}",
 		"reportBug": "报告问题",
-		"starOnGithub": "在 GitHub 上加星"
+		"starOnGithub": "在 GitHub 上点赞"
+	},
+	"audio": {
+		"sourceTracksTitle": "片段原始音频",
+		"systemLabel": "系统声音",
+		"micLabel": "麦克风",
+		"mixedLabel": "来源",
+		"volumeTitle": "音量",
+		"normalize": "标准化",
+		"deleteRegion": "删除音频"
 	}
 }

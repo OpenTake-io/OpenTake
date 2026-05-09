@@ -291,12 +291,30 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 		const sourceAudioTracks = useMemo<Array<{ id: string; label: string; peaks: AudioPeaksData }>>(() => {
 			if (systemSidecarPeaks || micSidecarPeaks) {
 				const tracks: Array<{ id: string; label: string; peaks: AudioPeaksData }> = [];
-				if (systemSidecarPeaks) tracks.push({ id: "system", label: "Source System", peaks: systemSidecarPeaks });
-				if (micSidecarPeaks) tracks.push({ id: "mic", label: "Source Mic", peaks: micSidecarPeaks });
+				if (systemSidecarPeaks)
+					tracks.push({
+						id: "system",
+						label: t("audio.systemLabel", "Source System"),
+						peaks: systemSidecarPeaks,
+					});
+				if (micSidecarPeaks)
+					tracks.push({
+						id: "mic",
+						label: t("audio.micLabel", "Source Mic"),
+						peaks: micSidecarPeaks,
+					});
 				return tracks;
 			}
-			return sourceAudioPeaks ? [{ id: "mixed", label: "Source", peaks: sourceAudioPeaks }] : [];
-		}, [micSidecarPeaks, sourceAudioPeaks, systemSidecarPeaks]);
+			return sourceAudioPeaks
+				? [
+						{
+							id: "mixed",
+							label: t("audio.mixedLabel", "Source"),
+							peaks: sourceAudioPeaks,
+						},
+					]
+				: [];
+		}, [micSidecarPeaks, sourceAudioPeaks, systemSidecarPeaks, t]);
 		useEffect(() => {
 			onSourceAudioTracksMetaChange?.(sourceAudioTracks.map((t) => ({ id: t.id, label: t.label })));
 		}, [onSourceAudioTracksMetaChange, sourceAudioTracks]);
