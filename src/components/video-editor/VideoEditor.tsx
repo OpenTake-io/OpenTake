@@ -140,11 +140,10 @@ import {
 	validateProjectData,
 } from "./projectPersistence";
 import { SettingsPanel } from "./SettingsPanel";
-import { SOURCE_AUDIO_NORMALIZE_GAIN, getSourceTrackIdFromPath } from "./audio/sourceAudioTracks";
 import { useAudioPreviewSync } from "./audio/useAudioPreviewSync";
+import { useClipAudioSettingsController } from "./audio/useClipAudioSettingsController";
 import { useSourceAudioFallback } from "./audio/useSourceAudioFallback";
 import { getActiveClipIdAtSourceTime, isClipMutedById } from "./audio/clipAudio";
-import { useSourceAudioTrackSettings } from "./audio/useSourceAudioTrackSettings";
 import {
 	APP_HEADER_ICON_BUTTON_CLASS,
 	DiscordLinkButton,
@@ -1791,24 +1790,12 @@ export default function VideoEditor() {
 		onSourceAudioTracksMetaChange,
 		onSelectedClipSourceAudioTrackVolumeChange,
 		onSelectedClipSourceAudioTrackNormalizeChange,
-	} = useSourceAudioTrackSettings({
+		embeddedSourcePreviewGain,
+		getSourceTrackPreviewGain,
+	} = useClipAudioSettingsController({
 		selectedClipId,
 		activeClipId: activeClipIdAtCurrentTime,
 	});
-	const embeddedSourcePreviewGain = useMemo(() => {
-		const settings = activeSourceAudioTrackSettings.mixed ?? { volume: 1, normalize: false };
-		const normalizeGain = settings.normalize ? SOURCE_AUDIO_NORMALIZE_GAIN : 1;
-		return Math.max(0, Math.min(2, settings.volume * normalizeGain));
-	}, [activeSourceAudioTrackSettings]);
-	const getSourceTrackPreviewGain = useCallback(
-		(audioPath: string) => {
-			const trackId = getSourceTrackIdFromPath(audioPath);
-			const settings = activeSourceAudioTrackSettings[trackId] ?? { volume: 1, normalize: false };
-			const normalizeGain = settings.normalize ? SOURCE_AUDIO_NORMALIZE_GAIN : 1;
-			return Math.max(0, Math.min(2, settings.volume * normalizeGain));
-		},
-		[activeSourceAudioTrackSettings],
-	);
 	const isCurrentClipMuted = useMemo(() => {
 		return isClipMutedById(activeClipIdAtCurrentTime, clipRegions);
 	}, [activeClipIdAtCurrentTime, clipRegions]);
