@@ -262,7 +262,7 @@ function ExtensionSettingsSection({
 				}
 
 				if (field.type === "slider") {
-					const step = field.step ?? 0.01;
+					const step = field.step ?? 1;
 					const stepText = String(step);
 					const precision = stepText.includes(".")
 						? stepText.split(".")[1]?.length ?? 0
@@ -274,7 +274,7 @@ function ExtensionSettingsSection({
 								value={typeof value === "number" ? value : (field.defaultValue as number)}
 								defaultValue={field.defaultValue as number}
 								min={field.min ?? 0}
-								max={field.max ?? 1}
+								max={field.max ?? 100}
 								step={step}
 								onChange={(v) => {
 									extensionHost.setExtensionSetting(extensionId, field.id, v);
