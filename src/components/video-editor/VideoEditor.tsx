@@ -3776,16 +3776,17 @@ export default function VideoEditor() {
 		}
 	}, []);
 
-	const handleAudioAdded = useCallback((span: Span, audioPath: string, trackIndex?: number) => {
-		const id = `audio-${nextAudioIdRef.current++}`;
-		const newRegion: AudioRegion = {
-			id,
-			startMs: Math.round(span.start),
-			endMs: Math.round(span.end),
-			audioPath,
-			volume: 1,
-			trackIndex,
-		};
+		const handleAudioAdded = useCallback((span: Span, audioPath: string, trackIndex?: number) => {
+			const id = `audio-${nextAudioIdRef.current++}`;
+			const newRegion: AudioRegion = {
+				id,
+				startMs: Math.round(span.start),
+				endMs: Math.round(span.end),
+				audioPath,
+				volume: 1,
+				normalize: false,
+				trackIndex,
+			};
 		setAudioRegions((prev) => [...prev, newRegion]);
 		setSelectedAudioId(id);
 		setSelectedZoomId(null);
@@ -3835,15 +3836,29 @@ export default function VideoEditor() {
 		[selectedAudioId],
 	);
 
-	const handleAudioDelete = useCallback(
-		(id: string) => {
+		const handleAudioDelete = useCallback(
+			(id: string) => {
 			setAudioRegions((prev) => prev.filter((region) => region.id !== id));
 			if (selectedAudioId === id) {
 				setSelectedAudioId(null);
 			}
 		},
-		[selectedAudioId],
-	);
+			[selectedAudioId],
+		);
+
+		const handleAudioNormalizeChange = useCallback(
+			(normalize: boolean) => {
+				if (!selectedAudioId) {
+					return;
+				}
+				setAudioRegions((prev) =>
+					prev.map((region) =>
+						region.id === selectedAudioId ? { ...region, normalize } : region,
+					),
+				);
+			},
+			[selectedAudioId],
+		);
 
 	const handleAnnotationAdded = useCallback((span: Span, trackIndex = 0) => {
 		const id = `annotation-${nextAnnotationIdRef.current++}`;
@@ -5761,14 +5776,21 @@ export default function VideoEditor() {
 									audio.onSelectedClipSourceAudioTrackNormalizeChange
 								}
 								selectedAudioId={selectedAudioId}
-								selectedAudioVolume={
-									selectedAudioId
-										? (audioRegions.find((r) => r.id === selectedAudioId)
-												?.volume ?? null)
-										: null
-								}
-								onAudioVolumeChange={handleAudioVolumeChange}
-								onAudioDelete={handleAudioDelete}
+									selectedAudioVolume={
+										selectedAudioId
+											? (audioRegions.find((r) => r.id === selectedAudioId)
+													?.volume ?? null)
+											: null
+									}
+									selectedAudioNormalize={
+										selectedAudioId
+											? (audioRegions.find((r) => r.id === selectedAudioId)
+													?.normalize ?? false)
+											: null
+									}
+									onAudioVolumeChange={handleAudioVolumeChange}
+									onAudioNormalizeChange={handleAudioNormalizeChange}
+									onAudioDelete={handleAudioDelete}
 								shadowIntensity={shadowIntensity}
 								onShadowChange={setShadowIntensity}
 								backgroundBlur={backgroundBlur}

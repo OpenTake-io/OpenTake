@@ -263,16 +263,18 @@ function AudioItemWithWaveform({
 		return { start: 0, end: duration };
 	}, [waveformSpan.end, waveformSpan.start]);
 	return (
-		<Item
-			id={item.id}
-			rowId={item.rowId}
-			span={span}
-			isSelected={isSelected}
-			onSelectId={onSelectAudio}
-			variant="audio"
-			waveformPeaks={peaks}
-			waveformSegmentSpan={normalizedWaveformSpan}
-		>
+			<Item
+				id={item.id}
+				rowId={item.rowId}
+				span={span}
+				isSelected={isSelected}
+				onSelectId={onSelectAudio}
+				variant="audio"
+				waveformPeaks={peaks}
+				waveformSegmentSpan={normalizedWaveformSpan}
+				waveformGain={Math.max(0, Math.min(2, item.audioGain ?? 1))}
+				waveformNormalize={Boolean(item.audioNormalize)}
+			>
 			{item.label}
 		</Item>
 	);
