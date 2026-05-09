@@ -420,6 +420,18 @@ int main(int argc, char* argv[]) {
         std::cerr << "ERROR: WGC capture session failed during recording" << std::endl;
         encoder.finalize();
         DeleteFileW(outputPathW.c_str());
+        if (!config.audioOutputPath.empty()) {
+            const std::wstring audioPathW = utf8ToWide(config.audioOutputPath);
+            const std::wstring audioMetadataPathW = utf8ToWide(config.audioOutputPath + ".json");
+            DeleteFileW(audioPathW.c_str());
+            DeleteFileW(audioMetadataPathW.c_str());
+        }
+        if (!config.micOutputPath.empty()) {
+            const std::wstring micPathW = utf8ToWide(config.micOutputPath);
+            const std::wstring micMetadataPathW = utf8ToWide(config.micOutputPath + ".json");
+            DeleteFileW(micPathW.c_str());
+            DeleteFileW(micMetadataPathW.c_str());
+        }
         return 1;
     }
 

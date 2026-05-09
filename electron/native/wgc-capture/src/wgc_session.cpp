@@ -136,7 +136,7 @@ bool WgcSession::initializeWithItem(int fps) {
     // IsBorderRequired is only available on Windows 11+ (build 22000). propagating an hresult_error results in Native Windows capture failure
     try {
         session_.IsBorderRequired(false);
-    } catch (winrt::hresult_error const& e) {
+    } catch (winrt::hresult_error const&) {
     }
 
     return true;
@@ -169,6 +169,7 @@ bool WgcSession::recreateFramePoolIfNeeded(
                   << framePoolWidth_ << "x" << framePoolHeight_ << std::endl;
     } catch (winrt::hresult_error const& e) {
         fatalError_ = true;
+        capturing_ = false;
         std::cerr << "ERROR: Failed to recreate WGC frame pool after resize: 0x"
                   << std::hex << e.code() << std::dec << std::endl;
     }
@@ -248,7 +249,7 @@ void WgcSession::onFrameArrived(
     winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool const& sender,
     winrt::Windows::Foundation::IInspectable const&) {
 
-    if (!capturing_) return;
+    if (!capturing_ || fatalError_) return;
 
     auto frame = sender.TryGetNextFrame();
     if (!frame) return;
