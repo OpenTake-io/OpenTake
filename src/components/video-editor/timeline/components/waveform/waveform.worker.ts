@@ -1,11 +1,12 @@
 self.onmessage = (e: MessageEvent) => {
-	const { channelData, samples } = e.data as {
+	const { requestId, channelData, samples } = e.data as {
+		requestId: number;
 		channelData: Float32Array;
 		samples: number;
 	};
 
 	if (!channelData || samples <= 0) {
-		self.postMessage(new Float32Array(0));
+		self.postMessage({ requestId, peaks: new Float32Array(0) });
 		return;
 	}
 
@@ -24,8 +25,8 @@ self.onmessage = (e: MessageEvent) => {
 			result[i] = max;
 		}
 
-		self.postMessage(result);
+		self.postMessage({ requestId, peaks: result });
 	} catch {
-		self.postMessage(new Float32Array(0));
+		self.postMessage({ requestId, peaks: new Float32Array(0) });
 	}
 };
