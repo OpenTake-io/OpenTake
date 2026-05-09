@@ -481,7 +481,9 @@ interface SettingsPanelProps {
 	onClipDelete?: (id: string) => void;
 	selectedAudioId?: string | null;
 	selectedAudioVolume?: number | null;
+	selectedAudioNormalize?: boolean | null;
 	onAudioVolumeChange?: (volume: number) => void;
+	onAudioNormalizeChange?: (normalize: boolean) => void;
 	onAudioDelete?: (id: string) => void;
 	shadowIntensity?: number;
 	onShadowChange?: (intensity: number) => void;
@@ -881,7 +883,9 @@ export function SettingsPanel({
 	onClipDelete,
 	selectedAudioId,
 	selectedAudioVolume,
+	selectedAudioNormalize,
 	onAudioVolumeChange,
+	onAudioNormalizeChange,
 	onAudioDelete,
 	shadowIntensity = 0.67,
 	onShadowChange,
@@ -3049,16 +3053,16 @@ export function SettingsPanel({
 			</section>
 		);
 
-		const audioSectionContent = (
-			<section className="flex flex-col gap-3">
+			const audioSectionContent = (
+				<section className="flex flex-col gap-3">
 				<div className="flex items-center justify-between gap-3">
 					<SectionLabel>{tSettings("audio.volumeTitle", "Audio")}</SectionLabel>
 					<span className="rounded-full bg-[#2563EB]/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#2563EB]">
 						{Math.round((selectedAudioVolume ?? 1) * 100)}%
 					</span>
 				</div>
-				<SliderControl
-					label={tSettings("audio.volume", "Volume")}
+					<SliderControl
+						label={tSettings("audio.volume", "Volume")}
 					value={selectedAudioVolume ?? 1}
 					defaultValue={1}
 					min={0}
@@ -3066,10 +3070,20 @@ export function SettingsPanel({
 					step={0.01}
 					onChange={(v) => onAudioVolumeChange?.(v)}
 					formatValue={(v) => `${Math.round(v * 100)}%`}
-					parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100}
-				/>
-			</section>
-		);
+						parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100}
+					/>
+					<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+						<span className="text-[10px] text-muted-foreground">
+							{tSettings("audio.normalize", "Normalize")}
+						</span>
+						<Switch
+							checked={Boolean(selectedAudioNormalize)}
+							onCheckedChange={(v) => onAudioNormalizeChange?.(v)}
+							className="data-[state=checked]:bg-[#2563EB] scale-75"
+						/>
+					</div>
+				</section>
+			);
 
 		const clipSectionContent = (
 			<section className="flex flex-col gap-2">

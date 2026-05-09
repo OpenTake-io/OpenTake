@@ -6,13 +6,14 @@ import type {
 	SourceAudioTrackSettings,
 	TrimRegion,
 } from "@/components/video-editor/types";
+import {
+	buildResolvedAudioPlan,
+	getSourceTrackIdFromPath,
+} from "@/lib/exporter/audioRoutingEngine";
 import { estimateCompanionAudioStartDelaySeconds } from "@/lib/mediaTiming";
 import { resolveMediaElementSource } from "./localMediaSource";
 import type { VideoMuxer } from "./muxer";
-import {
-	getSourceTrackIdFromPath,
-	resolveSourceTrackRoutingPolicy,
-} from "./sourceTrackRoutingPolicy";
+import { resolveSourceTrackRoutingPolicy } from "./sourceTrackRoutingPolicy";
 
 const AUDIO_BITRATE = 128_000;
 const DECODE_BACKPRESSURE_LIMIT = 20;
@@ -22,6 +23,7 @@ const MP4_AUDIO_CODEC = "mp4a.40.2";
 const OFFLINE_AUDIO_SAMPLE_RATE = 48_000;
 const OFFLINE_ENCODE_CHUNK_FRAMES = 1024;
 const OFFLINE_CHUNK_DURATION_SEC = 30;
+const USER_AUDIO_NORMALIZE_GAIN = 1.35;
 
 interface TimelineSlice {
 	sourceStartMs: number;
@@ -600,13 +602,28 @@ export class AudioProcessor {
 		if (this.cancelled) throw new Error("Export cancelled");
 		this.onProgress?.(0);
 
-		const routingPolicy = resolveSourceTrackRoutingPolicy(
-			videoUrl,
+		const resolvedPlan = buildResolvedAudioPlan({
+			videoResource: videoUrl,
 			sourceAudioFallbackPaths,
-		);
+			audioRegions,
+			sourceTrackGainById: {
+				mic: Math.max(0, Math.min(2, sourceAudioTrackSettings?.mic?.volume ?? 1)),
+				system: Math.max(0, Math.min(2, sourceAudioTrackSettings?.system?.volume ?? 1)),
+				mixed: Math.max(0, Math.min(2, sourceAudioTrackSettings?.mixed?.volume ?? 1)),
+			},
+			embeddedGain: Math.max(
+				0,
+				Math.min(
+					2,
+					sourceAudioTrackSettings?.mixed?.volume ??
+						sourceAudioTrackSettings?.system?.volume ??
+						1,
+				),
+			),
+		});
 
 		// Decode embedded source audio separately from companion sidecars.
-		const mainBuffer = routingPolicy.includeEmbeddedInExport
+		const mainBuffer = resolvedPlan.includeEmbeddedInExport
 			? await this.decodeAudioFromUrl(videoUrl)
 			: null;
 		const mainBufferGainSettings =
@@ -622,8 +639,8 @@ export class AudioProcessor {
 			[];
 		const refDuration =
 			mainBuffer?.duration ??
-			(routingPolicy.playbackPaths.length > 0 ? await this.getMediaDurationSec(videoUrl) : 0);
-		for (const audioPath of routingPolicy.playbackPaths) {
+			(resolvedPlan.playbackPaths.length > 0 ? await this.getMediaDurationSec(videoUrl) : 0);
+		for (const audioPath of resolvedPlan.playbackPaths) {
 			if (this.cancelled) throw new Error("Export cancelled");
 			const buffer = await this.decodeAudioFromUrl(audioPath);
 			if (!buffer) continue;
@@ -662,7 +679,7 @@ export class AudioProcessor {
 		let sourceDurationSec: number;
 		if (mainBufferEntry?.buffer) {
 			sourceDurationSec = mainBufferEntry.buffer.duration;
-		} else if (routingPolicy.playbackPaths.length > 0 || regionEntries.length > 0) {
+		} else if (resolvedPlan.playbackPaths.length > 0 || regionEntries.length > 0) {
 			sourceDurationSec = await this.getMediaDurationSec(videoUrl);
 		} else {
 			sourceDurationSec = primaryBuffer?.duration ?? 0;
@@ -892,7 +909,8 @@ export class AudioProcessor {
 		if (duration <= 0.001) return;
 
 		const gainNode = ctx.createGain();
-		gainNode.gain.value = Math.max(0, Math.min(1, region.volume));
+		const normalizeGain = region.normalize ? USER_AUDIO_NORMALIZE_GAIN : 1;
+		gainNode.gain.value = Math.max(0, Math.min(1, region.volume * normalizeGain));
 		gainNode.connect(ctx.destination);
 
 		const source = ctx.createBufferSource();

@@ -24,6 +24,19 @@ export interface UseSourceAudioTrackSettingsResult {
   onSelectedClipSourceAudioTrackNormalizeChange: (id: string, normalize: boolean) => void;
 }
 
+function isSameTrackMeta(left: SourceAudioTrackMeta, right: SourceAudioTrackMeta): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    const leftTrack = left[index];
+    const rightTrack = right[index];
+    if (!leftTrack || !rightTrack) return false;
+    if (leftTrack.id !== rightTrack.id || leftTrack.label !== rightTrack.label) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function useSourceAudioTrackSettings({
   selectedClipId,
   activeClipId,
@@ -55,13 +68,31 @@ export function useSourceAudioTrackSettings({
   }, [defaultSourceAudioTrackSettings, selectedClipId, sourceAudioTrackSettingsByClip]);
 
   const onSourceAudioTracksMetaChange = useCallback((tracks: SourceAudioTrackMeta) => {
-    setSourceAudioTrackMeta(tracks);
+    setSourceAudioTrackMeta((prev) => (isSameTrackMeta(prev, tracks) ? prev : tracks));
     setDefaultSourceAudioTrackSettings((prev) => {
       const next: SourceAudioTrackSettings = {};
       for (const track of tracks) {
         next[track.id] = prev[track.id] ?? { volume: 1, normalize: false };
       }
-      return next;
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      if (prevKeys.length !== nextKeys.length) {
+        return next;
+      }
+      for (const key of nextKeys) {
+        const prevSetting = prev[key];
+        const nextSetting = next[key];
+        if (!prevSetting || !nextSetting) {
+          return next;
+        }
+        if (
+          prevSetting.volume !== nextSetting.volume ||
+          prevSetting.normalize !== nextSetting.normalize
+        ) {
+          return next;
+        }
+      }
+      return prev;
     });
   }, []);
 

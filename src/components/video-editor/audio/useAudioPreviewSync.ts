@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { buildResolvedAudioPlan } from "@/lib/exporter/audioRoutingEngine";
 import { resolveMediaElementSource } from "@/lib/exporter/localMediaSource";
 import {
   clampMediaTimeToDuration,
@@ -40,6 +41,24 @@ export function useAudioPreviewSync({
   getSourceTrackPreviewGain,
   onSourceFallbackLoadError,
 }: UseAudioPreviewSyncParams) {
+  const resolvedPlan = useMemo(
+    () =>
+      buildResolvedAudioPlan({
+        videoResource: null,
+        sourceAudioFallbackPaths: previewSourceAudioFallbackPaths,
+        audioRegions,
+      }),
+    [audioRegions, previewSourceAudioFallbackPaths],
+  );
+  const resolvedUserTracks = useMemo(
+    () => resolvedPlan.tracks.filter((track) => track.kind === "user"),
+    [resolvedPlan],
+  );
+  const resolvedSourceTracks = useMemo(
+    () => resolvedPlan.tracks.filter((track) => track.kind !== "user"),
+    [resolvedPlan],
+  );
+
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const audioElementRevokersRef = useRef<Map<string, () => void>>(new Map());
   const audioElementResourcesRef = useRef<Map<string, string>>(new Map());
@@ -84,7 +103,7 @@ export function useAudioPreviewSync({
   useEffect(() => {
     let cancelled = false;
     const existing = audioElementsRef.current;
-    const currentIds = new Set(audioRegions.map((r) => r.id));
+    const currentIds = new Set(resolvedUserTracks.map((track) => track.id));
 
     for (const [id, audio] of existing) {
       if (!currentIds.has(id)) {
@@ -97,51 +116,51 @@ export function useAudioPreviewSync({
       }
     }
 
-    for (const region of audioRegions) {
-      let audio = existing.get(region.id);
+    for (const track of resolvedUserTracks) {
+      let audio = existing.get(track.id);
       if (!audio) {
         audio = new Audio();
         audio.preload = "auto";
-        existing.set(region.id, audio);
+        existing.set(track.id, audio);
       }
 
-      if (audioElementResourcesRef.current.get(region.id) !== region.audioPath) {
+      if (audioElementResourcesRef.current.get(track.id) !== track.sourceRef.path) {
         audio.pause();
         audio.src = "";
-        audioElementRevokersRef.current.get(region.id)?.();
-        audioElementRevokersRef.current.delete(region.id);
-        audioElementResourcesRef.current.set(region.id, region.audioPath);
+        audioElementRevokersRef.current.get(track.id)?.();
+        audioElementRevokersRef.current.delete(track.id);
+        audioElementResourcesRef.current.set(track.id, track.sourceRef.path);
 
         void (async () => {
-          const resolved = await resolveMediaElementSource(region.audioPath);
-          const latestAudio = existing.get(region.id);
+          const resolved = await resolveMediaElementSource(track.sourceRef.path);
+          const latestAudio = existing.get(track.id);
 
           if (
             cancelled ||
             latestAudio !== audio ||
-            audioElementResourcesRef.current.get(region.id) !== region.audioPath
+            audioElementResourcesRef.current.get(track.id) !== track.sourceRef.path
           ) {
             resolved.revoke();
             return;
           }
 
-          audioElementRevokersRef.current.set(region.id, resolved.revoke);
+          audioElementRevokersRef.current.set(track.id, resolved.revoke);
           latestAudio.src = resolved.src;
         })();
       }
 
-      audio.volume = Math.max(0, Math.min(1, region.volume * previewVolume));
+      audio.volume = Math.max(0, Math.min(1, track.gain * previewVolume));
     }
 
     return () => {
       cancelled = true;
     };
-  }, [audioRegions, previewVolume]);
+  }, [previewVolume, resolvedUserTracks]);
 
   useEffect(() => {
     let cancelled = false;
     const existing = sourceAudioElementsRef.current;
-    const currentIds = new Set(previewSourceAudioFallbackPaths);
+    const currentIds = new Set(resolvedSourceTracks.map((track) => track.sourceRef.path));
 
     for (const [id, audio] of existing) {
       if (!currentIds.has(id)) {
@@ -158,7 +177,8 @@ export function useAudioPreviewSync({
       }
     }
 
-    for (const audioPath of previewSourceAudioFallbackPaths) {
+    for (const track of resolvedSourceTracks) {
+      const audioPath = track.sourceRef.path;
       let audio = existing.get(audioPath);
       if (!audio) {
         audio = new Audio();
@@ -237,7 +257,7 @@ export function useAudioPreviewSync({
         : Math.max(0, Math.min(1, previewVolume));
     }
 
-    if (previewSourceAudioFallbackPaths.length === 0) {
+    if (resolvedSourceTracks.length === 0) {
       lastSourceAudioSyncTimeRef.current = null;
     }
 
@@ -248,7 +268,7 @@ export function useAudioPreviewSync({
     getSourceTrackPreviewGain,
     isCurrentClipMuted,
     onSourceFallbackLoadError,
-    previewSourceAudioFallbackPaths,
+    resolvedSourceTracks,
     previewVolume,
   ]);
 
@@ -303,15 +323,17 @@ export function useAudioPreviewSync({
     );
     const targetPlaybackRate = activeSpeedRegion ? activeSpeedRegion.speed : 1;
 
-    for (const region of audioRegions) {
-      const audio = audioElementsRef.current.get(region.id);
+    for (const track of resolvedUserTracks) {
+      const audio = audioElementsRef.current.get(track.id);
       if (!audio) continue;
 
-      const isInRegion = currentTimeMs >= region.startMs && currentTimeMs < region.endMs;
+      const startMs = track.timelineBinding.startMs;
+      const endMs = track.timelineBinding.endMs;
+      const isInRegion = currentTimeMs >= startMs && currentTimeMs < endMs;
 
       if (isPlaying && isInRegion) {
         enablePitchPreservingPlayback(audio);
-        const audioOffset = (currentTimeMs - region.startMs) / 1000;
+        const audioOffset = (currentTimeMs - startMs) / 1000;
         if (Math.abs(audio.currentTime - audioOffset) > 0.2) {
           audio.currentTime = audioOffset;
         }
@@ -330,10 +352,10 @@ export function useAudioPreviewSync({
         audio.pause();
       }
     }
-  }, [audioRegions, timelineTime, effectiveSpeedRegions, isPlaying]);
+  }, [effectiveSpeedRegions, isPlaying, resolvedUserTracks, timelineTime]);
 
   useEffect(() => {
-    if (previewSourceAudioFallbackPaths.length === 0) {
+    if (resolvedSourceTracks.length === 0) {
       lastSourceAudioSyncTimeRef.current = null;
       return;
     }
@@ -418,12 +440,12 @@ export function useAudioPreviewSync({
     isCurrentClipMuted,
     isPlaying,
     previewVolume,
-    previewSourceAudioFallbackPaths,
+    resolvedSourceTracks,
     sourceAudioFallbackStartDelayMsByPath,
   ]);
 
   useEffect(() => {
-    if (!isPlaying || previewSourceAudioFallbackPaths.length === 0) {
+    if (!isPlaying || resolvedSourceTracks.length === 0) {
       return;
     }
     void ensureSourceAudioRunning().then(() => {
@@ -433,5 +455,5 @@ export function useAudioPreviewSync({
         }
       }
     });
-  }, [isPlaying, previewSourceAudioFallbackPaths]);
+  }, [isPlaying, resolvedSourceTracks.length]);
 }
