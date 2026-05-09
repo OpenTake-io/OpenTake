@@ -149,6 +149,7 @@ import {
 } from "./TutorialHelp";
 import TimelineEditor, { type TimelineEditorHandle } from "./timeline/TimelineEditor";
 import { normalizeCursorTelemetry } from "./timeline/zoomSuggestionUtils";
+import type { SourceAudioTrackSettings } from "@/components/video-editor/audio/audioTypes";
 import {
 	type AnnotationRegion,
 	type AudioRegion,
@@ -197,7 +198,6 @@ import {
 	type ZoomMotionBlurTuning,
 	type ZoomRegion,
 	type ZoomTransitionEasing,
-	type SourceAudioTrackSettings,
 } from "./types";
 import VideoPlayback, { VideoPlaybackRef } from "./VideoPlayback";
 import {

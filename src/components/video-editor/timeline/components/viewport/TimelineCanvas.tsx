@@ -11,6 +11,10 @@ import {
 	type MouseEventHandler,
 } from "react";
 import { cn } from "@/lib/utils";
+import type {
+	SourceAudioTrackSettings,
+	SourceAudioTrackWithPeaks,
+} from "@/components/video-editor/audio/audioTypes";
 import {
 	getTimelineContentMinHeightPx,
 	getTimelineRowsMinHeightPx,
@@ -21,7 +25,7 @@ import glassStyles from "../../ItemGlass.module.css";
 import Item from "../../Item";
 import Row from "../../Row";
 import { CLIP_ROW_ID, SOURCE_AUDIO_ROW_ID, ZOOM_ROW_ID } from "../../core/constants";
-import type { AudioPeaksData, TimelineRenderItem } from "../../core/timelineTypes";
+import type { TimelineRenderItem } from "../../core/timelineTypes";
 import {
 	getAnnotationTrackIndex,
 	getAnnotationTrackRowId,
@@ -57,10 +61,10 @@ interface TimelineCanvasProps {
 	selectAllBlocksActive?: boolean;
 	onClearBlockSelection?: () => void;
 	keyframes?: { id: string; time: number }[];
-	sourceAudioTracks?: Array<{ id: string; label: string; peaks: AudioPeaksData }>;
+	sourceAudioTracks?: SourceAudioTrackWithPeaks[];
 	getSourceAudioTrackSettingsForClip?: (
 		clipId: string | null,
-	) => Record<string, { volume: number; normalize: boolean }>;
+	) => SourceAudioTrackSettings;
 	showSourceAudioTrack?: boolean;
 	liveSpanPreviewById?: Record<string, { start: number; end: number }>;
 	liveHiddenItemIds?: string[];
@@ -224,10 +228,10 @@ interface TimelineCanvasRowsProps {
 	onSelectClip?: (id: string | null) => void;
 	onSelectAnnotation?: (id: string | null) => void;
 	onSelectAudio?: (id: string | null) => void;
-	sourceAudioTracks?: Array<{ id: string; label: string; peaks: AudioPeaksData }>;
+	sourceAudioTracks?: SourceAudioTrackWithPeaks[];
 	getSourceAudioTrackSettingsForClip?: (
 		clipId: string | null,
-	) => Record<string, { volume: number; normalize: boolean }>;
+	) => SourceAudioTrackSettings;
 	showSourceAudioTrack?: boolean;
 	liveSpanPreviewById?: Record<string, { start: number; end: number }>;
 	liveHiddenItemIds?: string[];

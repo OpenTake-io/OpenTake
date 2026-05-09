@@ -1,10 +1,10 @@
 import React, { useCallback, useMemo } from "react";
 import {
 	SOURCE_AUDIO_NORMALIZE_GAIN,
-	getSourceTrackIdFromPath,
-} from "./sourceAudioTracks";
+	type SourceAudioTrackSettings,
+} from "@/components/video-editor/audio/audioTypes";
 import { useSourceAudioTrackSettings } from "./useSourceAudioTrackSettings";
-import { SourceAudioTrackSettings } from "../types";
+import { getSourceTrackIdFromPath } from "@/lib/exporter/audioRoutingEngine";
 
 interface UseClipAudioSettingsControllerParams {
 	selectedClipId: string | null;

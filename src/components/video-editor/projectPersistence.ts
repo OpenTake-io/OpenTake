@@ -20,6 +20,7 @@ import {
 import { DEFAULT_WALLPAPER_PATH } from "@/lib/wallpapers";
 import { ASPECT_RATIOS, type AspectRatio, isCustomAspectRatio } from "@/utils/aspectRatioUtils";
 import { CURSOR_MOTION_PRESETS, resolveCursorMotionPresetId } from "./cursorMotionPresets";
+import type { SourceAudioTrackSettings } from "@/components/video-editor/audio/audioTypes";
 import {
 	type AnnotationRegion,
 	type AudioRegion,
@@ -62,7 +63,6 @@ import {
 	DEFAULT_ZOOM_SMOOTHNESS,
 	getDefaultCaptionFontFamily,
 	type Padding,
-	SourceAudioTrackSettings,
 	type SpeedRegion,
 	type TrimRegion,
 	type WebcamOverlaySettings,

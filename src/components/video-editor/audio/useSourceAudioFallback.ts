@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { SOURCE_AUDIO_FALLBACK_TOAST_ID } from "./sourceAudioTracks";
+import { SOURCE_AUDIO_FALLBACK_TOAST_ID } from "@/components/video-editor/audio/audioTypes";
 
 interface UseSourceAudioFallbackParams {
   currentSourcePath: string | null;

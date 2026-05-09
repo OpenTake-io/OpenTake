@@ -19,6 +19,11 @@ import { formatShortcut } from "@/utils/platformUtils";
 import { loadEditorPreferences, saveEditorPreferences } from "../editorPreferences";
 import { fromFileUrl } from "../projectPersistence";
 import type {
+	SourceAudioTrackMeta,
+	SourceAudioTrackSettings,
+	SourceAudioTrackWithPeaks,
+} from "@/components/video-editor/audio/audioTypes";
+import type {
 	AnnotationRegion,
 	AudioRegion,
 	ClipRegion,
@@ -36,7 +41,6 @@ import { useTimelineEditorRuntime } from "./hooks/useTimelineEditorRuntime";
 import { useTimelineRange } from "./hooks/useTimelineRange";
 import TimelineCanvas from "./components/viewport/TimelineCanvas";
 import TimelineToolbar from "./components/toolbar/TimelineToolbar";
-import type { AudioPeaksData } from "./core/timelineTypes";
 
 export interface TimelineEditorProps {
 	videoDuration: number;
@@ -84,11 +88,11 @@ export interface TimelineEditorProps {
 	hideToolbar?: boolean;
 	showSourceAudioTrack?: boolean;
 	onSourceAudioAvailabilityChange?: (available: boolean) => void;
-	sourceAudioTrackSettings?: Record<string, { volume: number; normalize: boolean }>;
+	sourceAudioTrackSettings?: SourceAudioTrackSettings;
 	getSourceAudioTrackSettingsForClip?: (
 		clipId: string | null,
-	) => Record<string, { volume: number; normalize: boolean }>;
-	onSourceAudioTracksMetaChange?: (tracks: Array<{ id: string; label: string }>) => void;
+	) => SourceAudioTrackSettings;
+	onSourceAudioTracksMetaChange?: (tracks: SourceAudioTrackMeta) => void;
 }
 
 function extractLocalPathFromMediaServerUrl(input: string | null | undefined): string | null {
@@ -288,9 +292,9 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 		);
 		const micSidecarPeaks = useTimelineAudioPeaks(micSidecarPath);
 		const systemSidecarPeaks = useTimelineAudioPeaks(systemSidecarPath);
-		const sourceAudioTracks = useMemo<Array<{ id: string; label: string; peaks: AudioPeaksData }>>(() => {
+		const sourceAudioTracks = useMemo<SourceAudioTrackWithPeaks[]>(() => {
 			if (systemSidecarPeaks || micSidecarPeaks) {
-				const tracks: Array<{ id: string; label: string; peaks: AudioPeaksData }> = [];
+				const tracks: SourceAudioTrackWithPeaks[] = [];
 				if (systemSidecarPeaks)
 					tracks.push({
 						id: "system",
