@@ -3463,11 +3463,21 @@ export default function VideoEditor() {
 		setAutoSuggestZoomsTrigger(0);
 	}, []);
 
-	function handleSeek(time: number) {
-		const video = videoPlaybackRef.current?.video;
+	const handleSeek = useCallback((time: number, options: { pause?: boolean } = {}) => {
+		const playback = videoPlaybackRef.current;
+		const video = playback?.video;
 		if (!video) return;
+
+		if (options.pause && !video.paused) {
+			playback?.pause();
+		}
+
 		video.currentTime = mapTimelineTimeToSourceTime(time * 1000) / 1000;
-	}
+	}, [mapTimelineTimeToSourceTime]);
+
+	const handleTimelineSeek = useCallback((time: number) => {
+		handleSeek(time, { pause: true });
+	}, [handleSeek]);
 
 	const handleSelectZoom = useCallback((id: string | null) => {
 		setSelectedZoomId(id);
@@ -6653,7 +6663,7 @@ export default function VideoEditor() {
 						videoDuration={timelineDuration}
 						currentTime={currentTime}
 						playheadTime={timelinePlayheadTime}
-						onSeek={handleSeek}
+						onSeek={handleTimelineSeek}
 						videoPath={videoPath}
 						cursorTelemetry={normalizedCursorTelemetry}
 						autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
