@@ -1,6 +1,7 @@
 import * as PhosphorIcons from "@phosphor-icons/react";
 
 type IconWeight = "thin" | "light" | "regular" | "bold" | "fill";
+const missingIconPathCache = new Set<string>();
 
 function resolveIconComponent(name: string): {
 	iconName: string;
@@ -49,6 +50,9 @@ export function resolveIconPath(
 	cache: Map<string, Path2D>,
 ): Path2D | null {
 	const cacheKey = `${name}:${weight}`;
+	if (missingIconPathCache.has(cacheKey)) {
+		return null;
+	}
 	const cached = cache.get(cacheKey);
 	if (cached) {
 		return cached;
@@ -57,6 +61,7 @@ export function resolveIconPath(
 	const resolved = resolveIconComponent(name);
 	if (!resolved) {
 		console.warn(`[extensions] Icon ${name} not found in Phosphor library`);
+		missingIconPathCache.add(cacheKey);
 		return null;
 	}
 
@@ -70,14 +75,15 @@ export function resolveIconPath(
 		const pathDataList: string[] = [];
 		collectPathData(children, pathDataList);
 
-		if (pathDataList.length === 0) {
-			console.warn(`[extensions] No path data found for ${name}:${weight}`, {
-				iconName: resolved.iconName,
-				element,
-				children,
-			});
-			return null;
-		}
+			if (pathDataList.length === 0) {
+				console.warn(`[extensions] No path data found for ${name}:${weight}`, {
+					iconName: resolved.iconName,
+					element,
+					children,
+				});
+				missingIconPathCache.add(cacheKey);
+				return null;
+			}
 
 		const combinedPath = new Path2D();
 		for (const pathData of pathDataList) {
@@ -85,8 +91,9 @@ export function resolveIconPath(
 		}
 		cache.set(cacheKey, combinedPath);
 		return combinedPath;
-	} catch (err) {
-		console.error(`[extensions] Failed to extract path for icon ${name}:`, err);
-		return null;
-	}
+		} catch (err) {
+			console.error(`[extensions] Failed to extract path for icon ${name}:`, err);
+			missingIconPathCache.add(cacheKey);
+			return null;
+		}
 }
