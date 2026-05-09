@@ -8,7 +8,7 @@ import type {
 } from "@/components/video-editor/types";
 import {
 	buildResolvedAudioPlan,
-	getSourceTrackIdFromPath,
+	SourceTrackId,
 } from "@/lib/exporter/audioRoutingEngine";
 import { estimateCompanionAudioStartDelaySeconds } from "@/lib/mediaTiming";
 import { resolveMediaElementSource } from "./localMediaSource";
@@ -35,6 +35,48 @@ function resolveSourceTrackGain(
 	}
 	const normalizeGain = settings.normalize ? SOURCE_AUDIO_NORMALIZE_GAIN : 1;
 	return Math.max(0, Math.min(2, settings.volume * normalizeGain));
+}
+
+export function getSourceTrackIdFromPath(audioPath: string): SourceTrackId {
+	const normalized = audioPath.toLowerCase();
+	// Check for common patterns like .mic., -mic., mic.mp4, etc.
+	if (
+		normalized.includes(".mic.") ||
+		normalized.includes("-mic.") ||
+		normalized.includes("_mic_") ||
+		normalized.includes("/mic.") ||
+		normalized.includes("\\mic.") ||
+		normalized.endsWith("mic.mp4") ||
+		normalized.endsWith("mic.m4a") ||
+		normalized.endsWith("mic.wav")
+	) {
+		return "mic";
+	}
+	if (
+		normalized.includes(".system.") ||
+		normalized.includes("-system.") ||
+		normalized.includes("_system_") ||
+		normalized.includes("/system.") ||
+		normalized.includes("\\system.") ||
+		normalized.endsWith("system.mp4") ||
+		normalized.endsWith("system.m4a") ||
+		normalized.endsWith("system.wav")
+	) {
+		return "system";
+	}
+	return "mixed";
+}
+
+export function hasNonDefaultSourceTrackSettings(
+	sourceAudioTrackSettings?: SourceAudioTrackSettings,
+) {
+	if (!sourceAudioTrackSettings) {
+		return false;
+	}
+	return Object.values(sourceAudioTrackSettings).some(
+		(settings) =>
+			Math.abs((settings?.volume ?? 1) - 1) > 0.0005 || Boolean(settings?.normalize),
+	);
 }
 
 interface TimelineSlice {
@@ -198,7 +240,9 @@ export class AudioProcessor {
 		if (
 			sortedSpeedRegions.length > 0 ||
 			sortedAudioRegions.length > 0 ||
-			needsSourceAudioMixing
+			needsSourceAudioMixing ||
+			hasNonDefaultSourceTrackSettings(sourceAudioTrackSettings) ||
+			(clipRegions ?? []).some((clip) => Boolean(clip.muted))
 		) {
 			await this.renderAndMuxOfflineAudio(
 				videoUrl,
