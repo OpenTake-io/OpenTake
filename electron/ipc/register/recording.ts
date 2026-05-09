@@ -198,7 +198,7 @@ function normalizeRendererTimestampMs(value: unknown) {
 		return nowMs;
 	}
 
-	return Math.min(Math.max(0, Math.round(value)), nowMs + 1000);
+	return Math.min(Math.max(0, Math.round(value)), nowMs);
 }
 
 function pickMicrophoneChunkEvents(value: unknown): MicrophoneChunkTimingEvent[] | null {
