@@ -4352,6 +4352,10 @@ export default function VideoEditor() {
 						encodingMode,
 						useModernNativeStaticLayout: useExperimentalNativeExport,
 					});
+					const sourceAudioTrackSettingsForExport =
+						selectedClipId !== null
+							? audio.selectedClipSourceAudioTrackSettings
+							: audio.activeSourceAudioTrackSettings;
 
 					const exporterConfig = {
 						videoUrl: videoPath,
@@ -4421,7 +4425,7 @@ export default function VideoEditor() {
 						sourceAudioFallbackPaths: audio.sourceAudioFallbackPaths,
 						sourceAudioFallbackStartDelayMsByPath:
 							audio.sourceAudioFallbackStartDelayMsByPath,
-						sourceAudioTrackSettings: audio.activeSourceAudioTrackSettings,
+						sourceAudioTrackSettings: sourceAudioTrackSettingsForExport,
 						previewWidth,
 						previewHeight,
 						onProgress: (progress: ExportProgress) => {
@@ -4670,6 +4674,8 @@ export default function VideoEditor() {
 			audioRegions,
 			audio.sourceAudioFallbackPaths,
 			audio.sourceAudioFallbackStartDelayMsByPath,
+			audio.activeSourceAudioTrackSettings,
+			audio.selectedClipSourceAudioTrackSettings,
 			exportEncodingMode,
 			exportBackendPreference,
 			exportPipelineModel,
@@ -4701,6 +4707,7 @@ export default function VideoEditor() {
 			smokeExportConfig.shadowIntensity,
 			effectiveSpeedRegions,
 			frame,
+			selectedClipId,
 			smokeExportConfig.encodingMode,
 			smokeExportConfig.fps,
 			smokeExportConfig.quality,
