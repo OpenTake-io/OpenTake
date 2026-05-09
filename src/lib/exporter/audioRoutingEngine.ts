@@ -1,9 +1,9 @@
 import type { AudioRegion } from "@/components/video-editor/types";
+import { SOURCE_AUDIO_NORMALIZE_GAIN } from "@/components/video-editor/audio/audioTypes";
 import { resolveSourceAudioFallbackPaths } from "./sourceAudioFallback";
 
 export type SourceTrackId = "mic" | "system" | "mixed";
 export type ResolvedAudioTrackKind = "user" | "system" | "mic" | "mixed" | "embedded";
-const USER_AUDIO_NORMALIZE_GAIN = 1.35;
 
 export interface ResolvedAudioTrack {
 	id: string;
@@ -77,7 +77,7 @@ export function buildResolvedAudioPlan(input: {
 			path: region.audioPath,
 			startDelayMs: 0,
 		},
-		gain: clampGain(region.volume * (region.normalize ? USER_AUDIO_NORMALIZE_GAIN : 1), 1),
+		gain: clampGain(region.volume * (region.normalize ? SOURCE_AUDIO_NORMALIZE_GAIN : 1), 1),
 		timelineBinding: {
 			startMs: Math.max(0, region.startMs),
 			endMs: Math.max(0, region.endMs),
