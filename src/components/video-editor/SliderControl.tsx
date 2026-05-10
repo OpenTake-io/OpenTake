@@ -182,7 +182,7 @@ export const SliderControl = memo(function SliderControl({
 					dividerClass,
 				)}
 				style={{
-					left: "calc(2px + var(--slider-pct) * (100% - 6px))",
+					left: "calc(var(--slider-pct) * (100% - 6px) - 6px)",
 				}}
 			/>
 			<span className="pointer-events-none relative z-10 flex-1 pl-3 text-[12px] font-medium text-muted-foreground">
