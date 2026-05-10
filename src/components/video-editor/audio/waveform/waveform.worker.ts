@@ -24,12 +24,17 @@ workerScope.onmessage = (e: MessageEvent<WaveformWorkerRequest>) => {
 		const firstChannel = channels[0];
 		const result = new Float32Array(samples);
 		const total = firstChannel.length;
+		const blockSize = total / samples;
 
 		for (let i = 0; i < samples; i++) {
-			const start = Math.floor((i * total) / samples);
-			const end = Math.floor(((i + 1) * total) / samples);
+			const start = Math.floor(i * blockSize);
+			const end = Math.min(total, Math.floor((i + 1) * blockSize));
+			
 			let max = 0;
-			for (let j = start; j < end; j++) {
+			// Ensure we check at least one sample even if blockSize < 1
+			const actualEnd = Math.max(start + 1, end);
+			
+			for (let j = start; j < actualEnd && j < total; j++) {
 				for (let c = 0; c < channels.length; c++) {
 					const val = Math.abs(channels[c][j]);
 					if (val > max) max = val;
