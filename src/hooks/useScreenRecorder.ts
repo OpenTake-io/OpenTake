@@ -38,7 +38,6 @@ const WEBCAM_WIDTH = 1280;
 const WEBCAM_HEIGHT = 720;
 const WEBCAM_FRAME_RATE = 30;
 const WEBCAM_SUFFIX = "-webcam";
-const SOURCE_AUDIO_MUX_TOAST_ID = "recording-audio-mux-warning";
 const MICROPHONE_FALLBACK_ERROR_TOAST_ID = "recording-microphone-fallback-error";
 const MICROPHONE_SIDECAR_ERROR_TOAST_ID = "recording-microphone-sidecar-error";
 export type BrowserMicrophoneProfile =
@@ -1063,51 +1062,51 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					return;
 				}
 
-				let finalPath = result.path;
+				const finalPath = result.path;
 
-				if (isNativeWindows) {
-					const ipcMuxStart = performance.now();
-					console.log("[PERF:RENDERER] IPC: muxNativeWindowsRecording: STARTED");
-					const muxResult =
-						await window.electronAPI.muxNativeWindowsRecording(expectedDurationMs);
-					console.log(
-						`[PERF:RENDERER] IPC: muxNativeWindowsRecording: COMPLETED in ${(performance.now() - ipcMuxStart).toFixed(2)}ms`,
-					);
-
-					if (!muxResult?.success || !muxResult.path) {
-						void logNativeCaptureDiagnostics("mux-native-windows-recording");
-						const fallbackPath = muxResult?.path ?? finalPath;
-						const warningMessage =
-							muxResult?.error ||
-							muxResult?.message ||
-							"Failed to finish the native Windows audio mux";
-						toast.warning(
-							`${warningMessage}. Recording was saved, but audio playback or export may be incomplete.`,
-							{ id: SOURCE_AUDIO_MUX_TOAST_ID, duration: 10000 },
-						);
-						finalPath = fallbackPath;
-					} else {
-						finalPath = muxResult.path;
-					}
+				// 1. Immediately inform the Main process about the provisional path
+				const shouldHideOverlayCursor = hideEditorOverlayCursorByDefault.current;
+				if (webcamPath) {
+					await window.electronAPI.setCurrentRecordingSession({
+						videoPath: finalPath,
+						webcamPath,
+						timeOffsetMs: webcamTimeOffsetMs.current,
+						hideOverlayCursorByDefault: shouldHideOverlayCursor,
+					});
+				} else {
+					await window.electronAPI.setCurrentVideoPath(finalPath, {
+						hideOverlayCursorByDefault: shouldHideOverlayCursor,
+					});
 				}
 
-				const sidecarStart = performance.now();
-				console.log("[PERF:RENDERER] Store Sidecar: STARTED");
-				await storeMicrophoneSidecar(
-					micFallbackBlobPromise,
-					finalPath,
-					fallbackStartDelayMs,
-					fallbackTrackSettings,
-				);
-				console.log(
-					`[PERF:RENDERER] Store Sidecar: COMPLETED in ${(performance.now() - sidecarStart).toFixed(2)}ms`,
-				);
+				// 2. Open the editor window immediately (Optimistic UI)
+				setFinalizing(false);
+				void window.electronAPI.switchToEditor();
 
-				await finalizeRecordingSession(finalPath, webcamPath);
+				// 3. Perform background finalization (muxing, sidecars)
+				// We don't await this to keep the UI responsive
+				void (async () => {
+					try {
+						// Store sidecars
+						await storeMicrophoneSidecar(
+							micFallbackBlobPromise,
+							finalPath,
+							fallbackStartDelayMs,
+							fallbackTrackSettings,
+						);
 
-				console.log(
-					`[PERF:RENDERER] Total Stop Sequence: COMPLETED in ${(performance.now() - stopStart).toFixed(2)}ms`,
-				);
+						// Perform muxing/renaming if on Windows
+						if (isNativeWindows) {
+							await window.electronAPI.muxNativeWindowsRecording(expectedDurationMs);
+						}
+
+						console.log(
+							`[PERF:RENDERER] Background Stop Sequence: COMPLETED in ${(performance.now() - stopStart).toFixed(2)}ms`,
+						);
+					} catch (bgError) {
+						console.error("Error in background finalization:", bgError);
+					}
+				})();
 			})();
 			return;
 		}
