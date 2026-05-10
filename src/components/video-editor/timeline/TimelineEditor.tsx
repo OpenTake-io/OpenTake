@@ -2,21 +2,13 @@ import type { Span } from "dnd-timeline";
 import { Plus } from "@phosphor-icons/react";
 import {
 	forwardRef,
-	type KeyboardEvent as ReactKeyboardEvent,
-	useCallback,
 	useEffect,
 	useMemo,
 	useRef,
 	useState,
 } from "react";
-import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
-import {
-	type AspectRatio,
-} from "@/utils/aspectRatioUtils";
-import { formatShortcut } from "@/utils/platformUtils";
-import { loadEditorPreferences, saveEditorPreferences } from "../editorPreferences";
 import { fromFileUrl } from "../projectPersistence";
 import type {
 	SourceAudioTrackMeta,
@@ -79,14 +71,9 @@ export interface TimelineEditorProps {
 	onAudioDelete?: (id: string) => void;
 	selectedAudioId?: string | null;
 	onSelectAudio?: (id: string | null) => void;
-	aspectRatio?: AspectRatio;
-	onAspectRatioChange?: (aspectRatio: AspectRatio) => void;
-	onOpenCropEditor?: () => void;
-	isCropped?: boolean;
 	videoPath?: string | null;
 	videoSourcePath?: string | null;
 	cursorTelemetrySourcePath?: string | null;
-	hideToolbar?: boolean;
 	showSourceAudioTrack?: boolean;
 	onSourceAudioAvailabilityChange?: (available: boolean) => void;
 	sourceAudioTrackSettings?: SourceAudioTrackSettings;
@@ -171,14 +158,9 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onAudioDelete,
 			selectedAudioId,
 			onSelectAudio,
-			aspectRatio = "native",
-			onAspectRatioChange,
-			onOpenCropEditor,
-			isCropped = false,
 			videoPath,
 			videoSourcePath,
 			cursorTelemetrySourcePath,
-			hideToolbar = false,
 			showSourceAudioTrack = false,
 			onSourceAudioAvailabilityChange,
 			sourceAudioTrackSettings = {},
@@ -188,9 +170,6 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 		ref,
 	) {
 		const t = useScopedT("settings");
-		const tTimeline = useScopedT("timeline");
-		const tEditor = useScopedT("editor");
-		const initialEditorPreferences = useMemo(() => loadEditorPreferences(), []);
 		const totalMs = useMemo(
 			() => Math.max(0, Math.round(videoDuration * 1000)),
 			[videoDuration],
@@ -214,16 +193,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			totalMs,
 			timelineContainerRef,
 		});
-		const [customAspectWidth, setCustomAspectWidth] = useState(
-			initialEditorPreferences.customAspectWidth,
-		);
-		const [customAspectHeight, setCustomAspectHeight] = useState(
-			initialEditorPreferences.customAspectHeight,
-		);
-		const [scrollLabels, setScrollLabels] = useState({
-			pan: "Shift + Ctrl + Scroll",
-			zoom: "Ctrl + Scroll",
-		});
+
 		const [liveSpanPreviewById, setLiveSpanPreviewById] = useState<Record<string, Span>>({});
 		const liveZoomPreview = useMemo(() => {
 			const previewSpans: Record<string, Span> = { ...liveSpanPreviewById };
@@ -341,53 +311,6 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onSourceAudioAvailabilityChange?.(sourceAudioTracks.length > 0);
 		}, [onSourceAudioAvailabilityChange, sourceAudioTracks.length]);
 
-		useEffect(() => {
-			if (aspectRatio === "native") {
-				return;
-			}
-			const [width, height] = aspectRatio.split(":");
-			if (width && height) {
-				setCustomAspectWidth(width);
-				setCustomAspectHeight(height);
-			}
-		}, [aspectRatio]);
-
-		useEffect(() => {
-			saveEditorPreferences({
-				customAspectWidth,
-				customAspectHeight,
-			});
-		}, [customAspectHeight, customAspectWidth]);
-
-		const applyCustomAspectRatio = useCallback(() => {
-			const width = Number.parseInt(customAspectWidth, 10);
-			const height = Number.parseInt(customAspectHeight, 10);
-			if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-				toast.error("Custom aspect ratio must be positive numbers.");
-				return;
-			}
-			onAspectRatioChange?.(`${width}:${height}` as AspectRatio);
-		}, [customAspectHeight, customAspectWidth, onAspectRatioChange]);
-
-		const handleCustomAspectRatioKeyDown = useCallback(
-			(event: ReactKeyboardEvent<HTMLInputElement>) => {
-				// Prevent Radix DropdownMenu typeahead from selecting preset items while typing.
-				event.stopPropagation();
-				if (event.key === "Enter") {
-					event.preventDefault();
-					applyCustomAspectRatio();
-				}
-			},
-			[applyCustomAspectRatio],
-		);
-
-		useEffect(() => {
-			formatShortcut(["shift", "mod", "Scroll"]).then((pan) => {
-				formatShortcut(["mod", "Scroll"]).then((zoom) => {
-					setScrollLabels({ pan, zoom });
-				});
-			});
-		}, []);
 		const {
 			keyframes,
 			selectedKeyframeId,
@@ -407,11 +330,6 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			handleItemSpanChange,
 			canPlaceZoomAtMs,
 			addZoomAtMs,
-			handleAddZoom,
-			handleSuggestZooms,
-			handleSplitClip,
-			handleAddAudio,
-			handleAddAnnotation,
 		} = useTimelineEditorRuntime({
 			ref,
 			videoDuration,

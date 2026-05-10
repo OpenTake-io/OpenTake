@@ -6392,11 +6392,6 @@ export default function VideoEditor() {
 						onAnnotationDelete={handleAnnotationDelete}
 						selectedAnnotationId={selectedAnnotationId}
 						onSelectAnnotation={handleSelectAnnotation}
-						aspectRatio={aspectRatio}
-						onAspectRatioChange={setAspectRatio}
-						onOpenCropEditor={handleOpenCropEditor}
-						isCropped={isCropped}
-						hideToolbar={timelineCollapsed}
 						showSourceAudioTrack={clipRegions.some((c) => c.showSourceAudio)}
 						sourceAudioTrackSettings={audio.activeSourceAudioTrackSettings}
 						getSourceAudioTrackSettingsForClip={
