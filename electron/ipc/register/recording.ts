@@ -20,6 +20,7 @@ import { startNativeCursorMonitor, stopNativeCursorMonitor } from "../cursor/mon
 import {
 	normalizeCursorTelemetrySamples,
 	pauseCursorCaptureAtBoundary,
+	persistPendingCursorTelemetry,
 	resetCursorCaptureClock,
 	resumeCursorCapture,
 	sampleCursorPoint,
@@ -876,6 +877,11 @@ export function registerRecordingHandlers(
 						durationSeconds: validation.durationSeconds,
 					},
 				});
+
+				// Persist cursor telemetry before returning so the editor can find it immediately
+				snapshotCursorTelemetryForPersistence();
+				await persistPendingCursorTelemetry(finalVideoPath);
+
 				return { success: true, path: finalVideoPath };
 			} catch (error) {
 				console.error("Failed to stop native Windows capture:", error);
