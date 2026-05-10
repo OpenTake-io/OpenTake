@@ -24,6 +24,7 @@ import {
 import type { AudioSyncAdjustment } from "../types";
 import { moveFileWithOverwrite } from "../utils";
 import {
+	OPTIMIZE_RECORDING_FINALIZATION,
 	shouldKeepRecordingAudioSidecars,
 	WINDOWS_NATIVE_MIC_PRE_FILTERS,
 } from "./audioFilters";
@@ -193,6 +194,9 @@ export async function extendNativeWindowsVideoToDuration(
 	videoPath: string,
 	targetDurationMs: number | null | undefined,
 ): Promise<NativeWindowsVideoPaddingResult> {
+	const start = Date.now();
+	console.log("[PERF:MAIN] extendNativeWindowsVideoToDuration: STARTED");
+	try {
 	if (!Number.isFinite(targetDurationMs) || (targetDurationMs ?? 0) <= 0) {
 		return {
 			padded: false,
@@ -267,8 +271,13 @@ export async function extendNativeWindowsVideoToDuration(
 			padDurationSeconds,
 		};
 	} catch (error) {
-		await fs.rm(paddedOutputPath, { force: true }).catch(() => undefined);
-		throw error;
+			await fs.rm(paddedOutputPath, { force: true }).catch(() => undefined);
+			throw error;
+		}
+	} finally {
+		console.log(
+			`[PERF:MAIN] extendNativeWindowsVideoToDuration: COMPLETED in ${Date.now() - start}ms`,
+		);
 	}
 }
 
@@ -277,6 +286,9 @@ export async function muxNativeWindowsVideoWithAudio(
 	systemAudioPath: string | null,
 	micAudioPath: string | null,
 ): Promise<NativeWindowsAudioMuxResult> {
+	const start = Date.now();
+	console.log("[PERF:MAIN] muxNativeWindowsVideoWithAudio: STARTED");
+	try {
 	const ffmpegPath = getFfmpegBinaryPath();
 	const keepAudioSidecars = shouldKeepRecordingAudioSidecars();
 	const inputs: string[] = ["-i", videoPath];
@@ -385,6 +397,44 @@ export async function muxNativeWindowsVideoWithAudio(
 		durationDeltaMs: 0,
 	};
 
+	if (OPTIMIZE_RECORDING_FINALIZATION) {
+		console.log("[mux-win] Optimization enabled: skipping heavy muxing, keeping tracks separate.");
+		const videoPathWithoutExt = videoPath.replace(/\.[^.]+$/u, "");
+
+		// Move audio sidecars to final companion paths if they exist
+		if (systemAudioPath) {
+			const finalSystemPath = `${videoPathWithoutExt}.system.wav`;
+			if (systemAudioPath !== finalSystemPath) {
+				try {
+					await moveFileWithOverwrite(systemAudioPath, finalSystemPath);
+					if (audio.system) audio.system.path = finalSystemPath;
+				} catch (err) {
+					console.error(`[mux-win] Failed to move system audio to ${finalSystemPath}:`, err);
+				}
+			}
+		}
+		if (micAudioPath) {
+			const finalMicPath = `${videoPathWithoutExt}.mic.wav`;
+			if (micAudioPath !== finalMicPath) {
+				try {
+					await moveFileWithOverwrite(micAudioPath, finalMicPath);
+					if (audio.mic) audio.mic.path = finalMicPath;
+				} catch (err) {
+					console.error(`[mux-win] Failed to move mic audio to ${finalMicPath}:`, err);
+				}
+			}
+		}
+
+		return {
+			muxed: false,
+			videoDurationSeconds: videoDuration,
+			muxTimeoutMs,
+			audioInputs,
+			audio,
+			keptAudioSidecars: true,
+		};
+	}
+
 	try {
 		if (audioInputs.length === 2) {
 			const filterParts: string[] = [];
@@ -469,17 +519,22 @@ export async function muxNativeWindowsVideoWithAudio(
 		await validateRecordedVideo(mixedOutputPath);
 		await moveFileWithOverwrite(mixedOutputPath, videoPath);
 	} catch (error) {
-		await fs.rm(mixedOutputPath, { force: true }).catch(() => undefined);
-		throw error;
-	}
+			await fs.rm(mixedOutputPath, { force: true }).catch(() => undefined);
+			throw error;
+		}
 
-	return {
-		muxed: true,
-		videoDurationSeconds: videoDuration,
-		muxTimeoutMs,
-		audioInputs,
-		audio,
-		outputPath: videoPath,
-		keptAudioSidecars: true,
-	};
+		return {
+			muxed: true,
+			videoDurationSeconds: videoDuration,
+			muxTimeoutMs,
+			audioInputs,
+			audio,
+			outputPath: videoPath,
+			keptAudioSidecars: true,
+		};
+	} finally {
+		console.log(
+			`[PERF:MAIN] muxNativeWindowsVideoWithAudio: COMPLETED in ${Date.now() - start}ms`,
+		);
+	}
 }

@@ -38,3 +38,10 @@ export function shouldKeepRecordingAudioSidecars(env: NodeJS.ProcessEnv = proces
 	const value = env[RECORDING_AUDIO_SIDECAR_DEBUG_ENV]?.trim().toLowerCase();
 	return value === "1" || value === "true" || value === "yes" || value === "on";
 }
+
+/**
+ * Toggle for the recording finalization optimizations.
+ * - true: Fast probe (no -count_frames), separate audio tracks (no muxing).
+ * - false: slow probe (full decode), combined audio/video (heavy muxing).
+ */
+export const OPTIMIZE_RECORDING_FINALIZATION = true;

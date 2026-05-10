@@ -29,6 +29,7 @@ import {
 } from "../state";
 import type { AudioSyncAdjustment } from "../types";
 import { isAutoRecordingPath, moveFileWithOverwrite } from "../utils";
+import { OPTIMIZE_RECORDING_FINALIZATION } from "./audioFilters";
 import {
 	getFileSizeIfPresent,
 	getRecordingAudioMuxTimeoutMs,
@@ -318,7 +319,7 @@ export function attachNativeCaptureLifecycle(process: ChildProcessWithoutNullStr
 
 export async function finalizeStoredVideo(videoPath: string) {
 	// Safety net: if companion audio files still exist, the mux was skipped — attempt it now
-	if (videoPath.endsWith(".mp4")) {
+	if (!OPTIMIZE_RECORDING_FINALIZATION && videoPath.endsWith(".mp4")) {
 		const companionCandidates = await getUsableCompanionAudioCandidates(videoPath);
 		for (const { systemPath, micPath, platform } of companionCandidates) {
 			if (platform === "mac" || platform === "win") {

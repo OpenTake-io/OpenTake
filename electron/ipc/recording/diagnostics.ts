@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import { promisify } from "node:util";
 import { COMPANION_AUDIO_LAYOUTS } from "../constants";
+import { OPTIMIZE_RECORDING_FINALIZATION } from "./audioFilters";
 import { getFfmpegBinaryPath, getFfprobeBinaryPath } from "../ffmpeg/binary";
 import { lastNativeCaptureDiagnostics, setLastNativeCaptureDiagnostics } from "../state";
 import type { CompanionAudioCandidate, NativeCaptureDiagnostics } from "../types";
@@ -190,6 +191,7 @@ export function summarizeMicrophoneChunkTiming(
 
 /** Probe the duration of a media file (in seconds) using the container header. */
 export async function probeMediaDurationSeconds(filePath: string): Promise<number> {
+	const start = Date.now();
 	const ffmpegPath = getFfmpegBinaryPath();
 	try {
 		await execFileAsync(ffmpegPath, ["-i", filePath, "-hide_banner"], { timeout: 5000 });
@@ -199,6 +201,10 @@ export async function probeMediaDurationSeconds(filePath: string): Promise<numbe
 		if (duration !== null) {
 			return duration;
 		}
+	} finally {
+		console.log(
+			`[PERF:MAIN] probeMediaDurationSeconds: COMPLETED in ${Date.now() - start}ms`,
+		);
 	}
 	return 0;
 }
@@ -265,6 +271,7 @@ export function parseFfprobeVideoStreamDuration(output: string): VideoStreamDura
 export async function probeVideoStreamDuration(
 	filePath: string,
 ): Promise<VideoStreamDurationProbe | null> {
+	const start = Date.now();
 	try {
 		const result = await execFileAsync(
 			getFfprobeBinaryPath(),
@@ -273,7 +280,7 @@ export async function probeVideoStreamDuration(
 				"error",
 				"-select_streams",
 				"v:0",
-				"-count_frames",
+				...(OPTIMIZE_RECORDING_FINALIZATION ? [] : ["-count_frames"]),
 				"-show_entries",
 				"stream=duration,nb_frames,nb_read_frames,avg_frame_rate,r_frame_rate",
 				"-of",
@@ -286,6 +293,10 @@ export async function probeVideoStreamDuration(
 		return parseFfprobeVideoStreamDuration(stdout);
 	} catch {
 		return null;
+	} finally {
+		console.log(
+			`[PERF:MAIN] probeVideoStreamDuration: COMPLETED in ${Date.now() - start}ms`,
+		);
 	}
 }
 
