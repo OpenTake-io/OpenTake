@@ -40,7 +40,6 @@ import { calculateTimelineScale } from "./core/time";
 import { useTimelineEditorRuntime } from "./hooks/useTimelineEditorRuntime";
 import { useTimelineRange } from "./hooks/useTimelineRange";
 import TimelineCanvas from "./components/viewport/TimelineCanvas";
-import TimelineToolbar from "./components/toolbar/TimelineToolbar";
 
 export interface TimelineEditorProps {
 	videoDuration: number;
@@ -85,6 +84,8 @@ export interface TimelineEditorProps {
 	onOpenCropEditor?: () => void;
 	isCropped?: boolean;
 	videoPath?: string | null;
+	videoSourcePath?: string | null;
+	cursorTelemetrySourcePath?: string | null;
 	hideToolbar?: boolean;
 	showSourceAudioTrack?: boolean;
 	onSourceAudioAvailabilityChange?: (available: boolean) => void;
@@ -175,6 +176,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onOpenCropEditor,
 			isCropped = false,
 			videoPath,
+			videoSourcePath,
+			cursorTelemetrySourcePath,
 			hideToolbar = false,
 			showSourceAudioTrack = false,
 			onSourceAudioAvailabilityChange,
@@ -272,7 +275,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			return { previewSpans, hiddenZoomIds };
 		}, [clipRegions, liveSpanPreviewById, zoomRegions]);
 		const { shortcuts: keyShortcuts, isMac } = useShortcuts();
-		const sourceAudioPeaks = useTimelineAudioPeaks(videoPath, {
+		const { peaks: sourceAudioPeaks, loading: sourceAudioLoading } = useTimelineAudioPeaks(videoPath, {
 			enableSourceSidecarFallback: true,
 		});
 		const localSourcePath = useMemo(() => {
@@ -290,8 +293,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			() => (localSourcePath ? buildSourceSidecarPath(localSourcePath, "system") : null),
 			[localSourcePath],
 		);
-		const micSidecarPeaks = useTimelineAudioPeaks(micSidecarPath);
-		const systemSidecarPeaks = useTimelineAudioPeaks(systemSidecarPath);
+		const { peaks: micSidecarPeaks, loading: micSidecarLoading } = useTimelineAudioPeaks(micSidecarPath);
+		const { peaks: systemSidecarPeaks, loading: systemSidecarLoading } = useTimelineAudioPeaks(systemSidecarPath);
 		const sourceAudioTracks = useMemo<SourceAudioTrackWithPeaks[]>(() => {
 			if (systemSidecarPeaks || micSidecarPeaks) {
 				const tracks: SourceAudioTrackWithPeaks[] = [];
@@ -319,6 +322,17 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 					]
 				: [];
 		}, [micSidecarPeaks, sourceAudioPeaks, systemSidecarPeaks, t]);
+
+		const isLoading = useMemo(() => {
+			// If we are still actively trying to load audio peaks (main or sidecars)
+			if (videoPath && (sourceAudioLoading || micSidecarLoading || systemSidecarLoading)) return true;
+
+			// Robust telemetry loading detection:
+			// If a source path is set but telemetry hasn't arrived (or failed/retried) for it yet.
+			if (videoSourcePath && cursorTelemetrySourcePath !== videoSourcePath) return true;
+
+			return false;
+		}, [videoPath, videoSourcePath, cursorTelemetrySourcePath, sourceAudioLoading, micSidecarLoading, systemSidecarLoading]);
 		useEffect(() => {
 			onSourceAudioTracksMetaChange?.(sourceAudioTracks.map((t) => ({ id: t.id, label: t.label })));
 		}, [onSourceAudioTracksMetaChange, sourceAudioTracks]);
@@ -441,12 +455,6 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			keyShortcuts,
 			isTimelineFocusedRef,
 		});
-		const handleToolbarAddAnnotation = useCallback(() => {
-			handleAddAnnotation();
-		}, [handleAddAnnotation]);
-		const handleToolbarAddAudio = useCallback(() => {
-			void handleAddAudio();
-		}, [handleAddAudio]);
 
 		if (!videoDuration || videoDuration === 0) {
 			return (
@@ -466,32 +474,6 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 
 		return (
 			<div className="flex-1 min-h-0 flex flex-col bg-editor-bg overflow-hidden">
-				{hideToolbar ? null : (
-					<TimelineToolbar
-						aspectRatio={aspectRatio}
-						isCropped={isCropped}
-						scrollLabels={scrollLabels}
-						customAspectWidth={customAspectWidth}
-						customAspectHeight={customAspectHeight}
-						onCustomAspectWidthChange={setCustomAspectWidth}
-						onCustomAspectHeightChange={setCustomAspectHeight}
-						onCustomAspectRatioKeyDown={handleCustomAspectRatioKeyDown}
-						onApplyCustomAspectRatio={applyCustomAspectRatio}
-						onAspectRatioChange={onAspectRatioChange}
-						onOpenCropEditor={onOpenCropEditor}
-						onAddZoom={handleAddZoom}
-						onSuggestZooms={handleSuggestZooms}
-						onAddAnnotation={handleToolbarAddAnnotation}
-						onAddAudio={handleToolbarAddAudio}
-						onSplitClip={handleSplitClip}
-						cropLabel={t("sections.crop", "Crop")}
-						addZoomLabel={tTimeline("zoom.addZoom", "Add Zoom (Z)")}
-						suggestZoomsLabel={tTimeline("zoom.suggestZooms", "Suggest Zooms from Cursor")}
-						addAnnotationLabel={tTimeline("annotation.addAnnotation", "Add Annotation (A)")}
-						addAudioLabel={tTimeline("audio.label", "Audio")}
-						splitClipLabel={tEditor("toolbar.splitClip", "Split Clip (C)")}
-					/>
-				)}
 				<div
 					ref={timelineContainerRef}
 					className="flex-1 min-h-0 overflow-auto bg-editor-bg relative"
@@ -573,6 +555,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							showSourceAudioTrack={showSourceAudioTrack}
 							liveSpanPreviewById={liveZoomPreview.previewSpans}
 							liveHiddenItemIds={Array.from(liveZoomPreview.hiddenZoomIds)}
+							isLoading={isLoading}
 						/>
 					</TimelineWrapper>
 				</div>

@@ -12,6 +12,7 @@ import type { Span } from "dnd-timeline";
 import { useItem } from "dnd-timeline";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import AudioWaveform from "./components/waveform/AudioWaveform";
 import type { AudioPeaksData } from "./core/timelineTypes";
 import glassStyles from "./ItemGlass.module.css";
@@ -34,6 +35,8 @@ interface ItemProps {
 	waveformNormalize?: boolean;
 	muted?: boolean;
 	variant?: "zoom" | "trim" | "clip" | "annotation" | "speed" | "audio";
+	isLoading?: boolean;
+	loadingLabel?: string;
 }
 
 // Map zoom depth to multiplier labels
@@ -73,14 +76,45 @@ export default function Item({
 	waveformNormalize = false,
 	muted = false,
 	variant = "zoom",
+	isLoading = false,
+	loadingLabel,
 	children,
 }: ItemProps) {
 	const { setNodeRef, attributes, listeners, itemStyle, itemContentStyle } = useItem({
 		id,
 		span,
-		disabled,
+		disabled: disabled || isLoading,
 		data: { rowId },
 	});
+
+	const timeLabel = useMemo(
+		() => `${formatMs(span.start)} – ${formatMs(span.end)}`,
+		[span.start, span.end],
+	);
+
+	if (isLoading) {
+		return (
+			<div
+				ref={setNodeRef}
+				style={{
+					...itemStyle,
+					height: "100%",
+					display: "flex",
+					alignItems: "center",
+				}}
+				{...listeners}
+				{...attributes}
+			>
+				<Skeleton
+					variant="clip"
+					animation="shimmer-premium"
+					label={loadingLabel || "Loading..."}
+					className="w-full"
+					style={{ height: "85%", minHeight: 22 }}
+				/>
+			</div>
+		);
+	}
 
 	const isZoom = variant === "zoom";
 	const isTrim = variant === "trim";
@@ -100,11 +134,6 @@ export default function Item({
 					: isAudio
 						? glassStyles.glassDarkGreen
 						: glassStyles.glassYellow;
-
-	const timeLabel = useMemo(
-		() => `${formatMs(span.start)} – ${formatMs(span.end)}`,
-		[span.start, span.end],
-	);
 
 	const MIN_ITEM_PX = 6;
 	const handleSelect = () => {
