@@ -1488,21 +1488,131 @@ export class AudioProcessor {
 				const source = ctx.createBufferSource();
 				const gainNode = ctx.createGain();
 				gainNode.gain.value = Math.max(0, Math.min(2, gain));
-				source.buffer = buffer;
-				source.playbackRate.value = slice.speed;
-				source.connect(gainNode);
-				gainNode.connect(ctx.destination);
 
 				const sourceOffsetSec =
 					effectiveBufferStartSec +
 					(audibleRange.startSec - (localOutputStartSec + chunkOutputStartSec)) * slice.speed;
 				const localStartSec = audibleRange.startSec - chunkOutputStartSec;
 				const sourceDurationSec = audibleDurationSec * slice.speed;
-				source.start(localStartSec, sourceOffsetSec, sourceDurationSec);
+
+				const stretchedBuffer = this.stretchAudioBuffer(
+					buffer,
+					slice.speed,
+					sourceOffsetSec,
+					sourceDurationSec,
+					audibleDurationSec,
+					ctx,
+				);
+
+				source.buffer = stretchedBuffer;
+				source.playbackRate.value = 1;
+				source.connect(gainNode);
+				gainNode.connect(ctx.destination);
+
+				source.start(localStartSec);
 			}
 
 			outputOffsetSec += sliceOutputDurationSec;
 		}
+	}
+
+	private stretchAudioBuffer(
+		originalBuffer: AudioBuffer,
+		speed: number,
+		sourceOffsetSec: number,
+		sourceDurationSec: number,
+		audibleDurationSec: number,
+		ctx: BaseAudioContext,
+	): AudioBuffer {
+		const sampleRate = originalBuffer.sampleRate;
+		const channels = originalBuffer.numberOfChannels;
+
+		const startSample = Math.max(0, Math.floor(sourceOffsetSec * sampleRate));
+		const sourceSamples = Math.floor(sourceDurationSec * sampleRate);
+		const endSample = Math.min(originalBuffer.length, startSample + sourceSamples);
+
+		const outSamples = Math.floor(audibleDurationSec * sampleRate);
+		if (outSamples <= 0 || startSample >= originalBuffer.length) {
+			return ctx.createBuffer(channels, 1, sampleRate);
+		}
+
+		const outBuffer = ctx.createBuffer(channels, outSamples, sampleRate);
+
+		if (Math.abs(speed - 1) < 0.001) {
+			const copyLength = Math.min(endSample - startSample, outSamples);
+			if (copyLength > 0) {
+				for (let c = 0; c < channels; c++) {
+					outBuffer.copyToChannel(
+						originalBuffer.getChannelData(c).subarray(startSample, startSample + copyLength),
+						c,
+					);
+				}
+			}
+			return outBuffer;
+		}
+
+		const windowSize = Math.floor(sampleRate * 0.04);
+		const hopOut = Math.floor(windowSize * 0.5);
+		const hopIn = Math.floor(hopOut * speed);
+		const searchRange = Math.floor(sampleRate * 0.015);
+
+		const window = new Float32Array(windowSize);
+		for (let i = 0; i < windowSize; i++) {
+			window[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (windowSize - 1)));
+		}
+
+		for (let c = 0; c < channels; c++) {
+			const inData = originalBuffer.getChannelData(c);
+			const outData = outBuffer.getChannelData(c);
+
+			let inOffset = startSample;
+			let outOffset = 0;
+
+			for (let i = 0; i < windowSize; i++) {
+				if (inOffset + i < endSample && outOffset + i < outSamples) {
+					outData[outOffset + i] += inData[inOffset + i] * window[i];
+				}
+			}
+
+			outOffset += hopOut;
+			inOffset += hopIn;
+
+			while (outOffset + windowSize < outSamples && inOffset < endSample) {
+				let bestOffset = inOffset;
+				const minSearch = Math.max(startSample, inOffset - searchRange);
+				const maxSearch = Math.min(endSample - windowSize, inOffset + searchRange);
+
+				if (maxSearch > minSearch) {
+					let maxCorr = -Infinity;
+					let bestDelta = 0;
+
+					for (let testOffset = minSearch; testOffset <= maxSearch; testOffset += 4) {
+						let corr = 0;
+						for (let i = 0; i < hopOut; i += 4) {
+							if (outOffset + i < outSamples && testOffset + i < endSample) {
+								corr += outData[outOffset + i] * inData[testOffset + i];
+							}
+						}
+						if (corr > maxCorr) {
+							maxCorr = corr;
+							bestDelta = testOffset - inOffset;
+						}
+					}
+					bestOffset = inOffset + bestDelta;
+				}
+
+				for (let i = 0; i < windowSize; i++) {
+					if (bestOffset + i < endSample && outOffset + i < outSamples) {
+						outData[outOffset + i] += inData[bestOffset + i] * window[i];
+					}
+				}
+
+				outOffset += hopOut;
+				inOffset += hopIn;
+			}
+		}
+
+		return outBuffer;
 	}
 
 	// Create a WAV file header for the given audio parameters.
