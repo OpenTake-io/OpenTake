@@ -224,7 +224,11 @@ export async function finalizeStoredVideo(videoPath: string) {
 	snapshotCursorTelemetryForPersistence();
 	setCurrentVideoPath(videoPath);
 	setCurrentProjectPath(null);
-	await persistPendingCursorTelemetry(videoPath);
+	try {
+		await persistPendingCursorTelemetry(videoPath);
+	} catch (error) {
+		console.warn("[mac-stop] Failed to persist cursor telemetry:", error);
+	}
 	if (isAutoRecordingPath(videoPath)) {
 		await pruneAutoRecordings([videoPath]);
 	}

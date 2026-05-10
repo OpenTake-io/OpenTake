@@ -188,7 +188,9 @@ export async function muxNativeWindowsVideoWithAudio(
 		try {
 			const stat = await fs.stat(systemAudioPath);
 			if (stat.size > 0) {
-				await moveFileWithOverwrite(systemAudioPath, finalSystemPath);
+				if (systemAudioPath !== finalSystemPath) {
+					await moveFileWithOverwrite(systemAudioPath, finalSystemPath);
+				}
 				audioInputs.push("system");
 				audio.system = {
 					path: finalSystemPath,
@@ -208,7 +210,9 @@ export async function muxNativeWindowsVideoWithAudio(
 		try {
 			const stat = await fs.stat(micAudioPath);
 			if (stat.size > 0) {
-				await moveFileWithOverwrite(micAudioPath, finalMicPath);
+				if (micAudioPath !== finalMicPath) {
+					await moveFileWithOverwrite(micAudioPath, finalMicPath);
+				}
 				audioInputs.push("mic");
 				audio.mic = {
 					path: finalMicPath,
