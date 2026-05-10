@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import { promisify } from "node:util";
 import { COMPANION_AUDIO_LAYOUTS } from "../constants";
-import { OPTIMIZE_RECORDING_FINALIZATION } from "./audioFilters";
 import { getFfmpegBinaryPath, getFfprobeBinaryPath } from "../ffmpeg/binary";
 import { lastNativeCaptureDiagnostics, setLastNativeCaptureDiagnostics } from "../state";
 import type { CompanionAudioCandidate, NativeCaptureDiagnostics } from "../types";
@@ -280,7 +279,6 @@ export async function probeVideoStreamDuration(
 				"error",
 				"-select_streams",
 				"v:0",
-				...(OPTIMIZE_RECORDING_FINALIZATION ? [] : ["-count_frames"]),
 				"-show_entries",
 				"stream=duration,nb_frames,nb_read_frames,avg_frame_rate,r_frame_rate",
 				"-of",
