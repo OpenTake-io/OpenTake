@@ -41,7 +41,6 @@ import {
 import { rememberApprovedLocalReadPath } from "../project/manager";
 import {
 	getBrowserMicSidecarFilters,
-	OPTIMIZE_RECORDING_FINALIZATION,
 	shouldKeepRecordingAudioSidecars,
 } from "../recording/audioFilters";
 import {
@@ -70,7 +69,6 @@ import {
 } from "../recording/mac";
 import {
 	attachWindowsCaptureLifecycle,
-	extendNativeWindowsVideoToDuration,
 	isNativeWindowsCaptureAvailable,
 	muxNativeWindowsVideoWithAudio,
 	waitForWindowsCaptureStart,
@@ -1300,35 +1298,7 @@ export function registerRecordingHandlers(
 						hasOrphanedMicrophone: Boolean(orphanedMicAudioPath),
 					},
 				});
-				if (!OPTIMIZE_RECORDING_FINALIZATION && expectedDurationMs) {
-					try {
-						const padding = await extendNativeWindowsVideoToDuration(
-							videoPath,
-							expectedDurationMs,
-						);
-						await writeWindowsRecordingDiagnostics(videoPath, {
-							phase: "pad",
-							expectedDurationMs,
-							outputPath: videoPath,
-							systemAudioPath: diagnosticsSystemAudioPath,
-							microphonePath: diagnosticsMicAudioPath,
-							details: { ...padding },
-						});
-					} catch (paddingError) {
-						console.warn(
-							"[mux-win] Failed to extend native Windows video duration:",
-							paddingError,
-						);
-						await writeWindowsRecordingDiagnostics(videoPath, {
-							phase: "pad",
-							expectedDurationMs,
-							outputPath: videoPath,
-							systemAudioPath: diagnosticsSystemAudioPath,
-							microphonePath: diagnosticsMicAudioPath,
-							error: String(paddingError),
-						});
-					}
-				}
+				console.log("[mux-win] Optimization active: skipping video padding.");
 
 				let muxDetails: unknown = null;
 				if (diagnosticsSystemAudioPath || diagnosticsMicAudioPath) {
