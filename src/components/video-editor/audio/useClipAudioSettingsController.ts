@@ -63,7 +63,7 @@ export function useClipAudioSettingsController({
 			normalize: false,
 		};
 		const normalizeGain = settings.normalize ? SOURCE_AUDIO_NORMALIZE_GAIN : 1;
-		return Math.max(0, Math.min(2, settings.volume * normalizeGain));
+		return Math.max(0, Math.min(1, settings.volume * normalizeGain));
 	}, [embeddedTrackId, previewSourceAudioTrackSettings]);
 
 	const getSourceTrackPreviewGain = useCallback(
@@ -74,7 +74,7 @@ export function useClipAudioSettingsController({
 				normalize: false,
 			};
 			const normalizeGain = settings.normalize ? SOURCE_AUDIO_NORMALIZE_GAIN : 1;
-			return Math.max(0, Math.min(2, settings.volume * normalizeGain));
+			return Math.max(0, Math.min(1, settings.volume * normalizeGain));
 		},
 		[previewSourceAudioTrackSettings],
 	);

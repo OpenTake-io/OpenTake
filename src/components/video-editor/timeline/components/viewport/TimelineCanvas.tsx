@@ -278,7 +278,7 @@ function AudioItemWithWaveform({
 				variant="audio"
 				waveformPeaks={peaks}
 				waveformSegmentSpan={normalizedWaveformSpan}
-				waveformGain={Math.max(0, Math.min(2, item.audioGain ?? 1))}
+				waveformGain={Math.max(0, Math.min(1, item.audioGain ?? 1))}
 				waveformNormalize={Boolean(item.audioNormalize)}
 			>
 			{item.label}
@@ -405,7 +405,7 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 									variant="audio"
 									waveformPeaks={track.peaks}
 									waveformSegmentSpan={item.sourceSpan ?? item.span}
-									waveformGain={Math.max(0, Math.min(2, settings.volume))}
+									waveformGain={Math.max(0, Math.min(1, settings.volume))}
 									waveformNormalize={Boolean(settings.normalize)}
 									muted={item.muted}
 								>
