@@ -104,6 +104,9 @@ export default function Item({
 				}}
 				{...listeners}
 				{...attributes}
+				data-timeline-item="true"
+				onMouseDownCapture={(event) => event.stopPropagation()}
+				onClickCapture={(event) => event.stopPropagation()}
 			>
 				<Skeleton
 					variant="clip"
