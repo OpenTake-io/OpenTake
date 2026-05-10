@@ -2,6 +2,8 @@ import WorkerConstructor from "./waveform.worker?worker";
 import type { AudioPeaksData } from "../../timeline/core/timelineTypes";
 import { WAVEFORM_DEFAULT_PEAK_COUNT } from "../../timeline/core/constants";
 
+const MAX_WAVEFORM_PEAKS = 200_000;
+
 export class WaveformGenerator {
 	private audioContext: AudioContext;
 	private worker: Worker;
@@ -78,13 +80,14 @@ export class WaveformGenerator {
 				peakCount,
 				Math.floor(decoded.duration * 500)
 			);
+			const boundedPeakCount = Math.min(adaptivePeakCount, MAX_WAVEFORM_PEAKS);
 			const channels: Float32Array[] = [];
 			for (let i = 0; i < decoded.numberOfChannels; i++) {
 				// We slice to transfer the underlying buffer to the worker
 				channels.push(decoded.getChannelData(i).slice());
 			}
 			
-			const peaks = await this.computePeaksWithWorker(channels, adaptivePeakCount);
+			const peaks = await this.computePeaksWithWorker(channels, boundedPeakCount);
 
 			// Robust Normalization: Use 99.5th percentile to avoid being squashed by a single loud spike/pop
 			let max = 0;
