@@ -620,6 +620,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 	const finalizeRecordingSession = useCallback(
 		async (videoPath: string, webcamPath: string | null) => {
+			const start = performance.now();
+			console.log("[PERF:RENDERER] Finalize Session & Switch to Editor: STARTED");
 			const shouldHideOverlayCursor = hideEditorOverlayCursorByDefault.current;
 			try {
 				if (webcamPath) {
@@ -648,6 +650,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			setFinalizing(false);
 			await window.electronAPI.switchToEditor();
+			console.log(
+				`[PERF:RENDERER] Finalize Session & Switch to Editor: COMPLETED in ${(performance.now() - start).toFixed(2)}ms`,
+			);
 		},
 		[],
 	);
@@ -1004,6 +1009,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setFinalizing(true);
 
 			void (async () => {
+				const stopStart = performance.now();
+				console.log("[PERF:RENDERER] Total Stop Sequence: STARTED");
+
 				const fallbackStartDelayMs = micFallbackStartDelayMs.current;
 				const fallbackTrackSettings = micFallbackTrackSettings.current;
 				const stoppedAtMs = Date.now();
@@ -1014,7 +1022,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				const isNativeWindows = nativeWindowsRecording.current;
 				nativeWindowsRecording.current = false;
 
+				const ipcStopStart = performance.now();
+				console.log("[PERF:RENDERER] IPC: stopNativeScreenRecording: STARTED");
 				const result = await window.electronAPI.stopNativeScreenRecording();
+				console.log(
+					`[PERF:RENDERER] IPC: stopNativeScreenRecording: COMPLETED in ${(performance.now() - ipcStopStart).toFixed(2)}ms`,
+				);
+
 				await window.electronAPI?.setRecordingState(false);
 				const webcamPath = await webcamPathPromise;
 
@@ -1030,6 +1044,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 							fallbackStartDelayMs,
 						);
 						if (recoveredPath) {
+							console.log(
+								`[PERF:RENDERER] Total Stop Sequence (RECOVERED) in ${(performance.now() - stopStart).toFixed(2)}ms`,
+							);
 							return;
 						}
 					} catch (recoveryError) {
@@ -1049,8 +1066,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				let finalPath = result.path;
 
 				if (isNativeWindows) {
+					const ipcMuxStart = performance.now();
+					console.log("[PERF:RENDERER] IPC: muxNativeWindowsRecording: STARTED");
 					const muxResult =
 						await window.electronAPI.muxNativeWindowsRecording(expectedDurationMs);
+					console.log(
+						`[PERF:RENDERER] IPC: muxNativeWindowsRecording: COMPLETED in ${(performance.now() - ipcMuxStart).toFixed(2)}ms`,
+					);
+
 					if (!muxResult?.success || !muxResult.path) {
 						void logNativeCaptureDiagnostics("mux-native-windows-recording");
 						const fallbackPath = muxResult?.path ?? finalPath;
@@ -1068,14 +1091,23 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					}
 				}
 
+				const sidecarStart = performance.now();
+				console.log("[PERF:RENDERER] Store Sidecar: STARTED");
 				await storeMicrophoneSidecar(
 					micFallbackBlobPromise,
 					finalPath,
 					fallbackStartDelayMs,
 					fallbackTrackSettings,
 				);
+				console.log(
+					`[PERF:RENDERER] Store Sidecar: COMPLETED in ${(performance.now() - sidecarStart).toFixed(2)}ms`,
+				);
 
 				await finalizeRecordingSession(finalPath, webcamPath);
+
+				console.log(
+					`[PERF:RENDERER] Total Stop Sequence: COMPLETED in ${(performance.now() - stopStart).toFixed(2)}ms`,
+				);
 			})();
 			return;
 		}
