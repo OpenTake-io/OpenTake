@@ -1551,64 +1551,97 @@ export class AudioProcessor {
 			return outBuffer;
 		}
 
+		// WSOLA uses windowing which causes fade-in at the start and fade-out at the end.
+		// To avoid clicks at chunk boundaries, we render with 100ms of padding and trim it.
+		const paddingSec = 0.1;
+		const paddingOutSamples = Math.floor(sampleRate * paddingSec);
+		const paddingInSamples = Math.floor(paddingOutSamples * speed);
+
+		const workStartIn = Math.max(0, startSample - paddingInSamples);
+		const workEndIn = Math.min(originalBuffer.length, endSample + paddingInSamples);
+		
+		const actualPaddingInStart = startSample - workStartIn;
+		// We expect the output offset for the requested start to be roughly:
+		const actualPaddingOutStart = Math.floor(actualPaddingInStart / speed);
+
 		const windowSize = Math.floor(sampleRate * 0.04);
 		const hopOut = Math.floor(windowSize * 0.5);
 		const hopIn = Math.floor(hopOut * speed);
 		const searchRange = Math.floor(sampleRate * 0.015);
+
+		const workOutSamples = Math.floor((workEndIn - workStartIn) / speed) + windowSize * 2;
+		const workOutBuffer = ctx.createBuffer(channels, workOutSamples, sampleRate);
+
+		const inDataByChannel = Array.from({ length: channels }, (_, c) => originalBuffer.getChannelData(c));
+		const workOutDataByChannel = Array.from({ length: channels }, (_, c) => workOutBuffer.getChannelData(c));
 
 		const window = new Float32Array(windowSize);
 		for (let i = 0; i < windowSize; i++) {
 			window[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (windowSize - 1)));
 		}
 
-		for (let c = 0; c < channels; c++) {
-			const inData = originalBuffer.getChannelData(c);
-			const outData = outBuffer.getChannelData(c);
+		let inOffset = workStartIn;
+		let outOffset = 0;
 
-			let inOffset = startSample;
-			let outOffset = 0;
+		// Initial window
+		for (let i = 0; i < windowSize; i++) {
+			if (inOffset + i < workEndIn && outOffset + i < workOutSamples) {
+				for (let c = 0; c < channels; c++) {
+					workOutDataByChannel[c][outOffset + i] += inDataByChannel[c][inOffset + i] * window[i];
+				}
+			}
+		}
+
+		outOffset += hopOut;
+		inOffset += hopIn;
+
+		while (outOffset + windowSize < workOutSamples && inOffset + windowSize < workEndIn) {
+			let bestOffset = inOffset;
+			const minSearch = Math.max(workStartIn, inOffset - searchRange);
+			const maxSearch = Math.min(workEndIn - windowSize, inOffset + searchRange);
+
+			if (maxSearch > minSearch) {
+				let maxCorr = -Infinity;
+				let bestDelta = 0;
+
+				for (let testOffset = minSearch; testOffset <= maxSearch; testOffset += 4) {
+					let corr = 0;
+					for (let i = 0; i < hopOut; i += 4) {
+						if (outOffset + i < workOutSamples && testOffset + i < workEndIn) {
+							for (let c = 0; c < channels; c++) {
+								corr += workOutDataByChannel[c][outOffset + i] * inDataByChannel[c][testOffset + i];
+							}
+						}
+					}
+					if (corr > maxCorr) {
+						maxCorr = corr;
+						bestDelta = testOffset - inOffset;
+					}
+				}
+				bestOffset = inOffset + bestDelta;
+			}
 
 			for (let i = 0; i < windowSize; i++) {
-				if (inOffset + i < endSample && outOffset + i < outSamples) {
-					outData[outOffset + i] += inData[inOffset + i] * window[i];
+				if (bestOffset + i < workEndIn && outOffset + i < workOutSamples) {
+					for (let c = 0; c < channels; c++) {
+						workOutDataByChannel[c][outOffset + i] += inDataByChannel[c][bestOffset + i] * window[i];
+					}
 				}
 			}
 
 			outOffset += hopOut;
 			inOffset += hopIn;
+		}
 
-			while (outOffset + windowSize < outSamples && inOffset < endSample) {
-				let bestOffset = inOffset;
-				const minSearch = Math.max(startSample, inOffset - searchRange);
-				const maxSearch = Math.min(endSample - windowSize, inOffset + searchRange);
-
-				if (maxSearch > minSearch) {
-					let maxCorr = -Infinity;
-					let bestDelta = 0;
-
-					for (let testOffset = minSearch; testOffset <= maxSearch; testOffset += 4) {
-						let corr = 0;
-						for (let i = 0; i < hopOut; i += 4) {
-							if (outOffset + i < outSamples && testOffset + i < endSample) {
-								corr += outData[outOffset + i] * inData[testOffset + i];
-							}
-						}
-						if (corr > maxCorr) {
-							maxCorr = corr;
-							bestDelta = testOffset - inOffset;
-						}
-					}
-					bestOffset = inOffset + bestDelta;
+		// Transfer the stable middle portion to the final buffer
+		for (let c = 0; c < channels; c++) {
+			const finalData = outBuffer.getChannelData(c);
+			const tempData = workOutBuffer.getChannelData(c);
+			for (let i = 0; i < outSamples; i++) {
+				const srcIdx = actualPaddingOutStart + i;
+				if (srcIdx < workOutSamples) {
+					finalData[i] = tempData[srcIdx];
 				}
-
-				for (let i = 0; i < windowSize; i++) {
-					if (bestOffset + i < endSample && outOffset + i < outSamples) {
-						outData[outOffset + i] += inData[bestOffset + i] * window[i];
-					}
-				}
-
-				outOffset += hopOut;
-				inOffset += hopIn;
 			}
 		}
 
