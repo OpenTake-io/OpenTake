@@ -1029,7 +1029,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				);
 
 				await window.electronAPI?.setRecordingState(false);
-				const webcamPath = await webcamPathPromise;
 
 				if (!result.success || !result.path) {
 					console.error(
@@ -1064,29 +1063,28 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 				const finalPath = result.path;
 
-				// 1. Immediately inform the Main process about the provisional path
-				const shouldHideOverlayCursor = hideEditorOverlayCursorByDefault.current;
-				if (webcamPath) {
-					await window.electronAPI.setCurrentRecordingSession({
-						videoPath: finalPath,
-						webcamPath,
-						timeOffsetMs: webcamTimeOffsetMs.current,
-						hideOverlayCursorByDefault: shouldHideOverlayCursor,
-					});
-				} else {
-					await window.electronAPI.setCurrentVideoPath(finalPath, {
-						hideOverlayCursorByDefault: shouldHideOverlayCursor,
-					});
-				}
+				// 1. Finalize the session and switch to editor immediately (Optimistic UI)
+				// We pass null for webcamPath initially to avoid blocking on webcam disk writes/muxing.
+				await finalizeRecordingSession(finalPath, null);
 
-				// 2. Open the editor window immediately (Optimistic UI)
-				setFinalizing(false);
-				void window.electronAPI.switchToEditor();
-
-				// 3. Perform background finalization (muxing, sidecars)
+				// 2. Perform background finalization (webcam, muxing, sidecars)
 				// We don't await this to keep the UI responsive
 				void (async () => {
 					try {
+						// Await the webcam path in the background
+						const webcamPath = await webcamPathPromise;
+
+						// If we have a webcam path, update the session.
+						// This will broadcast a 'recording-session-changed' event that the open editor listens to.
+						if (webcamPath) {
+							await window.electronAPI.setCurrentRecordingSession({
+								videoPath: finalPath,
+								webcamPath,
+								timeOffsetMs: webcamTimeOffsetMs.current,
+								hideOverlayCursorByDefault: hideEditorOverlayCursorByDefault.current,
+							});
+						}
+
 						// Store sidecars
 						await storeMicrophoneSidecar(
 							micFallbackBlobPromise,
@@ -1743,10 +1741,25 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					}
 
 					if (videoResult.path) {
-						const webcamPath = pendingWebcamPathPromise.current
-							? await pendingWebcamPathPromise.current
-							: resolvedWebcamPath.current;
-						await finalizeRecordingSession(videoResult.path, webcamPath);
+						const finalVideoPath = videoResult.path;
+						// 1. Launch editor immediately (Optimistic UI)
+						await finalizeRecordingSession(finalVideoPath, null);
+
+						// 2. Background webcam processing
+						void (async () => {
+							const webcamPath = pendingWebcamPathPromise.current
+								? await pendingWebcamPathPromise.current
+								: resolvedWebcamPath.current;
+
+							if (webcamPath) {
+								await window.electronAPI.setCurrentRecordingSession({
+									videoPath: finalVideoPath,
+									webcamPath,
+									timeOffsetMs: webcamTimeOffsetMs.current,
+									hideOverlayCursorByDefault: hideEditorOverlayCursorByDefault.current,
+								});
+							}
+						})();
 					} else {
 						await notifyRecordingFinalizationFailure("Failed to save the recording.");
 					}

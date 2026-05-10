@@ -878,7 +878,11 @@ export function registerRecordingHandlers(
 
 				// Persist cursor telemetry before returning so the editor can find it immediately
 				snapshotCursorTelemetryForPersistence();
-				await persistPendingCursorTelemetry(finalVideoPath);
+				try {
+					await persistPendingCursorTelemetry(finalVideoPath);
+				} catch (error) {
+					console.warn("Failed to persist cursor telemetry during native stop:", error);
+				}
 
 				return { success: true, path: finalVideoPath };
 			} catch (error) {

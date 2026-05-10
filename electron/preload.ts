@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { RecordingSessionData } from "./ipc/types";
 
 type NativeVideoExportWriteResult = { success: boolean; error?: string };
 type NativeVideoAudioMuxMetrics = {
@@ -680,6 +681,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		options?: { preserveProjectPath?: boolean },
 	) => {
 		return ipcRenderer.invoke("set-current-recording-session", session, options);
+	},
+	onRecordingSessionChanged: (callback: (session: RecordingSessionData | null) => void) => {
+		const listener = (_event: Electron.IpcRendererEvent, payload: RecordingSessionData | null) =>
+			callback(payload);
+		ipcRenderer.on("recording-session-changed", listener);
+		return () => ipcRenderer.removeListener("recording-session-changed", listener);
 	},
 	getCurrentRecordingSession: () => {
 		return ipcRenderer.invoke("get-current-recording-session");

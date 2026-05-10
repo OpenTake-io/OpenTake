@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { dialog, ipcMain, shell } from "electron";
+import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { RECORDINGS_DIR } from "../../appPaths";
 import { buildMediaUrl, getMediaServerBaseUrl } from "../../mediaServer";
 import {
@@ -562,6 +562,13 @@ export function registerProjectHandlers() {
     if (!options?.preserveProjectPath) {
       setCurrentProjectPath(null)
     }
+
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send('recording-session-changed', nextSession);
+      }
+    }
+
     return { success: true, webcamPath: nextSession.webcamPath ?? null }
   })
 
@@ -582,6 +589,13 @@ export function registerProjectHandlers() {
       setCurrentProjectPath(null)
     }
     await persistRecordingSessionManifest(currentRecordingSession!)
+
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send('recording-session-changed', currentRecordingSession);
+      }
+    }
+
     return { success: true }
   })
 

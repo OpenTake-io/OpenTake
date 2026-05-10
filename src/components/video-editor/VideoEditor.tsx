@@ -2500,6 +2500,24 @@ export default function VideoEditor() {
 	]);
 
 	useEffect(() => {
+		if (!window.electronAPI.onRecordingSessionChanged) {
+			return;
+		}
+
+		return window.electronAPI.onRecordingSessionChanged((session) => {
+			if (!session) return;
+			if (session.videoPath === videoSourcePath && session.webcamPath) {
+				setWebcam((prev) => ({
+					...prev,
+					enabled: true,
+					sourcePath: session.webcamPath ?? null,
+					timeOffsetMs: session.timeOffsetMs ?? prev.timeOffsetMs,
+				}));
+			}
+		});
+	}, [videoSourcePath]);
+
+	useEffect(() => {
 		let cancelled = false;
 		if (!webcam.sourcePath) {
 			setResolvedWebcamVideoUrl(null);
