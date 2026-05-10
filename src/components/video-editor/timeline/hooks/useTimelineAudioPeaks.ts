@@ -40,20 +40,30 @@ interface TimelineAudioPeaksOptions {
 	peakCount?: number;
 }
 
+export interface TimelineAudioPeaksResult {
+	peaks: AudioPeaksData | null;
+	loading: boolean;
+}
+
 export function useTimelineAudioPeaks(
 	mediaResource: string | null | undefined,
 	options: TimelineAudioPeaksOptions = {},
-): AudioPeaksData | null {
-	const [data, setData] = useState<AudioPeaksData | null>(null);
+): TimelineAudioPeaksResult {
+	const [peaks, setPeaks] = useState<AudioPeaksData | null>(null);
+	const [loading, setLoading] = useState(false);
 	const sourceRef = useRef(mediaResource);
 	const enableSourceSidecarFallback = options.enableSourceSidecarFallback ?? false;
 	const peakCount = options.peakCount ?? WAVEFORM_DEFAULT_PEAK_COUNT;
 
 	useEffect(() => {
 		sourceRef.current = mediaResource;
-		setData(null);
-		if (!mediaResource) return;
+		setPeaks(null);
+		if (!mediaResource) {
+			setLoading(false);
+			return;
+		}
 
+		setLoading(true);
 		let cancelled = false;
 
 		const run = async () => {
@@ -64,28 +74,49 @@ export function useTimelineAudioPeaks(
 
 			try {
 				const result = await tryGenerate(mediaResource);
-				if (!cancelled && sourceRef.current === mediaResource) setData(result);
+				if (!cancelled && sourceRef.current === mediaResource) {
+					setPeaks(result);
+					setLoading(false);
+				}
 				return;
 			} catch {
 				// fallthrough
 			}
 
-			if (!enableSourceSidecarFallback) return;
+			if (!enableSourceSidecarFallback) {
+				if (!cancelled && sourceRef.current === mediaResource) {
+					setLoading(false);
+				}
+				return;
+			}
 
 			const localPathFromServer = extractLocalPathFromMediaServerUrl(mediaResource);
 			const localSourcePath =
 				localPathFromServer ||
 				(/^file:\/\//i.test(mediaResource) ? fromFileUrl(mediaResource) : mediaResource);
-			if (!localSourcePath) return;
+			if (!localSourcePath) {
+				if (!cancelled && sourceRef.current === mediaResource) {
+					setLoading(false);
+				}
+				return;
+			}
 
-			for (const candidate of buildSidecarAudioCandidates(localSourcePath)) {
+			const candidates = buildSidecarAudioCandidates(localSourcePath);
+			for (const candidate of candidates) {
 				try {
 					const result = await tryGenerate(candidate);
-					if (!cancelled && sourceRef.current === mediaResource) setData(result);
+					if (!cancelled && sourceRef.current === mediaResource) {
+						setPeaks(result);
+						setLoading(false);
+					}
 					return;
 				} catch {
 					// try next
 				}
+			}
+
+			if (!cancelled && sourceRef.current === mediaResource) {
+				setLoading(false);
 			}
 		};
 
@@ -96,5 +127,5 @@ export function useTimelineAudioPeaks(
 		};
 	}, [mediaResource, enableSourceSidecarFallback, peakCount]);
 
-	return data;
+	return { peaks, loading };
 }

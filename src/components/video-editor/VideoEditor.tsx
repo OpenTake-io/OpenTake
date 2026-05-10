@@ -6356,15 +6356,17 @@ export default function VideoEditor() {
 				>
 					<TimelineEditor
 						ref={timelineRef}
-						hideToolbar
 						videoDuration={timelineDuration}
 						currentTime={currentTime}
 						playheadTime={timelinePlayheadTime}
 						onSeek={handleTimelineSeek}
 						videoPath={videoPath}
+						videoSourcePath={videoSourcePath}
+						cursorTelemetrySourcePath={cursorTelemetrySourcePath}
 						cursorTelemetry={normalizedCursorTelemetry}
 						autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
 						onAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
+						disableSuggestedZooms={!autoApplyFreshRecordingAutoZooms}
 						zoomRegions={zoomRegions}
 						onZoomAdded={handleZoomAdded}
 						onZoomSuggested={handleZoomSuggested}
@@ -6391,6 +6393,10 @@ export default function VideoEditor() {
 						selectedAnnotationId={selectedAnnotationId}
 						onSelectAnnotation={handleSelectAnnotation}
 						aspectRatio={aspectRatio}
+						onAspectRatioChange={setAspectRatio}
+						onOpenCropEditor={handleOpenCropEditor}
+						isCropped={isCropped}
+						hideToolbar={timelineCollapsed}
 						showSourceAudioTrack={clipRegions.some((c) => c.showSourceAudio)}
 						sourceAudioTrackSettings={audio.activeSourceAudioTrackSettings}
 						getSourceAudioTrackSettingsForClip={

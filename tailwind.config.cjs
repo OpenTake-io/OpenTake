@@ -18,11 +18,22 @@ module.exports = {
 						transform: "translateX(100%)",
 					},
 				},
+				"text-shimmer": {
+					"0%, 100%": {
+						"background-size": "200% 200%",
+						"background-position": "left center",
+					},
+					"50%": {
+						"background-size": "200% 200%",
+						"background-position": "right center",
+					},
+				},
 			},
 			animation: {
 				"accordion-down": "accordion-down 0.2s ease-out",
 				"accordion-up": "accordion-up 0.2s ease-out",
 				shimmer: "shimmer 2s infinite",
+				"text-shimmer": "text-shimmer 2.5s ease-out infinite",
 			},
 			borderRadius: {
 				lg: "var(--radius)",
