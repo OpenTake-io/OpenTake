@@ -1067,44 +1067,42 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				// We pass null for webcamPath initially to avoid blocking on webcam disk writes/muxing.
 				await finalizeRecordingSession(finalPath, null);
 
-				// 2. Perform background finalization (webcam, muxing, sidecars)
-				// We don't await this to keep the UI responsive
-				void (async () => {
-					try {
-						// Await the webcam path in the background
-						const webcamPath = await webcamPathPromise;
+						// 2. Perform background finalization (webcam, muxing, sidecars)
+						// We don't await this to keep the UI responsive
+						void (async () => {
+							try {
+								// Await the webcam path in the background
+								const webcamPath = await webcamPathPromise;
 
-						// If we have a webcam path, update the session.
-						// This will broadcast a 'recording-session-changed' event that the open editor listens to.
-						if (webcamPath) {
-							await window.electronAPI.setCurrentRecordingSession({
-								videoPath: finalPath,
-								webcamPath,
-								timeOffsetMs: webcamTimeOffsetMs.current,
-								hideOverlayCursorByDefault: hideEditorOverlayCursorByDefault.current,
-							});
-						}
+								// Store sidecars
+								await storeMicrophoneSidecar(
+									micFallbackBlobPromise,
+									finalPath,
+									fallbackStartDelayMs,
+									fallbackTrackSettings,
+								);
 
-						// Store sidecars
-						await storeMicrophoneSidecar(
-							micFallbackBlobPromise,
-							finalPath,
-							fallbackStartDelayMs,
-							fallbackTrackSettings,
-						);
+								// Perform muxing/renaming if on Windows
+								if (isNativeWindows) {
+									await window.electronAPI.muxNativeWindowsRecording(expectedDurationMs);
+								}
 
-						// Perform muxing/renaming if on Windows
-						if (isNativeWindows) {
-							await window.electronAPI.muxNativeWindowsRecording(expectedDurationMs);
-						}
+								// Update the session state to notify the editor that all background assets (webcam, mic, etc.) are now ready.
+								// This broadcasts a 'recording-session-changed' event that the open editor listens to for re-scanning assets.
+								await window.electronAPI.setCurrentRecordingSession({
+									videoPath: finalPath,
+									webcamPath,
+									timeOffsetMs: webcamTimeOffsetMs.current,
+									hideOverlayCursorByDefault: hideEditorOverlayCursorByDefault.current,
+								});
 
-						console.log(
-							`[PERF:RENDERER] Background Stop Sequence: COMPLETED in ${(performance.now() - stopStart).toFixed(2)}ms`,
-						);
-					} catch (bgError) {
-						console.error("Error in background finalization:", bgError);
-					}
-				})();
+								console.log(
+									`[PERF:RENDERER] Background Stop Sequence: COMPLETED in ${(performance.now() - stopStart).toFixed(2)}ms`,
+								);
+							} catch (bgError) {
+								console.error("Error in background finalization:", bgError);
+							}
+						})();
 			})();
 			return;
 		}

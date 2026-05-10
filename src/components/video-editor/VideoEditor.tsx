@@ -2505,15 +2505,18 @@ export default function VideoEditor() {
 		}
 
 		return window.electronAPI.onRecordingSessionChanged((session) => {
-			if (!session) return;
-			if (session.videoPath === videoSourcePath && session.webcamPath) {
-				setWebcam((prev) => ({
-					...prev,
-					enabled: true,
-					sourcePath: session.webcamPath ?? null,
-					timeOffsetMs: session.timeOffsetMs ?? prev.timeOffsetMs,
-				}));
+			if (!session || session.videoPath !== videoSourcePath) {
+				return;
 			}
+
+			setWebcam((prev) => ({
+				...prev,
+				enabled: Boolean(session.webcamPath),
+				sourcePath: session.webcamPath ?? null,
+				timeOffsetMs: session.webcamPath
+					? (session.timeOffsetMs ?? prev.timeOffsetMs)
+					: DEFAULT_WEBCAM_TIME_OFFSET_MS,
+			}));
 		});
 	}, [videoSourcePath]);
 
