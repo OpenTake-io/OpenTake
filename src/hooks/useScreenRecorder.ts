@@ -867,6 +867,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			const webcamPath = await stopWebcamRecorder();
 			await storeMicrophoneSidecar(resolvedMicFallbackBlobPromise, result.path, startDelayMs);
 			await finalizeRecordingSession(result.path, webcamPath);
+			
+			if (typeof window.electronAPI?.hudOverlayClose === "function") {
+				window.electronAPI.hudOverlayClose();
+			}
+
 			return result.path;
 		},
 		[
@@ -1073,6 +1078,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 							try {
 								// Await the webcam path in the background
 								const webcamPath = await webcamPathPromise;
+								console.log("[useScreenRecorder] Background native processing: webcamPath is", webcamPath);
 
 								// Store sidecars
 								await storeMicrophoneSidecar(
@@ -1086,6 +1092,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 								if (isNativeWindows) {
 									await window.electronAPI.muxNativeWindowsRecording(expectedDurationMs);
 								}
+
+								console.log("[useScreenRecorder] Emitting setCurrentRecordingSession with:", { finalPath, webcamPath });
 
 								// Update the session state to notify the editor that all background assets (webcam, mic, etc.) are now ready.
 								// This broadcasts a 'recording-session-changed' event that the open editor listens to for re-scanning assets.
@@ -1101,6 +1109,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 								);
 							} catch (bgError) {
 								console.error("Error in background finalization:", bgError);
+							} finally {
+								// After all background tasks are done (webcam, mic sidecars, muxing),
+								// we can safely close the HUD window to release hardware and resources.
+								if (typeof window.electronAPI?.hudOverlayClose === "function") {
+									console.log("[useScreenRecorder] All background tasks finished, closing HUD");
+									window.electronAPI.hudOverlayClose();
+								}
 							}
 						})();
 			})();
@@ -1749,13 +1764,22 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 								? await pendingWebcamPathPromise.current
 								: resolvedWebcamPath.current;
 
-							if (webcamPath) {
-								await window.electronAPI.setCurrentRecordingSession({
-									videoPath: finalVideoPath,
-									webcamPath,
-									timeOffsetMs: webcamTimeOffsetMs.current,
-									hideOverlayCursorByDefault: hideEditorOverlayCursorByDefault.current,
-								});
+							try {
+								if (webcamPath) {
+									await window.electronAPI.setCurrentRecordingSession({
+										videoPath: finalVideoPath,
+										webcamPath,
+										timeOffsetMs: webcamTimeOffsetMs.current,
+										hideOverlayCursorByDefault: hideEditorOverlayCursorByDefault.current,
+									});
+								}
+							} finally {
+								// After all background tasks are done (webcam),
+								// we can safely close the HUD window to release hardware and resources.
+								if (typeof window.electronAPI?.hudOverlayClose === "function") {
+									console.log("[useScreenRecorder:browser] All background tasks finished, closing HUD");
+									window.electronAPI.hudOverlayClose();
+								}
 							}
 						})();
 					} else {

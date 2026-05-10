@@ -20,6 +20,7 @@ import {
 	persistRecordingsDirectorySetting,
 	rememberRecentProject,
 	replaceApprovedSessionLocalReadPaths,
+	rememberApprovedLocalReadPath,
 	resolveApprovedLocalMediaPath,
 	saveProjectThumbnail,
   saveRecentProjectPaths,
@@ -581,10 +582,8 @@ export function registerProjectHandlers() {
       timeOffsetMs: normalizeRecordingTimeOffsetMs(session.timeOffsetMs),
       hideOverlayCursorByDefault: normalizeBoolean(session.hideOverlayCursorByDefault),
     });
-    await replaceApprovedSessionLocalReadPaths([
-      currentRecordingSession!.videoPath,
-      currentRecordingSession!.webcamPath,
-    ])
+    await rememberApprovedLocalReadPath(currentRecordingSession!.videoPath)
+    await rememberApprovedLocalReadPath(currentRecordingSession!.webcamPath)
     if (!options?.preserveProjectPath) {
       setCurrentProjectPath(null)
     }
