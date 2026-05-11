@@ -197,9 +197,14 @@ function getExistingEditorWindow(): BrowserWindow | null {
 let defaultTrayIcon: ReturnType<typeof getTrayIcon> | null = null;
 let recordingTrayIcon: ReturnType<typeof getTrayIcon> | null = null;
 
+function getPlatformAppIconFilename(size: 32 | 128 | 512) {
+	const baseName = process.platform === "darwin" ? "recordlymac" : "recordly";
+	return `app-icons/${baseName}-${size}.png`;
+}
+
 function getDefaultTrayIcon() {
 	if (!defaultTrayIcon) {
-		defaultTrayIcon = getTrayIcon("app-icons/recordly-32.png");
+		defaultTrayIcon = getTrayIcon(getPlatformAppIconFilename(32));
 	}
 	return defaultTrayIcon;
 }
@@ -529,7 +534,7 @@ function syncDockIcon() {
 		return;
 	}
 
-	const dockIcon = getAppImage("app-icons/recordly-512.png");
+	const dockIcon = getAppImage(getPlatformAppIconFilename(512));
 	if (!dockIcon.isEmpty()) {
 		app.dock.setIcon(dockIcon);
 	}
@@ -600,7 +605,7 @@ function sendUpdateToastToWindows(channel: "update-toast-state", payload: unknow
 		const notification = new Notification({
 			title: getUpdateNotificationTitle(updatePayload),
 			body: getUpdateNotificationBody(updatePayload),
-			icon: getAppImage("app-icons/recordly-128.png"),
+			icon: getAppImage(getPlatformAppIconFilename(128)),
 			silent: false,
 		});
 
