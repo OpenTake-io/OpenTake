@@ -2734,7 +2734,7 @@ export function SettingsPanel({
 										.maxDirectionalBlurPx
 								}
 								min={0}
-								max={32}
+								max={64}
 								step={0.1}
 								onChange={(value) =>
 									onZoomMotionBlurTuningChange?.({
@@ -2778,7 +2778,7 @@ export function SettingsPanel({
 										.maxRadialBlurStrength
 								}
 								min={0}
-								max={0.5}
+								max={1}
 								step={0.005}
 								onChange={(value) =>
 									onZoomMotionBlurTuningChange?.({

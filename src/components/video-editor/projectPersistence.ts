@@ -177,7 +177,7 @@ export function normalizeExportPipelineModel(value: unknown): ExportPipelineMode
 		return value;
 	}
 
-	return "modern";
+	return "legacy";
 }
 
 export function normalizeExportMp4FrameRate(value: unknown): ExportMp4FrameRate {
@@ -360,10 +360,10 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			? clamp(rawZoomMotionBlurTuning.zoomVelocityThreshold, 0, 0.4)
 			: DEFAULT_ZOOM_MOTION_BLUR_TUNING.zoomVelocityThreshold,
 		maxDirectionalBlurPx: isFiniteNumber(rawZoomMotionBlurTuning.maxDirectionalBlurPx)
-			? clamp(rawZoomMotionBlurTuning.maxDirectionalBlurPx, 0, 32)
+			? clamp(rawZoomMotionBlurTuning.maxDirectionalBlurPx, 0, 64)
 			: DEFAULT_ZOOM_MOTION_BLUR_TUNING.maxDirectionalBlurPx,
 		maxRadialBlurStrength: isFiniteNumber(rawZoomMotionBlurTuning.maxRadialBlurStrength)
-			? clamp(rawZoomMotionBlurTuning.maxRadialBlurStrength, 0, 0.5)
+			? clamp(rawZoomMotionBlurTuning.maxRadialBlurStrength, 0, 1)
 			: DEFAULT_ZOOM_MOTION_BLUR_TUNING.maxRadialBlurStrength,
 		panResponsePerSecond: isFiniteNumber(rawZoomMotionBlurTuning.panResponsePerSecond)
 			? clamp(rawZoomMotionBlurTuning.panResponsePerSecond, 1, 30)

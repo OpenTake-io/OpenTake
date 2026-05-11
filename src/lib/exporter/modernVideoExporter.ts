@@ -1409,6 +1409,18 @@ export class ModernVideoExporter {
 			reasons.push("unsupported-background-video");
 		}
 
+		if ((this.config.zoomMotionBlur ?? 0) > 0) {
+			reasons.push("unsupported-zoom-motion-blur");
+		}
+
+		if ((this.config.zoomTemporalMotionBlur ?? 0) > 0) {
+			reasons.push("unsupported-zoom-temporal-motion-blur");
+		}
+
+		if ((this.config.cursorMotionBlur ?? 0) > 0) {
+			reasons.push("unsupported-cursor-motion-blur");
+		}
+
 		const hasZoomRegions = (this.config.zoomRegions ?? []).length > 0;
 		const needsTimelineMap = this.shouldUseNativeStaticLayoutTimelineMap(
 			videoInfo,

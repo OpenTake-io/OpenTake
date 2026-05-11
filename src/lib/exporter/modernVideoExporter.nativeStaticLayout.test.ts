@@ -308,6 +308,29 @@ describe("ModernVideoExporter native static-layout eligibility", () => {
 		).toBe("unsupported-background-video");
 	});
 
+	it("skips native static-layout when motion blur is enabled", () => {
+		const exporter = createExporter({
+			zoomMotionBlur: 0.8,
+			zoomTemporalMotionBlur: 0.6,
+			cursorMotionBlur: 0.4,
+		});
+
+		expect(
+			exporter.getNativeStaticLayoutSkipReasons(
+				{
+					audioMode: "edited-track",
+					strategy: "offline-render-fallback",
+				},
+				videoInfo,
+				59,
+			),
+		).toEqual([
+			"unsupported-zoom-motion-blur",
+			"unsupported-zoom-temporal-motion-blur",
+			"unsupported-cursor-motion-blur",
+		]);
+	});
+
 	it("collects every native static-layout blocker for beta diagnostics", () => {
 		const exporter = createExporter({
 			width: 1921,
