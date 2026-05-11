@@ -373,6 +373,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 		skipTaskbar: true,
 		hasShadow: false,
 		show: false,
+		focusable: false,
 		webPreferences: {
 			preload: path.join(electronWindowsDir, "preload.mjs"),
 			nodeIntegration: false,
@@ -511,6 +512,36 @@ export function createHudOverlayWindow(): BrowserWindow {
 
 export function getHudOverlayWindow(): BrowserWindow | null {
 	return hudOverlayWindow && !hudOverlayWindow.isDestroyed() ? hudOverlayWindow : null;
+}
+
+/**
+ * Re-initialise the HUD overlay's mouse passthrough state.
+ *
+ * On Windows 11+, any new BrowserWindow appearing (even focusable:false ones
+ * like the source highlight overlay) can silently corrupt the
+ * WS_EX_TRANSPARENT flag that backs setIgnoreMouseEvents forwarding.  Call
+ * this after any operation that creates or destroys a sibling window so that
+ * hover detection on the HUD is immediately restored without requiring the
+ * user to move their mouse over the bar.
+ */
+export function reassertHudOverlayMousePassthrough(): void {
+	if (process.platform !== "win32" || !isHudOverlayMousePassthroughSupported()) {
+		return;
+	}
+
+	const hud = getHudOverlayWindow();
+	if (!hud) {
+		return;
+	}
+
+	// Toggle off then back on so the native WS_EX_TRANSPARENT flag is fully
+	// re-initialised rather than merely re-asserted in a potentially broken state.
+	hud.setIgnoreMouseEvents(false);
+	setTimeout(() => {
+		if (!hud.isDestroyed()) {
+			hud.setIgnoreMouseEvents(true, { forward: true });
+		}
+	}, 50);
 }
 
 export function createUpdateToastWindow(): BrowserWindow {
