@@ -2,6 +2,8 @@ import WorkerConstructor from "./waveform.worker?worker";
 import type { AudioPeaksData } from "../../timeline/core/timelineTypes";
 import { WAVEFORM_DEFAULT_PEAK_COUNT } from "../../timeline/core/constants";
 
+const MAX_WAVEFORM_PEAKS = 200_000;
+
 export class WaveformGenerator {
 	private audioContext: AudioContext;
 	private worker: Worker;
@@ -74,22 +76,37 @@ export class WaveformGenerator {
 
 			const arrayBuffer = await response.arrayBuffer();
 			const decoded = await this.audioContext.decodeAudioData(arrayBuffer);
-			
+			const adaptivePeakCount = Math.max(
+				peakCount,
+				Math.floor(decoded.duration * 500)
+			);
+			const boundedPeakCount = Math.min(adaptivePeakCount, MAX_WAVEFORM_PEAKS);
 			const channels: Float32Array[] = [];
 			for (let i = 0; i < decoded.numberOfChannels; i++) {
 				// We slice to transfer the underlying buffer to the worker
 				channels.push(decoded.getChannelData(i).slice());
 			}
 			
-			const peaks = await this.computePeaksWithWorker(channels, peakCount);
+			const peaks = await this.computePeaksWithWorker(channels, boundedPeakCount);
 
+			// Robust Normalization: Use 99.5th percentile to avoid being squashed by a single loud spike/pop
 			let max = 0;
-			for (let i = 0; i < peaks.length; i++) {
-				if (peaks[i] > max) max = peaks[i];
+			const sortedPeaks = [...peaks].sort((a, b) => a - b);
+			const percentileIndex = Math.floor(sortedPeaks.length * 0.995);
+			const robustMax = sortedPeaks[percentileIndex] || 0;
+
+			// Fallback to absolute max if the percentile is zero (very quiet file)
+			if (robustMax === 0) {
+				for (let i = 0; i < peaks.length; i++) {
+					if (peaks[i] > max) max = peaks[i];
+				}
+			} else {
+				max = robustMax;
 			}
+
 			if (max > 0) {
 				for (let i = 0; i < peaks.length; i++) {
-					peaks[i] /= max;
+					peaks[i] = Math.min(1.0, peaks[i] / max);
 				}
 			}
 

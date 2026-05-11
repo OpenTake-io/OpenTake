@@ -2500,6 +2500,34 @@ export default function VideoEditor() {
 	]);
 
 	useEffect(() => {
+		if (!window.electronAPI.onRecordingSessionChanged) {
+			return;
+		}
+
+		return window.electronAPI.onRecordingSessionChanged((session) => {
+			console.log("[VideoEditor] onRecordingSessionChanged received!", {
+				sessionVideoPath: session?.videoPath,
+				videoSourcePath: videoSourcePath,
+				match: session?.videoPath === videoSourcePath,
+				webcamPath: session?.webcamPath
+			});
+
+			if (!session || session.videoPath !== videoSourcePath) {
+				return;
+			}
+
+			setWebcam((prev) => ({
+				...prev,
+				enabled: Boolean(session.webcamPath),
+				sourcePath: session.webcamPath ?? null,
+				timeOffsetMs: session.webcamPath
+					? (session.timeOffsetMs ?? prev.timeOffsetMs)
+					: DEFAULT_WEBCAM_TIME_OFFSET_MS,
+			}));
+		});
+	}, [videoSourcePath]);
+
+	useEffect(() => {
 		let cancelled = false;
 		if (!webcam.sourcePath) {
 			setResolvedWebcamVideoUrl(null);
@@ -6356,15 +6384,17 @@ export default function VideoEditor() {
 				>
 					<TimelineEditor
 						ref={timelineRef}
-						hideToolbar
 						videoDuration={timelineDuration}
 						currentTime={currentTime}
 						playheadTime={timelinePlayheadTime}
 						onSeek={handleTimelineSeek}
 						videoPath={videoPath}
+						videoSourcePath={videoSourcePath}
+						cursorTelemetrySourcePath={cursorTelemetrySourcePath}
 						cursorTelemetry={normalizedCursorTelemetry}
 						autoSuggestZoomsTrigger={autoSuggestZoomsTrigger}
 						onAutoSuggestZoomsConsumed={handleAutoSuggestZoomsConsumed}
+						disableSuggestedZooms={!autoApplyFreshRecordingAutoZooms}
 						zoomRegions={zoomRegions}
 						onZoomAdded={handleZoomAdded}
 						onZoomSuggested={handleZoomSuggested}
@@ -6390,7 +6420,6 @@ export default function VideoEditor() {
 						onAnnotationDelete={handleAnnotationDelete}
 						selectedAnnotationId={selectedAnnotationId}
 						onSelectAnnotation={handleSelectAnnotation}
-						aspectRatio={aspectRatio}
 						showSourceAudioTrack={clipRegions.some((c) => c.showSourceAudio)}
 						sourceAudioTrackSettings={audio.activeSourceAudioTrackSettings}
 						getSourceAudioTrackSettingsForClip={
