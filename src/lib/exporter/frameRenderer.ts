@@ -1512,7 +1512,7 @@ export class FrameRenderer {
 					: null,
 			);
 
-			this.drawFrame();
+			this.drawFrame(temporalSnapshot.sceneTransform);
 
 			if (
 				this.config.annotationRegions &&
@@ -1690,7 +1690,11 @@ export class FrameRenderer {
 		this.compositeWithShadows();
 
 		// Draw device frame overlay on top of video content
-		this.drawFrame();
+		this.drawFrame({
+			scale: this.animationState.appliedScale,
+			x: this.animationState.x,
+			y: this.animationState.y,
+		});
 
 		// Render annotations on top if present
 		if (
@@ -2294,13 +2298,20 @@ export class FrameRenderer {
 		this.drawWebcamOverlay(ctx, w, h);
 	}
 
-	private drawFrame(): void {
+	private drawFrame(sceneTransform?: { scale: number; x: number; y: number }): void {
 		if ((!this.frameImage && !this.frameDraw) || !this.compositeCtx || !this.layoutCache)
 			return;
 
 		const ctx = this.compositeCtx;
 		const maskRect = this.layoutCache.maskRect;
 		const insets = this.frameInsets;
+		const transform = sceneTransform ?? { scale: 1, x: 0, y: 0 };
+		const drawWithTransform = (draw: () => void) => {
+			ctx.save();
+			applyCanvasSceneTransform(ctx, transform);
+			draw();
+			ctx.restore();
+		};
 
 		if (!insets) {
 			// No insets: draw frame spanning entire mask area
@@ -2310,15 +2321,19 @@ export class FrameRenderer {
 				c.height = Math.round(maskRect.height);
 				const dCtx = c.getContext("2d");
 				if (dCtx) this.frameDraw(dCtx, c.width, c.height);
-				ctx.drawImage(c, maskRect.x, maskRect.y, maskRect.width, maskRect.height);
+				drawWithTransform(() => {
+					ctx.drawImage(c, maskRect.x, maskRect.y, maskRect.width, maskRect.height);
+				});
 			} else {
-				ctx.drawImage(
-					this.frameImage!,
-					maskRect.x,
-					maskRect.y,
-					maskRect.width,
-					maskRect.height,
-				);
+				drawWithTransform(() => {
+					ctx.drawImage(
+						this.frameImage!,
+						maskRect.x,
+						maskRect.y,
+						maskRect.width,
+						maskRect.height,
+					);
+				});
 			}
 			return;
 		}
@@ -2338,9 +2353,13 @@ export class FrameRenderer {
 			c.height = Math.round(frameH);
 			const dCtx = c.getContext("2d");
 			if (dCtx) this.frameDraw(dCtx, c.width, c.height);
-			ctx.drawImage(c, frameX, frameY, frameW, frameH);
+			drawWithTransform(() => {
+				ctx.drawImage(c, frameX, frameY, frameW, frameH);
+			});
 		} else {
-			ctx.drawImage(this.frameImage!, frameX, frameY, frameW, frameH);
+			drawWithTransform(() => {
+				ctx.drawImage(this.frameImage!, frameX, frameY, frameW, frameH);
+			});
 		}
 	}
 

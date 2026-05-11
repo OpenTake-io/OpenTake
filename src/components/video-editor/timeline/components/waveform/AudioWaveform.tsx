@@ -75,31 +75,32 @@ function AudioWaveformComponent({
 			const { peaks: peakData, durationMs } = peaks;
 			if (durationMs <= 0 || peakData.length === 0) return;
 
-			const rawVisibleStartMs = segmentStartMs ?? range.start;
-			const rawVisibleEndMs = segmentEndMs ?? range.end;
-			const msPerBin = durationMs / peakData.length;
-			const visibleStartMs =
-				msPerBin > 0 ? Math.round(rawVisibleStartMs / msPerBin) * msPerBin : rawVisibleStartMs;
-			const visibleEndMs =
-				msPerBin > 0 ? Math.round(rawVisibleEndMs / msPerBin) * msPerBin : rawVisibleEndMs;
+			// Use raw values for smooth zooming/panning (no snapping)
+			const visibleStartMs = segmentStartMs ?? range.start;
+			const visibleEndMs = segmentEndMs ?? range.end;
 			const visibleDurationMs = visibleEndMs - visibleStartMs;
+			
 			if (visibleDurationMs <= 0) return;
 
 			const midY = height / 2;
-
 			ctx.beginPath();
+			
 			for (let px = 0; px < width; px++) {
 				const t = visibleStartMs + (px / width) * visibleDurationMs;
-				const exactIndex = Math.max(
-					0,
-					Math.min(peakData.length - 1, (t / durationMs) * (peakData.length - 1)),
-				);
+				
+				// If the timeline time is beyond the actual audio duration, we draw nothing (flat line)
+				if (t < 0 || t > durationMs) continue;
+
+				const exactIndex = (t / durationMs) * (peakData.length - 1);
 				const leftIndex = Math.floor(exactIndex);
 				const rightIndex = Math.min(peakData.length - 1, leftIndex + 1);
 				const mix = exactIndex - leftIndex;
+				
 				let amplitude = peakData[leftIndex] * (1 - mix) + peakData[rightIndex] * mix;
+				
 				if (normalize) amplitude = Math.sqrt(Math.max(0, amplitude));
 				amplitude = Math.max(0, Math.min(1, amplitude * gain));
+				
 				const barHeight = amplitude * midY * 0.85;
 
 				ctx.moveTo(px, midY - barHeight);
