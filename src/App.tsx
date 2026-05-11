@@ -14,7 +14,7 @@ export default function App() {
 	const [windowType, setWindowType] = useState("");
 	const { t } = useI18n();
 	const isMacOS = /mac/i.test(navigator.platform);
-	const appIconSrc = isMacOS ? "/app-icons/recordlymac-128.png" : "/app-icons/recordly-128.png";
+	const appIconSrc = "/app-icons/recordly-128.png";
 
 	useEffect(() => {
 		const params = new URLSearchParams(window.location.search);
