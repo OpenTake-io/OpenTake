@@ -642,6 +642,7 @@ const APP_LANGUAGE_LABELS: Record<AppLocale, string> = {
 	en: "English",
 	es: "Español",
 	fr: "Français",
+	it: "Italiano",
 	nl: "Nederlands",
 	ko: "한국어",
 	"pt-BR": "Português",
