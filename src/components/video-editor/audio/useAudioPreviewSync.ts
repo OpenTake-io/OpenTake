@@ -189,20 +189,9 @@ export function useAudioPreviewSync({
       audio.volume = 1;
       audio.dataset.sourceAudioPath = audioPath;
 
-      const context = ensureSourceAudioContext();
-      const masterGain = sourceAudioMasterGainRef.current;
-      if (context && masterGain && !sourceAudioMediaNodesRef.current.has(audioPath)) {
-        try {
-          const mediaNode = context.createMediaElementSource(audio);
-          const trackGainNode = context.createGain();
-          mediaNode.connect(trackGainNode);
-          trackGainNode.connect(masterGain);
-          sourceAudioMediaNodesRef.current.set(audioPath, mediaNode);
-          sourceAudioGainNodesRef.current.set(audioPath, trackGainNode);
-        } catch (error) {
-          onSourceFallbackLoadError(error);
-        }
-      }
+      // Web Audio API createMediaElementSource breaks preservesPitch on Chromium.
+      // We route directly through the HTMLAudioElement to ensure pitch preservation works
+      // during speed changes. Note: this limits maximum preview volume to 1.0 (100%).
 
       if (sourceAudioElementResourcesRef.current.get(audioPath) !== audioPath) {
         audio.pause();
@@ -245,10 +234,7 @@ export function useAudioPreviewSync({
         })();
       }
 
-      const trackGainNode = sourceAudioGainNodesRef.current.get(audioPath);
-      if (trackGainNode) {
-        trackGainNode.gain.value = Math.max(0, Math.min(2, getSourceTrackPreviewGain(audioPath)));
-      }
+      audio.volume = Math.max(0, Math.min(1, getSourceTrackPreviewGain(audioPath) * (isCurrentClipMuted ? 0 : previewVolume)));
     }
 
     if (sourceAudioMasterGainRef.current) {
@@ -378,10 +364,7 @@ export function useAudioPreviewSync({
 
     for (const audio of sourceAudioElementsRef.current.values()) {
       const sourceAudioPath = audio.dataset.sourceAudioPath ?? "";
-      const trackGainNode = sourceAudioGainNodesRef.current.get(sourceAudioPath);
-      if (trackGainNode) {
-        trackGainNode.gain.value = Math.max(0, Math.min(2, getSourceTrackPreviewGain(sourceAudioPath)));
-      }
+      audio.volume = Math.max(0, Math.min(1, getSourceTrackPreviewGain(sourceAudioPath) * (isCurrentClipMuted ? 0 : previewVolume)));
 
       enablePitchPreservingPlayback(audio);
       const audioDuration = Number.isFinite(audio.duration) ? audio.duration : null;
