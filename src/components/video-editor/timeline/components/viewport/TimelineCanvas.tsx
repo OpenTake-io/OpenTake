@@ -170,6 +170,10 @@ function useTimelineHover({
 		setZoomRowHoverMs(null);
 	}, []);
 
+	const handleZoomRowMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+		event.stopPropagation();
+	}, []);
+
 	const handleZoomRowClick = useCallback(
 		(event: MouseEvent<HTMLDivElement>) => {
 			event.stopPropagation();
@@ -213,6 +217,7 @@ function useTimelineHover({
 		handleZoomRowMouseEnter,
 		handleZoomRowMouseMove,
 		handleZoomRowMouseLeave,
+		handleZoomRowMouseDown,
 		handleZoomRowClick,
 	};
 }
@@ -244,6 +249,7 @@ interface TimelineCanvasRowsProps {
 	onZoomRowMouseEnter: MouseEventHandler<HTMLDivElement>;
 	onZoomRowMouseMove: MouseEventHandler<HTMLDivElement>;
 	onZoomRowMouseLeave: MouseEventHandler<HTMLDivElement>;
+	onZoomRowMouseDown: MouseEventHandler<HTMLDivElement>;
 	onZoomRowClick: MouseEventHandler<HTMLDivElement>;
 	isLoading?: boolean;
 }
@@ -311,6 +317,7 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 	onZoomRowMouseEnter,
 	onZoomRowMouseMove,
 	onZoomRowMouseLeave,
+	onZoomRowMouseDown,
 	onZoomRowClick,
 	isLoading = false,
 }: TimelineCanvasRowsProps) {
@@ -422,6 +429,7 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 				onMouseEnter={onZoomRowMouseEnter}
 				onMouseMove={onZoomRowMouseMove}
 				onMouseLeave={onZoomRowMouseLeave}
+				onMouseDown={onZoomRowMouseDown}
 				onClick={onZoomRowClick}
 			>
 				{canShowGhostZoom && ghostStartMs !== null && (
@@ -699,6 +707,7 @@ export default function TimelineCanvas({
 		handleZoomRowMouseEnter,
 		handleZoomRowMouseMove,
 		handleZoomRowMouseLeave,
+		handleZoomRowMouseDown,
 		handleZoomRowClick,
 	} = useTimelineHover({
 		direction,
@@ -771,6 +780,7 @@ export default function TimelineCanvas({
 					onZoomRowMouseEnter={handleZoomRowMouseEnter}
 					onZoomRowMouseMove={handleZoomRowMouseMove}
 					onZoomRowMouseLeave={handleZoomRowMouseLeave}
+					onZoomRowMouseDown={handleZoomRowMouseDown}
 					onZoomRowClick={handleZoomRowClick}
 					isLoading={isLoading}
 				/>
