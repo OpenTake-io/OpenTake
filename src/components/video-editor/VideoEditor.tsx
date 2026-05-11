@@ -135,6 +135,7 @@ import {
 	fromFileUrl,
 	normalizeProjectEditor,
 	resolveVideoUrl,
+	stripPersistedDevMotionBlurSettings,
 	toFileUrl,
 	validateProjectData,
 } from "./projectPersistence";
@@ -1774,7 +1775,7 @@ export default function VideoEditor() {
 				defaultSourceAudioTrackSettings: SourceAudioTrackSettings;
 			}>,
 		) => {
-			return editor;
+			return stripPersistedDevMotionBlurSettings(editor);
 		},
 		[],
 	);
@@ -2038,7 +2039,9 @@ export default function VideoEditor() {
 
 			const project = candidate;
 			const sourcePath = fromFileUrl(project.videoPath);
-			const normalizedEditor = normalizeProjectEditor(project.editor);
+			const normalizedEditor = normalizeProjectEditor(
+				stripPersistedDevMotionBlurSettings(project.editor ?? {}),
+			);
 
 			try {
 				videoPlaybackRef.current?.pause();
