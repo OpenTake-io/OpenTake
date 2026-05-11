@@ -75,8 +75,17 @@ describe("editorPreferences", () => {
 		expect(DEFAULT_EDITOR_PREFERENCES.cursorSway).toBe(0.25);
 	});
 
-	it("defaults MP4 exports to the Lightning pipeline", () => {
-		expect(DEFAULT_EDITOR_PREFERENCES.exportPipelineModel).toBe("modern");
+	it("bakes in the stronger split motion blur tuning defaults", () => {
+		expect(DEFAULT_EDITOR_PREFERENCES.zoomMotionBlurTuning).toMatchObject({
+			panVelocityThreshold: 0,
+			zoomVelocityThreshold: 0,
+			maxDirectionalBlurPx: 48.2,
+			maxRadialBlurStrength: 0.755,
+		});
+	});
+
+	it("defaults MP4 exports to the legacy pipeline", () => {
+		expect(DEFAULT_EDITOR_PREFERENCES.exportPipelineModel).toBe("legacy");
 	});
 
 	it("loads stored editor control preferences", () => {

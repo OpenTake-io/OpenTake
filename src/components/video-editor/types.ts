@@ -116,9 +116,9 @@ export interface ZoomMotionBlurTuning {
 
 export const DEFAULT_ZOOM_MOTION_BLUR_TUNING: ZoomMotionBlurTuning = {
 	panVelocityThreshold: 0,
-	zoomVelocityThreshold: 0.025,
-	maxDirectionalBlurPx: 11,
-	maxRadialBlurStrength: 0.175,
+	zoomVelocityThreshold: 0,
+	maxDirectionalBlurPx: 48.2,
+	maxRadialBlurStrength: 0.755,
 	panResponsePerSecond: 11,
 	zoomResponsePerSecond: 9,
 	zoomSafeZoneRadiusPx: 6,
