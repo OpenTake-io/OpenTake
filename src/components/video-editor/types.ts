@@ -51,7 +51,7 @@ export interface CursorVisualSettings {
 }
 
 export type CursorStyle = "macos" | "tahoe" | "tahoe-inverted" | "dot" | "figma" | (string & {}); // extension-contributed cursor styles
-export const DEFAULT_CURSOR_STYLE: CursorStyle = "tahoe";
+export const DEFAULT_CURSOR_STYLE: CursorStyle = "macos";
 
 export type EditorEffectSection =
 	| "scene"
@@ -116,9 +116,9 @@ export interface ZoomMotionBlurTuning {
 
 export const DEFAULT_ZOOM_MOTION_BLUR_TUNING: ZoomMotionBlurTuning = {
 	panVelocityThreshold: 0,
-	zoomVelocityThreshold: 0.025,
-	maxDirectionalBlurPx: 11,
-	maxRadialBlurStrength: 0.175,
+	zoomVelocityThreshold: 0,
+	maxDirectionalBlurPx: 41.8,
+	maxRadialBlurStrength: 1,
 	panResponsePerSecond: 11,
 	zoomResponsePerSecond: 9,
 	zoomSafeZoneRadiusPx: 6,
