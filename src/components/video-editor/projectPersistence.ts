@@ -156,6 +156,21 @@ function clamp(value: number, min: number, max: number) {
 	return Math.min(max, Math.max(min, value));
 }
 
+type PersistedDevMotionBlurSettings = {
+	zoomMotionBlurTuning?: unknown;
+};
+
+export function stripPersistedDevMotionBlurSettings<T extends PersistedDevMotionBlurSettings>(
+	editor: T,
+): Omit<T, keyof PersistedDevMotionBlurSettings> {
+	const {
+		zoomMotionBlurTuning: _zoomMotionBlurTuning,
+		...persistedEditor
+	} = editor;
+
+	return persistedEditor;
+}
+
 export function normalizeExportEncodingMode(value: unknown): ExportEncodingMode {
 	if (value === "fast" || value === "balanced" || value === "quality") {
 		return value;
@@ -360,10 +375,10 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			? clamp(rawZoomMotionBlurTuning.zoomVelocityThreshold, 0, 0.4)
 			: DEFAULT_ZOOM_MOTION_BLUR_TUNING.zoomVelocityThreshold,
 		maxDirectionalBlurPx: isFiniteNumber(rawZoomMotionBlurTuning.maxDirectionalBlurPx)
-			? clamp(rawZoomMotionBlurTuning.maxDirectionalBlurPx, 0, 32)
+			? clamp(rawZoomMotionBlurTuning.maxDirectionalBlurPx, 0, 96)
 			: DEFAULT_ZOOM_MOTION_BLUR_TUNING.maxDirectionalBlurPx,
 		maxRadialBlurStrength: isFiniteNumber(rawZoomMotionBlurTuning.maxRadialBlurStrength)
-			? clamp(rawZoomMotionBlurTuning.maxRadialBlurStrength, 0, 0.5)
+			? clamp(rawZoomMotionBlurTuning.maxRadialBlurStrength, 0, 1.5)
 			: DEFAULT_ZOOM_MOTION_BLUR_TUNING.maxRadialBlurStrength,
 		panResponsePerSecond: isFiniteNumber(rawZoomMotionBlurTuning.panResponsePerSecond)
 			? clamp(rawZoomMotionBlurTuning.panResponsePerSecond, 1, 30)
