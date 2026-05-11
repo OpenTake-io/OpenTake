@@ -4361,8 +4361,7 @@ export default function VideoEditor() {
 						? (smokeExportConfig.fps ?? settings.mp4FrameRate ?? mp4FrameRate)
 						: (settings.mp4FrameRate ?? mp4FrameRate);
 					const pipelineModel = smokeExportConfig.enabled
-						? (smokeExportConfig.pipelineModel ??
-								(smokeExportConfig.useNativeExport ? "modern" : "legacy"))
+						? (smokeExportConfig.pipelineModel ?? "modern")
 						: (settings.pipelineModel ?? exportPipelineModel);
 					const useExperimentalNativeExport =
 						pipelineModel === "modern" &&
