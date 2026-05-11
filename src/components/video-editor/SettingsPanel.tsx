@@ -3240,7 +3240,7 @@ export function SettingsPanel({
 											value={settings.volume}
 											defaultValue={1}
 											min={0}
-											max={2}
+											max={1}
 											step={0.01}
 											onChange={(v) => onSourceAudioTrackVolumeChange?.(track.id, v)}
 											formatValue={(v) => `${Math.round(v * 100)}%`}

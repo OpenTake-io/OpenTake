@@ -9,6 +9,7 @@ interface PlaybackCursorProps {
 	onSeek?: (time: number) => void;
 	timelineRef: RefObject<HTMLDivElement>;
 	keyframes?: { id: string; time: number }[];
+	isLoading?: boolean;
 }
 
 export default function PlaybackCursor({
@@ -17,6 +18,7 @@ export default function PlaybackCursor({
 	onSeek,
 	timelineRef,
 	keyframes = [],
+	isLoading = false,
 }: PlaybackCursorProps) {
 	const { sidebarWidth, direction, range, valueToPixels, pixelsToValue } = useTimelineContext();
 	const sideProperty = direction === "rtl" ? "right" : "left";
@@ -100,11 +102,27 @@ export default function PlaybackCursor({
 				</div>
 				<div
 					className={cn(
-						"absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/80 text-[10px] text-white/90 font-medium tabular-nums whitespace-nowrap border border-foreground/10 shadow-lg pointer-events-none",
-						isDragging ? "opacity-100" : "opacity-0",
+						"absolute -top-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/80 text-[10px] text-white/90 font-medium tabular-nums whitespace-nowrap border border-foreground/10 shadow-lg pointer-events-none transition-opacity",
+						(isDragging || isLoading) ? "opacity-100" : "opacity-0",
 					)}
 				>
-					<span className="leading-5">{formatPlayheadTime(clampedTime)}</span>
+					<div className="flex items-center">
+						{formatPlayheadTime(clampedTime).split("").map((char, i) => (
+							<span
+								key={i}
+								className={cn(
+									"leading-5 whitespace-pre",
+									isLoading && "bg-gradient-to-r from-white/40 via-white to-white/40 bg-clip-text text-transparent animate-text-shimmer"
+								)}
+								style={isLoading ? {
+									animationDelay: `${i * 0.05}s`,
+									animationDuration: "2.5s",
+								} : undefined}
+							>
+								{char}
+							</span>
+						))}
+					</div>
 				</div>
 			</div>
 		</div>
