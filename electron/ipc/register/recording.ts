@@ -13,6 +13,7 @@ import {
 	systemPreferences,
 } from "electron";
 import { showCursor } from "../../cursorHider";
+import { getMonitorHandles } from "../monitorResolver";
 import { ALLOW_RECORDLY_WINDOW_CAPTURE } from "../constants";
 import { startWindowBoundsCapture, stopWindowBoundsCapture } from "../cursor/bounds";
 import { startInteractionCapture, stopInteractionCapture } from "../cursor/interaction";
@@ -74,6 +75,7 @@ import {
 	waitForWindowsCaptureStart,
 	waitForWindowsCaptureStop,
 } from "../recording/windows";
+import { getMonitorHandles } from "../monitorResolver";
 import {
 	shouldStartWindowsBrowserMicrophoneFallback,
 	shouldUseWindowsBrowserMicrophoneFallback,
@@ -406,10 +408,13 @@ export function registerRecordingHandlers(
 					const recordingsDir = await getRecordingsDir();
 					const timestamp = Date.now();
 					const outputPath = path.join(recordingsDir, `recording-${timestamp}.mp4`);
+					const tempVideoPath = path.join(app.getPath("temp"), `recordly-native-${timestamp}.mp4`);
+					
 					let captureOutput = "";
 					let systemAudioPath: string | null = null;
 					let microphonePath: string | null = null;
 					let orphanedMicAudioPath: string | null = null;
+					
 					const browserMicFallbackRequested =
 						shouldStartWindowsBrowserMicrophoneFallback(options);
 					const windowId = parseWindowId(source?.id);
@@ -424,14 +429,28 @@ export function registerRecordingHandlers(
 					setWindowsOrphanedMicAudioPath(null);
 
 					const config: Record<string, unknown> = {
-						outputPath,
+						outputPath: tempVideoPath,
 						fps: 60,
 					};
 
 					if (isWindowCapture) {
 						config.windowHandle = windowId;
 					} else {
-						config.displayId = resolvedDisplay.displayId;
+						// Windows Graphics Capture (WGC) requires a raw HMONITOR handle.
+						// We attempt to resolve the handle by matching the physical coordinates of the target display.
+						const monitors = getMonitorHandles();
+						const matchedMonitor = monitors.find(m => 
+							m.x === Math.round(displayBounds.x) && 
+							m.y === Math.round(displayBounds.y)
+						) || monitors[0];
+
+						if (matchedMonitor) {
+							config.displayId = matchedMonitor.handle;
+						} else {
+							// Fallback to coordinate-based matching if handle resolution fails
+							config.displayId = resolvedDisplay.displayId;
+						}
+						
 						config.displayX = Math.round(resolvedDisplay.bounds.x);
 						config.displayY = Math.round(resolvedDisplay.bounds.y);
 						config.displayW = Math.round(resolvedDisplay.bounds.width);
@@ -443,15 +462,17 @@ export function registerRecordingHandlers(
 							recordingsDir,
 							`recording-${timestamp}.system.wav`,
 						);
+						const tempAudioPath = path.join(app.getPath("temp"), `recordly-native-${timestamp}.system.wav`);
 						config.captureSystemAudio = true;
-						config.audioOutputPath = systemAudioPath;
+						config.audioOutputPath = tempAudioPath;
 						setWindowsSystemAudioPath(systemAudioPath);
 					}
 
 					if (options?.capturesMicrophone && !browserMicFallbackRequested) {
 						microphonePath = path.join(recordingsDir, `recording-${timestamp}.mic.wav`);
+						const tempMicPath = path.join(app.getPath("temp"), `recordly-native-${timestamp}.mic.wav`);
 						config.captureMic = true;
-						config.micOutputPath = microphonePath;
+						config.micOutputPath = tempMicPath;
 						if (options.microphoneLabel) {
 							config.micDeviceName = options.microphoneLabel;
 						}
@@ -480,19 +501,25 @@ export function registerRecordingHandlers(
 					setWindowsCaptureTargetPath(outputPath);
 					setWindowsCaptureStopRequested(false);
 					setWindowsCapturePaused(false);
+
+					// We inject __COMPAT_LAYER=HighDpiAware to ensure the native helper correctly
+					// calculates coordinates on systems with desktop scaling (DPI) active.
 					wcProc = spawn(exePath, [JSON.stringify(config)], {
 						cwd: recordingsDir,
 						stdio: ["pipe", "pipe", "pipe"],
+						env: { ...process.env, __COMPAT_LAYER: "HighDpiAware" },
 					});
 					setWindowsCaptureProcess(wcProc);
 					attachWindowsCaptureLifecycle(wcProc);
 
 					wcProc.stdout.on("data", (chunk: Buffer) => {
-						captureOutput += chunk.toString();
+						const msg = chunk.toString();
+						captureOutput += msg;
 						setWindowsCaptureOutputBuffer(captureOutput);
 					});
 					wcProc.stderr.on("data", (chunk: Buffer) => {
-						captureOutput += chunk.toString();
+						const msg = chunk.toString();
+						captureOutput += msg;
 						setWindowsCaptureOutputBuffer(captureOutput);
 					});
 
@@ -839,10 +866,37 @@ export function registerRecordingHandlers(
 				setWindowsCaptureStopRequested(true);
 				proc.stdin.write("stop\n");
 				const tempVideoPath = await waitForWindowsCaptureStop(proc);
-
 				const finalVideoPath = preferredVideoPath ?? tempVideoPath;
+
+				// Native Windows capture results are initially written to a safe temporary path
+				// (to avoid encoding failures with non-ASCII characters). We move them to the final
+				// destination now using Node.js, which handles Unicode paths correctly.
 				if (tempVideoPath !== finalVideoPath) {
 					await moveFileWithOverwrite(tempVideoPath, finalVideoPath);
+				}
+
+				if (windowsSystemAudioPath && tempVideoPath.endsWith(".mp4")) {
+					const tempAudioPath = tempVideoPath.replace(".mp4", ".system.wav");
+					const finalAudioPath = windowsSystemAudioPath;
+					if (await fs.access(tempAudioPath).then(() => true).catch(() => false)) {
+						await moveFileWithOverwrite(tempAudioPath, finalAudioPath);
+						const tempJson = tempAudioPath + ".json";
+						if (await fs.access(tempJson).then(() => true).catch(() => false)) {
+							await moveFileWithOverwrite(tempJson, finalAudioPath + ".json");
+						}
+					}
+				}
+
+				if (windowsMicAudioPath && tempVideoPath.endsWith(".mp4")) {
+					const tempMicPath = tempVideoPath.replace(".mp4", ".mic.wav");
+					const finalMicPath = windowsMicAudioPath;
+					if (await fs.access(tempMicPath).then(() => true).catch(() => false)) {
+						await moveFileWithOverwrite(tempMicPath, finalMicPath);
+						const tempJson = tempMicPath + ".json";
+						if (await fs.access(tempJson).then(() => true).catch(() => false)) {
+							await moveFileWithOverwrite(tempJson, finalMicPath + ".json");
+						}
+					}
 				}
 				const validation = await validateRecordedVideo(finalVideoPath);
 
