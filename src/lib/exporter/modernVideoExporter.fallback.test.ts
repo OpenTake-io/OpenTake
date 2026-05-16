@@ -117,4 +117,57 @@ describe("ModernVideoExporter native fallback routing", () => {
 		expect(initializeEncoder).toHaveBeenCalledTimes(1);
 		expect(mocks.muxerFinalize).toHaveBeenCalledTimes(1);
 	}, 15_000);
+
+	it("retries the main decode path once with a readable file-backed source", async () => {
+		const { ModernVideoExporter } = await import("./modernVideoExporter");
+		mocks.streamingDecoderGetEffectiveDuration.mockReturnValue(1);
+		mocks.streamingDecoderDecodeAll
+			.mockRejectedValueOnce(
+				new Error("readAVPacket pipeline failed: Failed after 3 attempts"),
+			)
+			.mockResolvedValueOnce(undefined);
+
+		const exporter = new ModernVideoExporter({
+			videoUrl: "file:///recording.mp4",
+			width: 1920,
+			height: 1080,
+			frameRate: 30,
+			bitrate: 8_000_000,
+			wallpaper: "#101010",
+			padding: 0,
+			borderRadius: 0,
+			backgroundBlur: 0,
+			shadowIntensity: 0,
+			showShadow: false,
+			cropRegion: { x: 0, y: 0, width: 1, height: 1 },
+			backendPreference: "webcodecs",
+		} as never) as unknown as {
+			export: () => Promise<{ success: boolean; blob?: Blob; error?: string }>;
+			initializeEncoder: () => Promise<unknown>;
+		};
+
+		vi.spyOn(exporter, "initializeEncoder").mockResolvedValue({
+			codec: "avc1.640034",
+			hardwareAcceleration: "prefer-hardware",
+		});
+
+		const result = await exporter.export();
+
+		expect(result.success).toBe(true);
+		expect(mocks.streamingDecoderLoadMetadata).toHaveBeenCalledTimes(2);
+		expect(mocks.streamingDecoderLoadMetadata.mock.calls[0]).toEqual([
+			"file:///recording.mp4",
+			{
+				forceReadableFileSource: false,
+			},
+		]);
+		expect(mocks.streamingDecoderLoadMetadata.mock.calls[1]).toEqual([
+			"file:///recording.mp4",
+			{
+				forceReadableFileSource: true,
+			},
+		]);
+		expect(mocks.streamingDecoderDecodeAll).toHaveBeenCalledTimes(2);
+		expect(mocks.muxerFinalize).toHaveBeenCalledTimes(1);
+	});
 });
