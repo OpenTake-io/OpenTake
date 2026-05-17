@@ -425,18 +425,20 @@ export function registerRecordingHandlers(
 				}
 
 				let wcProc: ChildProcessWithoutNullStreams | null = null;
+				let tempVideoPath: string | null = null;
+				let tempSystemAudioPath: string | null = null;
+				let tempMicPath: string | null = null;
 				try {
 					const exePath = getWindowsCaptureExePath();
 					const recordingsDir = await getRecordingsDir();
 					const timestamp = Date.now();
 					const outputPath = path.join(recordingsDir, `recording-${timestamp}.mp4`);
-					const tempVideoPath = path.join(app.getPath("temp"), `recordly-native-${timestamp}.mp4`);
+					tempVideoPath = path.join(app.getPath("temp"), `recordly-native-${timestamp}.mp4`);
 					
 					let captureOutput = "";
 					let systemAudioPath: string | null = null;
 					let microphonePath: string | null = null;
 					let orphanedMicAudioPath: string | null = null;
-					let tempMicPath: string | null = null;
 					
 					const browserMicFallbackRequested =
 						shouldStartWindowsBrowserMicrophoneFallback(options);
@@ -486,9 +488,12 @@ export function registerRecordingHandlers(
 							recordingsDir,
 							`recording-${timestamp}.system.wav`,
 						);
-						const tempAudioPath = path.join(app.getPath("temp"), `recordly-native-${timestamp}.system.wav`);
+						tempSystemAudioPath = path.join(
+							app.getPath("temp"),
+							`recordly-native-${timestamp}.system.wav`,
+						);
 						config.captureSystemAudio = true;
-						config.audioOutputPath = tempAudioPath;
+						config.audioOutputPath = tempSystemAudioPath;
 						setWindowsSystemAudioPath(systemAudioPath);
 					} else {
 						setWindowsSystemAudioPath(null);
@@ -530,8 +535,9 @@ export function registerRecordingHandlers(
 					setWindowsCaptureStopRequested(false);
 					setWindowsCapturePaused(false);
 
-					// We inject __COMPAT_LAYER=HighDpiAware to ensure the native helper correctly
-					// calculates coordinates on systems with desktop scaling (DPI) active.
+					// The native helper currently does not declare DPI awareness in its own
+					// manifest or process setup, so we keep the compatibility flag here until
+					// scaled-display capture is verified without it on Windows.
 					wcProc = spawn(exePath, [JSON.stringify(config)], {
 						cwd: recordingsDir,
 						stdio: ["pipe", "pipe", "pipe"],
@@ -598,6 +604,17 @@ export function registerRecordingHandlers(
 					} catch {
 						/* ignore */
 					}
+					await Promise.allSettled([
+						tempVideoPath
+							? fs.rm(tempVideoPath, { force: true }).catch(() => undefined)
+							: Promise.resolve(),
+						tempSystemAudioPath
+							? fs.rm(tempSystemAudioPath, { force: true }).catch(() => undefined)
+							: Promise.resolve(),
+						tempMicPath
+							? fs.rm(tempMicPath, { force: true }).catch(() => undefined)
+							: Promise.resolve(),
+					]);
 					setWindowsNativeCaptureActive(false);
 					setNativeScreenRecordingActive(false);
 					setWindowsCaptureProcess(null);
