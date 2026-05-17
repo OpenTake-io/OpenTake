@@ -72,6 +72,13 @@ describe("media server path policy", () => {
 });
 
 describe("resolveHttpByteRange", () => {
+	it("rejects malformed and multi-range headers", async () => {
+		const { resolveHttpByteRange } = await import("./mediaServer");
+
+		expect(resolveHttpByteRange("bytes=0-1,2-3", 100)).toBeNull();
+		expect(resolveHttpByteRange("bytes=0-1foo", 100)).toBeNull();
+	});
+
 	it("clamps oversized explicit end offsets to EOF", async () => {
 		const { resolveHttpByteRange } = await import("./mediaServer");
 
