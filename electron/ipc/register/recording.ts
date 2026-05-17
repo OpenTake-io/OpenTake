@@ -75,7 +75,6 @@ import {
 	waitForWindowsCaptureStart,
 	waitForWindowsCaptureStop,
 } from "../recording/windows";
-import { getMonitorHandles } from "../monitorResolver";
 import {
 	shouldStartWindowsBrowserMicrophoneFallback,
 	shouldUseWindowsBrowserMicrophoneFallback,
@@ -439,10 +438,11 @@ export function registerRecordingHandlers(
 						// Windows Graphics Capture (WGC) requires a raw HMONITOR handle.
 						// We attempt to resolve the handle by matching the physical coordinates of the target display.
 						const monitors = getMonitorHandles();
-						const matchedMonitor = monitors.find(m => 
-							m.x === Math.round(displayBounds.x) && 
-							m.y === Math.round(displayBounds.y)
-						) || monitors[0];
+						const matchedMonitor = monitors.find(
+							(monitor) =>
+								monitor.x === Math.round(displayBounds.x) &&
+								monitor.y === Math.round(displayBounds.y),
+						);
 
 						if (matchedMonitor) {
 							config.displayId = matchedMonitor.handle;
@@ -466,6 +466,8 @@ export function registerRecordingHandlers(
 						config.captureSystemAudio = true;
 						config.audioOutputPath = tempAudioPath;
 						setWindowsSystemAudioPath(systemAudioPath);
+					} else {
+						setWindowsSystemAudioPath(null);
 					}
 
 					if (options?.capturesMicrophone && !browserMicFallbackRequested) {
@@ -479,6 +481,8 @@ export function registerRecordingHandlers(
 						setWindowsMicAudioPath(microphonePath);
 					} else if (browserMicFallbackRequested) {
 						config.captureMic = false;
+						setWindowsMicAudioPath(null);
+					} else {
 						setWindowsMicAudioPath(null);
 					}
 
@@ -574,6 +578,9 @@ export function registerRecordingHandlers(
 					setNativeScreenRecordingActive(false);
 					setWindowsCaptureProcess(null);
 					setWindowsCaptureTargetPath(null);
+					setWindowsSystemAudioPath(null);
+					setWindowsMicAudioPath(null);
+					setWindowsOrphanedMicAudioPath(null);
 					setWindowsCaptureStopRequested(false);
 					setWindowsCapturePaused(false);
 					return {
