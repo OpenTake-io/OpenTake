@@ -477,7 +477,6 @@ export class FrameRenderer {
 	private currentVideoTime = 0;
 	private cursorOverlay: PixiCursorOverlay | null = null;
 	private lastSyncedWebcamTime: number | null = null;
-	private lastWebcamCacheRefreshTime: number | null = null;
 	private webcamRenderMode: "hidden" | "live" | "cached" = "hidden";
 	private webcamLayoutCache: WebcamLayoutCache | null = null;
 	private videoTextureUsesStartupStaging = false;
@@ -2367,7 +2366,6 @@ export class FrameRenderer {
 			this.webcamFrameCacheCanvas = null;
 			this.webcamFrameCacheCtx = null;
 			this.lastSyncedWebcamTime = null;
-			this.lastWebcamCacheRefreshTime = null;
 			this.webcamLayoutCache = null;
 			this.webcamRenderMode = "hidden";
 			return;
@@ -2380,7 +2378,6 @@ export class FrameRenderer {
 		this.clearWebcamMediaElement();
 		this.webcamFrameCacheCanvas = null;
 		this.webcamFrameCacheCtx = null;
-		this.lastWebcamCacheRefreshTime = null;
 		this.webcamLayoutCache = null;
 		this.webcamRenderMode = "hidden";
 
@@ -2391,7 +2388,6 @@ export class FrameRenderer {
 			this.webcamVideoElement = null;
 			this.webcamSeekPromise = null;
 			this.lastSyncedWebcamTime = null;
-			this.lastWebcamCacheRefreshTime = null;
 			return;
 		} catch (error) {
 			console.warn(
@@ -2452,31 +2448,6 @@ export class FrameRenderer {
 		this.webcamRenderMode = nextMode;
 	}
 
-	private shouldRefreshWebcamFrameCache(width: number, height: number): boolean {
-		const cropRegion = this.config.webcam?.cropRegion;
-		const sourceRect = getWebcamCropSourceRect(cropRegion, width, height);
-		const targetWidth = Math.max(1, Math.ceil(sourceRect.sw));
-		const targetHeight = Math.max(1, Math.ceil(sourceRect.sh));
-
-		if (
-			!this.webcamFrameCacheCanvas ||
-			this.webcamFrameCacheCanvas.width !== targetWidth ||
-			this.webcamFrameCacheCanvas.height !== targetHeight
-		) {
-			return true;
-		}
-
-		if (!isWebcamCropRegionDefault(cropRegion)) {
-			return true;
-		}
-
-		if (this.lastWebcamCacheRefreshTime === null) {
-			return true;
-		}
-
-		return Math.abs(this.currentVideoTime - this.lastWebcamCacheRefreshTime) >= 0.25;
-	}
-
 	private ensureWebcamFrameCache(width: number, height: number): boolean {
 		const targetWidth = Math.max(1, Math.ceil(width));
 		const targetHeight = Math.max(1, Math.ceil(height));
@@ -2504,7 +2475,6 @@ export class FrameRenderer {
 		source: CanvasImageSource | VideoFrame,
 		width: number,
 		height: number,
-		referenceTimeSeconds = this.currentVideoTime,
 	): boolean {
 		const sourceRect = getWebcamCropSourceRect(this.config.webcam?.cropRegion, width, height);
 		if (!this.ensureWebcamFrameCache(sourceRect.sw, sourceRect.sh)) {
@@ -2532,7 +2502,6 @@ export class FrameRenderer {
 			this.webcamFrameCacheCanvas.width,
 			this.webcamFrameCacheCanvas.height,
 		);
-		this.lastWebcamCacheRefreshTime = referenceTimeSeconds;
 		return true;
 	}
 
@@ -2558,7 +2527,6 @@ export class FrameRenderer {
 		liveSourceWidth: number,
 		liveSourceHeight: number,
 		canUseLiveSource: boolean,
-		referenceTimeSeconds = this.currentVideoTime,
 	): WebcamRenderSource | null {
 		if (canUseLiveSource && liveSource && liveSourceWidth > 0 && liveSourceHeight > 0) {
 			const usesDefaultCropRegion = isWebcamCropRegionDefault(this.config.webcam?.cropRegion);
@@ -2572,7 +2540,6 @@ export class FrameRenderer {
 					liveSource,
 					liveSourceWidth,
 					liveSourceHeight,
-					referenceTimeSeconds,
 				);
 				const cachedSource = this.getCachedWebcamRenderSource();
 				if (cachedSource) {
@@ -2901,7 +2868,6 @@ export class FrameRenderer {
 			liveSourceDimensions.width,
 			liveSourceDimensions.height,
 			canUseLiveSource,
-			referenceTimeSeconds,
 		);
 
 		if (!renderableWebcamSource) {
@@ -4045,7 +4011,6 @@ export class FrameRenderer {
 
 		this.annotationScaleFactor = 1;
 		this.lastSyncedWebcamTime = null;
-		this.lastWebcamCacheRefreshTime = null;
 		this.webcamRenderMode = "hidden";
 		this.webcamLayoutCache = null;
 		this.layoutCache = null;
