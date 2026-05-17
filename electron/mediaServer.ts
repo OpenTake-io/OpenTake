@@ -12,7 +12,7 @@ export function resolveHttpByteRange(
 	rangeHeader: string,
 	fileSize: number,
 ): { start: number; end: number } | null {
-	const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+	const match = rangeHeader.trim().match(/^bytes=(\d*)-(\d*)$/);
 	if (!match || (!match[1] && !match[2])) {
 		return null;
 	}
