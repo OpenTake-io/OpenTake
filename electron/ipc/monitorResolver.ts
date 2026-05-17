@@ -55,6 +55,7 @@ public class MonitorHelper {
 
 	const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", psScript], {
 		encoding: "utf-8",
+		timeout: 5000,
 	});
 
 	if (result.error || result.status !== 0) {
