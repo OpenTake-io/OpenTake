@@ -367,6 +367,29 @@ async function cleanupWindowsOrphanedMicAudioPath(filePath: string | null) {
 	await fs.rm(filePath, { force: true }).catch(() => undefined);
 }
 
+async function pathExists(filePath: string | null | undefined) {
+	if (!filePath) {
+		return false;
+	}
+
+	try {
+		await fs.access(filePath);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+async function resolveExistingPath(...candidates: Array<string | null | undefined>) {
+	for (const candidate of candidates) {
+		if (await pathExists(candidate)) {
+			return candidate ?? null;
+		}
+	}
+
+	return null;
+}
+
 export function registerRecordingHandlers(
 	onRecordingStateChange?: (recording: boolean, sourceName: string) => void,
 ) {
@@ -413,6 +436,7 @@ export function registerRecordingHandlers(
 					let systemAudioPath: string | null = null;
 					let microphonePath: string | null = null;
 					let orphanedMicAudioPath: string | null = null;
+					let tempMicPath: string | null = null;
 					
 					const browserMicFallbackRequested =
 						shouldStartWindowsBrowserMicrophoneFallback(options);
@@ -472,7 +496,7 @@ export function registerRecordingHandlers(
 
 					if (options?.capturesMicrophone && !browserMicFallbackRequested) {
 						microphonePath = path.join(recordingsDir, `recording-${timestamp}.mic.wav`);
-						const tempMicPath = path.join(app.getPath("temp"), `recordly-native-${timestamp}.mic.wav`);
+						tempMicPath = path.join(app.getPath("temp"), `recordly-native-${timestamp}.mic.wav`);
 						config.captureMic = true;
 						config.micOutputPath = tempMicPath;
 						if (options.microphoneLabel) {
@@ -532,7 +556,7 @@ export function registerRecordingHandlers(
 						browserMicFallbackRequested ||
 						shouldUseWindowsBrowserMicrophoneFallback(captureOutput, options);
 					if (microphoneFallbackRequired) {
-						orphanedMicAudioPath = microphonePath;
+						orphanedMicAudioPath = tempMicPath ?? microphonePath;
 						setWindowsOrphanedMicAudioPath(orphanedMicAudioPath);
 						microphonePath = null;
 						setWindowsMicAudioPath(null);
@@ -860,6 +884,9 @@ export function registerRecordingHandlers(
 		try {
 		// Windows native capture stop path
 		if (process.platform === "win32" && windowsNativeCaptureActive) {
+			let stagedTempVideoPath: string | null = null;
+			let stagedTempSystemAudioPath: string | null = null;
+			let stagedTempMicAudioPath: string | null = null;
 			try {
 				if (!windowsCaptureProcess) {
 					throw new Error("Native Windows capture process is not running");
@@ -873,6 +900,7 @@ export function registerRecordingHandlers(
 				setWindowsCaptureStopRequested(true);
 				proc.stdin.write("stop\n");
 				const tempVideoPath = await waitForWindowsCaptureStop(proc);
+				stagedTempVideoPath = tempVideoPath;
 				const finalVideoPath = preferredVideoPath ?? tempVideoPath;
 
 				// Native Windows capture results are initially written to a safe temporary path
@@ -884,11 +912,12 @@ export function registerRecordingHandlers(
 
 				if (windowsSystemAudioPath && tempVideoPath.endsWith(".mp4")) {
 					const tempAudioPath = tempVideoPath.replace(".mp4", ".system.wav");
+					stagedTempSystemAudioPath = tempAudioPath;
 					const finalAudioPath = windowsSystemAudioPath;
-					if (await fs.access(tempAudioPath).then(() => true).catch(() => false)) {
+					if (await pathExists(tempAudioPath)) {
 						await moveFileWithOverwrite(tempAudioPath, finalAudioPath);
 						const tempJson = tempAudioPath + ".json";
-						if (await fs.access(tempJson).then(() => true).catch(() => false)) {
+						if (await pathExists(tempJson)) {
 							await moveFileWithOverwrite(tempJson, finalAudioPath + ".json");
 						}
 					}
@@ -896,11 +925,12 @@ export function registerRecordingHandlers(
 
 				if (windowsMicAudioPath && tempVideoPath.endsWith(".mp4")) {
 					const tempMicPath = tempVideoPath.replace(".mp4", ".mic.wav");
+					stagedTempMicAudioPath = tempMicPath;
 					const finalMicPath = windowsMicAudioPath;
-					if (await fs.access(tempMicPath).then(() => true).catch(() => false)) {
+					if (await pathExists(tempMicPath)) {
 						await moveFileWithOverwrite(tempMicPath, finalMicPath);
 						const tempJson = tempMicPath + ".json";
-						if (await fs.access(tempJson).then(() => true).catch(() => false)) {
+						if (await pathExists(tempJson)) {
 							await moveFileWithOverwrite(tempJson, finalMicPath + ".json");
 						}
 					}
@@ -948,27 +978,36 @@ export function registerRecordingHandlers(
 				return { success: true, path: finalVideoPath };
 			} catch (error) {
 				console.error("Failed to stop native Windows capture:", error);
-				const fallbackPath = windowsCaptureTargetPath;
+				const fallbackPath = await resolveExistingPath(
+					windowsCaptureTargetPath,
+					stagedTempVideoPath,
+				);
+				const recoveredSystemAudioPath = await resolveExistingPath(
+					windowsSystemAudioPath,
+					stagedTempSystemAudioPath,
+				);
+				const recoveredMicAudioPath = await resolveExistingPath(
+					windowsMicAudioPath,
+					stagedTempMicAudioPath,
+				);
 				const fallbackOrphanedMicAudioPath = windowsOrphanedMicAudioPath;
-				const diagnosticsSystemAudioPath = windowsSystemAudioPath;
-				const diagnosticsMicAudioPath = windowsMicAudioPath;
+				const diagnosticsSystemAudioPath = recoveredSystemAudioPath ?? windowsSystemAudioPath;
+				const diagnosticsMicAudioPath = recoveredMicAudioPath ?? windowsMicAudioPath;
 				setWindowsNativeCaptureActive(false);
 				setNativeScreenRecordingActive(false);
 				setWindowsCaptureProcess(null);
 				setWindowsCaptureTargetPath(null);
 				setWindowsCaptureStopRequested(false);
 				setWindowsCapturePaused(false);
-				setWindowsSystemAudioPath(null);
-				setWindowsMicAudioPath(null);
 				setWindowsOrphanedMicAudioPath(null);
-				setWindowsPendingVideoPath(null);
-				await cleanupWindowsOrphanedMicAudioPath(fallbackOrphanedMicAudioPath);
 
 				if (fallbackPath) {
 					try {
-						await fs.access(fallbackPath);
 						const validation = await validateRecordedVideo(fallbackPath);
 						setWindowsPendingVideoPath(fallbackPath);
+						setWindowsSystemAudioPath(recoveredSystemAudioPath);
+						setWindowsMicAudioPath(recoveredMicAudioPath);
+						await cleanupWindowsOrphanedMicAudioPath(fallbackOrphanedMicAudioPath);
 						recordNativeCaptureDiagnostics({
 							backend: "windows-wgc",
 							phase: "stop",
@@ -997,6 +1036,11 @@ export function registerRecordingHandlers(
 						// File is absent or failed validation.
 					}
 				}
+
+				setWindowsSystemAudioPath(null);
+				setWindowsMicAudioPath(null);
+				setWindowsPendingVideoPath(null);
+				await cleanupWindowsOrphanedMicAudioPath(fallbackOrphanedMicAudioPath);
 
 				recordNativeCaptureDiagnostics({
 					backend: "windows-wgc",
