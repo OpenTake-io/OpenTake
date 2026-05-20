@@ -127,6 +127,14 @@ import {
 	saveEditorPresets,
 	serializeEditorPresetSnapshot,
 } from "./editorPreferences";
+import {
+	createEditorHistoryStack,
+	type EditorHistorySnapshot,
+	recordEditorHistorySnapshot,
+	redoEditorHistoryStack,
+	resetEditorHistoryStack,
+	undoEditorHistoryStack,
+} from "./editorHistory";
 import ProjectBrowserDialog, { type ProjectLibraryEntry } from "./ProjectBrowserDialog";
 import {
 	createProjectData,
@@ -205,19 +213,6 @@ import {
 	buildLoopedCursorTelemetry,
 	getDisplayedTimelineWindowMs,
 } from "./videoPlayback/cursorLoopTelemetry";
-
-type EditorHistorySnapshot = {
-	zoomRegions: ZoomRegion[];
-	clipRegions: ClipRegion[];
-	speedRegions: SpeedRegion[];
-	annotationRegions: AnnotationRegion[];
-	audioRegions: AudioRegion[];
-	autoCaptions: CaptionCue[];
-	selectedZoomId: string | null;
-	selectedClipId: string | null;
-	selectedAnnotationId: string | null;
-	selectedAudioId: string | null;
-};
 
 type PendingExportSave = {
 	fileName: string;
@@ -769,9 +764,7 @@ export default function VideoEditor() {
 	const exporterRef = useRef<CancelableExporter | null>(null);
 	const autoSuggestedVideoPathRef = useRef<string | null>(null);
 	const pendingFreshRecordingAutoZoomPathRef = useRef<string | null>(null);
-	const historyPastRef = useRef<EditorHistorySnapshot[]>([]);
-	const historyFutureRef = useRef<EditorHistorySnapshot[]>([]);
-	const historyCurrentRef = useRef<EditorHistorySnapshot | null>(null);
+	const editorHistoryRef = useRef(createEditorHistoryStack());
 	const applyingHistoryRef = useRef(false);
 	const pendingExportSaveRef = useRef<PendingExportSave | null>(null);
 	const pendingTelemetryRetryTimeoutRef = useRef<number | null>(null);
@@ -1513,14 +1506,10 @@ export default function VideoEditor() {
 		void refreshProjectLibrary();
 	}, [refreshProjectLibrary]);
 
-	const canUndo = historyPastRef.current.length > 0;
-	const canRedo = historyFutureRef.current.length > 0;
+	const canUndo = editorHistoryRef.current.past.length > 0;
+	const canRedo = editorHistoryRef.current.future.length > 0;
 
 	void historyVersion;
-
-	const cloneSnapshot = useCallback((snapshot: EditorHistorySnapshot): EditorHistorySnapshot => {
-		return cloneStructured(snapshot);
-	}, []);
 
 	const gifOutputDimensions = useMemo(
 		() =>
@@ -1970,7 +1959,7 @@ export default function VideoEditor() {
 	const applyHistorySnapshot = useCallback(
 		(snapshot: EditorHistorySnapshot) => {
 			applyingHistoryRef.current = true;
-			const cloned = cloneSnapshot(snapshot);
+			const cloned = cloneStructured(snapshot);
 			setZoomRegions(cloned.zoomRegions);
 			setClipRegions(cloned.clipRegions);
 			setSpeedRegions(cloned.speedRegions);
@@ -2002,34 +1991,24 @@ export default function VideoEditor() {
 				cloned.annotationRegions.reduce((max, region) => Math.max(max, region.zIndex), 0) +
 				1;
 		},
-		[cloneSnapshot],
+		[],
 	);
 
 	const handleUndo = useCallback(() => {
-		if (historyPastRef.current.length === 0) return;
-
-		const current = historyCurrentRef.current ?? cloneSnapshot(buildHistorySnapshot());
-		const previous = historyPastRef.current.pop();
+		const previous = undoEditorHistoryStack(editorHistoryRef.current, buildHistorySnapshot());
 		if (!previous) return;
 
-		historyFutureRef.current.push(cloneSnapshot(current));
-		historyCurrentRef.current = cloneSnapshot(previous);
 		applyHistorySnapshot(previous);
 		syncHistoryButtons();
-	}, [applyHistorySnapshot, buildHistorySnapshot, cloneSnapshot, syncHistoryButtons]);
+	}, [applyHistorySnapshot, buildHistorySnapshot, syncHistoryButtons]);
 
 	const handleRedo = useCallback(() => {
-		if (historyFutureRef.current.length === 0) return;
-
-		const current = historyCurrentRef.current ?? cloneSnapshot(buildHistorySnapshot());
-		const next = historyFutureRef.current.pop();
+		const next = redoEditorHistoryStack(editorHistoryRef.current, buildHistorySnapshot());
 		if (!next) return;
 
-		historyPastRef.current.push(cloneSnapshot(current));
-		historyCurrentRef.current = cloneSnapshot(next);
 		applyHistorySnapshot(next);
 		syncHistoryButtons();
-	}, [applyHistorySnapshot, buildHistorySnapshot, cloneSnapshot, syncHistoryButtons]);
+	}, [applyHistorySnapshot, buildHistorySnapshot, syncHistoryButtons]);
 
 	const applyLoadedProject = useCallback(
 		async (candidate: unknown, path?: string | null) => {
@@ -2169,9 +2148,7 @@ export default function VideoEditor() {
 					0,
 				) + 1;
 
-			historyPastRef.current = [];
-			historyFutureRef.current = [];
-			historyCurrentRef.current = null;
+			resetEditorHistoryStack(editorHistoryRef.current);
 			applyingHistoryRef.current = false;
 			syncHistoryButtons();
 
@@ -2285,32 +2262,18 @@ export default function VideoEditor() {
 
 	useEffect(() => {
 		const snapshot = buildHistorySnapshot();
+		const result = recordEditorHistorySnapshot(editorHistoryRef.current, snapshot, {
+			applyingHistory: applyingHistoryRef.current,
+		});
 
-		if (!historyCurrentRef.current) {
-			historyCurrentRef.current = cloneSnapshot(snapshot);
-			syncHistoryButtons();
-			return;
-		}
-
-		if (applyingHistoryRef.current) {
-			historyCurrentRef.current = cloneSnapshot(snapshot);
+		if (result === "applied") {
 			applyingHistoryRef.current = false;
+		}
+
+		if (result !== "unchanged") {
 			syncHistoryButtons();
-			return;
 		}
-
-		if (areDeepEqual(historyCurrentRef.current, snapshot)) {
-			return;
-		}
-
-		historyPastRef.current.push(cloneSnapshot(historyCurrentRef.current));
-		if (historyPastRef.current.length > 100) {
-			historyPastRef.current.shift();
-		}
-		historyCurrentRef.current = cloneSnapshot(snapshot);
-		historyFutureRef.current = [];
-		syncHistoryButtons();
-	}, [buildHistorySnapshot, cloneSnapshot, syncHistoryButtons]);
+	}, [buildHistorySnapshot, syncHistoryButtons]);
 
 	const hasUnsavedChanges = useMemo(
 		() =>
