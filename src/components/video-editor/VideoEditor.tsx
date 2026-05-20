@@ -2291,10 +2291,11 @@ export default function VideoEditor() {
 
 		return window.electronAPI.onRecordingSessionChanged((session) => {
 			console.log("[VideoEditor] onRecordingSessionChanged received!", {
-				sessionVideoPath: session?.videoPath,
-				videoSourcePath: videoSourcePath,
+				hasSession: Boolean(session),
+				hasSessionVideoPath: Boolean(session?.videoPath),
+				hasVideoSourcePath: Boolean(videoSourcePath),
 				match: session?.videoPath === videoSourcePath,
-				webcamPath: session?.webcamPath,
+				hasWebcamPath: Boolean(session?.webcamPath),
 			});
 
 			if (!session || session.videoPath !== videoSourcePath) {
