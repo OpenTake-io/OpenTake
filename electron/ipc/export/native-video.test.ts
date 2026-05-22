@@ -449,6 +449,49 @@ describe("getExperimentalNvidiaCudaExportSkipReason", () => {
 		}
 	});
 
+	it("does not use packaged auto-candidate audio bypass when CUDA is explicitly enabled", async () => {
+		const exportEnvName = "RECORDLY_EXPERIMENTAL_NVIDIA_CUDA_EXPORT";
+		const forceEnvName = "RECORDLY_NVIDIA_CUDA_FORCE_VIDEO_ONLY";
+		const allowAudioEnvName = "RECORDLY_NVIDIA_CUDA_ALLOW_AUDIO_EXPORT";
+		const originalExportEnv = process.env[exportEnvName];
+		const originalForceEnv = process.env[forceEnvName];
+		const originalAllowAudioEnv = process.env[allowAudioEnvName];
+		const originalIsPackaged = electronAppMock.isPackaged;
+		electronAppMock.isPackaged = true;
+		process.env[exportEnvName] = "1";
+		delete process.env[forceEnvName];
+		delete process.env[allowAudioEnvName];
+
+		try {
+			const reason = await getExperimentalNvidiaCudaExportSkipReason(
+				createNvidiaCudaSkipOptions({
+					audioOptions: { audioMode: "copy-source", audioSourcePath: "input.mp4" },
+				}),
+			);
+
+			expect(reason).toBe(
+				process.platform === "win32" ? "audio-mode:copy-source" : "not-windows",
+			);
+		} finally {
+			if (originalExportEnv === undefined) {
+				delete process.env[exportEnvName];
+			} else {
+				process.env[exportEnvName] = originalExportEnv;
+			}
+			if (originalForceEnv === undefined) {
+				delete process.env[forceEnvName];
+			} else {
+				process.env[forceEnvName] = originalForceEnv;
+			}
+			if (originalAllowAudioEnv === undefined) {
+				delete process.env[allowAudioEnvName];
+			} else {
+				process.env[allowAudioEnvName] = originalAllowAudioEnv;
+			}
+			electronAppMock.isPackaged = originalIsPackaged;
+		}
+	});
+
 	it("skips packaged CUDA auto-candidates when Electron reports no NVIDIA GPU", async () => {
 		const reason = await withPackagedCudaCandidate(
 			{ gpuDevice: [{ vendorId: 0x8086, deviceString: "Intel UHD Graphics" }] },
