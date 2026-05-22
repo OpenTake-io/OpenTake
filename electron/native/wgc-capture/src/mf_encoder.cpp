@@ -27,6 +27,11 @@ bool MFEncoder::initialize(const std::wstring& outputPath, int width, int height
 
     if (initialized_) return false;
 
+    if (fps <= 0) {
+        std::cerr << "ERROR: Encoder fps must be positive, got " << fps << std::endl;
+        return false;
+    }
+
     if (width % 2 != 0 || height % 2 != 0) {
         std::cerr << "ERROR: Encoder dimensions must be even, got " << width << "x" << height << std::endl;
         return false;
@@ -227,6 +232,12 @@ bool MFEncoder::writeFrame(ID3D11Texture2D* texture, int64_t timestampHns) {
 
     context_->Unmap(stagingTexture_.Get(), 0);
 
+    // WGC may stop delivering frames while the scene is static; keep the MP4
+    // timeline continuous by repeating the previous frame before writing a new one.
+    if (!lastFrameBuffer_.empty() && !extendLastFrameToLocked(timestampHns)) {
+        return false;
+    }
+
     bool wroteSample = writeNv12SampleLocked(nv12Buffer_, timestampHns);
     if (wroteSample) {
         lastFrameBuffer_ = nv12Buffer_;
@@ -238,24 +249,39 @@ bool MFEncoder::writeFrame(ID3D11Texture2D* texture, int64_t timestampHns) {
 bool MFEncoder::extendLastFrameTo(int64_t timestampHns) {
     std::lock_guard<std::mutex> lock(mutex_);
 
+    return extendLastFrameToLocked(timestampHns);
+}
+
+bool MFEncoder::extendLastFrameToLocked(int64_t timestampHns) {
     if (!initialized_ || !sinkWriter_) return false;
     if (lastFrameBuffer_.empty()) return false;
+    if (lastSampleTimeHns_ < 0) return false;
 
+    if (fps_ <= 0) return false;
     const int64_t frameDurationHns = 10000000LL / fps_;
-    if (lastSampleTimeHns_ >= 0 && timestampHns <= lastSampleTimeHns_ + frameDurationHns) {
+    if (frameDurationHns <= 0) return false;
+    if (timestampHns <= lastSampleTimeHns_ + frameDurationHns) {
         return true;
     }
 
-    if (!writeNv12SampleLocked(lastFrameBuffer_, timestampHns)) {
-        return false;
+    int64_t nextSampleTimeHns = lastSampleTimeHns_ + frameDurationHns;
+    while (nextSampleTimeHns + frameDurationHns <= timestampHns) {
+        if (!writeNv12SampleLocked(lastFrameBuffer_, nextSampleTimeHns)) {
+            return false;
+        }
+        lastSampleTimeHns_ = nextSampleTimeHns;
+        nextSampleTimeHns += frameDurationHns;
     }
 
-    lastSampleTimeHns_ = timestampHns;
     return true;
 }
 
 bool MFEncoder::writeNv12SampleLocked(const std::vector<uint8_t>& frameBuffer, int64_t timestampHns) {
     if (frameBuffer.empty()) return false;
+    if (fps_ <= 0) return false;
+
+    const int64_t frameDurationHns = 10000000LL / fps_;
+    if (frameDurationHns <= 0) return false;
 
     // Create MF sample
     DWORD bufferSize = static_cast<DWORD>(frameBuffer.size());
@@ -277,7 +303,7 @@ bool MFEncoder::writeNv12SampleLocked(const std::vector<uint8_t>& frameBuffer, i
 
     sample->AddBuffer(buffer.Get());
     sample->SetSampleTime(timestampHns);
-    sample->SetSampleDuration(10000000LL / fps_);
+    sample->SetSampleDuration(frameDurationHns);
 
     hr = sinkWriter_->WriteSample(streamIndex_, sample.Get());
     if (FAILED(hr)) {
