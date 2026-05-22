@@ -147,6 +147,7 @@ import {
 } from "./projectPersistence";
 import { SettingsPanel } from "./SettingsPanel";
 import { getDevOpenRecordingConfig, getSmokeExportConfig } from "./smokeExportConfig";
+import { createSmokeExportProgressSampler } from "./smokeExportProgress";
 import {
 	APP_HEADER_ICON_BUTTON_CLASS,
 	DiscordLinkButton,
@@ -3984,41 +3985,12 @@ export default function VideoEditor() {
 					smokeExportConfig.enabled && smokeExportConfig.shadowIntensity !== undefined
 						? smokeExportConfig.shadowIntensity
 						: shadowIntensity;
-				const smokeProgressSamples: Array<Record<string, unknown>> = [];
-				let lastSmokeProgressSampleAt = 0;
-				let lastSmokeProgressPhase: ExportProgress["phase"] | undefined;
-				const recordSmokeProgress = (progress: ExportProgress) => {
-					if (!smokeExportConfig.enabled || smokeExportStartedAt === null) {
-						return;
-					}
-
-					const now = performance.now();
-					const phase = progress.phase ?? "extracting";
-					const shouldSample =
-						smokeProgressSamples.length === 0 ||
-						phase !== lastSmokeProgressPhase ||
-						now - lastSmokeProgressSampleAt >= 1000 ||
-						progress.currentFrame >= progress.totalFrames;
-
-					if (!shouldSample) {
-						return;
-					}
-
-					smokeProgressSamples.push({
-						elapsedMs: Math.round(now - smokeExportStartedAt),
-						phase,
-						currentFrame: progress.currentFrame,
-						totalFrames: progress.totalFrames,
-						percentage: progress.percentage,
-						estimatedTimeRemaining: progress.estimatedTimeRemaining,
-						renderFps: progress.renderFps,
-						renderBackend: progress.renderBackend,
-						encodeBackend: progress.encodeBackend,
-						encoderName: progress.encoderName,
-					});
-					lastSmokeProgressSampleAt = now;
-					lastSmokeProgressPhase = phase;
-				};
+				const smokeProgressSampler = createSmokeExportProgressSampler({
+					enabled: smokeExportConfig.enabled,
+					startedAtMs: smokeExportStartedAt,
+				});
+				const smokeProgressSamples = smokeProgressSampler.samples;
+				const recordSmokeProgress = smokeProgressSampler.record;
 
 				if (settings.format === "gif" && settings.gifConfig) {
 					// GIF Export
