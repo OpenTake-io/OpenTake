@@ -436,7 +436,9 @@ export function validateNvidiaCudaExportSummary(
 	if (expected.requiresTimelineSync) {
 		if (!summary.outputAudio) {
 			issues.push("missing output audio stream");
-		} else if (outputAudioDurationSec !== null && outputAudioDurationSec <= 0) {
+		} else if (outputAudioDurationSec === null) {
+			issues.push("missing output audio duration");
+		} else if (outputAudioDurationSec <= 0) {
 			issues.push("output audio duration is not positive");
 		}
 	}
@@ -3903,7 +3905,7 @@ export async function resolveNativeVideoEncoder(
 export function canCopyAudioCodecIntoMp4(codec?: string | null) {
 	const normalized = (codec ?? "").trim().toLowerCase();
 	if (!normalized) {
-		return true;
+		return false;
 	}
 
 	return (
