@@ -88,6 +88,7 @@ import {
 } from "@/utils/aspectRatioUtils";
 import { ExtensionIcon } from "./ExtensionIcon";
 import { calculateMp4ExportDimensions, calculateMp4SourceDimensions } from "./exportDimensions";
+import { resolveExportStartSettings } from "./exportStartSettings";
 import { resolveExportStatusModel } from "./exportStatusModel";
 import { resolveMp4ExportRouting } from "./mp4ExportRouting";
 import { resolveMp4ExportSettings } from "./mp4ExportSettings";
@@ -4666,31 +4667,19 @@ export default function VideoEditor() {
 
 		const sourceWidth = video.videoWidth || 1920;
 		const sourceHeight = video.videoHeight || 1080;
-		const gifDimensions = calculateOutputDimensions(
+		const settings = resolveExportStartSettings({
 			sourceWidth,
 			sourceHeight,
+			exportFormat,
+			exportEncodingMode,
+			exportQuality,
+			mp4FrameRate,
+			exportBackendPreference,
+			exportPipelineModel,
+			gifFrameRate,
+			gifLoop,
 			gifSizePreset,
-			GIF_SIZE_PRESETS,
-		);
-
-		const settings: ExportSettings = {
-			format: exportFormat,
-			encodingMode: exportFormat === "mp4" ? exportEncodingMode : undefined,
-			mp4FrameRate: exportFormat === "mp4" ? mp4FrameRate : undefined,
-			backendPreference: exportFormat === "mp4" ? exportBackendPreference : undefined,
-			pipelineModel: exportFormat === "mp4" ? exportPipelineModel : undefined,
-			quality: exportFormat === "mp4" ? exportQuality : undefined,
-			gifConfig:
-				exportFormat === "gif"
-					? {
-							frameRate: gifFrameRate,
-							loop: gifLoop,
-							sizePreset: gifSizePreset,
-							width: gifDimensions.width,
-							height: gifDimensions.height,
-						}
-					: undefined,
-		};
+		});
 
 		setExportError(null);
 		setExportedFilePath(undefined);
