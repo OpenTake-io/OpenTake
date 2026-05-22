@@ -27,6 +27,11 @@ bool MFEncoder::initialize(const std::wstring& outputPath, int width, int height
 
     if (initialized_) return false;
 
+    if (fps <= 0) {
+        std::cerr << "ERROR: Encoder fps must be positive, got " << fps << std::endl;
+        return false;
+    }
+
     if (width % 2 != 0 || height % 2 != 0) {
         std::cerr << "ERROR: Encoder dimensions must be even, got " << width << "x" << height << std::endl;
         return false;
@@ -273,6 +278,10 @@ bool MFEncoder::extendLastFrameToLocked(int64_t timestampHns) {
 
 bool MFEncoder::writeNv12SampleLocked(const std::vector<uint8_t>& frameBuffer, int64_t timestampHns) {
     if (frameBuffer.empty()) return false;
+    if (fps_ <= 0) return false;
+
+    const int64_t frameDurationHns = 10000000LL / fps_;
+    if (frameDurationHns <= 0) return false;
 
     // Create MF sample
     DWORD bufferSize = static_cast<DWORD>(frameBuffer.size());
@@ -294,7 +303,7 @@ bool MFEncoder::writeNv12SampleLocked(const std::vector<uint8_t>& frameBuffer, i
 
     sample->AddBuffer(buffer.Get());
     sample->SetSampleTime(timestampHns);
-    sample->SetSampleDuration(10000000LL / fps_);
+    sample->SetSampleDuration(frameDurationHns);
 
     hr = sinkWriter_->WriteSample(streamIndex_, sample.Get());
     if (FAILED(hr)) {
