@@ -88,6 +88,7 @@ import {
 } from "@/utils/aspectRatioUtils";
 import { ExtensionIcon } from "./ExtensionIcon";
 import { calculateMp4ExportDimensions, calculateMp4SourceDimensions } from "./exportDimensions";
+import { resolveMp4ExportRouting } from "./mp4ExportRouting";
 import { useNvidiaCudaExportOptIn } from "./useNvidiaCudaExportOptIn";
 
 const PhCursorFill = (props: { className?: string; weight?: "fill" | "regular" }) => (
@@ -4135,25 +4136,24 @@ export default function VideoEditor() {
 					const selectedMp4FrameRate = smokeExportConfig.enabled
 						? (smokeExportConfig.fps ?? settings.mp4FrameRate ?? mp4FrameRate)
 						: (settings.mp4FrameRate ?? mp4FrameRate);
-					const pipelineModel = smokeExportConfig.enabled
-						? (smokeExportConfig.pipelineModel ?? "modern")
-						: (settings.pipelineModel ?? exportPipelineModel);
-					const useExperimentalNativeExport =
-						pipelineModel === "modern" &&
-						(smokeExportConfig.enabled ? smokeExportConfig.useNativeExport : true);
-					const useExperimentalNvidiaCudaExport =
-						useExperimentalNativeExport &&
-						experimentalNvidiaCudaExport &&
-						nvidiaCudaExportAvailable;
-					const backendPreference =
-						pipelineModel === "legacy"
-							? "webcodecs"
-							: smokeExportConfig.enabled
-								? (smokeExportConfig.backendPreference ??
-									(smokeExportConfig.useNativeExport ? "breeze" : "webcodecs"))
-								: useExperimentalNativeExport
-									? "auto"
-									: (settings.backendPreference ?? exportBackendPreference);
+					const {
+						pipelineModel,
+						useExperimentalNativeExport,
+						useExperimentalNvidiaCudaExport,
+						backendPreference,
+					} = resolveMp4ExportRouting({
+						smokeExportConfig: {
+							enabled: smokeExportConfig.enabled,
+							pipelineModel: smokeExportConfig.pipelineModel,
+							useNativeExport: smokeExportConfig.useNativeExport,
+							backendPreference: smokeExportConfig.backendPreference,
+						},
+						settings,
+						exportPipelineModel,
+						exportBackendPreference,
+						experimentalNvidiaCudaExport,
+						nvidiaCudaExportAvailable,
+					});
 					const supportedSourceDimensions =
 						await ensureSupportedMp4SourceDimensions(selectedMp4FrameRate);
 					const { width: exportWidth, height: exportHeight } =
