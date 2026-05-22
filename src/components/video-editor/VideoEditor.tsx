@@ -88,6 +88,7 @@ import {
 } from "@/utils/aspectRatioUtils";
 import { ExtensionIcon } from "./ExtensionIcon";
 import { calculateMp4ExportDimensions, calculateMp4SourceDimensions } from "./exportDimensions";
+import { resolveExportStatusModel } from "./exportStatusModel";
 import { resolveMp4ExportRouting } from "./mp4ExportRouting";
 import { resolveMp4ExportSettings } from "./mp4ExportSettings";
 import { useNvidiaCudaExportOptIn } from "./useNvidiaCudaExportOptIn";
@@ -4826,94 +4827,31 @@ export default function VideoEditor() {
 		);
 	}, [t]);
 
-	const isExportSaving = exportProgress?.phase === "saving";
-	const isExportPreparing =
-		isExporting && (!exportProgress || exportProgress.phase === "preparing");
-	const isExportFinalizing = exportProgress?.phase === "finalizing";
-	const isRenderingAudio =
-		isExportFinalizing && typeof exportProgress?.audioProgress === "number";
-	const exportFinalizingProgress = isExportFinalizing
-		? Math.min(
-				typeof exportProgress?.renderProgress === "number"
-					? exportProgress.renderProgress
-					: (exportProgress?.percentage ?? 100),
-				100,
-			)
+	const {
+		isExportSaving,
+		isExportPreparing,
+		isExportFinalizing,
+		isRenderingAudio,
+		exportFinalizingProgress,
+		exportFinalizingPercent,
+		isExportFinalSaveIndeterminate,
+		isLightningExportInProgress,
+		shouldSuspendPreviewRendering,
+		isLegacyExportInProgress,
+		renderSpeedFps,
+		runtimeLabel: exportRuntimeLabel,
+		nativeSkipLabel: exportNativeSkipLabel,
+	} = resolveExportStatusModel({
+		isExporting,
+		exportProgress,
+		exportFormat,
+		exportPipelineModel,
+	});
+	const exportRenderSpeedLabel = renderSpeedFps
+		? t("editor.exportStatus.renderSpeed", "Render speed {{fps}} FPS", {
+				fps: renderSpeedFps,
+			})
 		: null;
-	const exportFinalizingPercent = isExportFinalizing
-		? Math.round(exportFinalizingProgress ?? 100)
-		: null;
-	const isExportMuxingAndSaving =
-		isExportFinalizing &&
-		exportFormat === "mp4" &&
-		exportPipelineModel === "modern" &&
-		!isRenderingAudio;
-	const isExportFinalSaveIndeterminate =
-		isExportMuxingAndSaving && (exportFinalizingPercent ?? 0) >= 98;
-	const isLightningExportInProgress =
-		exportFormat === "mp4" &&
-		exportPipelineModel === "modern" &&
-		(isExporting || exportProgress !== null);
-	const shouldSuspendPreviewRendering =
-		isExporting && exportFormat === "mp4" && exportPipelineModel === "modern";
-	const isLegacyExportInProgress =
-		exportFormat === "mp4" &&
-		exportPipelineModel === "legacy" &&
-		(isExporting || exportProgress !== null);
-	const exportRenderSpeedLabel =
-		!isExportPreparing &&
-		!isExportFinalizing &&
-		!isExportSaving &&
-		typeof exportProgress?.renderFps === "number" &&
-		Number.isFinite(exportProgress.renderFps) &&
-		exportProgress.renderFps > 0
-			? t("editor.exportStatus.renderSpeed", "Render speed {{fps}} FPS", {
-					fps: exportProgress.renderFps.toFixed(1),
-				})
-			: null;
-	const exportRuntimeLabel = useMemo(() => {
-		const renderBackend = exportProgress?.renderBackend;
-		const encodeBackend = exportProgress?.encodeBackend;
-		const encoderName = exportProgress?.encoderName;
-
-		if (!renderBackend && !encodeBackend && !encoderName) {
-			return null;
-		}
-
-		const rendererLabel =
-			renderBackend === "webgpu" ? "WebGPU" : renderBackend === "webgl" ? "WebGL" : null;
-		const encoderLabel =
-			encodeBackend === "ffmpeg"
-				? "Breeze"
-				: encodeBackend === "webcodecs"
-					? "WebCodecs"
-					: null;
-		const pathLabel =
-			rendererLabel && encoderLabel
-				? `${rendererLabel} + ${encoderLabel}`
-				: (rendererLabel ?? encoderLabel);
-
-		if (!pathLabel) {
-			return encoderName ?? null;
-		}
-
-		return encoderName ? `${pathLabel} (${encoderName})` : pathLabel;
-	}, [exportProgress]);
-	const exportNativeSkipReasons =
-		exportProgress?.nativeStaticLayoutSkipReasons &&
-		exportProgress.nativeStaticLayoutSkipReasons.length > 0
-			? exportProgress.nativeStaticLayoutSkipReasons
-			: exportProgress?.nativeStaticLayoutSkipReason
-				? [exportProgress.nativeStaticLayoutSkipReason]
-				: [];
-	const exportNativeSkipLabel =
-		exportNativeSkipReasons.length > 0
-			? `Native skipped: ${exportNativeSkipReasons[0]}${
-					exportNativeSkipReasons.length > 1
-						? ` (+${exportNativeSkipReasons.length - 1} more)`
-						: ""
-				}`
-			: null;
 	const exportPercentLabel = exportProgress
 		? isExportPreparing
 			? t("editor.exportStatus.preparing", "Preparing export...")
@@ -5335,7 +5273,7 @@ export default function VideoEditor() {
 											<div
 												className="h-full bg-[#2563EB] transition-all duration-300 ease-out"
 												style={{
-													width: `${Math.min(isRenderingAudio ? (exportProgress.audioProgress ?? 0) * 100 : (exportFinalizingProgress ?? exportProgress?.percentage ?? 8), 100)}%`,
+													width: `${Math.min(isRenderingAudio ? (exportProgress?.audioProgress ?? 0) * 100 : (exportFinalizingProgress ?? exportProgress?.percentage ?? 8), 100)}%`,
 												}}
 											/>
 										)}
