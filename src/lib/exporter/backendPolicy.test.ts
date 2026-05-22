@@ -76,4 +76,121 @@ describe("backendPolicy", () => {
 			],
 		});
 	});
+
+	it("documents the native static layout path when Breeze is selected explicitly", () => {
+		expect(
+			planLightningExportRoutes({
+				backendPreference: "breeze",
+				platform: "win32",
+				nativeStaticLayoutAvailable: true,
+			}),
+		).toEqual({
+			selectedRoute: "native-static-layout",
+			decisions: [
+				{
+					route: "native-static-layout",
+					status: "selected",
+					reasons: ["visually-compatible"],
+				},
+				{
+					route: "breeze-stream",
+					status: "fallback",
+					reasons: ["user-selected-breeze"],
+				},
+				{
+					route: "webcodecs",
+					status: "fallback",
+					reasons: ["breeze-unavailable-fallback"],
+				},
+			],
+		});
+	});
+
+	it("keeps explicit Breeze selected when native static layout is unavailable", () => {
+		expect(
+			planLightningExportRoutes({
+				backendPreference: "breeze",
+				platform: "win32",
+				nativeStaticLayoutAvailable: false,
+			}),
+		).toEqual({
+			selectedRoute: "breeze-stream",
+			decisions: [
+				{
+					route: "native-static-layout",
+					status: "rejected",
+					reasons: ["native-static-unavailable"],
+				},
+				{
+					route: "breeze-stream",
+					status: "selected",
+					reasons: ["user-selected-breeze"],
+				},
+				{
+					route: "webcodecs",
+					status: "fallback",
+					reasons: ["breeze-unavailable-fallback"],
+				},
+			],
+		});
+	});
+
+	it("records explicit Breeze native static layout skip reasons", () => {
+		expect(
+			planLightningExportRoutes({
+				backendPreference: "breeze",
+				platform: "win32",
+				nativeStaticLayoutAvailable: true,
+				nativeStaticLayoutSkipReasons: ["unsupported-audio-mix"],
+			}),
+		).toEqual({
+			selectedRoute: "breeze-stream",
+			decisions: [
+				{
+					route: "native-static-layout",
+					status: "rejected",
+					reasons: ["unsupported-audio-mix"],
+				},
+				{
+					route: "breeze-stream",
+					status: "selected",
+					reasons: ["user-selected-breeze"],
+				},
+				{
+					route: "webcodecs",
+					status: "fallback",
+					reasons: ["breeze-unavailable-fallback"],
+				},
+			],
+		});
+	});
+
+	it("documents why macOS auto skips native static layout", () => {
+		expect(
+			planLightningExportRoutes({
+				backendPreference: "auto",
+				platform: "darwin",
+				nativeStaticLayoutAvailable: true,
+			}),
+		).toEqual({
+			selectedRoute: "breeze-stream",
+			decisions: [
+				{
+					route: "native-static-layout",
+					status: "rejected",
+					reasons: ["platform-does-not-use-native-static-layout"],
+				},
+				{
+					route: "breeze-stream",
+					status: "selected",
+					reasons: ["platform-prefers-native-streaming"],
+				},
+				{
+					route: "webcodecs",
+					status: "fallback",
+					reasons: ["breeze-unavailable-fallback"],
+				},
+			],
+		});
+	});
 });
