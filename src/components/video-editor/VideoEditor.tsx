@@ -52,7 +52,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Toaster } from "@/components/ui/sonner";
 import { useI18n } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
-import { loadAppSetting, saveAppSetting } from "@/lib/appSettings";
 import {
 	calculateOutputDimensions,
 	DEFAULT_MP4_CODEC,
@@ -89,6 +88,7 @@ import {
 } from "@/utils/aspectRatioUtils";
 import { ExtensionIcon } from "./ExtensionIcon";
 import { calculateMp4ExportDimensions, calculateMp4SourceDimensions } from "./exportDimensions";
+import { useNvidiaCudaExportOptIn } from "./useNvidiaCudaExportOptIn";
 
 const PhCursorFill = (props: { className?: string; weight?: "fill" | "regular" }) => (
 	<Cursor weight="fill" className={props.className} />
@@ -108,8 +108,6 @@ const PhSparkle = (props: { className?: string; weight?: "fill" | "regular" }) =
 const PhSettings = (props: { className?: string; weight?: "fill" | "regular" }) => (
 	<Gear weight={props.weight ?? "regular"} className={props.className} />
 );
-
-const NVIDIA_CUDA_EXPORT_OPT_IN_SETTING_KEY = "recordly.export.experimentalNvidiaCuda";
 
 import type { SourceAudioTrackSettings } from "@/components/video-editor/audio/audioTypes";
 import { extensionHost } from "@/lib/extensions";
@@ -554,10 +552,16 @@ export default function VideoEditor() {
 	const [exportPipelineModel, setExportPipelineModel] = useState<ExportPipelineModel>(
 		initialEditorPreferences.exportPipelineModel,
 	);
-	const [nvidiaCudaExportAvailable, setNvidiaCudaExportAvailable] = useState(false);
-	const [experimentalNvidiaCudaExport, setExperimentalNvidiaCudaExportState] = useState(
-		() => loadAppSetting<boolean>(NVIDIA_CUDA_EXPORT_OPT_IN_SETTING_KEY) === true,
-	);
+	const enableModernExportPipeline = useCallback(() => {
+		setExportPipelineModel("modern");
+	}, []);
+	const {
+		nvidiaCudaExportAvailable,
+		experimentalNvidiaCudaExport,
+		setExperimentalNvidiaCudaExport,
+	} = useNvidiaCudaExportOptIn({
+		onEnabled: enableModernExportPipeline,
+	});
 	const [mp4FrameRate, setMp4FrameRate] = useState<ExportMp4FrameRate>(
 		initialEditorPreferences.mp4FrameRate ?? DEFAULT_MP4_EXPORT_FRAME_RATE,
 	);
@@ -627,48 +631,6 @@ export default function VideoEditor() {
 			setAppPlatform(platform);
 		});
 	}, []);
-
-	useEffect(() => {
-		let cancelled = false;
-
-		void (async () => {
-			try {
-				const result = await window.electronAPI?.getNativeExportCapabilities?.();
-				if (cancelled) {
-					return;
-				}
-
-				const available = result?.capabilities?.nvidiaCuda.available === true;
-				setNvidiaCudaExportAvailable(available);
-				if (!available) {
-					setExperimentalNvidiaCudaExportState(false);
-				}
-			} catch (error) {
-				if (cancelled) {
-					return;
-				}
-				console.warn("[export] Failed to load native export capabilities", error);
-				setNvidiaCudaExportAvailable(false);
-				setExperimentalNvidiaCudaExportState(false);
-			}
-		})();
-
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-
-	const setExperimentalNvidiaCudaExport = useCallback(
-		(enabled: boolean) => {
-			const nextEnabled = Boolean(enabled && nvidiaCudaExportAvailable);
-			setExperimentalNvidiaCudaExportState(nextEnabled);
-			saveAppSetting(NVIDIA_CUDA_EXPORT_OPT_IN_SETTING_KEY, nextEnabled);
-			if (nextEnabled) {
-				setExportPipelineModel("modern");
-			}
-		},
-		[nvidiaCudaExportAvailable],
-	);
 
 	useEffect(() => {
 		autoSuggestedVideoPathRef.current = null;
