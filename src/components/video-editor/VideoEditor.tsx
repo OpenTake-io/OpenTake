@@ -89,6 +89,7 @@ import {
 import { ExtensionIcon } from "./ExtensionIcon";
 import { calculateMp4ExportDimensions, calculateMp4SourceDimensions } from "./exportDimensions";
 import { resolveMp4ExportRouting } from "./mp4ExportRouting";
+import { resolveMp4ExportSettings } from "./mp4ExportSettings";
 import { useNvidiaCudaExportOptIn } from "./useNvidiaCudaExportOptIn";
 
 const PhCursorFill = (props: { className?: string; weight?: "fill" | "regular" }) => (
@@ -4125,17 +4126,19 @@ export default function VideoEditor() {
 					}
 				} else {
 					// MP4 Export
-					const quality = smokeExportConfig.enabled
-						? (smokeExportConfig.quality ?? settings.quality ?? exportQuality)
-						: (settings.quality ?? exportQuality);
-					const encodingMode = smokeExportConfig.enabled
-						? (smokeExportConfig.encodingMode ??
-							settings.encodingMode ??
-							exportEncodingMode)
-						: (settings.encodingMode ?? exportEncodingMode);
-					const selectedMp4FrameRate = smokeExportConfig.enabled
-						? (smokeExportConfig.fps ?? settings.mp4FrameRate ?? mp4FrameRate)
-						: (settings.mp4FrameRate ?? mp4FrameRate);
+					const { quality, encodingMode, selectedMp4FrameRate } =
+						resolveMp4ExportSettings({
+							smokeExportConfig: {
+								enabled: smokeExportConfig.enabled,
+								quality: smokeExportConfig.quality,
+								encodingMode: smokeExportConfig.encodingMode,
+								fps: smokeExportConfig.fps,
+							},
+							settings,
+							exportQuality,
+							exportEncodingMode,
+							mp4FrameRate,
+						});
 					const {
 						pipelineModel,
 						useExperimentalNativeExport,
