@@ -252,6 +252,7 @@ bool MFEncoder::extendLastFrameToLocked(int64_t timestampHns) {
     if (lastFrameBuffer_.empty()) return false;
     if (lastSampleTimeHns_ < 0) return false;
 
+    if (fps_ <= 0) return false;
     const int64_t frameDurationHns = 10000000LL / fps_;
     if (frameDurationHns <= 0) return false;
     if (timestampHns <= lastSampleTimeHns_ + frameDurationHns) {
