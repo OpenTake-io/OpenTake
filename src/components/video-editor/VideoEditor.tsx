@@ -88,6 +88,7 @@ import {
 } from "@/utils/aspectRatioUtils";
 import { ExtensionIcon } from "./ExtensionIcon";
 import { calculateMp4ExportDimensions, calculateMp4SourceDimensions } from "./exportDimensions";
+import { resolveSavingExportProgress } from "./exportProgressState";
 import { resolveExportStartSettings } from "./exportStartSettings";
 import { resolveExportStatusModel } from "./exportStatusModel";
 import { resolveMp4ExportRouting } from "./mp4ExportRouting";
@@ -1213,17 +1214,7 @@ export default function VideoEditor() {
 	]);
 
 	const markExportAsSaving = useCallback(() => {
-		setExportProgress((previous) => ({
-			currentFrame: previous?.totalFrames ?? previous?.currentFrame ?? 1,
-			totalFrames: previous?.totalFrames ?? previous?.currentFrame ?? 1,
-			percentage: 100,
-			estimatedTimeRemaining: 0,
-			renderFps: previous?.renderFps,
-			renderBackend: previous?.renderBackend,
-			encodeBackend: previous?.encodeBackend,
-			encoderName: previous?.encoderName,
-			phase: "saving",
-		}));
+		setExportProgress(resolveSavingExportProgress);
 	}, []);
 
 	const handleShowCursorChange = useCallback((nextShowCursor: boolean) => {
