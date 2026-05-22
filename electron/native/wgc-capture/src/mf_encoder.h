@@ -24,6 +24,7 @@ public:
     bool finalize();
 
 private:
+    bool extendLastFrameToLocked(int64_t timestampHns);
     bool writeNv12SampleLocked(const std::vector<uint8_t>& frameBuffer, int64_t timestampHns);
 
     ComPtr<IMFSinkWriter> sinkWriter_;
