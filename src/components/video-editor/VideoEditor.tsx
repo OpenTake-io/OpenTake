@@ -631,17 +631,27 @@ export default function VideoEditor() {
 	useEffect(() => {
 		let cancelled = false;
 
-		void window.electronAPI?.getNativeExportCapabilities?.().then((result) => {
-			if (cancelled) {
-				return;
-			}
+		void (async () => {
+			try {
+				const result = await window.electronAPI?.getNativeExportCapabilities?.();
+				if (cancelled) {
+					return;
+				}
 
-			const available = result?.capabilities?.nvidiaCuda.available === true;
-			setNvidiaCudaExportAvailable(available);
-			if (!available) {
+				const available = result?.capabilities?.nvidiaCuda.available === true;
+				setNvidiaCudaExportAvailable(available);
+				if (!available) {
+					setExperimentalNvidiaCudaExportState(false);
+				}
+			} catch (error) {
+				if (cancelled) {
+					return;
+				}
+				console.warn("[export] Failed to load native export capabilities", error);
+				setNvidiaCudaExportAvailable(false);
 				setExperimentalNvidiaCudaExportState(false);
 			}
-		});
+		})();
 
 		return () => {
 			cancelled = true;
