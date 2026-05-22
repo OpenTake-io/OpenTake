@@ -8,8 +8,8 @@ import type {
 	CursorStyle,
 	CursorTelemetryPoint,
 	Padding,
-	SpeedRegion,
 	SourceAudioTrackSettings,
+	SpeedRegion,
 	TrimRegion,
 	WebcamOverlaySettings,
 	ZoomMotionBlurTuning,
@@ -49,7 +49,11 @@ import {
 	isVideoWallpaperSource,
 } from "@/lib/wallpapers";
 import { AudioProcessor, isAacAudioEncodingSupported } from "./audioEncoder";
-import { normalizeLightningRuntimePlatform, shouldPreferNativeAutoBackend } from "./backendPolicy";
+import {
+	normalizeLightningRuntimePlatform,
+	shouldPreferNativeAutoBackend,
+	shouldPreferNativeStaticLayoutBeforeBreeze,
+} from "./backendPolicy";
 import { buildEditedTrackSourceSegments, classifyEditedTrackStrategy } from "./editedTrackStrategy";
 import {
 	type ExportBackpressureProfile,
@@ -376,14 +380,15 @@ export class ModernVideoExporter {
 				const runtimePlatform = this.getRuntimePlatform();
 				let useNativeEncoder = false;
 				let triedNativeStaticLayoutWithProbe = false;
-				let shouldDeferNativeEncoderStart = backendPreference === "breeze";
+				let shouldDeferNativeEncoderStart =
+					backendPreference === "breeze" ||
+					shouldPreferNativeStaticLayoutBeforeBreeze(runtimePlatform, backendPreference);
 				this.lastNativeExportError = null;
 
 				let stageStartedAt = this.getNowMs();
-				if (backendPreference === "breeze") {
-					// Defer the streaming native encoder until after metadata is known.
-					// Static-layout exports can then use the faster Windows D3D compositor
-					// instead of unnecessarily rendering every frame through JS first.
+				if (shouldDeferNativeEncoderStart) {
+					// Defer the streaming native encoder until after metadata is known so
+					// static-layout exports can use the fastest compatible compositor first.
 				} else if (
 					backendPreference === "auto" &&
 					shouldPreferNativeAutoBackend(runtimePlatform)
