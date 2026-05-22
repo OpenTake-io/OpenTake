@@ -108,6 +108,11 @@ export function planLightningExportRoutes(options: {
 
 	if (options.backendPreference === "auto" && shouldPreferNativeAutoBackend(options.platform)) {
 		decisions.push({
+			route: "native-static-layout",
+			status: "rejected",
+			reasons: ["platform-does-not-use-native-static-layout"],
+		});
+		decisions.push({
 			route: "breeze-stream",
 			status: "selected",
 			reasons: ["platform-prefers-native-streaming"],
