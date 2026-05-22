@@ -433,6 +433,13 @@ export function validateNvidiaCudaExportSummary(
 	if (expected.requiresTimelineSync && !isNvidiaCudaTimestampAlignedSummary(summary)) {
 		issues.push("CUDA timeline mode is not timestamp-aligned for audio export");
 	}
+	if (expected.requiresTimelineSync) {
+		if (!summary.outputAudio) {
+			issues.push("missing output audio stream");
+		} else if (outputAudioDurationSec !== null && outputAudioDurationSec <= 0) {
+			issues.push("output audio duration is not positive");
+		}
+	}
 	if (nativeFrames === null) {
 		issues.push("missing native frame count");
 	} else if (nativeFrames < minimumFrames) {
@@ -455,6 +462,7 @@ export function validateNvidiaCudaExportSummary(
 	}
 	if (
 		outputAudioDurationSec !== null &&
+		outputAudioDurationSec > 0 &&
 		Math.abs(outputAudioDurationSec - expectedDurationSec) > durationToleranceSec
 	) {
 		issues.push(
