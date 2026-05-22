@@ -227,6 +227,12 @@ bool MFEncoder::writeFrame(ID3D11Texture2D* texture, int64_t timestampHns) {
 
     context_->Unmap(stagingTexture_.Get(), 0);
 
+    // WGC may stop delivering frames while the scene is static; keep the MP4
+    // timeline continuous by repeating the previous frame before writing a new one.
+    if (!lastFrameBuffer_.empty() && !extendLastFrameToLocked(timestampHns)) {
+        return false;
+    }
+
     bool wroteSample = writeNv12SampleLocked(nv12Buffer_, timestampHns);
     if (wroteSample) {
         lastFrameBuffer_ = nv12Buffer_;
@@ -238,19 +244,29 @@ bool MFEncoder::writeFrame(ID3D11Texture2D* texture, int64_t timestampHns) {
 bool MFEncoder::extendLastFrameTo(int64_t timestampHns) {
     std::lock_guard<std::mutex> lock(mutex_);
 
+    return extendLastFrameToLocked(timestampHns);
+}
+
+bool MFEncoder::extendLastFrameToLocked(int64_t timestampHns) {
     if (!initialized_ || !sinkWriter_) return false;
     if (lastFrameBuffer_.empty()) return false;
+    if (lastSampleTimeHns_ < 0) return false;
 
     const int64_t frameDurationHns = 10000000LL / fps_;
-    if (lastSampleTimeHns_ >= 0 && timestampHns <= lastSampleTimeHns_ + frameDurationHns) {
+    if (frameDurationHns <= 0) return false;
+    if (timestampHns <= lastSampleTimeHns_ + frameDurationHns) {
         return true;
     }
 
-    if (!writeNv12SampleLocked(lastFrameBuffer_, timestampHns)) {
-        return false;
+    int64_t nextSampleTimeHns = lastSampleTimeHns_ + frameDurationHns;
+    while (nextSampleTimeHns + frameDurationHns <= timestampHns) {
+        if (!writeNv12SampleLocked(lastFrameBuffer_, nextSampleTimeHns)) {
+            return false;
+        }
+        lastSampleTimeHns_ = nextSampleTimeHns;
+        nextSampleTimeHns += frameDurationHns;
     }
 
-    lastSampleTimeHns_ = timestampHns;
     return true;
 }
 
