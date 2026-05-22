@@ -55,6 +55,7 @@ import {
 	buildNativeVideoAudioMuxArgs,
 	canCopyAudioCodecIntoMp4,
 	getExperimentalNvidiaCudaExportSkipReason,
+	getNativeExportCapabilities,
 	getNativeGpuCompositorStallTimeoutMs,
 	getNativeStaticLayoutSourceProxyBitrate,
 	getNvidiaCudaAudioExportSkipReason,
@@ -307,7 +308,7 @@ describe("getNvidiaCudaAudioExportSkipReason", () => {
 });
 
 describe("getNvidiaCudaAutoStallTimeoutMs", () => {
-	it("only applies the stall guard to packaged auto candidates by default", () => {
+	it("only applies the stall guard to active validated CUDA candidates by default", () => {
 		expect(getNvidiaCudaAutoStallTimeoutMs(false)).toBeNull();
 		expect(getNvidiaCudaAutoStallTimeoutMs(true)).toBe(120_000);
 	});
@@ -396,13 +397,41 @@ describe("hasNvidiaGpuDeviceInGpuInfo", () => {
 	});
 });
 
+describe("getNativeExportCapabilities", () => {
+	it("reports NVIDIA CUDA availability when the wrapper and an NVIDIA GPU are present", async () => {
+		const capabilities = await withPackagedCudaCandidate(
+			{ gpuDevice: [{ vendorId: 0x10de, deviceString: "NVIDIA GeForce GTX 1650" }] },
+			() => getNativeExportCapabilities(),
+		);
+
+		expect(capabilities.nvidiaCuda.available).toBe(process.platform === "win32");
+		expect(capabilities.nvidiaCuda.hasWrapper).toBe(process.platform === "win32");
+		expect(capabilities.nvidiaCuda.hasNvidiaGpu).toBe(process.platform === "win32" ? true : null);
+	});
+});
+
 describe("getExperimentalNvidiaCudaExportSkipReason", () => {
-	it("auto-enables packaged CUDA candidates when the helper and an NVIDIA GPU are present", async () => {
+	it("requires user opt-in before packaged CUDA candidates run", async () => {
 		const reason = await withPackagedCudaCandidate(
 			{ gpuDevice: [{ vendorId: 0x10de, deviceString: "NVIDIA GeForce GTX 1650" }] },
 			() =>
 				getExperimentalNvidiaCudaExportSkipReason(
 					createNvidiaCudaSkipOptions({
+						audioOptions: { audioMode: "copy-source", audioSourcePath: "input.mp4" },
+					}),
+				),
+		);
+
+		expect(reason).toBe(process.platform === "win32" ? "env-disabled" : "not-windows");
+	});
+
+	it("allows user opt-in CUDA candidates when the helper and an NVIDIA GPU are present", async () => {
+		const reason = await withPackagedCudaCandidate(
+			{ gpuDevice: [{ vendorId: 0x10de, deviceString: "NVIDIA GeForce GTX 1650" }] },
+			() =>
+				getExperimentalNvidiaCudaExportSkipReason(
+					createNvidiaCudaSkipOptions({
+						experimentalNvidiaCudaExport: true,
 						audioOptions: { audioMode: "copy-source", audioSourcePath: "input.mp4" },
 					}),
 				),
@@ -492,10 +521,13 @@ describe("getExperimentalNvidiaCudaExportSkipReason", () => {
 		}
 	});
 
-	it("skips packaged CUDA auto-candidates when Electron reports no NVIDIA GPU", async () => {
+	it("skips user opt-in CUDA candidates when Electron reports no NVIDIA GPU", async () => {
 		const reason = await withPackagedCudaCandidate(
 			{ gpuDevice: [{ vendorId: 0x8086, deviceString: "Intel UHD Graphics" }] },
-			() => getExperimentalNvidiaCudaExportSkipReason(createNvidiaCudaSkipOptions()),
+			() =>
+				getExperimentalNvidiaCudaExportSkipReason(
+					createNvidiaCudaSkipOptions({ experimentalNvidiaCudaExport: true }),
+				),
 		);
 
 		expect(reason).toBe(
@@ -503,12 +535,14 @@ describe("getExperimentalNvidiaCudaExportSkipReason", () => {
 		);
 	});
 
-	it("lets the packaged auto-candidate be explicitly disabled", async () => {
+	it("lets the user opt-in candidate be explicitly disabled", async () => {
 		const reason = await withPackagedCudaCandidate(
 			{ gpuDevice: [{ vendorId: 0x10de, deviceString: "NVIDIA GeForce GTX 1650" }] },
 			async () => {
 				process.env.RECORDLY_EXPERIMENTAL_NVIDIA_CUDA_EXPORT = "0";
-				return getExperimentalNvidiaCudaExportSkipReason(createNvidiaCudaSkipOptions());
+				return getExperimentalNvidiaCudaExportSkipReason(
+					createNvidiaCudaSkipOptions({ experimentalNvidiaCudaExport: true }),
+				);
 			},
 		);
 
