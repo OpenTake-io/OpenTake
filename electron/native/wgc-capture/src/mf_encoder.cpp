@@ -152,6 +152,7 @@ bool MFEncoder::initialize(const std::wstring& outputPath, int width, int height
     const int uvSize = (width_ / 2) * (height_ / 2) * 2;
     nv12Buffer_.resize(ySize + uvSize);
     lastFrameBuffer_.clear();
+    firstSampleTimeHns_ = -1;
     lastSampleTimeHns_ = -1;
 
     initialized_ = true;
@@ -234,14 +235,17 @@ bool MFEncoder::writeFrame(ID3D11Texture2D* texture, int64_t timestampHns) {
 
     // WGC may stop delivering frames while the scene is static; keep the MP4
     // timeline continuous by repeating the previous frame before writing a new one.
-    if (!lastFrameBuffer_.empty() && !extendLastFrameToLocked(timestampHns)) {
+    int64_t normalizedTimestampHns = 0;
+    normalizeWriteTimestampHnsLocked(timestampHns, normalizedTimestampHns);
+
+    if (!lastFrameBuffer_.empty() && !extendLastFrameToLocked(normalizedTimestampHns)) {
         return false;
     }
 
-    bool wroteSample = writeNv12SampleLocked(nv12Buffer_, timestampHns);
+    bool wroteSample = writeNv12SampleLocked(nv12Buffer_, normalizedTimestampHns);
     if (wroteSample) {
         lastFrameBuffer_ = nv12Buffer_;
-        lastSampleTimeHns_ = timestampHns;
+        lastSampleTimeHns_ = normalizedTimestampHns;
     }
     return wroteSample;
 }
@@ -249,7 +253,36 @@ bool MFEncoder::writeFrame(ID3D11Texture2D* texture, int64_t timestampHns) {
 bool MFEncoder::extendLastFrameTo(int64_t timestampHns) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    return extendLastFrameToLocked(timestampHns);
+    int64_t normalizedTimestampHns = 0;
+    if (!normalizeTimelineTimestampHnsLocked(timestampHns, normalizedTimestampHns)) {
+        return false;
+    }
+
+    return extendLastFrameToLocked(normalizedTimestampHns);
+}
+
+void MFEncoder::normalizeWriteTimestampHnsLocked(int64_t timestampHns, int64_t& normalizedTimestampHns) {
+    if (firstSampleTimeHns_ < 0) {
+        firstSampleTimeHns_ = timestampHns < 0 ? 0 : timestampHns;
+    }
+
+    normalizedTimestampHns = timestampHns - firstSampleTimeHns_;
+    if (normalizedTimestampHns < 0) {
+        normalizedTimestampHns = 0;
+    }
+}
+
+bool MFEncoder::normalizeTimelineTimestampHnsLocked(
+    int64_t timestampHns,
+    int64_t& normalizedTimestampHns
+) const {
+    if (firstSampleTimeHns_ < 0) return false;
+
+    normalizedTimestampHns = timestampHns - firstSampleTimeHns_;
+    if (normalizedTimestampHns < 0) {
+        normalizedTimestampHns = 0;
+    }
+    return true;
 }
 
 bool MFEncoder::extendLastFrameToLocked(int64_t timestampHns) {
@@ -332,6 +365,7 @@ bool MFEncoder::finalize() {
     lastFrameBuffer_.clear();
     nv12Buffer_.shrink_to_fit();
     lastFrameBuffer_.shrink_to_fit();
+    firstSampleTimeHns_ = -1;
     lastSampleTimeHns_ = -1;
     MFShutdown();
     return SUCCEEDED(hr);
