@@ -2010,15 +2010,16 @@ export async function getExperimentalNvidiaCudaExportSkipReason(
 		return "not-windows";
 	}
 	const explicitCuda = isExplicitNvidiaCudaExportEnabled();
-	const packagedAutoCandidate = isPackagedNvidiaCudaExportAutoCandidateEnabled();
-	if (!explicitCuda && !packagedAutoCandidate) {
+	const packagedAutoCandidateEnabled = isPackagedNvidiaCudaExportAutoCandidateEnabled();
+	const packagedAutoCandidateActive = isPackagedNvidiaCudaExportAutoCandidateActive();
+	if (!explicitCuda && !packagedAutoCandidateEnabled) {
 		return "env-disabled";
 	}
 	if (!options.experimentalWindowsGpuCompositor) {
 		return "windows-gpu-compositor-disabled";
 	}
 
-	if (packagedAutoCandidate && !explicitCuda) {
+	if (packagedAutoCandidateActive) {
 		if (!(await resolveExperimentalNvidiaCudaExportScriptPath())) {
 			return "cuda-wrapper-unavailable";
 		}
@@ -2029,7 +2030,7 @@ export async function getExperimentalNvidiaCudaExportSkipReason(
 
 	return getNvidiaCudaAudioExportSkipReason(options.audioOptions?.audioMode, {
 		allowValidatedFallbackCandidate:
-			packagedAutoCandidate || isNvidiaCudaForceVideoOnlyEnabled(),
+			packagedAutoCandidateActive || isNvidiaCudaForceVideoOnlyEnabled(),
 	});
 }
 
