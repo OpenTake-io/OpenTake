@@ -58,6 +58,43 @@ describe("resolveExportStatusModel", () => {
 		expect(status.isExportFinalSaveIndeterminate).toBe(true);
 	});
 
+	it("sanitizes invalid finalizing progress before rounding", () => {
+		const negativeStatus = resolveExportStatusModel({
+			isExporting: true,
+			exportProgress: progress({
+				phase: "finalizing",
+				renderProgress: -12.4,
+			}),
+			exportFormat: "mp4",
+			exportPipelineModel: "modern",
+		});
+		const infiniteStatus = resolveExportStatusModel({
+			isExporting: true,
+			exportProgress: progress({
+				phase: "finalizing",
+				renderProgress: Number.POSITIVE_INFINITY,
+			}),
+			exportFormat: "mp4",
+			exportPipelineModel: "modern",
+		});
+		const nanStatus = resolveExportStatusModel({
+			isExporting: true,
+			exportProgress: progress({
+				phase: "finalizing",
+				renderProgress: Number.NaN,
+			}),
+			exportFormat: "mp4",
+			exportPipelineModel: "modern",
+		});
+
+		expect(negativeStatus.exportFinalizingProgress).toBe(0);
+		expect(negativeStatus.exportFinalizingPercent).toBe(0);
+		expect(infiniteStatus.exportFinalizingProgress).toBe(0);
+		expect(infiniteStatus.exportFinalizingPercent).toBe(0);
+		expect(nanStatus.exportFinalizingProgress).toBe(0);
+		expect(nanStatus.exportFinalizingPercent).toBe(0);
+	});
+
 	it("keeps audio finalization out of the muxing-and-saving state", () => {
 		const status = resolveExportStatusModel({
 			isExporting: true,

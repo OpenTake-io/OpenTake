@@ -35,12 +35,14 @@ export function resolveExportStatusModel({
 	const isExportFinalizing = exportProgress?.phase === "finalizing";
 	const isRenderingAudio =
 		isExportFinalizing && typeof exportProgress?.audioProgress === "number";
+	const rawFinalizingProgress =
+		typeof exportProgress?.renderProgress === "number"
+			? exportProgress.renderProgress
+			: (exportProgress?.percentage ?? 100);
 	const exportFinalizingProgress = isExportFinalizing
-		? Math.min(
-				typeof exportProgress?.renderProgress === "number"
-					? exportProgress.renderProgress
-					: (exportProgress?.percentage ?? 100),
-				100,
+		? Math.max(
+				0,
+				Math.min(100, Number.isFinite(rawFinalizingProgress) ? rawFinalizingProgress : 0),
 			)
 		: null;
 	const exportFinalizingPercent = isExportFinalizing
