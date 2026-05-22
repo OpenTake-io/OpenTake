@@ -90,6 +90,18 @@ type NativeVideoMetadataProbe = {
 	audioCodec?: string;
 	audioSampleRate?: number;
 };
+type NativeExportCapabilities = {
+	platform: NodeJS.Platform;
+	nvidiaCuda: {
+		available: boolean;
+		skipReason: string | null;
+		hasNvidiaGpu: boolean | null;
+		hasWrapper: boolean;
+		explicitEnabled: boolean;
+		explicitDisabled: boolean;
+		userOptInRequired: boolean;
+	};
+};
 
 const nativeVideoExportWriteRequests = new Map<
 	number,
@@ -195,6 +207,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
 			error?: string;
 		}>;
 	},
+	getNativeExportCapabilities: () => {
+		return ipcRenderer.invoke("get-native-export-capabilities") as Promise<{
+			success: boolean;
+			capabilities?: NativeExportCapabilities;
+			error?: string;
+		}>;
+	},
 	nativeStaticLayoutExport: (options: {
 		sessionId?: string;
 		inputPath: string;
@@ -255,6 +274,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		}>;
 		chunkDurationSec?: number;
 		experimentalWindowsGpuCompositor?: boolean;
+		experimentalNvidiaCudaExport?: boolean;
 		audioOptions?: {
 			audioMode?: "none" | "copy-source" | "trim-source" | "edited-track";
 			audioSourcePath?: string | null;
