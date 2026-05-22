@@ -1078,6 +1078,47 @@ describe("validateNvidiaCudaExportSummary", () => {
 		expect(issues).toEqual([]);
 	});
 
+	it("rejects inline-audio CUDA output when the helper does not produce audio", () => {
+		const issues = validateNvidiaCudaExportSummary(
+			{
+				success: true,
+				targetFrames: 300,
+				durationSec: 10,
+				nativeSummary: {
+					success: true,
+					frames: 300,
+					sourceTimestampMode: "pts",
+					selectionStage: "timestamp-mapped-callback",
+				},
+				outputVideo: { duration: "9.999900", nb_frames: "300" },
+			},
+			{ durationSec: 10, targetFrames: 300, requiresTimelineSync: true },
+		);
+
+		expect(issues).toEqual(["missing output audio stream"]);
+	});
+
+	it("rejects inline-audio CUDA output when the probed audio stream is empty", () => {
+		const issues = validateNvidiaCudaExportSummary(
+			{
+				success: true,
+				targetFrames: 300,
+				durationSec: 10,
+				nativeSummary: {
+					success: true,
+					frames: 300,
+					sourceTimestampMode: "pts",
+					selectionStage: "timestamp-mapped-callback",
+				},
+				outputVideo: { duration: "9.999900", nb_frames: "300" },
+				outputAudio: { duration: "0.000000" },
+			},
+			{ durationSec: 10, targetFrames: 300, requiresTimelineSync: true },
+		);
+
+		expect(issues).toEqual(["output audio duration is not positive"]);
+	});
+
 	it("accepts audio CUDA output when the helper reports PTS-aligned selection", () => {
 		const issues = validateNvidiaCudaExportSummary(
 			{
