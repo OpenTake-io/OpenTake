@@ -382,13 +382,16 @@ export class ModernVideoExporter {
 				const runtimePlatform = this.getRuntimePlatform();
 				let useNativeEncoder = false;
 				let triedNativeStaticLayoutWithProbe = false;
+				const prefersNativeStaticLayoutBeforeBreeze =
+					shouldPreferNativeStaticLayoutBeforeBreeze(runtimePlatform, backendPreference);
 				const shouldTryNativeStaticLayout =
 					backendPreference === "breeze" ||
-					this.config.experimentalNvidiaCudaExport === true;
+					this.config.experimentalNvidiaCudaExport === true ||
+					prefersNativeStaticLayoutBeforeBreeze;
 				let shouldDeferNativeEncoderStart =
 					backendPreference === "breeze" ||
 					this.config.experimentalNvidiaCudaExport === true ||
-					shouldPreferNativeStaticLayoutBeforeBreeze(runtimePlatform, backendPreference);
+					prefersNativeStaticLayoutBeforeBreeze;
 				this.lastNativeExportError = null;
 
 				let stageStartedAt = this.getNowMs();
