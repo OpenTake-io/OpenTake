@@ -501,6 +501,7 @@ export default function VideoEditor() {
 	>({});
 	const [defaultSourceAudioTrackSettings, setDefaultSourceAudioTrackSettings] =
 		useState<SourceAudioTrackSettings>({});
+	const [sourceAudioFallbackRefreshKey, setSourceAudioFallbackRefreshKey] = useState(0);
 	const [hasClipSourceAudio, setHasClipSourceAudio] = useState(false);
 	const [autoCaptions, setAutoCaptions] = useState<CaptionCue[]>([]);
 	const [autoCaptionSettings, setAutoCaptionSettings] = useState<AutoCaptionSettings>(
@@ -2318,6 +2319,7 @@ export default function VideoEditor() {
 					? (session.timeOffsetMs ?? prev.timeOffsetMs)
 					: DEFAULT_WEBCAM_TIME_OFFSET_MS,
 			}));
+			setSourceAudioFallbackRefreshKey((key) => key + 1);
 		});
 	}, [videoSourcePath]);
 
@@ -3173,6 +3175,7 @@ export default function VideoEditor() {
 		duration,
 		isPlaying,
 		previewVolume,
+		sourceAudioFallbackRefreshKey,
 		summarizeErrorMessage,
 		onSourceFallbackLoadError: (error) => {
 			toast.warning(
@@ -3190,6 +3193,7 @@ export default function VideoEditor() {
 		if (!video.paused && !video.ended) {
 			playback.pause();
 		} else {
+			audio.playSourceAudioPreview();
 			playback.play().catch((err) => console.error("Video play failed:", err));
 		}
 	}
