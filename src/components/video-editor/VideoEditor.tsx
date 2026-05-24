@@ -86,6 +86,7 @@ import {
 	getAspectRatioLabel,
 	getAspectRatioValue,
 } from "@/utils/aspectRatioUtils";
+import { planClipSpeedChange } from "./clipSpeedChange";
 import { ExtensionIcon } from "./ExtensionIcon";
 import { calculateMp4ExportDimensions, calculateMp4SourceDimensions } from "./exportDimensions";
 import { resolveSavingExportProgress } from "./exportProgressState";
@@ -3530,31 +3531,33 @@ export default function VideoEditor() {
 			if (!Number.isFinite(speed) || speed <= 0) {
 				return;
 			}
-			const clip = clipRegions.find((c) => c.id === selectedClipId);
-			if (!clip) return;
-			const oldSpeed = Number.isFinite(clip.speed) && clip.speed > 0 ? clip.speed : 1;
-			const sourceDurationMs = (clip.endMs - clip.startMs) * oldSpeed;
-			const newEndMs = Math.round(clip.startMs + sourceDurationMs / speed);
-			const scaleFactor = oldSpeed / speed;
+			const plan = planClipSpeedChange({
+				clipRegions,
+				zoomRegions,
+				selectedClipId,
+				speed,
+			});
+			if (!plan) return;
 
-			setClipRegions((prev) =>
-				prev.map((c) => (c.id === selectedClipId ? { ...c, speed, endMs: newEndMs } : c)),
-			);
-			// Scale zoom regions that lie within this clip proportionally
-			setZoomRegions((prev) =>
-				prev.map((zoom) => {
-					if (zoom.startMs < clip.startMs || zoom.startMs >= clip.endMs) return zoom;
-					return {
-						...zoom,
-						startMs: Math.round(
-							clip.startMs + (zoom.startMs - clip.startMs) * scaleFactor,
-						),
-						endMs: Math.round(clip.startMs + (zoom.endMs - clip.startMs) * scaleFactor),
-					};
-				}),
-			);
+			if ("blockedReason" in plan) {
+				toast.warning(
+					plan.blockedReason === "clip-overlap"
+						? t(
+								"editor.timeline.speedClipOverlap",
+								"Speed change would overlap the next clip. Move or split clips before slowing this section.",
+							)
+						: t(
+								"editor.timeline.speedZoomOverlap",
+								"Speed change would overlap another zoom. Move or delete the overlapping zoom first.",
+							),
+				);
+				return;
+			}
+
+			setClipRegions(plan.clipRegions);
+			setZoomRegions(plan.zoomRegions);
 		},
-		[selectedClipId, clipRegions],
+		[selectedClipId, clipRegions, zoomRegions, t],
 	);
 
 	const handleClipMutedChange = useCallback(
