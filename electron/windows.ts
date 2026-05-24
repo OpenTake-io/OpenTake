@@ -5,7 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { USER_DATA_PATH } from "./appPaths";
-import { getHudOverlayWindowBounds } from "./hudOverlayBounds";
+import {
+	getHudOverlayWindowBounds,
+	resizeHudOverlayFallbackBounds,
+} from "./hudOverlayBounds";
 import { getPackagedRendererBaseUrl } from "./rendererServer";
 
 const electronWindowsDir = path.dirname(fileURLToPath(import.meta.url));
@@ -253,7 +256,13 @@ function setHudOverlayFallbackExpanded(expanded: boolean) {
 		return;
 	}
 
-	hudOverlayWindow.setBounds(getHudOverlayBounds(), false);
+	const { workArea } = getHudOverlayDisplay();
+	const nextBounds = resizeHudOverlayFallbackBounds(
+		workArea,
+		hudOverlayWindow.getBounds(),
+		expanded,
+	);
+	hudOverlayWindow.setBounds(nextBounds, false);
 	positionUpdateToastWindow();
 	if (hudOverlayWindow.isVisible()) {
 		hudOverlayWindow.moveTop();
