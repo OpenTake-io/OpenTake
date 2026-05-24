@@ -46,6 +46,12 @@ export type BrowserMicrophoneProfile =
 	| "no-echo"
 	| "no-noise-suppression"
 	| "raw";
+type BrowserCaptureCursorMode = "always" | "never";
+export type BrowserCaptureCursorPolicy = {
+	streamCursor: BrowserCaptureCursorMode;
+	hideOsCursorBeforeRecording: boolean;
+	hideEditorOverlayCursorByDefault: boolean;
+};
 const DEFAULT_BROWSER_MICROPHONE_PROFILE: BrowserMicrophoneProfile = "no-agc";
 const BROWSER_MICROPHONE_PROFILES = new Set<BrowserMicrophoneProfile>([
 	"processed",
@@ -181,6 +187,28 @@ export function normalizeBrowserMicrophoneProfile(value?: string | null): Browse
 	return normalized && BROWSER_MICROPHONE_PROFILES.has(normalized as BrowserMicrophoneProfile)
 		? (normalized as BrowserMicrophoneProfile)
 		: DEFAULT_BROWSER_MICROPHONE_PROFILE;
+}
+
+export function resolveBrowserCaptureCursorPolicy({
+	nativeWindowsCaptureStartFailed = false,
+}: {
+	nativeWindowsCaptureStartFailed?: boolean;
+} = {}): BrowserCaptureCursorPolicy {
+	if (nativeWindowsCaptureStartFailed) {
+		// If WGC already failed, avoid the telemetry overlay path that can lag on
+		// constrained Windows systems; keep the browser-captured cursor instead.
+		return {
+			streamCursor: "always",
+			hideOsCursorBeforeRecording: false,
+			hideEditorOverlayCursorByDefault: true,
+		};
+	}
+
+	return {
+		streamCursor: "never",
+		hideOsCursorBeforeRecording: true,
+		hideEditorOverlayCursorByDefault: true,
+	};
 }
 
 export function createProcessedMicrophoneConstraints(
@@ -1331,6 +1359,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				typeof window.electronAPI.startNativeScreenRecording === "function";
 
 			let useNativeWindowsCapture = false;
+			let nativeWindowsCaptureStartFailed = false;
 			if (
 				platform === "win32" &&
 				(selectedSource.id?.startsWith("screen:") ||
@@ -1385,7 +1414,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				);
 				if (!nativeResult.success) {
 					if (useNativeWindowsCapture) {
-						hideEditorOverlayCursorByDefault.current = true;
+						nativeWindowsCaptureStartFailed = true;
 						console.warn(
 							"Native Windows capture failed, falling back to browser capture:",
 							nativeResult.error ?? nativeResult.message,
@@ -1495,7 +1524,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				}
 			}
 
-			hideEditorOverlayCursorByDefault.current = true;
+			const browserCursorPolicy = resolveBrowserCaptureCursorPolicy({
+				nativeWindowsCaptureStartFailed,
+			});
+			hideEditorOverlayCursorByDefault.current =
+				browserCursorPolicy.hideEditorOverlayCursorByDefault;
 
 			const wantsAudioCapture = microphoneEnabled || systemAudioEnabled;
 			const browserCaptureSource = await resolveBrowserCaptureSource(selectedSource);
@@ -1509,10 +1542,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				);
 			}
 
-			try {
-				await window.electronAPI.hideOsCursor?.();
-			} catch {
-				console.warn("Could not hide OS cursor before recording.");
+			if (browserCursorPolicy.hideOsCursorBeforeRecording) {
+				try {
+					await window.electronAPI.hideOsCursor?.();
+				} catch {
+					console.warn("Could not hide OS cursor before recording.");
+				}
 			}
 
 			let videoTrack: MediaStreamTrack | undefined;
@@ -1527,9 +1562,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					maxHeight: TARGET_HEIGHT,
 					maxFrameRate: TARGET_FRAME_RATE,
 					minFrameRate: MIN_FRAME_RATE,
-					googCaptureCursor: false,
+					googCaptureCursor: browserCursorPolicy.streamCursor === "always",
 				},
-				cursor: "never" as const,
+				cursor: browserCursorPolicy.streamCursor,
 			};
 
 			if (wantsAudioCapture) {
@@ -1542,7 +1577,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 							width: { ideal: TARGET_WIDTH, max: TARGET_WIDTH },
 							height: { ideal: TARGET_HEIGHT, max: TARGET_HEIGHT },
 							frameRate: { ideal: TARGET_FRAME_RATE, max: TARGET_FRAME_RATE },
-							cursor: "never",
+							cursor: browserCursorPolicy.streamCursor,
 						},
 						selfBrowserSurface: "exclude",
 						surfaceSwitching: "exclude",
@@ -1653,7 +1688,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 								width: { ideal: TARGET_WIDTH, max: TARGET_WIDTH },
 								height: { ideal: TARGET_HEIGHT, max: TARGET_HEIGHT },
 								frameRate: { ideal: TARGET_FRAME_RATE, max: TARGET_FRAME_RATE },
-								cursor: "never",
+								cursor: browserCursorPolicy.streamCursor,
 							},
 							selfBrowserSurface: "exclude",
 							surfaceSwitching: "exclude",
