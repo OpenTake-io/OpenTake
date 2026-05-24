@@ -2064,6 +2064,32 @@ export default function VideoEditor() {
 		[currentProjectPath, webcam.timeOffsetMs],
 	);
 
+	const resetSourceScopedEditorState = useCallback(() => {
+		setZoomRegions([]);
+		setTrimRegions([]);
+		setClipRegions([]);
+		clipInitializedRef.current = false;
+		autoFullTrackClipIdRef.current = null;
+		autoFullTrackClipEndMsRef.current = null;
+		setSpeedRegions([]);
+		setAnnotationRegions([]);
+		setAudioRegions([]);
+		setSourceAudioTrackSettingsByClip({});
+		setDefaultSourceAudioTrackSettings({});
+		setHasClipSourceAudio(false);
+		setAutoCaptions([]);
+		setAutoCaptionSettings((prev) => ({ ...prev, enabled: false }));
+		setSelectedZoomId(null);
+		setSelectedClipId(null);
+		setSelectedAnnotationId(null);
+		setSelectedAudioId(null);
+		nextZoomIdRef.current = 1;
+		nextClipIdRef.current = 1;
+		nextAudioIdRef.current = 1;
+		nextAnnotationIdRef.current = 1;
+		nextAnnotationZIndexRef.current = 1;
+	}, []);
+
 	const handleUploadWebcam = useCallback(async () => {
 		const result = await window.electronAPI.openVideoFilePicker();
 		if (!result.success || !result.path) {
@@ -2152,6 +2178,7 @@ export default function VideoEditor() {
 					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
 					setLastSavedSnapshot(null);
+					resetSourceScopedEditorState();
 					pendingFreshRecordingAutoZoomPathRef.current = autoApplyFreshRecordingAutoZooms
 						? sourceVideoUrl
 						: null;
@@ -2180,6 +2207,7 @@ export default function VideoEditor() {
 					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
 					setLastSavedSnapshot(null);
+					resetSourceScopedEditorState();
 					pendingFreshRecordingAutoZoomPathRef.current = null;
 					setWebcam((prev) => ({
 						...prev,
@@ -2237,6 +2265,7 @@ export default function VideoEditor() {
 					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
 					setLastSavedSnapshot(null);
+					resetSourceScopedEditorState();
 					pendingFreshRecordingAutoZoomPathRef.current = autoApplyFreshRecordingAutoZooms
 						? sourceVideoUrl
 						: null;
@@ -2259,6 +2288,7 @@ export default function VideoEditor() {
 					setVideoPath(sourceVideoUrl);
 					setCurrentProjectPath(null);
 					setLastSavedSnapshot(null);
+					resetSourceScopedEditorState();
 					pendingFreshRecordingAutoZoomPathRef.current = null;
 					applySessionPresentation(null);
 					setWebcam((prev) => ({
@@ -2285,6 +2315,7 @@ export default function VideoEditor() {
 		devOpenRecordingConfig.inputPath,
 		devOpenRecordingConfig.webcamInputPath,
 		initialEditorPreferences,
+		resetSourceScopedEditorState,
 		smokeExportConfig.enabled,
 		smokeExportConfig.inputPath,
 		smokeExportConfig.projectPath,
