@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { USER_DATA_PATH } from "./appPaths";
+import { getHudOverlayWindowBounds } from "./hudOverlayBounds";
 import { getPackagedRendererBaseUrl } from "./rendererServer";
 
 const electronWindowsDir = path.dirname(fileURLToPath(import.meta.url));
@@ -23,6 +24,7 @@ const WINDOW_ICON_PATH = path.join(
 let hudOverlayWindow: BrowserWindow | null = null;
 let hudOverlayHiddenFromCapture = true;
 let hudOverlayCaptureProtectionLoaded = false;
+let hudOverlayFallbackExpanded = false;
 let countdownWindow: BrowserWindow | null = null;
 let updateToastWindow: BrowserWindow | null = null;
 
@@ -183,12 +185,11 @@ function getHudOverlayDisplay() {
 
 function getHudOverlayBounds() {
 	const { workArea } = getHudOverlayDisplay();
-	return {
-		x: workArea.x,
-		y: workArea.y,
-		width: workArea.width,
-		height: workArea.height,
-	};
+	return getHudOverlayWindowBounds(
+		workArea,
+		isHudOverlayMousePassthroughSupported(),
+		hudOverlayFallbackExpanded,
+	);
 }
 
 function applyHudOverlayBounds() {
@@ -242,9 +243,27 @@ function positionUpdateToastWindow() {
 	updateToastWindow.moveTop();
 }
 
+function setHudOverlayFallbackExpanded(expanded: boolean) {
+	hudOverlayFallbackExpanded = expanded;
+	if (
+		!hudOverlayWindow ||
+		hudOverlayWindow.isDestroyed() ||
+		isHudOverlayMousePassthroughSupported()
+	) {
+		return;
+	}
+
+	hudOverlayWindow.setBounds(getHudOverlayBounds(), false);
+	positionUpdateToastWindow();
+	if (hudOverlayWindow.isVisible()) {
+		hudOverlayWindow.moveTop();
+	}
+}
+
 ipcMain.on("hud-overlay-set-ignore-mouse", (_event, ignore: boolean) => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
 		if (!isHudOverlayMousePassthroughSupported()) {
+			setHudOverlayFallbackExpanded(!ignore);
 			hudOverlayWindow.setIgnoreMouseEvents(false);
 			return;
 		}
@@ -358,6 +377,7 @@ ipcMain.handle("set-hud-overlay-capture-protection", (_event, enabled: boolean) 
 
 export function createHudOverlayWindow(): BrowserWindow {
 	loadHudOverlayCaptureProtectionSetting();
+	hudOverlayFallbackExpanded = false;
 	const initialBounds = getHudOverlayBounds();
 	let hasShownHudWindow = false;
 
