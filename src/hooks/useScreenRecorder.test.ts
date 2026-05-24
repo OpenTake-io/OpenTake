@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	createProcessedMicrophoneConstraints,
 	normalizeBrowserMicrophoneProfile,
+	resolveBrowserCaptureCursorPolicy,
 } from "./useScreenRecorder";
 
 type RecordingState = "inactive" | "recording" | "paused";
@@ -105,6 +106,26 @@ describe("createProcessedMicrophoneConstraints", () => {
 		expect(normalizeBrowserMicrophoneProfile("RAW")).toBe("raw");
 		expect(normalizeBrowserMicrophoneProfile("unknown")).toBe("no-agc");
 		expect(normalizeBrowserMicrophoneProfile(null)).toBe("no-agc");
+	});
+});
+
+describe("resolveBrowserCaptureCursorPolicy", () => {
+	it("preserves the existing hidden-cursor browser policy by default", () => {
+		expect(resolveBrowserCaptureCursorPolicy()).toEqual({
+			streamCursor: "never",
+			hideOsCursorBeforeRecording: true,
+			hideEditorOverlayCursorByDefault: true,
+		});
+	});
+
+	it("uses the browser captured cursor after native Windows capture fails to start", () => {
+		expect(
+			resolveBrowserCaptureCursorPolicy({ nativeWindowsCaptureStartFailed: true }),
+		).toEqual({
+			streamCursor: "always",
+			hideOsCursorBeforeRecording: false,
+			hideEditorOverlayCursorByDefault: true,
+		});
 	});
 });
 
