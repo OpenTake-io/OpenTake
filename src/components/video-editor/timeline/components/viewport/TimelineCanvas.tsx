@@ -1,31 +1,21 @@
 import { Plus } from "@phosphor-icons/react";
 import { useTimelineContext } from "dnd-timeline";
 import {
+	type MouseEvent,
+	type MouseEventHandler,
 	memo,
 	useCallback,
 	useEffect,
 	useMemo,
 	useRef,
 	useState,
-	type MouseEvent,
-	type MouseEventHandler,
 } from "react";
-import { cn } from "@/lib/utils";
 import type {
 	SourceAudioTrackSettings,
 	SourceAudioTrackWithPeaks,
 } from "@/components/video-editor/audio/audioTypes";
-import {
-	getTimelineContentMinHeightPx,
-	getTimelineRowsMinHeightPx,
-	getTimelineViewportStretchFactor,
-	TIMELINE_AXIS_HEIGHT_PX,
-} from "../../timelineLayout";
-import glassStyles from "../../ItemGlass.module.css";
-import Item from "../../Item";
-import Row from "../../Row";
+import { cn } from "@/lib/utils";
 import { CLIP_ROW_ID, SOURCE_AUDIO_ROW_ID, ZOOM_ROW_ID } from "../../core/constants";
-import type { TimelineRenderItem } from "../../core/timelineTypes";
 import {
 	getAnnotationTrackIndex,
 	getAnnotationTrackRowId,
@@ -34,10 +24,20 @@ import {
 	isAnnotationTrackRowId,
 	isAudioTrackRowId,
 } from "../../core/rows";
+import type { TimelineRenderItem } from "../../core/timelineTypes";
+import { useTimelineAudioPeaks } from "../../hooks/useTimelineAudioPeaks";
+import Item from "../../Item";
+import glassStyles from "../../ItemGlass.module.css";
+import Row from "../../Row";
+import {
+	getTimelineContentMinHeightPx,
+	getTimelineRowsMinHeightPx,
+	getTimelineViewportStretchFactor,
+	TIMELINE_AXIS_HEIGHT_PX,
+} from "../../timelineLayout";
 import TimelineAxis from "../axis/TimelineAxis";
 import ClipMarkerOverlay from "../overlays/ClipMarkerOverlay";
 import PlaybackCursor from "../playhead/PlaybackCursor";
-import { useTimelineAudioPeaks } from "../../hooks/useTimelineAudioPeaks";
 
 const HINT_CLIP = "Press C to split clip";
 const HINT_ANNOTATION = "Press A to add annotation";
@@ -386,6 +386,7 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 						isSelected={selectAllBlocksActive || item.id === selectedClipId}
 						onSelectId={onSelectClip}
 						variant="clip"
+						speedValue={item.speedValue}
 						isLoading={isLoading}
 						loadingLabel="Analyzing..."
 					>
