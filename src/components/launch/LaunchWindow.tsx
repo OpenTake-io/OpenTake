@@ -1,46 +1,45 @@
 import {
+	ArrowClockwiseIcon,
 	CaretUpIcon,
+	DotsThreeVerticalIcon,
 	MicrophoneIcon,
 	MicrophoneSlashIcon,
 	MinusIcon,
 	MonitorIcon,
-	DotsThreeVerticalIcon,
 	TimerIcon,
 	VideoCameraIcon,
 	VideoCameraSlashIcon,
 	XIcon,
-	ArrowClockwiseIcon,
 } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useRef } from "react";
 import { RxDragHandleDots2 } from "react-icons/rx";
+import { Separator } from "@/components/ui/separator";
 import { useScopedT } from "../../contexts/I18nContext";
-import { useHudBarDrag } from "./hooks/useHudBarDrag";
 import { useMicrophoneDevices } from "../../hooks/useMicrophoneDevices";
-import { useLaunchWindowSystemState } from "./hooks/useLaunchWindowSystemState";
-import { useLaunchHudInteractionState } from "./hooks/useLaunchHudInteractionState";
-import { useLaunchWindowActions } from "./hooks/useLaunchWindowActions";
-import { useRecordingTimer } from "./hooks/useRecordingTimer";
 import { useScreenRecorder } from "../../hooks/useScreenRecorder";
 import { useVideoDevices } from "../../hooks/useVideoDevices";
-import { useWebcamPreviewOverlay } from "./hooks/useWebcamPreviewOverlay";
+import { Button } from "../ui/button";
+import { HudInteractionContext } from "./contexts/HudInteractionContext";
 import {
 	canToggleFloatingWebcamPreview,
 } from "./floatingWebcamPreview";
-import { LaunchPopoverCoordinatorProvider, useLaunchPopoverCoordinator } from "./popovers/LaunchPopoverCoordinator";
+import { useHudBarDrag } from "./hooks/useHudBarDrag";
+import { useLaunchHudInteractionState } from "./hooks/useLaunchHudInteractionState";
+import { useLaunchWindowActions } from "./hooks/useLaunchWindowActions";
+import { useLaunchWindowSystemState } from "./hooks/useLaunchWindowSystemState";
+import { useRecordingTimer } from "./hooks/useRecordingTimer";
+import { useWebcamPreviewOverlay } from "./hooks/useWebcamPreviewOverlay";
+import styles from "./LaunchWindow.module.css";
 import { CountdownPopover } from "./popovers/CountdownPopover";
+import { LaunchPopoverCoordinatorProvider, useLaunchPopoverCoordinator } from "./popovers/LaunchPopoverCoordinator";
 import { MicPopover } from "./popovers/MicPopover";
 import { MorePopover } from "./popovers/MorePopover";
 import { ProjectPopover } from "./popovers/ProjectPopover";
 import { SourcePopover } from "./popovers/SourcePopover";
 import { WebcamPopover } from "./popovers/WebcamPopover";
-import { HudInteractionContext } from "./contexts/HudInteractionContext";
-import { MarqueeText } from "./SourceSelector";
-import styles from "./LaunchWindow.module.css";
-
-import { Separator } from "@/components/ui/separator";
-import { Button } from "../ui/button";
 import { RecordingControls } from "./RecordingControls";
-import { useEffect, useRef } from "react";
+import { MarqueeText } from "./SourceSelector";
 
 const SHOW_DEV_UPDATE_PREVIEW = import.meta.env.DEV;
 
@@ -427,6 +426,8 @@ function LaunchWindowContent() {
 	);
 
 	const hudMode = finalizing ? "finalizing" : recording ? "recording" : "idle";
+	const useNativeHudBarDrag =
+		platform === "linux" || hudOverlayMousePassthroughSupported === false;
 
 	return (
 		<HudInteractionContext.Provider value={{ onMouseEnter: handleHudMouseEnter, onMouseLeave: handleHudMouseLeave }}>
@@ -456,16 +457,11 @@ function LaunchWindowContent() {
 							className={`${styles.bar} launch-theme mb-2`}
 						>
 							<div
-								// On Linux (especially Wayland) the compositor owns window
-								// placement, so BrowserWindow.setBounds() is silently ignored.
-								// Fall back to a native OS drag via -webkit-app-region on the
-								// handle.  We still need JS pointer handlers in webcam-preview
-								// mode (which translates via CSS inside the window), so only
-								// mark the handle as a native drag region for the IPC path.
+								// Linux compositors and non-passthrough Windows fallback windows
+								// need native window dragging; the JS drag path only translates
+								// content inside the HUD window.
 								className={`flex items-center px-0.5 cursor-grab active:cursor-grabbing ${
-									platform === "linux" && !showRecordingWebcamPreview
-										? styles.electronDrag
-										: ""
+									useNativeHudBarDrag ? styles.electronDrag : ""
 								}`}
 								onPointerDown={handleHudBarPointerDown}
 								onPointerMove={handleHudBarPointerMove}
