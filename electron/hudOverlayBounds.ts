@@ -9,6 +9,10 @@ const NON_PASSTHROUGH_HUD_WIDTH_DIP = 860;
 const NON_PASSTHROUGH_HUD_COMPACT_HEIGHT_DIP = 160;
 const NON_PASSTHROUGH_HUD_EXPANDED_HEIGHT_DIP = 540;
 
+function clamp(value: number, min: number, max: number): number {
+	return Math.min(Math.max(value, min), max);
+}
+
 export function getHudOverlayWindowBounds(
 	workArea: HudOverlayWorkArea,
 	mousePassthroughSupported: boolean,
@@ -31,5 +35,21 @@ export function getHudOverlayWindowBounds(
 		y: Math.round(workArea.y + workArea.height - height),
 		width,
 		height,
+	};
+}
+
+export function resizeHudOverlayFallbackBounds(
+	workArea: HudOverlayWorkArea,
+	currentBounds: HudOverlayWorkArea,
+	fallbackExpanded: boolean,
+): HudOverlayWorkArea {
+	const nextBounds = getHudOverlayWindowBounds(workArea, false, fallbackExpanded);
+	const maxX = workArea.x + workArea.width - nextBounds.width;
+	const maxY = workArea.y + workArea.height - nextBounds.height;
+
+	return {
+		...nextBounds,
+		x: clamp(currentBounds.x, workArea.x, maxX),
+		y: clamp(currentBounds.y + currentBounds.height - nextBounds.height, workArea.y, maxY),
 	};
 }

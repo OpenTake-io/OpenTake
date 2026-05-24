@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { getHudOverlayWindowBounds } from "./hudOverlayBounds";
+import {
+	getHudOverlayWindowBounds,
+	resizeHudOverlayFallbackBounds,
+} from "./hudOverlayBounds";
 
 describe("getHudOverlayWindowBounds", () => {
 	const workArea = {
@@ -68,6 +71,75 @@ describe("getHudOverlayWindowBounds", () => {
 			y: 20,
 			width: 640,
 			height: 420,
+		});
+	});
+});
+
+describe("resizeHudOverlayFallbackBounds", () => {
+	const workArea = {
+		x: 0,
+		y: 0,
+		width: 1920,
+		height: 1080,
+	};
+
+	it("preserves the dragged bottom edge when expanding", () => {
+		expect(
+			resizeHudOverlayFallbackBounds(
+				workArea,
+				{
+					x: 420,
+					y: 700,
+					width: 860,
+					height: 160,
+				},
+				true,
+			),
+		).toEqual({
+			x: 420,
+			y: 320,
+			width: 860,
+			height: 540,
+		});
+	});
+
+	it("preserves the dragged bottom edge when compacting", () => {
+		expect(
+			resizeHudOverlayFallbackBounds(
+				workArea,
+				{
+					x: 420,
+					y: 320,
+					width: 860,
+					height: 540,
+				},
+				false,
+			),
+		).toEqual({
+			x: 420,
+			y: 700,
+			width: 860,
+			height: 160,
+		});
+	});
+
+	it("keeps resized fallback bounds inside the display work area", () => {
+		expect(
+			resizeHudOverlayFallbackBounds(
+				workArea,
+				{
+					x: 1500,
+					y: 900,
+					width: 860,
+					height: 160,
+				},
+				true,
+			),
+		).toEqual({
+			x: 1060,
+			y: 520,
+			width: 860,
+			height: 540,
 		});
 	});
 });
