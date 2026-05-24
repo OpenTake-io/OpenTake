@@ -2074,6 +2074,8 @@ export default function VideoEditor() {
 		setSpeedRegions([]);
 		setAnnotationRegions([]);
 		setAudioRegions([]);
+		setCursorTelemetry([]);
+		setCursorTelemetrySourcePath(null);
 		setSourceAudioTrackSettingsByClip({});
 		setDefaultSourceAudioTrackSettings({});
 		setHasClipSourceAudio(false);
@@ -2088,6 +2090,8 @@ export default function VideoEditor() {
 		nextAudioIdRef.current = 1;
 		nextAnnotationIdRef.current = 1;
 		nextAnnotationZIndexRef.current = 1;
+		pendingFreshRecordingAutoSuggestTelemetryCountRef.current = 0;
+		autoSuggestedVideoPathRef.current = null;
 		resetEditorHistoryStack(editorHistoryRef.current);
 		applyingHistoryRef.current = false;
 		syncHistoryButtons();
