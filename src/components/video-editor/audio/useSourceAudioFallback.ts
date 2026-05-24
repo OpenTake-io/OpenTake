@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { SOURCE_AUDIO_FALLBACK_TOAST_ID } from "@/components/video-editor/audio/audioTypes";
 
@@ -16,13 +16,18 @@ export function useSourceAudioFallback({
   const [sourceAudioFallbackPaths, setSourceAudioFallbackPaths] = useState<string[]>([]);
   const [sourceAudioFallbackStartDelayMsByPath, setSourceAudioFallbackStartDelayMsByPath] =
     useState<Record<string, number>>({});
+  const previousSourcePathRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     // Refetch when late recording sidecars are finalized after the editor opens.
     void refreshKey;
-    setSourceAudioFallbackPaths([]);
-    setSourceAudioFallbackStartDelayMsByPath({});
+    const sourceChanged = previousSourcePathRef.current !== currentSourcePath;
+    previousSourcePathRef.current = currentSourcePath;
+    if (sourceChanged) {
+      setSourceAudioFallbackPaths([]);
+      setSourceAudioFallbackStartDelayMsByPath({});
+    }
 
     if (!currentSourcePath) {
       return () => {
@@ -37,8 +42,10 @@ export function useSourceAudioFallback({
           return;
         }
         if (!result.success) {
-          setSourceAudioFallbackPaths([]);
-          setSourceAudioFallbackStartDelayMsByPath({});
+          if (sourceChanged) {
+            setSourceAudioFallbackPaths([]);
+            setSourceAudioFallbackStartDelayMsByPath({});
+          }
           toast.warning(
             result.error
               ? `Could not load companion audio sources: ${summarizeErrorMessage(result.error)}`
@@ -53,8 +60,10 @@ export function useSourceAudioFallback({
         setSourceAudioFallbackStartDelayMsByPath(result.startDelayMsByPath ?? {});
       } catch (error) {
         if (!cancelled) {
-          setSourceAudioFallbackPaths([]);
-          setSourceAudioFallbackStartDelayMsByPath({});
+          if (sourceChanged) {
+            setSourceAudioFallbackPaths([]);
+            setSourceAudioFallbackStartDelayMsByPath({});
+          }
           toast.warning(
             `Could not load companion audio sources: ${summarizeErrorMessage(String(error))}`,
             { id: SOURCE_AUDIO_FALLBACK_TOAST_ID, duration: 10000 },
