@@ -118,7 +118,64 @@ describe("ModernVideoExporter native fallback routing", () => {
 		expect(mocks.muxerFinalize).toHaveBeenCalledTimes(1);
 	}, 15_000);
 
-	it("tries Windows auto static-layout before starting the streaming native encoder", async () => {
+	it("keeps Windows auto exports on the streaming native route before static layout", async () => {
+		vi.stubGlobal("navigator", {
+			platform: "Win32",
+			userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+		});
+
+		const { ModernVideoExporter } = await import("./modernVideoExporter");
+		const nativeResult = {
+			success: true,
+			blob: new Blob([], { type: "video/mp4" }),
+		};
+		const exporter = new ModernVideoExporter({
+			videoUrl: "file:///recording.mp4",
+			width: 1920,
+			height: 1080,
+			frameRate: 30,
+			bitrate: 8_000_000,
+			wallpaper: "#101010",
+			padding: 0,
+			borderRadius: 0,
+			backgroundBlur: 0,
+			shadowIntensity: 0,
+			showShadow: false,
+			cropRegion: { x: 0, y: 0, width: 1, height: 1 },
+			experimentalNativeExport: true,
+			backendPreference: "auto",
+		} as never) as unknown as {
+			export: () => Promise<{ success: boolean; blob?: Blob; error?: string }>;
+			finishNativeVideoExport: () => Promise<unknown>;
+			loadNativeStaticLayoutVideoInfo: () => Promise<unknown>;
+			tryExportNativeStaticLayout: () => Promise<unknown>;
+			tryStartNativeVideoExport: () => Promise<boolean>;
+		};
+
+		const loadNativeStaticLayoutVideoInfo = vi.spyOn(
+			exporter,
+			"loadNativeStaticLayoutVideoInfo",
+		);
+		const tryExportNativeStaticLayout = vi.spyOn(exporter, "tryExportNativeStaticLayout");
+		const tryStartNativeVideoExport = vi
+			.spyOn(exporter, "tryStartNativeVideoExport")
+			.mockResolvedValue(true);
+		const finishNativeVideoExport = vi
+			.spyOn(exporter, "finishNativeVideoExport")
+			.mockResolvedValue(nativeResult);
+
+		const result = await exporter.export();
+
+		expect(result.success).toBe(true);
+		expect(result.blob).toBe(nativeResult.blob);
+		expect(tryStartNativeVideoExport).toHaveBeenCalledTimes(1);
+		expect(loadNativeStaticLayoutVideoInfo).not.toHaveBeenCalled();
+		expect(tryExportNativeStaticLayout).not.toHaveBeenCalled();
+		expect(mocks.streamingDecoderLoadMetadata).toHaveBeenCalledTimes(1);
+		expect(finishNativeVideoExport).toHaveBeenCalledTimes(1);
+	}, 15_000);
+
+	it("tries Windows auto static-layout first when NVIDIA CUDA is opted in", async () => {
 		vi.stubGlobal("navigator", {
 			platform: "Win32",
 			userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -143,6 +200,7 @@ describe("ModernVideoExporter native fallback routing", () => {
 			showShadow: false,
 			cropRegion: { x: 0, y: 0, width: 1, height: 1 },
 			experimentalNativeExport: true,
+			experimentalNvidiaCudaExport: true,
 			backendPreference: "auto",
 		} as never) as unknown as {
 			export: () => Promise<{ success: boolean; blob?: Blob; error?: string }>;
