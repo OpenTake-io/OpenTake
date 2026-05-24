@@ -1544,7 +1544,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			if (browserCursorPolicy.hideOsCursorBeforeRecording) {
 				try {
-					await window.electronAPI.hideOsCursor?.();
+					const hideCursorResult = await window.electronAPI.hideOsCursor?.();
+					if (hideCursorResult && !hideCursorResult.success) {
+						console.warn("Could not hide OS cursor before recording.", hideCursorResult);
+					}
 				} catch {
 					console.warn("Could not hide OS cursor before recording.");
 				}
