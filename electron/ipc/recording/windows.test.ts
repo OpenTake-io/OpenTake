@@ -45,6 +45,49 @@ describe("waitForWindowsCaptureStop", () => {
 		expect(proc.kill).not.toHaveBeenCalled();
 	});
 
+	it("resolves the fallback target path when the helper closes cleanly without output path", async () => {
+		const proc = new FakeCaptureProcess();
+		setWindowsCaptureOutputBuffer("Recording stopped without output path");
+		setWindowsCaptureTargetPath("C:\\Recordly\\fallback.mp4");
+
+		const stopped = waitForWindowsCaptureStop(
+			proc as unknown as Parameters<typeof waitForWindowsCaptureStop>[0],
+			1000,
+		);
+		proc.emit("close", 0);
+
+		await expect(stopped).resolves.toBe("C:\\Recordly\\fallback.mp4");
+		expect(proc.kill).not.toHaveBeenCalled();
+	});
+
+	it("rejects with helper output when the helper exits with a non-zero code", async () => {
+		const proc = new FakeCaptureProcess();
+		setWindowsCaptureOutputBuffer("Encoder error: insufficient memory");
+
+		const stopped = waitForWindowsCaptureStop(
+			proc as unknown as Parameters<typeof waitForWindowsCaptureStop>[0],
+			1000,
+		);
+		proc.emit("close", 1);
+
+		await expect(stopped).rejects.toThrow("Encoder error: insufficient memory");
+		expect(proc.kill).not.toHaveBeenCalled();
+	});
+
+	it("rejects when the helper emits an error", async () => {
+		const proc = new FakeCaptureProcess();
+		const error = new Error("spawn failed");
+
+		const stopped = waitForWindowsCaptureStop(
+			proc as unknown as Parameters<typeof waitForWindowsCaptureStop>[0],
+			1000,
+		);
+		proc.emit("error", error);
+
+		await expect(stopped).rejects.toBe(error);
+		expect(proc.kill).not.toHaveBeenCalled();
+	});
+
 	it("kills the helper and rejects when stop never completes", async () => {
 		const proc = new FakeCaptureProcess();
 

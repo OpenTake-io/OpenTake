@@ -2088,7 +2088,10 @@ export default function VideoEditor() {
 		nextAudioIdRef.current = 1;
 		nextAnnotationIdRef.current = 1;
 		nextAnnotationZIndexRef.current = 1;
-	}, []);
+		resetEditorHistoryStack(editorHistoryRef.current);
+		applyingHistoryRef.current = false;
+		syncHistoryButtons();
+	}, [syncHistoryButtons]);
 
 	const handleUploadWebcam = useCallback(async () => {
 		const result = await window.electronAPI.openVideoFilePicker();
