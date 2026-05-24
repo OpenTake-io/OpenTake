@@ -501,6 +501,7 @@ export default function VideoEditor() {
 	>({});
 	const [defaultSourceAudioTrackSettings, setDefaultSourceAudioTrackSettings] =
 		useState<SourceAudioTrackSettings>({});
+	const [sourceAudioFallbackRefreshKey, setSourceAudioFallbackRefreshKey] = useState(0);
 	const [hasClipSourceAudio, setHasClipSourceAudio] = useState(false);
 	const [autoCaptions, setAutoCaptions] = useState<CaptionCue[]>([]);
 	const [autoCaptionSettings, setAutoCaptionSettings] = useState<AutoCaptionSettings>(
@@ -2298,26 +2299,29 @@ export default function VideoEditor() {
 		}
 
 		return window.electronAPI.onRecordingSessionChanged((session) => {
+			const sessionSourcePath = session?.videoPath ? fromFileUrl(session.videoPath) : null;
+			const sessionWebcamPath = session?.webcamPath ? fromFileUrl(session.webcamPath) : null;
 			console.log("[VideoEditor] onRecordingSessionChanged received!", {
 				hasSession: Boolean(session),
 				hasSessionVideoPath: Boolean(session?.videoPath),
 				hasVideoSourcePath: Boolean(videoSourcePath),
-				match: session?.videoPath === videoSourcePath,
-				hasWebcamPath: Boolean(session?.webcamPath),
+				match: sessionSourcePath === videoSourcePath,
+				hasWebcamPath: Boolean(sessionWebcamPath),
 			});
 
-			if (!session || session.videoPath !== videoSourcePath) {
+			if (!session || sessionSourcePath !== videoSourcePath) {
 				return;
 			}
 
 			setWebcam((prev) => ({
 				...prev,
-				enabled: Boolean(session.webcamPath),
-				sourcePath: session.webcamPath ?? null,
-				timeOffsetMs: session.webcamPath
+				enabled: Boolean(sessionWebcamPath),
+				sourcePath: sessionWebcamPath,
+				timeOffsetMs: sessionWebcamPath
 					? (session.timeOffsetMs ?? prev.timeOffsetMs)
 					: DEFAULT_WEBCAM_TIME_OFFSET_MS,
 			}));
+			setSourceAudioFallbackRefreshKey((key) => key + 1);
 		});
 	}, [videoSourcePath]);
 
@@ -3173,6 +3177,7 @@ export default function VideoEditor() {
 		duration,
 		isPlaying,
 		previewVolume,
+		sourceAudioFallbackRefreshKey,
 		summarizeErrorMessage,
 		onSourceFallbackLoadError: (error) => {
 			toast.warning(
@@ -3182,6 +3187,15 @@ export default function VideoEditor() {
 		},
 	});
 
+	const startPlayback = useCallback(() => {
+		const playback = videoPlaybackRef.current;
+		const video = playback?.video;
+		if (!playback || !video) return;
+
+		audio.playSourceAudioPreview();
+		playback.play().catch((err) => console.error("Video play failed:", err));
+	}, [audio.playSourceAudioPreview]);
+
 	function togglePlayPause() {
 		const playback = videoPlaybackRef.current;
 		const video = playback?.video;
@@ -3190,7 +3204,7 @@ export default function VideoEditor() {
 		if (!video.paused && !video.ended) {
 			playback.pause();
 		} else {
-			playback.play().catch((err) => console.error("Video play failed:", err));
+			startPlayback();
 		}
 	}
 
@@ -3901,7 +3915,7 @@ export default function VideoEditor() {
 				const playback = videoPlaybackRef.current;
 				if (playback?.video) {
 					if (playback.video.paused) {
-						playback.play().catch(console.error);
+						startPlayback();
 					} else {
 						playback.pause();
 					}
@@ -3911,7 +3925,7 @@ export default function VideoEditor() {
 
 		window.addEventListener("keydown", handleKeyDown, { capture: true });
 		return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
-	}, [shortcuts, isMac, handleUndo, handleRedo]);
+	}, [shortcuts, isMac, handleUndo, handleRedo, startPlayback]);
 
 	useEffect(() => {
 		if (selectedZoomId && !zoomRegions.some((region) => region.id === selectedZoomId)) {
