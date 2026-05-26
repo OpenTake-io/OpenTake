@@ -9,16 +9,15 @@ Language: EN | [简中](README.zh-CN.md)
   <img src="https://img.shields.io/badge/open%20source-AGPL3.0-2563eb?style=for-the-badge" alt="AGPL 3.0 license" />
 </p>
 
-### Create polished screen recordings without editing.
-[Recordly](https://www.recordly.dev) is an **open-source screen recorder** and editor for **walkthroughs, demos, product videos**, and more. 
-**Accepting PRs.** [Donate](https://ko-fi.com/webadderall/goal?g=0)
+### Create polished demo videos in minutes
+[Recordly](https://www.recordly.dev) is your **open-source screen recorder** and editor for **walkthroughs, demos, product videos**, and more. 
+**Accepting PRs.**
 
-https://github.com/user-attachments/assets/9b66c71d-ac97-49ff-a0c9-63ac26edf2e4
+<img width="1280" height="720" alt="MP4 to GIF export (4)" src="https://github.com/user-attachments/assets/e6d68606-5fc0-4f70-99cd-7521982dc13b" />
+
 
 ---
-# Sponsors
-> Keep Recordly open-source and <a href="https://github.com/sponsors/webadderall">get eyes on your logo</a>
-
+### Backed by the community
 <a href="https://coderabbit.link/recordly"><img width="400" alt="CodeRabbit Typemark" src="https://github.com/user-attachments/assets/3926ecfd-8652-4f2d-8da8-ac7641017cf5" /></a>
 
 ---
