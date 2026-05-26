@@ -397,7 +397,7 @@ Recordly is licensed under the **AGPL 3.0**.
 ## Acknowledgements
 
 Recordly originally started as a fork of [OpenScreen](https://github.com/siddharthvaddem/openscreen). Over 80% of code has diverged since.
-Some features of OpenScreen such as its zoom animations are directly ported from early versions of Recordly.
+Many features of OpenScreen such as its zoom animations are directly ported from early versions of Recordly.
 
 Created by  
 [@webadderall](https://x.com/webadderall)
