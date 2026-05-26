@@ -211,6 +211,12 @@ export function resolveBrowserCaptureCursorPolicy({
 	};
 }
 
+export function shouldUseNativeWindowsCaptureForSource(
+	source: Pick<ProcessedDesktopSource, "id"> | null | undefined,
+): boolean {
+	return source?.id?.startsWith("screen:") === true;
+}
+
 export function createProcessedMicrophoneConstraints(
 	microphoneDeviceId?: string,
 	profile: BrowserMicrophoneProfile = DEFAULT_BROWSER_MICROPHONE_PROFILE,
@@ -1362,8 +1368,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			let nativeWindowsCaptureStartFailed = false;
 			if (
 				platform === "win32" &&
-				(selectedSource.id?.startsWith("screen:") ||
-					selectedSource.id?.startsWith("window:")) &&
+				shouldUseNativeWindowsCaptureForSource(selectedSource) &&
 				typeof window.electronAPI.isNativeWindowsCaptureAvailable === "function"
 			) {
 				try {
