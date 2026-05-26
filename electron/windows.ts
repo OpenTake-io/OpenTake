@@ -272,7 +272,9 @@ function setHudOverlayFallbackExpanded(expanded: boolean) {
 ipcMain.on("hud-overlay-set-ignore-mouse", (_event, ignore: boolean) => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
 		if (!isHudOverlayMousePassthroughSupported()) {
-			setHudOverlayFallbackExpanded(!ignore);
+			if (process.platform !== "linux") {
+				setHudOverlayFallbackExpanded(!ignore);
+			}
 			hudOverlayWindow.setIgnoreMouseEvents(false);
 			return;
 		}
