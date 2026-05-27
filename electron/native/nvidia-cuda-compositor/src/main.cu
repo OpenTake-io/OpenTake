@@ -302,6 +302,12 @@ Options parseOptions(int argc, char** argv) {
     if (options.inputPath.empty()) {
         fail("--input is required");
     }
+    if ((options.width > 0) != (options.height > 0)) {
+        fail("--width and --height must be specified together");
+    }
+    if (options.width > 0 && (options.width % 2 != 0 || options.height % 2 != 0)) {
+        fail("--width and --height must be even numbers for NV12 encoding");
+    }
     return options;
 }
 

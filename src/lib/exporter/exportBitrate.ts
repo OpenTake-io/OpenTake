@@ -43,6 +43,10 @@ function getBaseMp4ExportBitrate(width: number, height: number, quality: ExportQ
 }
 
 function getFrameRateBitrateMultiplier(frameRate: ExportMp4FrameRate): number {
+	// This only scales requestedBitrate above REFERENCE_FRAME_RATE, so 24fps
+	// and 30fps share the same multiplier. useModernNativeStaticLayout can
+	// still change the final bitrate because pixelRateScale uses frameRate
+	// against REFERENCE_PIXEL_RATE for the native layout floor/cap.
 	return Math.sqrt(Math.max(1, frameRate / REFERENCE_FRAME_RATE));
 }
 
