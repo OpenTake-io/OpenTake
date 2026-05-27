@@ -22,6 +22,10 @@ function isFiniteNumber(value: unknown): value is number {
 	return typeof value === "number" && Number.isFinite(value);
 }
 
+/**
+ * Reads the preferred cue timestamp, falling back to legacy start/end fields.
+ * Returns rounded milliseconds, or null when neither value is usable.
+ */
 function getCueTimeMs(cue: SubtitleCueInput, primaryKey: "startMs" | "endMs") {
 	const fallbackKey = primaryKey === "startMs" ? "start" : "end";
 	const primaryValue = cue[primaryKey];
@@ -33,6 +37,10 @@ function getCueTimeMs(cue: SubtitleCueInput, primaryKey: "startMs" | "endMs") {
 	return isFiniteNumber(fallbackValue) ? Math.round(fallbackValue) : null;
 }
 
+/**
+ * Converts raw caption cues into export-ready cues with valid timing and text.
+ * Malformed cues are skipped so one bad cue does not fail the whole export.
+ */
 function normalizeSubtitleCues(cues: SubtitleCueInput[]) {
 	const normalizedCues: NormalizedSubtitleCue[] = [];
 
@@ -57,6 +65,10 @@ function normalizeSubtitleCues(cues: SubtitleCueInput[]) {
 	return normalizedCues;
 }
 
+/**
+ * Formats milliseconds as a subtitle timestamp using the format delimiter.
+ * SRT uses commas for milliseconds, while WebVTT uses periods.
+ */
 function formatTimestamp(ms: number, separator: "," | ".") {
 	const roundedMs = Math.max(0, Math.round(ms));
 	const hours = Math.floor(roundedMs / 3_600_000);
@@ -71,6 +83,10 @@ function formatTimestamp(ms: number, separator: "," | ".") {
 	].join(":");
 }
 
+/**
+ * Converts caption cues into SubRip content.
+ * Returns an empty string when no valid cues are available.
+ */
 export function cuesToSrt(cues: SubtitleCueInput[]) {
 	const blocks = normalizeSubtitleCues(cues).map((cue, index) =>
 		[
@@ -83,6 +99,10 @@ export function cuesToSrt(cues: SubtitleCueInput[]) {
 	return blocks.length > 0 ? `${blocks.join("\n\n")}\n` : "";
 }
 
+/**
+ * Converts caption cues into WebVTT content.
+ * Always includes the required WEBVTT header.
+ */
 export function cuesToVtt(cues: SubtitleCueInput[]) {
 	const blocks = normalizeSubtitleCues(cues).map((cue, index) =>
 		[
@@ -95,6 +115,10 @@ export function cuesToVtt(cues: SubtitleCueInput[]) {
 	return `WEBVTT\n\n${blocks.length > 0 ? `${blocks.join("\n\n")}\n` : ""}`;
 }
 
+/**
+ * Converts caption cues to the requested subtitle file format.
+ * Throws when the format is not supported.
+ */
 export function subtitleCuesToFile(format: SubtitleExportFormat, cues: SubtitleCueInput[]) {
 	if (format === "srt") {
 		return cuesToSrt(cues);
@@ -107,12 +131,18 @@ export function subtitleCuesToFile(format: SubtitleExportFormat, cues: SubtitleC
 	throw new Error("Unsupported subtitle export format.");
 }
 
+/**
+ * Builds the save dialog filter for the selected subtitle format.
+ */
 function getSubtitleFilter(format: SubtitleExportFormat) {
 	return format === "srt"
 		? { name: "SubRip Subtitle", extensions: ["srt"] }
 		: { name: "WebVTT Subtitle", extensions: ["vtt"] };
 }
 
+/**
+ * Normalizes the requested download name and ensures it has the format extension.
+ */
 function getSafeFileName(fileName: unknown, format: SubtitleExportFormat) {
 	if (typeof fileName !== "string" || fileName.trim().length === 0) {
 		return `captions.${format}`;
@@ -124,6 +154,10 @@ function getSafeFileName(fileName: unknown, format: SubtitleExportFormat) {
 		: `${normalizedFileName}.${format}`;
 }
 
+/**
+ * Handles the IPC request for exporting captions to a subtitle file.
+ * Opens a native save dialog, writes the selected format, and returns export status.
+ */
 export async function exportSubtitleFile(
 	event: IpcMainInvokeEvent,
 	options: {
