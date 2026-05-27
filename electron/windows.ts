@@ -5,10 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { USER_DATA_PATH } from "./appPaths";
-import {
-	getHudOverlayWindowBounds,
-	resizeHudOverlayFallbackBounds,
-} from "./hudOverlayBounds";
+import { getHudOverlayWindowBounds, resizeHudOverlayFallbackBounds } from "./hudOverlayBounds";
 import { getPackagedRendererBaseUrl } from "./rendererServer";
 
 const electronWindowsDir = path.dirname(fileURLToPath(import.meta.url));
@@ -17,7 +14,8 @@ const nodeRequire = createRequire(import.meta.url);
 const APP_ROOT = path.join(electronWindowsDir, "..");
 const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
 const RENDERER_DIST = path.join(APP_ROOT, "dist");
-const WINDOW_ICON_FILENAME = process.platform === "darwin" ? "recordlymac-512.png" : "recordly-512.png";
+const WINDOW_ICON_FILENAME =
+	process.platform === "darwin" ? "recordlymac-512.png" : "recordly-512.png";
 const WINDOW_ICON_PATH = path.join(
 	process.env.VITE_PUBLIC || RENDERER_DIST,
 	"app-icons",
@@ -28,6 +26,9 @@ let hudOverlayWindow: BrowserWindow | null = null;
 let hudOverlayHiddenFromCapture = true;
 let hudOverlayCaptureProtectionLoaded = false;
 let hudOverlayFallbackExpanded = false;
+let hudOverlayIgnoringMouse = true;
+let hudOverlayMouseReassertTimer: NodeJS.Timeout | null = null;
+let hudOverlayRecordingActive = false;
 let countdownWindow: BrowserWindow | null = null;
 let updateToastWindow: BrowserWindow | null = null;
 
@@ -190,7 +191,7 @@ function getHudOverlayBounds() {
 	const { workArea } = getHudOverlayDisplay();
 	return getHudOverlayWindowBounds(
 		workArea,
-		isHudOverlayMousePassthroughSupported(),
+		isHudOverlayMousePassthroughSupported() && !hudOverlayRecordingActive,
 		hudOverlayFallbackExpanded,
 	);
 }
@@ -247,6 +248,11 @@ function positionUpdateToastWindow() {
 }
 
 function setHudOverlayFallbackExpanded(expanded: boolean) {
+	if (hudOverlayRecordingActive) {
+		hudOverlayFallbackExpanded = false;
+		return;
+	}
+
 	hudOverlayFallbackExpanded = expanded;
 	if (
 		!hudOverlayWindow ||
@@ -269,23 +275,43 @@ function setHudOverlayFallbackExpanded(expanded: boolean) {
 	}
 }
 
-ipcMain.on("hud-overlay-set-ignore-mouse", (_event, ignore: boolean) => {
-	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
-		if (!isHudOverlayMousePassthroughSupported()) {
-			if (process.platform !== "linux") {
-				setHudOverlayFallbackExpanded(!ignore);
-			}
-			hudOverlayWindow.setIgnoreMouseEvents(false);
-			return;
-		}
+function setHudOverlayMousePassthrough(ignore: boolean) {
+	hudOverlayIgnoringMouse = hudOverlayRecordingActive ? false : ignore;
 
-		if (ignore) {
-			hudOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
-			return;
-		}
-
-		hudOverlayWindow.setIgnoreMouseEvents(false);
+	if (hudOverlayMouseReassertTimer) {
+		clearTimeout(hudOverlayMouseReassertTimer);
+		hudOverlayMouseReassertTimer = null;
 	}
+
+	if (!hudOverlayWindow || hudOverlayWindow.isDestroyed()) {
+		return;
+	}
+
+	if (hudOverlayRecordingActive) {
+		hudOverlayFallbackExpanded = false;
+		applyHudOverlayBounds();
+		hudOverlayWindow.setIgnoreMouseEvents(false);
+		return;
+	}
+
+	if (!isHudOverlayMousePassthroughSupported()) {
+		if (process.platform !== "linux") {
+			setHudOverlayFallbackExpanded(!ignore);
+		}
+		hudOverlayWindow.setIgnoreMouseEvents(false);
+		return;
+	}
+
+	if (ignore) {
+		hudOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
+		return;
+	}
+
+	hudOverlayWindow.setIgnoreMouseEvents(false);
+}
+
+ipcMain.on("hud-overlay-set-ignore-mouse", (_event, ignore: boolean) => {
+	setHudOverlayMousePassthrough(Boolean(ignore));
 });
 
 // Keep compatibility with existing drag IPC/state.
@@ -426,7 +452,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 			win.setIgnoreMouseEvents(false);
 			setTimeout(() => {
 				if (!win.isDestroyed()) {
-					win.setIgnoreMouseEvents(true, { forward: true });
+					setHudOverlayMousePassthrough(hudOverlayIgnoringMouse);
 				}
 			}, 50);
 		}
@@ -437,7 +463,13 @@ export function createHudOverlayWindow(): BrowserWindow {
 	}
 
 	if (isHudOverlayMousePassthroughSupported()) {
-		win.setIgnoreMouseEvents(true, { forward: true });
+		if (hudOverlayRecordingActive) {
+			hudOverlayIgnoringMouse = false;
+			win.setIgnoreMouseEvents(false);
+		} else {
+			hudOverlayIgnoringMouse = true;
+			win.setIgnoreMouseEvents(true, { forward: true });
+		}
 	}
 
 	// On Windows 11+, focus changes (e.g. showing a native notification) can break
@@ -452,7 +484,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 				win.setIgnoreMouseEvents(false);
 				setTimeout(() => {
 					if (!win.isDestroyed()) {
-						win.setIgnoreMouseEvents(true, { forward: true });
+						setHudOverlayMousePassthrough(hudOverlayIgnoringMouse);
 					}
 				}, 50);
 			}
@@ -566,14 +598,30 @@ export function reassertHudOverlayMousePassthrough(): void {
 		return;
 	}
 
+	if (hudOverlayRecordingActive) {
+		hud.setIgnoreMouseEvents(false);
+		return;
+	}
+
 	// Toggle off then back on so the native WS_EX_TRANSPARENT flag is fully
 	// re-initialised rather than merely re-asserted in a potentially broken state.
 	hud.setIgnoreMouseEvents(false);
-	setTimeout(() => {
+	if (hudOverlayMouseReassertTimer) {
+		clearTimeout(hudOverlayMouseReassertTimer);
+	}
+	hudOverlayMouseReassertTimer = setTimeout(() => {
+		hudOverlayMouseReassertTimer = null;
 		if (!hud.isDestroyed()) {
-			hud.setIgnoreMouseEvents(true, { forward: true });
+			setHudOverlayMousePassthrough(hudOverlayIgnoringMouse);
 		}
 	}, 50);
+}
+
+export function setHudOverlayRecordingActive(recording: boolean): void {
+	hudOverlayRecordingActive = Boolean(recording);
+	hudOverlayFallbackExpanded = false;
+	applyHudOverlayBounds();
+	setHudOverlayMousePassthrough(!hudOverlayRecordingActive);
 }
 
 export function createUpdateToastWindow(): BrowserWindow {
