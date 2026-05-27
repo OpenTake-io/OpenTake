@@ -163,7 +163,10 @@ import {
 	RECORDLY_ISSUES_URL,
 } from "./TutorialHelp";
 import TimelineEditor, { type TimelineEditorHandle } from "./timeline/TimelineEditor";
-import { normalizeCursorTelemetry } from "./timeline/zoomSuggestionUtils";
+import {
+	normalizeCursorTelemetry,
+	shouldAutoApplyFreshRecordingZoomsForSource,
+} from "./timeline/zoomSuggestionUtils";
 import {
 	type AnnotationRegion,
 	type AudioRegion,
@@ -3345,6 +3348,23 @@ export default function VideoEditor() {
 
 	useEffect(() => {
 		if (
+			videoPath &&
+			pendingFreshRecordingAutoZoomPathRef.current === videoPath &&
+			isPreviewReady &&
+			!shouldAutoApplyFreshRecordingZoomsForSource(
+				videoPlaybackRef.current?.video?.videoWidth,
+				videoPlaybackRef.current?.video?.videoHeight,
+			)
+		) {
+			pendingFreshRecordingAutoZoomPathRef.current = null;
+			if (pendingFreshRecordingAutoSuggestTimeoutRef.current !== null) {
+				window.clearTimeout(pendingFreshRecordingAutoSuggestTimeoutRef.current);
+				pendingFreshRecordingAutoSuggestTimeoutRef.current = null;
+			}
+			return;
+		}
+
+		if (
 			!videoPath ||
 			loading ||
 			!isPreviewReady ||
@@ -3401,6 +3421,27 @@ export default function VideoEditor() {
 		normalizedCursorTelemetry,
 		zoomRegions,
 	]);
+
+	useEffect(() => {
+		if (
+			!videoPath ||
+			!isPreviewReady ||
+			zoomRegions.length === 0 ||
+			autoSuggestedVideoPathRef.current !== videoPath ||
+			shouldAutoApplyFreshRecordingZoomsForSource(
+				videoPlaybackRef.current?.video?.videoWidth,
+				videoPlaybackRef.current?.video?.videoHeight,
+			)
+		) {
+			return;
+		}
+
+		autoSuggestedVideoPathRef.current = null;
+		setZoomRegions((prev) => {
+			const next = prev.filter((region) => region.mode !== "auto");
+			return next.length === prev.length ? prev : next;
+		});
+	}, [videoPath, isPreviewReady, zoomRegions]);
 
 	const handleZoomSpanChange = useCallback((id: string, span: Span) => {
 		setZoomRegions((prev) =>

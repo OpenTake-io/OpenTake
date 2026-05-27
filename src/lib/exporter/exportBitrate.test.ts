@@ -15,6 +15,28 @@ describe("export bitrate policy", () => {
 		).toBe(27_000_000);
 	});
 
+	it("raises high-resolution 60fps source-quality exports above the 30fps budget", () => {
+		const sharedOptions = {
+			width: 2560,
+			height: 1440,
+			quality: "source" as const,
+			encodingMode: "quality" as const,
+		};
+
+		const thirtyFpsBitrate = getMp4ExportBitrate({
+			...sharedOptions,
+			frameRate: 30,
+		});
+		const sixtyFpsBitrate = getMp4ExportBitrate({
+			...sharedOptions,
+			frameRate: 60,
+		});
+
+		expect(thirtyFpsBitrate).toBe(45_000_000);
+		expect(sixtyFpsBitrate).toBeGreaterThan(thirtyFpsBitrate);
+		expect(sixtyFpsBitrate).toBe(63_639_610);
+	});
+
 	it("keeps modern native static-layout source exports high enough for screen text", () => {
 		expect(
 			getMp4ExportBitrate({
