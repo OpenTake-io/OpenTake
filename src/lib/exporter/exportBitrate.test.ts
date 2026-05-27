@@ -60,6 +60,29 @@ describe("export bitrate policy", () => {
 		).toBe(27_000_000);
 	});
 
+	it("scales modern native static-layout source exports at 60fps", () => {
+		const sharedOptions = {
+			width: 1920,
+			height: 1080,
+			quality: "source" as const,
+			encodingMode: "quality" as const,
+			useModernNativeStaticLayout: true,
+		};
+
+		const thirtyFpsBitrate = getMp4ExportBitrate({
+			...sharedOptions,
+			frameRate: 30,
+		});
+		const sixtyFpsBitrate = getMp4ExportBitrate({
+			...sharedOptions,
+			frameRate: 60,
+		});
+
+		expect(thirtyFpsBitrate).toBe(27_000_000);
+		expect(sixtyFpsBitrate).toBeGreaterThan(thirtyFpsBitrate);
+		expect(sixtyFpsBitrate).toBe(38_183_766);
+	});
+
 	it("does not raise fast exports when the requested bitrate is already lower than the cap", () => {
 		expect(
 			getMp4ExportBitrate({

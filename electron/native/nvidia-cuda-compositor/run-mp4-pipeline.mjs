@@ -1052,6 +1052,15 @@ const sourcePtsPath = join(workDir, `${baseName}.source-pts.csv`);
 
 const videoInfo = getVideoInfo(inputPath);
 const webcamInfo = webcamInput ? getVideoInfo(webcamInput) : null;
+if (requestedOutputWidth > 0 !== requestedOutputHeight > 0) {
+	fail("--width and --height must be specified together");
+}
+if (
+	requestedOutputWidth > 0 &&
+	(requestedOutputWidth % 2 !== 0 || requestedOutputHeight % 2 !== 0)
+) {
+	fail("--width and --height must be even numbers for NV12 encoding");
+}
 const outputWidth = requestedOutputWidth > 0 ? requestedOutputWidth : videoInfo.width;
 const outputHeight = requestedOutputHeight > 0 ? requestedOutputHeight : videoInfo.height;
 const timelineSegments = readTimelineSegments(timelineMap);
@@ -1265,10 +1274,6 @@ const encodeArgs = [
 	annexBPath,
 	"--output",
 	encodedPath,
-	"--width",
-	String(outputWidth),
-	"--height",
-	String(outputHeight),
 	"--fps",
 	String(fps),
 	"--input-frames",
@@ -1283,6 +1288,9 @@ const encodeArgs = [
 	"--chunk-mb",
 	String(chunkMb),
 ];
+if (requestedOutputWidth > 0 && requestedOutputHeight > 0) {
+	encodeArgs.push("--width", String(outputWidth), "--height", String(outputHeight));
+}
 if (sourcePts.path && sourcePts.frames >= sourceWindowFrames) {
 	encodeArgs.push("--source-pts", sourcePts.path);
 }
