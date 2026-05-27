@@ -670,6 +670,17 @@ interface Window {
 			message?: string;
 			error?: string;
 		}>;
+		exportSubtitleFile: (options: {
+			format: "srt" | "vtt";
+			cues: AutoCaptionCue[];
+			fileName?: string;
+		}) => Promise<{
+			success: boolean;
+			path?: string;
+			message?: string;
+			error?: string;
+			canceled?: boolean;
+		}>;
 		setCurrentVideoPath: (
 			path: string,
 			options?: {

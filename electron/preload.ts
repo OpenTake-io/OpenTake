@@ -682,6 +682,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	}) => {
 		return ipcRenderer.invoke("generate-auto-captions", options);
 	},
+	exportSubtitleFile: (options: {
+		format: "srt" | "vtt";
+		cues: Array<{
+			id: string;
+			startMs: number;
+			endMs: number;
+			text: string;
+			words?: Array<{
+				text: string;
+				startMs: number;
+				endMs: number;
+				leadingSpace?: boolean;
+			}>;
+		}>;
+		fileName?: string;
+	}) => {
+		return ipcRenderer.invoke("export-subtitle-file", options);
+	},
 	setCurrentVideoPath: (
 		path: string,
 		options?: {
