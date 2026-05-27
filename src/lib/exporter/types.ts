@@ -179,6 +179,8 @@ export type ExportMp4FrameRate = 24 | 30 | 60;
 // GIF Export Types
 export type ExportFormat = "mp4" | "gif";
 
+export type SubtitleExportFormat = "srt" | "vtt";
+
 export type GifFrameRate = 15 | 20 | 25 | 30;
 
 export type GifSizePreset = "medium" | "large" | "original";

@@ -78,6 +78,7 @@ import {
 	canUseInMemoryExportSaveFallback,
 	describeBlockedInMemoryExportSave,
 } from "@/lib/exporter/exportSavePolicy";
+import type { SubtitleExportFormat } from "@/lib/exporter/types";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import {
@@ -352,6 +353,20 @@ function getErrorMessage(error: unknown): string {
 	return "Something went wrong";
 }
 
+function getSubtitleExportFileName(
+	format: SubtitleExportFormat,
+	projectPath: string | null,
+	sourcePath: string | null,
+) {
+	const sourceName =
+		(projectPath ?? sourcePath)
+			?.split(/[\\/]/)
+			.pop()
+			?.replace(/\.[^.]+$/, "") ?? "captions";
+	const safeBaseName = sourceName.replace(/[\x00-\x1f<>:"\/\\|?*]+/g, "-").trim();
+	return `${safeBaseName || "captions"}.${format}`;
+}
+
 export default function VideoEditor() {
 	const { t } = useI18n();
 	const smokeExportConfig = useMemo(
@@ -521,6 +536,7 @@ export default function VideoEditor() {
 	>(initialEditorPreferences.whisperModelPath ? "downloaded" : "idle");
 	const [whisperModelDownloadProgress, setWhisperModelDownloadProgress] = useState(0);
 	const [isGeneratingCaptions, setIsGeneratingCaptions] = useState(false);
+	const [isExportingSubtitleFile, setIsExportingSubtitleFile] = useState(false);
 	const [isExporting, setIsExporting] = useState(false);
 	const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
 	const [exportError, setExportError] = useState<string | null>(null);
@@ -2666,6 +2682,53 @@ export default function VideoEditor() {
 		setAutoCaptions([]);
 		setAutoCaptionSettings((prev) => ({ ...prev, enabled: false }));
 	}, []);
+
+	const handleExportSubtitleFile = useCallback(
+		async (format: SubtitleExportFormat) => {
+			if (isExportingSubtitleFile) {
+				return;
+			}
+
+			if (autoCaptions.length === 0) {
+				toast.error("Generate captions before exporting a subtitle file");
+				return;
+			}
+
+			setIsExportingSubtitleFile(true);
+			try {
+				const result = await window.electronAPI.exportSubtitleFile({
+					format,
+					cues: autoCaptions,
+					fileName: getSubtitleExportFileName(
+						format,
+						currentProjectPath,
+						currentSourcePath,
+					),
+				});
+
+				if (result.canceled) {
+					toast.info("Subtitle export canceled");
+					return;
+				}
+
+				if (!result.success || !result.path) {
+					toast.error(
+						result.message ||
+							getErrorMessage(result.error) ||
+							"Failed to export subtitle file",
+					);
+					return;
+				}
+
+				toast.success(`Subtitle file exported to ${result.path}`);
+			} catch (error) {
+				toast.error(getErrorMessage(error));
+			} finally {
+				setIsExportingSubtitleFile(false);
+			}
+		},
+		[autoCaptions, currentProjectPath, currentSourcePath, isExportingSubtitleFile],
+	);
 
 	const saveProject = useCallback(
 		async (forceSaveAs: boolean, options?: SaveProjectOptions) => {
@@ -5440,6 +5503,45 @@ export default function VideoEditor() {
 									className="shadow-2xl"
 								/>
 							)}
+						</DropdownMenuContent>
+					</DropdownMenu>
+					<DropdownMenu modal={false}>
+						<DropdownMenuTrigger asChild>
+							<Button
+								type="button"
+								variant="outline"
+								disabled={autoCaptions.length === 0 || isExportingSubtitleFile}
+								className="inline-flex h-8 min-w-[108px] items-center justify-center gap-2 rounded-[5px] border-foreground/10 bg-foreground/5 px-3 text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+								title={
+									autoCaptions.length > 0
+										? "Export subtitles"
+										: "Generate captions before exporting subtitles"
+								}
+							>
+								<PhCaptions className="h-4 w-4" />
+								<span className="text-sm font-semibold tracking-tight">
+									Subtitles
+								</span>
+								<ChevronDown className="h-3.5 w-3.5" />
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent
+							align="end"
+							sideOffset={10}
+							className="border-foreground/10 bg-editor-surface-alt"
+						>
+							<DropdownMenuItem
+								onClick={() => void handleExportSubtitleFile("srt")}
+								className="cursor-pointer text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+							>
+								Export SRT
+							</DropdownMenuItem>
+							<DropdownMenuItem
+								onClick={() => void handleExportSubtitleFile("vtt")}
+								className="cursor-pointer text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+							>
+								Export VTT
+							</DropdownMenuItem>
 						</DropdownMenuContent>
 					</DropdownMenu>
 				</div>
