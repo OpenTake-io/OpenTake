@@ -39,6 +39,10 @@ type PersistedEditorControls = Pick<
 	| "cameraSpringDampingMultiplier"
 	| "cameraSpringMassMultiplier"
 	| "cursorMotionBlur"
+	| "cursorClickEffect"
+	| "cursorClickEffectScale"
+	| "cursorClickEffectOpacity"
+	| "cursorClickEffectDurationMs"
 	| "cursorClickBounce"
 	| "cursorClickBounceDuration"
 	| "cursorSway"
@@ -122,6 +126,10 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
 	cameraSpringDampingMultiplier: DEFAULT_EDITOR_CONTROLS.cameraSpringDampingMultiplier,
 	cameraSpringMassMultiplier: DEFAULT_EDITOR_CONTROLS.cameraSpringMassMultiplier,
 	cursorMotionBlur: DEFAULT_EDITOR_CONTROLS.cursorMotionBlur,
+	cursorClickEffect: DEFAULT_EDITOR_CONTROLS.cursorClickEffect,
+	cursorClickEffectScale: DEFAULT_EDITOR_CONTROLS.cursorClickEffectScale,
+	cursorClickEffectOpacity: DEFAULT_EDITOR_CONTROLS.cursorClickEffectOpacity,
+	cursorClickEffectDurationMs: DEFAULT_EDITOR_CONTROLS.cursorClickEffectDurationMs,
 	cursorClickBounce: DEFAULT_EDITOR_CONTROLS.cursorClickBounce,
 	cursorClickBounceDuration: DEFAULT_EDITOR_CONTROLS.cursorClickBounceDuration,
 	cursorSway: DEFAULT_EDITOR_CONTROLS.cursorSway,
@@ -311,6 +319,13 @@ function normalizeEditorControls(
 		cameraSpringMassMultiplier:
 			sanitizedRaw.cameraSpringMassMultiplier ?? fallback.cameraSpringMassMultiplier,
 		cursorMotionBlur: sanitizedRaw.cursorMotionBlur ?? fallback.cursorMotionBlur,
+		cursorClickEffect: sanitizedRaw.cursorClickEffect ?? fallback.cursorClickEffect,
+		cursorClickEffectScale:
+			sanitizedRaw.cursorClickEffectScale ?? fallback.cursorClickEffectScale,
+		cursorClickEffectOpacity:
+			sanitizedRaw.cursorClickEffectOpacity ?? fallback.cursorClickEffectOpacity,
+		cursorClickEffectDurationMs:
+			sanitizedRaw.cursorClickEffectDurationMs ?? fallback.cursorClickEffectDurationMs,
 		cursorClickBounce: sanitizedRaw.cursorClickBounce ?? fallback.cursorClickBounce,
 		cursorClickBounceDuration:
 			sanitizedRaw.cursorClickBounceDuration ?? fallback.cursorClickBounceDuration,
@@ -372,6 +387,10 @@ function normalizeEditorControls(
 		cameraSpringDampingMultiplier: normalized.cameraSpringDampingMultiplier,
 		cameraSpringMassMultiplier: normalized.cameraSpringMassMultiplier,
 		cursorMotionBlur: normalized.cursorMotionBlur,
+		cursorClickEffect: normalized.cursorClickEffect,
+		cursorClickEffectScale: normalized.cursorClickEffectScale,
+		cursorClickEffectOpacity: normalized.cursorClickEffectOpacity,
+		cursorClickEffectDurationMs: normalized.cursorClickEffectDurationMs,
 		cursorClickBounce: normalized.cursorClickBounce,
 		cursorClickBounceDuration: normalized.cursorClickBounceDuration,
 		cursorSway: normalized.cursorSway,
