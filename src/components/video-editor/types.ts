@@ -46,12 +46,31 @@ export interface CursorVisualSettings {
 	motionBlur: number;
 	clickBounce: number;
 	clickBounceDuration: number;
+	clickEffect: CursorClickEffectStyle;
+	clickEffectScale: number;
+	clickEffectOpacity: number;
+	clickEffectDurationMs: number;
 	sway: number;
 	style: CursorStyle;
 }
 
 export type CursorStyle = "macos" | "tahoe" | "tahoe-inverted" | "dot" | "figma" | (string & {}); // extension-contributed cursor styles
 export const DEFAULT_CURSOR_STYLE: CursorStyle = "tahoe";
+
+export type CursorClickEffectStyle = "none" | "ripple" | "spotlight" | "burst";
+export const DEFAULT_CURSOR_CLICK_EFFECT: CursorClickEffectStyle = "ripple";
+export const DEFAULT_CURSOR_CLICK_EFFECT_SCALE = 1;
+export const DEFAULT_CURSOR_CLICK_EFFECT_OPACITY = 1;
+export const DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS = 600;
+
+export function normalizeCursorClickEffectStyle(
+	value: unknown,
+	fallback: CursorClickEffectStyle = DEFAULT_CURSOR_CLICK_EFFECT,
+): CursorClickEffectStyle {
+	return value === "none" || value === "ripple" || value === "spotlight" || value === "burst"
+		? value
+		: fallback;
+}
 
 export type EditorEffectSection =
 	| "scene"
@@ -466,7 +485,10 @@ export const DEFAULT_PADDING: Padding = {
 	right: 20,
 	linked: true,
 };
-export type { SourceAudioTrackSetting, SourceAudioTrackSettings } from "@/components/video-editor/audio/audioTypes";
+export type {
+	SourceAudioTrackSetting,
+	SourceAudioTrackSettings,
+} from "@/components/video-editor/audio/audioTypes";
 
 export interface AudioRegion {
 	id: string;
