@@ -2,6 +2,7 @@ import type { ExportEncodingMode, ExportMp4FrameRate, ExportQuality } from "./ty
 
 const MIN_MP4_BITRATE = 2_000_000;
 const REFERENCE_PIXEL_RATE = 1920 * 1080 * 30;
+const REFERENCE_FRAME_RATE = 30;
 
 export function getEncodingModeBitrateMultiplier(encodingMode: ExportEncodingMode): number {
 	switch (encodingMode) {
@@ -39,6 +40,10 @@ function getBaseMp4ExportBitrate(width: number, height: number, quality: ExportQ
 		return 20_000_000;
 	}
 	return 30_000_000;
+}
+
+function getFrameRateBitrateScale(frameRate: ExportMp4FrameRate): number {
+	return Math.sqrt(Math.max(frameRate, REFERENCE_FRAME_RATE) / REFERENCE_FRAME_RATE);
 }
 
 function getModernNativeStaticLayoutBitrateCap(
@@ -87,7 +92,8 @@ export function getMp4ExportBitrate(options: {
 }): number {
 	const requestedBitrate = Math.round(
 		getBaseMp4ExportBitrate(options.width, options.height, options.quality) *
-			getEncodingModeBitrateMultiplier(options.encodingMode),
+			getEncodingModeBitrateMultiplier(options.encodingMode) *
+			getFrameRateBitrateScale(options.frameRate),
 	);
 	const nativeStaticLayoutBitrate =
 		options.useModernNativeStaticLayout && options.encodingMode !== "fast"

@@ -36,6 +36,7 @@ import {
 	type AnnotationRegion,
 	type AutoCaptionSettings,
 	type CaptionCue,
+	type CursorClickEffectStyle,
 	type CursorStyle,
 	type Padding,
 	type SpeedRegion,
@@ -133,10 +134,14 @@ import {
 	DEFAULT_CONNECTED_ZOOM_GAP_MS,
 	DEFAULT_CURSOR_CLICK_BOUNCE,
 	DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
+	DEFAULT_CURSOR_CLICK_EFFECT,
+	DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
+	DEFAULT_CURSOR_CLICK_EFFECT_OPACITY,
+	DEFAULT_CURSOR_CLICK_EFFECT_SCALE,
 	DEFAULT_CURSOR_MOTION_BLUR,
 	DEFAULT_CURSOR_SIZE,
-	DEFAULT_CURSOR_STYLE,
 	DEFAULT_CURSOR_SMOOTHING,
+	DEFAULT_CURSOR_STYLE,
 	DEFAULT_CURSOR_SWAY,
 	DEFAULT_PADDING,
 	DEFAULT_WEBCAM_CORNER_RADIUS,
@@ -209,7 +214,10 @@ const PIXI_RENDERER_INIT_TIMEOUT_MS = 8_000;
 
 function isCanvasRenderer(application: Application): boolean {
 	const rendererName = application?.renderer?.constructor?.name?.toLowerCase();
-	return Boolean(rendererName && (rendererName.includes("canvasrenderer") || rendererName.includes("canvas")));
+	return Boolean(
+		rendererName &&
+			(rendererName.includes("canvasrenderer") || rendererName.includes("canvas")),
+	);
 }
 
 function toRendererErrorMessage(error: unknown): string {
@@ -218,7 +226,10 @@ function toRendererErrorMessage(error: unknown): string {
 
 function isRendererUnavailableError(error: unknown): boolean {
 	const message = toRendererErrorMessage(error).toLowerCase();
-	return message.includes("canvasrenderer is not yet implemented") || message.includes("no available renderer");
+	return (
+		message.includes("canvasrenderer is not yet implemented") ||
+		message.includes("no available renderer")
+	);
 }
 
 function summarizeRendererAttempts(attempts: readonly PixiRendererAttempt[]): string {
@@ -366,6 +377,10 @@ interface VideoPlaybackProps {
 	zoomMotionBlur?: number;
 	zoomMotionBlurTuning?: ZoomMotionBlurTuning;
 	cursorMotionBlur?: number;
+	cursorClickEffect?: CursorClickEffectStyle;
+	cursorClickEffectScale?: number;
+	cursorClickEffectOpacity?: number;
+	cursorClickEffectDurationMs?: number;
 	cursorClickBounce?: number;
 	cursorClickBounceDuration?: number;
 	cursorSway?: number;
@@ -444,6 +459,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			zoomMotionBlur = DEFAULT_ZOOM_MOTION_BLUR,
 			zoomMotionBlurTuning = DEFAULT_ZOOM_MOTION_BLUR_TUNING,
 			cursorMotionBlur = DEFAULT_CURSOR_MOTION_BLUR,
+			cursorClickEffect = DEFAULT_CURSOR_CLICK_EFFECT,
+			cursorClickEffectScale = DEFAULT_CURSOR_CLICK_EFFECT_SCALE,
+			cursorClickEffectOpacity = DEFAULT_CURSOR_CLICK_EFFECT_OPACITY,
+			cursorClickEffectDurationMs = DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
 			cursorClickBounce = DEFAULT_CURSOR_CLICK_BOUNCE,
 			cursorClickBounceDuration = DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
 			cursorSway = DEFAULT_CURSOR_SWAY,
@@ -513,6 +532,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			y: number;
 			width: number;
 			height: number;
+			renderWidth?: number;
+			renderHeight?: number;
 			sourceCrop?: {
 				x: number;
 				y: number;
@@ -564,6 +585,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const cameraSpringDampingMultiplierRef = useRef(cameraSpringDampingMultiplier);
 		const cameraSpringMassMultiplierRef = useRef(cameraSpringMassMultiplier);
 		const cursorMotionBlurRef = useRef(cursorMotionBlur);
+		const cursorClickEffectRef = useRef(cursorClickEffect);
+		const cursorClickEffectScaleRef = useRef(cursorClickEffectScale);
+		const cursorClickEffectOpacityRef = useRef(cursorClickEffectOpacity);
+		const cursorClickEffectDurationMsRef = useRef(cursorClickEffectDurationMs);
 		const cursorClickBounceRef = useRef(cursorClickBounce);
 		const cursorClickBounceDurationRef = useRef(cursorClickBounceDuration);
 		const cursorSwayRef = useRef(cursorSway);
@@ -583,7 +608,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		);
 
 		const initializePixiRenderer = useCallback(
-			async (container: HTMLDivElement): Promise<{
+			async (
+				container: HTMLDivElement,
+			): Promise<{
 				app: Application;
 				backend: PixiPreviewBackend;
 			}> => {
@@ -603,7 +630,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					}
 
 					const rendererApp = new Application();
-					const initStarted = typeof performance === "undefined" ? Date.now() : performance.now();
+					const initStarted =
+						typeof performance === "undefined" ? Date.now() : performance.now();
 					try {
 						await initApplicationWithTimeout(
 							rendererApp,
@@ -622,7 +650,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 							backend,
 						);
 						const elapsed = Math.round(
-							(typeof performance === "undefined" ? Date.now() : performance.now()) - initStarted,
+							(typeof performance === "undefined" ? Date.now() : performance.now()) -
+								initStarted,
 						);
 						if (isCanvasRenderer(rendererApp)) {
 							throw new Error(
@@ -632,9 +661,13 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 						return { app: rendererApp, backend };
 					} catch (error) {
 						const elapsed = Math.round(
-							(typeof performance === "undefined" ? Date.now() : performance.now()) - initStarted,
+							(typeof performance === "undefined" ? Date.now() : performance.now()) -
+								initStarted,
 						);
-						attempts.push({ backend, message: `${toRendererErrorMessage(error)} (after ${elapsed}ms)` });
+						attempts.push({
+							backend,
+							message: `${toRendererErrorMessage(error)} (after ${elapsed}ms)`,
+						});
 						const statusMessage = isRendererUnavailableError(error)
 							? "renderer backend unavailable in this runtime"
 							: "renderer init failed";
@@ -950,7 +983,12 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				videoSizeRef.current = result.videoSize;
 				baseScaleRef.current = result.baseScale;
 				baseOffsetRef.current = result.baseOffset;
-				baseMaskRef.current = result.maskRect;
+				const renderResolution = app.renderer.resolution || window.devicePixelRatio || 1;
+				baseMaskRef.current = {
+					...result.maskRect,
+					renderWidth: result.maskRect.width * renderResolution,
+					renderHeight: result.maskRect.height * renderResolution,
+				};
 				cropBoundsRef.current = result.cropBounds;
 
 				// Sync extension cursor effects canvas resolution with renderer
@@ -1061,7 +1099,9 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			const activeFrameData = frame
 				? extensionHost.getFrames().find((registeredFrame) => registeredFrame.id === frame)
 				: null;
-			const shouldRedrawDynamicFrame = Boolean(activeFrameData?.draw && frameSpriteRef.current);
+			const shouldRedrawDynamicFrame = Boolean(
+				activeFrameData?.draw && frameSpriteRef.current,
+			);
 
 			// Layout-only changes should not force texture/sprite recreation.
 			if (frameReloadKeyRef.current === nextFrameReloadKey && !shouldRedrawDynamicFrame) {
@@ -1576,6 +1616,22 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		}, [cursorMotionBlur]);
 
 		useEffect(() => {
+			cursorClickEffectRef.current = cursorClickEffect;
+		}, [cursorClickEffect]);
+
+		useEffect(() => {
+			cursorClickEffectScaleRef.current = cursorClickEffectScale;
+		}, [cursorClickEffectScale]);
+
+		useEffect(() => {
+			cursorClickEffectOpacityRef.current = cursorClickEffectOpacity;
+		}, [cursorClickEffectOpacity]);
+
+		useEffect(() => {
+			cursorClickEffectDurationMsRef.current = cursorClickEffectDurationMs;
+		}, [cursorClickEffectDurationMs]);
+
+		useEffect(() => {
 			cursorClickBounceRef.current = cursorClickBounce;
 		}, [cursorClickBounce]);
 
@@ -1873,6 +1929,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 							massMultiplier: cursorSpringMassMultiplierRef.current,
 						},
 						motionBlur: cursorMotionBlurRef.current,
+						clickEffect: cursorClickEffectRef.current,
+						clickEffectScale: cursorClickEffectScaleRef.current,
+						clickEffectOpacity: cursorClickEffectOpacityRef.current,
+						clickEffectDurationMs: cursorClickEffectDurationMsRef.current,
 						clickBounce: cursorClickBounceRef.current,
 						clickBounceDuration: cursorClickBounceDurationRef.current,
 						sway: cursorSwayRef.current,
@@ -2236,10 +2296,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					resetSpringState(springYRef.current, appliedY);
 				}
 
-				applyTransform(
-					{ scale: appliedScale, x: appliedX, y: appliedY },
-					targetFocus,
-				);
+				applyTransform({ scale: appliedScale, x: appliedX, y: appliedY }, targetFocus);
 
 				applyWebcamBubbleLayout(animationStateRef.current.appliedScale || 1);
 
@@ -2459,6 +2516,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				massMultiplier: cursorSpringMassMultiplier,
 			});
 			overlay.setMotionBlur(cursorMotionBlur);
+			overlay.setClickEffect(cursorClickEffect);
+			overlay.setClickEffectScale(cursorClickEffectScale);
+			overlay.setClickEffectOpacity(cursorClickEffectOpacity);
+			overlay.setClickEffectDurationMs(cursorClickEffectDurationMs);
 			overlay.setClickBounce(cursorClickBounce);
 			overlay.setClickBounceDuration(cursorClickBounceDuration);
 			overlay.setSway(cursorSway);
@@ -2490,6 +2551,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			cursorSpringDampingMultiplier,
 			cursorSpringMassMultiplier,
 			cursorMotionBlur,
+			cursorClickEffect,
+			cursorClickEffectScale,
+			cursorClickEffectOpacity,
+			cursorClickEffectDurationMs,
 			cursorClickBounce,
 			cursorClickBounceDuration,
 			cursorSway,
@@ -2742,7 +2807,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 						filter:
 							showShadow && shadowIntensity > 0
 								? `drop-shadow(0 ${shadowIntensity * 12}px ${shadowIntensity * 48}px rgba(0,0,0,${shadowIntensity * 0.7})) drop-shadow(0 ${shadowIntensity * 4}px ${shadowIntensity * 16}px rgba(0,0,0,${shadowIntensity * 0.5})) drop-shadow(0 ${shadowIntensity * 2}px ${shadowIntensity * 8}px rgba(0,0,0,${shadowIntensity * 0.3}))`
-							: "none",
+								: "none",
 					}}
 				/>
 				{hasRendererFallback && (
@@ -2750,7 +2815,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 						<div className="rounded-md bg-black/70 px-3 py-1.5 text-xs text-white">
 							{`Pixi renderer unavailable on this environment (${pixiRendererBackend ?? "unknown"}).`}
 							<br />
-							Fallback to 2D native preview so you can continue working while the GPU path is unavailable.
+							Fallback to 2D native preview so you can continue working while the GPU
+							path is unavailable.
 						</div>
 					</div>
 				)}

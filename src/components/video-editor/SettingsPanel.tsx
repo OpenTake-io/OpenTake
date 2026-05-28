@@ -9,6 +9,7 @@ import {
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import minimalCursorUrl from "@/assets/cursors/custom/minimal-cursor.svg";
 import { Button } from "@/components/ui/button";
 import {
 	Select,
@@ -40,7 +41,6 @@ import {
 	isVideoWallpaperSource,
 } from "@/lib/wallpapers";
 import { type AspectRatio } from "@/utils/aspectRatioUtils";
-import minimalCursorUrl from "@/assets/cursors/custom/minimal-cursor.svg";
 import { useI18n, useScopedT } from "../../contexts/I18nContext";
 import type { AppLocale } from "../../i18n/config";
 import { SUPPORTED_LOCALES } from "../../i18n/config";
@@ -60,6 +60,7 @@ import type {
 	AutoCaptionSettings,
 	CaptionCue,
 	CropRegion,
+	CursorClickEffectStyle,
 	CursorStyle,
 	EditorEffectSection,
 	FigureData,
@@ -76,6 +77,10 @@ import {
 	DEFAULT_CROP_REGION,
 	DEFAULT_CURSOR_CLICK_BOUNCE,
 	DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
+	DEFAULT_CURSOR_CLICK_EFFECT,
+	DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
+	DEFAULT_CURSOR_CLICK_EFFECT_OPACITY,
+	DEFAULT_CURSOR_CLICK_EFFECT_SCALE,
 	DEFAULT_CURSOR_MOTION_BLUR,
 	DEFAULT_CURSOR_SIZE,
 	DEFAULT_CURSOR_STYLE,
@@ -277,7 +282,11 @@ function ExtensionSettingsSection({
 						<div key={field.id} className="mt-1">
 							<SliderControl
 								label={field.label}
-								value={typeof value === "number" ? value : (field.defaultValue as number)}
+								value={
+									typeof value === "number"
+										? value
+										: (field.defaultValue as number)
+								}
 								defaultValue={field.defaultValue as number}
 								min={field.min ?? 0}
 								max={field.max ?? 1}
@@ -388,6 +397,33 @@ function ExtensionSettingsSection({
 
 const MOTION_PRESET_ORDER: CursorMotionPresetId[] = ["focused", "smooth"];
 
+const CURSOR_CLICK_EFFECT_OPTIONS: Array<{
+	id: CursorClickEffectStyle;
+	label: string;
+	description: string;
+}> = [
+	{
+		id: "none",
+		label: "Off",
+		description: "No click animation. Keeps the pointer steady on every tap.",
+	},
+	{
+		id: "ripple",
+		label: "Ripple",
+		description: "Concentric rings that expand from the click point.",
+	},
+	{
+		id: "spotlight",
+		label: "Spotlight",
+		description: "A soft pulse that blooms behind the cursor on click.",
+	},
+	{
+		id: "burst",
+		label: "Burst",
+		description: "A sharper burst with sparks for more energetic demos.",
+	},
+];
+
 function MotionPresetCards({
 	title,
 	activePresetId,
@@ -442,6 +478,157 @@ function MotionPresetCards({
 					);
 				})}
 			</div>
+		</div>
+	);
+}
+
+function CursorClickEffectPreview({ effect }: { effect: CursorClickEffectStyle }) {
+	return (
+		<div
+			className="relative flex items-center justify-center"
+			style={{
+				width: `${BUILTIN_CURSOR_PREVIEW_FRAME_SIZE}px`,
+				height: `${BUILTIN_CURSOR_PREVIEW_FRAME_SIZE}px`,
+			}}
+		>
+			{effect === "none" ? (
+				<div className="relative flex h-10 w-10 items-center justify-center">
+					<span className="absolute h-7 w-7 rounded-full border border-foreground/12" />
+					<span className="absolute h-px w-8 -rotate-12 rounded-full bg-foreground/35" />
+				</div>
+			) : null}
+			{effect === "ripple" ? (
+				<svg
+					className="absolute h-12 w-12 text-[#2563EB]"
+					viewBox="0 0 48 48"
+					aria-hidden="true"
+				>
+					<circle
+						cx="24"
+						cy="24"
+						r="13"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="2"
+						opacity="0.72"
+					/>
+				</svg>
+			) : null}
+			{effect === "spotlight" ? (
+				<>
+					<span className="absolute h-12 w-12 rounded-full bg-[#2563EB]/18 blur-[8px]" />
+					<span className="absolute h-9 w-9 rounded-full bg-[#2563EB]/10" />
+					<span className="absolute h-7 w-7 rounded-full border-[1.5px] border-[#2563EB]/42" />
+				</>
+			) : null}
+			{effect === "burst" ? (
+				<svg
+					className="absolute h-12 w-12 text-[#2563EB]/90"
+					viewBox="0 0 48 48"
+					aria-hidden="true"
+				>
+					<g
+						fill="none"
+						stroke="currentColor"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+					>
+						<circle cx="24" cy="24" r="8.5" strokeWidth="1.8" opacity="0.54" />
+						<path d="M24 7.5v6.5" strokeWidth="1.8" opacity="0.9" />
+						<path d="M24 34v6.5" strokeWidth="1.8" opacity="0.9" />
+						<path d="M7.5 24H14" strokeWidth="1.8" opacity="0.9" />
+						<path d="M34 24h6.5" strokeWidth="1.8" opacity="0.9" />
+						<path d="M12.3 12.3l4.6 4.6" strokeWidth="1.7" opacity="0.82" />
+						<path d="M31.1 31.1l4.6 4.6" strokeWidth="1.7" opacity="0.82" />
+						<path d="M35.7 12.3l-4.6 4.6" strokeWidth="1.7" opacity="0.82" />
+						<path d="M16.9 31.1l-4.6 4.6" strokeWidth="1.7" opacity="0.82" />
+					</g>
+				</svg>
+			) : null}
+		</div>
+	);
+}
+
+function CursorClickEffectCards({
+	title,
+	activeEffectId,
+	onApply,
+	showAdvanced,
+	onToggleAdvanced,
+	tSettings,
+}: {
+	title: string;
+	activeEffectId: CursorClickEffectStyle;
+	onApply: (effectId: CursorClickEffectStyle) => void;
+	showAdvanced: boolean;
+	onToggleAdvanced: () => void;
+	tSettings: (key: string, fallback?: string) => string;
+}) {
+	return (
+		<div className="flex flex-col gap-2">
+			<div className="flex items-center justify-between">
+				<div className="text-[10px] text-muted-foreground">{title}</div>
+				<button
+					type="button"
+					onClick={onToggleAdvanced}
+					aria-pressed={showAdvanced}
+					className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80"
+					title={
+						showAdvanced
+							? tSettings(
+									"effects.cursorClickEffects.advancedHide",
+									"Hide advanced click effect controls",
+								)
+							: tSettings(
+									"effects.cursorClickEffects.advancedShow",
+									"Show advanced click effect controls",
+								)
+					}
+				>
+					{tSettings("effects.cursorClickEffects.advanced", "Advanced")}
+				</button>
+			</div>
+			<ToggleGroup
+				type="single"
+				value={activeEffectId}
+				onValueChange={(value) => {
+					if (value) {
+						onApply(value as CursorClickEffectStyle);
+					}
+				}}
+				className="grid grid-cols-4 gap-2"
+				aria-label={title}
+			>
+				{CURSOR_CLICK_EFFECT_OPTIONS.map((effect) => {
+					const label = tSettings(
+						`effects.cursorClickEffects.${effect.id}.label`,
+						effect.label,
+					);
+					const description = tSettings(
+						`effects.cursorClickEffects.${effect.id}.description`,
+						effect.description,
+					);
+
+					return (
+						<ToggleGroupItem
+							key={effect.id}
+							value={effect.id}
+							aria-label={label}
+							title={`${label} - ${description}`}
+							className={cn(
+								"group aspect-square h-auto min-w-0 rounded-[10px] border border-foreground/10 bg-foreground/[0.03] p-3 text-left text-foreground shadow-none transition-all hover:border-foreground/20 hover:bg-foreground/[0.06]",
+								"data-[state=on]:border-[#2563EB]/70 data-[state=on]:bg-[#2563EB]/12 data-[state=on]:text-foreground",
+							)}
+						>
+							<div className="flex h-full flex-col items-center justify-between gap-3">
+								<div className="flex min-h-0 flex-1 items-center justify-center rounded-lg px-2 py-1.5">
+									<CursorClickEffectPreview effect={effect.id} />
+								</div>
+							</div>
+						</ToggleGroupItem>
+					);
+				})}
+			</ToggleGroup>
 		</div>
 	);
 }
@@ -534,6 +721,14 @@ interface SettingsPanelProps {
 	onZoomClassicModeChange?: (enabled: boolean) => void;
 	cursorMotionBlur?: number;
 	onCursorMotionBlurChange?: (amount: number) => void;
+	cursorClickEffect?: CursorClickEffectStyle;
+	onCursorClickEffectChange?: (effect: CursorClickEffectStyle) => void;
+	cursorClickEffectScale?: number;
+	onCursorClickEffectScaleChange?: (scale: number) => void;
+	cursorClickEffectOpacity?: number;
+	onCursorClickEffectOpacityChange?: (opacity: number) => void;
+	cursorClickEffectDurationMs?: number;
+	onCursorClickEffectDurationMsChange?: (duration: number) => void;
 	cursorClickBounce?: number;
 	onCursorClickBounceChange?: (amount: number) => void;
 	cursorClickBounceDuration?: number;
@@ -790,9 +985,13 @@ async function createInvertedPreview(url: string) {
 function CursorStylePreview({
 	style,
 	previewUrls,
+	frameSize = BUILTIN_CURSOR_PREVIEW_FRAME_SIZE,
+	previewSize,
 }: {
 	style: CursorStyle;
 	previewUrls: Partial<Record<string, string>>;
+	frameSize?: number;
+	previewSize?: number;
 }) {
 	const previewSrc =
 		style === "macos"
@@ -806,13 +1005,14 @@ function CursorStylePreview({
 						: previewUrls[style];
 
 	if (style === "macos" || style === "tahoe" || style === "tahoe-inverted") {
-		const previewSize = BUILTIN_CURSOR_PREVIEW_SIZE * getCursorStyleSizeMultiplier(style);
+		const resolvedPreviewSize =
+			(previewSize ?? BUILTIN_CURSOR_PREVIEW_SIZE) * getCursorStyleSizeMultiplier(style);
 		return (
 			<div
 				className="flex items-center justify-center"
 				style={{
-					width: `${BUILTIN_CURSOR_PREVIEW_FRAME_SIZE}px`,
-					height: `${BUILTIN_CURSOR_PREVIEW_FRAME_SIZE}px`,
+					width: `${frameSize}px`,
+					height: `${frameSize}px`,
 				}}
 			>
 				<img
@@ -821,8 +1021,8 @@ function CursorStylePreview({
 					className="max-w-none object-contain drop-shadow-[0_8px_12px_rgba(15,23,42,0.18)]"
 					draggable={false}
 					style={{
-						width: `${previewSize}px`,
-						height: `${previewSize}px`,
+						width: `${resolvedPreviewSize}px`,
+						height: `${resolvedPreviewSize}px`,
 					}}
 				/>
 			</div>
@@ -830,22 +1030,58 @@ function CursorStylePreview({
 	}
 
 	if (style === "figma") {
-		return <img src={previewSrc} alt="" className="h-7 w-7 object-contain" draggable={false} />;
-	}
-
-	if (style === "dot") {
+		const resolvedPreviewSize = previewSize ?? 28;
 		return (
-			<span className="h-[14px] w-[14px] rounded-full border-[2.5px] border-neutral-800 bg-white shadow-[0_8px_12px_rgba(15,23,42,0.16)]" />
+			<div
+				className="flex items-center justify-center"
+				style={{ width: `${frameSize}px`, height: `${frameSize}px` }}
+			>
+				<img
+					src={previewSrc}
+					alt=""
+					className="object-contain"
+					draggable={false}
+					style={{
+						width: `${resolvedPreviewSize}px`,
+						height: `${resolvedPreviewSize}px`,
+					}}
+				/>
+			</div>
 		);
 	}
 
+	if (style === "dot") {
+		const resolvedPreviewSize = previewSize ?? 14;
+		return (
+			<div
+				className="flex items-center justify-center"
+				style={{ width: `${frameSize}px`, height: `${frameSize}px` }}
+			>
+				<span
+					className="rounded-full border-[2.5px] border-neutral-800 bg-white shadow-[0_8px_12px_rgba(15,23,42,0.16)]"
+					style={{
+						width: `${resolvedPreviewSize}px`,
+						height: `${resolvedPreviewSize}px`,
+					}}
+				/>
+			</div>
+		);
+	}
+
+	const resolvedPreviewSize = previewSize ?? 28;
 	return (
-		<img
-			src={previewSrc ?? tahoeCursorUrl}
-			alt=""
-			className="h-7 w-7 object-contain"
-			draggable={false}
-		/>
+		<div
+			className="flex items-center justify-center"
+			style={{ width: `${frameSize}px`, height: `${frameSize}px` }}
+		>
+			<img
+				src={previewSrc ?? tahoeCursorUrl}
+				alt=""
+				className="object-contain"
+				draggable={false}
+				style={{ width: `${resolvedPreviewSize}px`, height: `${resolvedPreviewSize}px` }}
+			/>
+		</div>
 	);
 }
 
@@ -919,6 +1155,14 @@ export function SettingsPanel({
 	onZoomClassicModeChange,
 	cursorMotionBlur = DEFAULT_CURSOR_MOTION_BLUR,
 	onCursorMotionBlurChange,
+	cursorClickEffect = DEFAULT_CURSOR_CLICK_EFFECT,
+	onCursorClickEffectChange,
+	cursorClickEffectScale = DEFAULT_CURSOR_CLICK_EFFECT_SCALE,
+	onCursorClickEffectScaleChange,
+	cursorClickEffectOpacity = DEFAULT_CURSOR_CLICK_EFFECT_OPACITY,
+	onCursorClickEffectOpacityChange,
+	cursorClickEffectDurationMs = DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
+	onCursorClickEffectDurationMsChange,
 	cursorClickBounce = 1,
 	onCursorClickBounceChange,
 	cursorClickBounceDuration = DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
@@ -1164,6 +1408,7 @@ export function SettingsPanel({
 	const [extensionCursorPreviewUrls, setExtensionCursorPreviewUrls] = useState<
 		Partial<Record<string, string>>
 	>({});
+	const [showCursorClickEffectAdvanced, setShowCursorClickEffectAdvanced] = useState(false);
 	const cursorPreviewUrls = useMemo(
 		() => ({ ...builtInCursorPreviewUrls, ...extensionCursorPreviewUrls }),
 		[builtInCursorPreviewUrls, extensionCursorPreviewUrls],
@@ -1241,12 +1486,7 @@ export function SettingsPanel({
 		if (!isKnownWallpaper && isVideoWallpaperSource(selected)) {
 			setCustomImages((prev) => (prev.includes(selected) ? prev : [selected, ...prev]));
 		}
-	}, [
-		builtInWallpaperPaths,
-		extensionWallpaperPaths,
-		selected,
-		wallpaperPreviewPaths,
-	]);
+	}, [builtInWallpaperPaths, extensionWallpaperPaths, selected, wallpaperPreviewPaths]);
 
 	const imageWallpaperTiles = useMemo<WallpaperTile[]>(() => {
 		const imageWallpapers = builtInWallpapers.filter(
@@ -1534,8 +1774,12 @@ export function SettingsPanel({
 		);
 		onCursorSpringMassMultiplierChange?.(initialEditorPreferences.cursorSpringMassMultiplier);
 		onCursorMotionBlurChange?.(initialEditorPreferences.cursorMotionBlur);
+		onCursorClickEffectChange?.(initialEditorPreferences.cursorClickEffect);
+		onCursorClickEffectScaleChange?.(initialEditorPreferences.cursorClickEffectScale);
+		onCursorClickEffectOpacityChange?.(initialEditorPreferences.cursorClickEffectOpacity);
+		onCursorClickEffectDurationMsChange?.(initialEditorPreferences.cursorClickEffectDurationMs);
 		onCursorClickBounceChange?.(initialEditorPreferences.cursorClickBounce);
-		onCursorClickBounceDurationChange?.(DEFAULT_CURSOR_CLICK_BOUNCE_DURATION);
+		onCursorClickBounceDurationChange?.(initialEditorPreferences.cursorClickBounceDuration);
 		onCursorSwayChange?.(initialEditorPreferences.cursorSway);
 	};
 
@@ -3069,8 +3313,8 @@ export function SettingsPanel({
 			</section>
 		);
 
-			const audioSectionContent = (
-				<section className="flex flex-col gap-3">
+		const audioSectionContent = (
+			<section className="flex flex-col gap-3">
 				<div className="flex items-center justify-between gap-3">
 					<SectionLabel>{tSettings("audio.volumeTitle", "Audio")}</SectionLabel>
 					<button
@@ -3084,8 +3328,8 @@ export function SettingsPanel({
 						{t("common.actions.reset", "Reset")}
 					</button>
 				</div>
-					<SliderControl
-						label={tSettings("audio.volume", "Volume")}
+				<SliderControl
+					label={tSettings("audio.volume", "Volume")}
 					value={selectedAudioVolume ?? 1}
 					defaultValue={1}
 					min={0}
@@ -3093,20 +3337,20 @@ export function SettingsPanel({
 					step={0.01}
 					onChange={(v) => onAudioVolumeChange?.(v)}
 					formatValue={(v) => `${Math.round(v * 100)}%`}
-						parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100}
+					parseInput={(text) => parseFloat(text.replace(/%$/, "")) / 100}
+				/>
+				<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+					<span className="text-[10px] text-muted-foreground">
+						{tSettings("audio.normalize", "Normalize")}
+					</span>
+					<Switch
+						checked={Boolean(selectedAudioNormalize)}
+						onCheckedChange={(v) => onAudioNormalizeChange?.(v)}
+						className="data-[state=checked]:bg-[#2563EB] scale-75"
 					/>
-					<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
-						<span className="text-[10px] text-muted-foreground">
-							{tSettings("audio.normalize", "Normalize")}
-						</span>
-						<Switch
-							checked={Boolean(selectedAudioNormalize)}
-							onCheckedChange={(v) => onAudioNormalizeChange?.(v)}
-							className="data-[state=checked]:bg-[#2563EB] scale-75"
-						/>
-					</div>
-				</section>
-			);
+				</div>
+			</section>
+		);
 
 		const clipSectionContent = (
 			<section className="flex flex-col gap-2">
@@ -3183,7 +3427,10 @@ export function SettingsPanel({
 					{hasClipSourceAudio && (
 						<div className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
 							<span className="text-[10px] text-muted-foreground">
-								{tSettings("clip.separateClipFromAudio", "Separate clip from audio")}
+								{tSettings(
+									"clip.separateClipFromAudio",
+									"Separate clip from audio",
+								)}
 							</span>
 							<Switch
 								checked={selectedClipShowSourceAudio ?? false}
@@ -3194,65 +3441,68 @@ export function SettingsPanel({
 					)}
 				</div>
 
-				{selectedClipId &&
-					hasClipSourceAudio &&
-					sourceAudioTrackMeta.length > 0 && (
-						<div className="mt-1 flex flex-col gap-3">
-							{sourceAudioTrackMeta.map((track) => {
-								const settings = sourceAudioTrackSettings[track.id] ?? {
-									volume: 1,
-									normalize: false,
-								};
-								return (
-									<div
-										key={track.id}
-										className="rounded-lg border border-foreground/10 bg-foreground/[0.03] px-3 py-2"
-									>
-										<div className="mb-2 flex items-center justify-between">
-											<span className="text-[11px] font-medium text-foreground">
-												{track.label}
-											</span>
-											<button
-												type="button"
-												onClick={() => {
-													onSourceAudioTrackVolumeChange?.(track.id, 1);
-													onSourceAudioTrackNormalizeChange?.(track.id, false);
-												}}
-												className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80"
-											>
-												{t("common.actions.reset", "Reset")}
-											</button>
-										</div>
-										<div className="mb-2 flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
-											<span className="text-[10px] text-muted-foreground">
-												{tSettings("audio.normalize", "Normalize")}
-											</span>
-											<Switch
-												checked={settings.normalize}
-												onCheckedChange={(v) =>
-													onSourceAudioTrackNormalizeChange?.(track.id, v)
-												}
-												className="data-[state=checked]:bg-[#06b6d4] scale-75"
-											/>
-										</div>
-										<SliderControl
-											label={tSettings("audio.volume", "Volume")}
-											value={settings.volume}
-											defaultValue={1}
-											min={0}
-											max={1}
-											step={0.01}
-											onChange={(v) => onSourceAudioTrackVolumeChange?.(track.id, v)}
-											formatValue={(v) => `${Math.round(v * 100)}%`}
-											parseInput={(text) =>
-												parseFloat(text.replace(/%$/, "")) / 100
+				{selectedClipId && hasClipSourceAudio && sourceAudioTrackMeta.length > 0 && (
+					<div className="mt-1 flex flex-col gap-3">
+						{sourceAudioTrackMeta.map((track) => {
+							const settings = sourceAudioTrackSettings[track.id] ?? {
+								volume: 1,
+								normalize: false,
+							};
+							return (
+								<div
+									key={track.id}
+									className="rounded-lg border border-foreground/10 bg-foreground/[0.03] px-3 py-2"
+								>
+									<div className="mb-2 flex items-center justify-between">
+										<span className="text-[11px] font-medium text-foreground">
+											{track.label}
+										</span>
+										<button
+											type="button"
+											onClick={() => {
+												onSourceAudioTrackVolumeChange?.(track.id, 1);
+												onSourceAudioTrackNormalizeChange?.(
+													track.id,
+													false,
+												);
+											}}
+											className="text-[10px] text-[#2563EB] transition-opacity hover:opacity-80"
+										>
+											{t("common.actions.reset", "Reset")}
+										</button>
+									</div>
+									<div className="mb-2 flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+										<span className="text-[10px] text-muted-foreground">
+											{tSettings("audio.normalize", "Normalize")}
+										</span>
+										<Switch
+											checked={settings.normalize}
+											onCheckedChange={(v) =>
+												onSourceAudioTrackNormalizeChange?.(track.id, v)
 											}
+											className="data-[state=checked]:bg-[#06b6d4] scale-75"
 										/>
 									</div>
-								);
-							})}
-						</div>
-					)}
+									<SliderControl
+										label={tSettings("audio.volume", "Volume")}
+										value={settings.volume}
+										defaultValue={1}
+										min={0}
+										max={1}
+										step={0.01}
+										onChange={(v) =>
+											onSourceAudioTrackVolumeChange?.(track.id, v)
+										}
+										formatValue={(v) => `${Math.round(v * 100)}%`}
+										parseInput={(text) =>
+											parseFloat(text.replace(/%$/, "")) / 100
+										}
+									/>
+								</div>
+							);
+						})}
+					</div>
+				)}
 			</section>
 		);
 
@@ -3366,6 +3616,69 @@ export function SettingsPanel({
 								formatValue={(v) => `${v.toFixed(2)}×`}
 								parseInput={(text) => parseFloat(text.replace(/×$/, ""))}
 							/>
+							<CursorClickEffectCards
+								title={tSettings(
+									"effects.cursorClickEffects.title",
+									"Click Effects",
+								)}
+								activeEffectId={cursorClickEffect}
+								onApply={(effectId) => onCursorClickEffectChange?.(effectId)}
+								showAdvanced={showCursorClickEffectAdvanced}
+								onToggleAdvanced={() =>
+									setShowCursorClickEffectAdvanced((current) => !current)
+								}
+								tSettings={tSettings}
+							/>
+							{showCursorClickEffectAdvanced ? (
+								<div className="grid gap-1.5">
+									<SliderControl
+										label={tSettings(
+											"effects.cursorClickEffects.size",
+											"Effect Size",
+										)}
+										value={cursorClickEffectScale}
+										defaultValue={DEFAULT_CURSOR_CLICK_EFFECT_SCALE}
+										min={0.5}
+										max={2}
+										step={0.05}
+										onChange={(v) => onCursorClickEffectScaleChange?.(v)}
+										formatValue={(v) => `${v.toFixed(2)}×`}
+										parseInput={(text) => parseFloat(text.replace(/×$/, ""))}
+									/>
+									<SliderControl
+										label={tSettings(
+											"effects.cursorClickEffects.opacity",
+											"Effect Opacity",
+										)}
+										value={cursorClickEffectOpacity}
+										defaultValue={DEFAULT_CURSOR_CLICK_EFFECT_OPACITY}
+										min={0}
+										max={1}
+										step={0.01}
+										onChange={(v) => onCursorClickEffectOpacityChange?.(v)}
+										formatValue={(v) => `${Math.round(v * 100)}%`}
+										parseInput={(text) =>
+											parseFloat(text.replace(/%$/, "")) / 100
+										}
+									/>
+									<SliderControl
+										label={tSettings(
+											"effects.cursorClickEffects.duration",
+											"Effect Duration",
+										)}
+										value={cursorClickEffectDurationMs}
+										defaultValue={DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS}
+										min={120}
+										max={1200}
+										step={10}
+										onChange={(v) => onCursorClickEffectDurationMsChange?.(v)}
+										formatValue={(v) => `${Math.round(v)} ms`}
+										parseInput={(text) =>
+											parseFloat(text.replace(/ms$/i, "").trim())
+										}
+									/>
+								</div>
+							) : null}
 							<SliderControl
 								label={tSettings("effects.cursorClickBounce")}
 								value={cursorClickBounce}

@@ -1,12 +1,12 @@
+import { loadAppSetting, saveAppSetting } from "../../lib/appSettings";
 import {
 	normalizeExportBackendPreference,
 	normalizeExportMp4FrameRate,
 	normalizeExportPipelineModel,
 	normalizeProjectEditor,
-	stripPersistedDevMotionBlurSettings,
 	type ProjectEditorState,
+	stripPersistedDevMotionBlurSettings,
 } from "./projectPersistence";
-import { loadAppSetting, saveAppSetting } from "../../lib/appSettings";
 
 type PersistedEditorControls = Pick<
 	ProjectEditorState,
@@ -39,6 +39,10 @@ type PersistedEditorControls = Pick<
 	| "cameraSpringDampingMultiplier"
 	| "cameraSpringMassMultiplier"
 	| "cursorMotionBlur"
+	| "cursorClickEffect"
+	| "cursorClickEffectScale"
+	| "cursorClickEffectOpacity"
+	| "cursorClickEffectDurationMs"
 	| "cursorClickBounce"
 	| "cursorClickBounceDuration"
 	| "cursorSway"
@@ -120,6 +124,10 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
 	cameraSpringDampingMultiplier: DEFAULT_EDITOR_CONTROLS.cameraSpringDampingMultiplier,
 	cameraSpringMassMultiplier: DEFAULT_EDITOR_CONTROLS.cameraSpringMassMultiplier,
 	cursorMotionBlur: DEFAULT_EDITOR_CONTROLS.cursorMotionBlur,
+	cursorClickEffect: DEFAULT_EDITOR_CONTROLS.cursorClickEffect,
+	cursorClickEffectScale: DEFAULT_EDITOR_CONTROLS.cursorClickEffectScale,
+	cursorClickEffectOpacity: DEFAULT_EDITOR_CONTROLS.cursorClickEffectOpacity,
+	cursorClickEffectDurationMs: DEFAULT_EDITOR_CONTROLS.cursorClickEffectDurationMs,
 	cursorClickBounce: DEFAULT_EDITOR_CONTROLS.cursorClickBounce,
 	cursorClickBounceDuration: DEFAULT_EDITOR_CONTROLS.cursorClickBounceDuration,
 	cursorSway: DEFAULT_EDITOR_CONTROLS.cursorSway,
@@ -279,14 +287,12 @@ function normalizeEditorControls(
 		zoomInDurationMs: sanitizedRaw.zoomInDurationMs ?? fallback.zoomInDurationMs,
 		zoomInOverlapMs: sanitizedRaw.zoomInOverlapMs ?? fallback.zoomInOverlapMs,
 		zoomOutDurationMs: sanitizedRaw.zoomOutDurationMs ?? fallback.zoomOutDurationMs,
-		connectedZoomGapMs:
-			sanitizedRaw.connectedZoomGapMs ?? fallback.connectedZoomGapMs,
+		connectedZoomGapMs: sanitizedRaw.connectedZoomGapMs ?? fallback.connectedZoomGapMs,
 		connectedZoomDurationMs:
 			sanitizedRaw.connectedZoomDurationMs ?? fallback.connectedZoomDurationMs,
 		zoomInEasing: sanitizedRaw.zoomInEasing ?? fallback.zoomInEasing,
 		zoomOutEasing: sanitizedRaw.zoomOutEasing ?? fallback.zoomOutEasing,
-		connectedZoomEasing:
-			sanitizedRaw.connectedZoomEasing ?? fallback.connectedZoomEasing,
+		connectedZoomEasing: sanitizedRaw.connectedZoomEasing ?? fallback.connectedZoomEasing,
 		showCursor: sanitizedRaw.showCursor ?? fallback.showCursor,
 		loopCursor: sanitizedRaw.loopCursor ?? fallback.loopCursor,
 		cursorStyle: sanitizedRaw.cursorStyle ?? fallback.cursorStyle,
@@ -296,19 +302,24 @@ function normalizeEditorControls(
 			sanitizedRaw.cursorSpringStiffnessMultiplier ??
 			fallback.cursorSpringStiffnessMultiplier,
 		cursorSpringDampingMultiplier:
-			sanitizedRaw.cursorSpringDampingMultiplier ??
-			fallback.cursorSpringDampingMultiplier,
+			sanitizedRaw.cursorSpringDampingMultiplier ?? fallback.cursorSpringDampingMultiplier,
 		cursorSpringMassMultiplier:
 			sanitizedRaw.cursorSpringMassMultiplier ?? fallback.cursorSpringMassMultiplier,
 		cameraSpringStiffnessMultiplier:
 			sanitizedRaw.cameraSpringStiffnessMultiplier ??
 			fallback.cameraSpringStiffnessMultiplier,
 		cameraSpringDampingMultiplier:
-			sanitizedRaw.cameraSpringDampingMultiplier ??
-			fallback.cameraSpringDampingMultiplier,
+			sanitizedRaw.cameraSpringDampingMultiplier ?? fallback.cameraSpringDampingMultiplier,
 		cameraSpringMassMultiplier:
 			sanitizedRaw.cameraSpringMassMultiplier ?? fallback.cameraSpringMassMultiplier,
 		cursorMotionBlur: sanitizedRaw.cursorMotionBlur ?? fallback.cursorMotionBlur,
+		cursorClickEffect: sanitizedRaw.cursorClickEffect ?? fallback.cursorClickEffect,
+		cursorClickEffectScale:
+			sanitizedRaw.cursorClickEffectScale ?? fallback.cursorClickEffectScale,
+		cursorClickEffectOpacity:
+			sanitizedRaw.cursorClickEffectOpacity ?? fallback.cursorClickEffectOpacity,
+		cursorClickEffectDurationMs:
+			sanitizedRaw.cursorClickEffectDurationMs ?? fallback.cursorClickEffectDurationMs,
 		cursorClickBounce: sanitizedRaw.cursorClickBounce ?? fallback.cursorClickBounce,
 		cursorClickBounceDuration:
 			sanitizedRaw.cursorClickBounceDuration ?? fallback.cursorClickBounceDuration,
@@ -318,8 +329,7 @@ function normalizeEditorControls(
 		frame: sanitizedRaw.frame !== undefined ? sanitizedRaw.frame : fallback.frame,
 		webcam: sanitizedRaw.webcam ?? fallback.webcam,
 		aspectRatio: sanitizedRaw.aspectRatio ?? fallback.aspectRatio,
-		exportEncodingMode:
-			sanitizedRaw.exportEncodingMode ?? fallback.exportEncodingMode,
+		exportEncodingMode: sanitizedRaw.exportEncodingMode ?? fallback.exportEncodingMode,
 		exportBackendPreference:
 			sanitizedRaw.exportBackendPreference === undefined
 				? fallback.exportBackendPreference
@@ -371,6 +381,10 @@ function normalizeEditorControls(
 		cameraSpringDampingMultiplier: normalized.cameraSpringDampingMultiplier,
 		cameraSpringMassMultiplier: normalized.cameraSpringMassMultiplier,
 		cursorMotionBlur: normalized.cursorMotionBlur,
+		cursorClickEffect: normalized.cursorClickEffect,
+		cursorClickEffectScale: normalized.cursorClickEffectScale,
+		cursorClickEffectOpacity: normalized.cursorClickEffectOpacity,
+		cursorClickEffectDurationMs: normalized.cursorClickEffectDurationMs,
 		cursorClickBounce: normalized.cursorClickBounce,
 		cursorClickBounceDuration: normalized.cursorClickBounceDuration,
 		cursorSway: normalized.cursorSway,
@@ -446,10 +460,7 @@ export function saveEditorPreferences(preferences: Partial<EditorPreferences>): 
 		const merged = normalizeEditorPreferences({ ...current, ...preferences }, current);
 		const persisted = stripPersistedDevMotionBlurSettings(merged);
 		saveAppSetting(EDITOR_PREFERENCES_STORAGE_KEY, persisted);
-		globalThis.localStorage?.setItem(
-			EDITOR_PREFERENCES_STORAGE_KEY,
-			JSON.stringify(persisted),
-		);
+		globalThis.localStorage?.setItem(EDITOR_PREFERENCES_STORAGE_KEY, JSON.stringify(persisted));
 	} catch {
 		// Ignore storage failures so editor controls still work.
 	}
