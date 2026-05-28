@@ -549,8 +549,9 @@ export function registerProjectHandlers() {
         normalizeBoolean(options?.hideOverlayCursorByDefault) ||
         normalizeBoolean(resolvedSession.hideOverlayCursorByDefault),
       nativeCaptureUnavailable:
-        normalizeBoolean(options?.nativeCaptureUnavailable) ||
-        normalizeBoolean(resolvedSession.nativeCaptureUnavailable),
+        normalizeBoolean(
+          options?.nativeCaptureUnavailable ?? resolvedSession.nativeCaptureUnavailable,
+        ),
     }
 
     setCurrentRecordingSession(nextSession)
