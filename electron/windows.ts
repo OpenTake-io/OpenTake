@@ -5,7 +5,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { USER_DATA_PATH } from "./appPaths";
-import { getHudOverlayWindowBounds, resizeHudOverlayFallbackBounds } from "./hudOverlayBounds";
+import {
+	getHudOverlayWindowBounds,
+	resizeHudOverlayFallbackBounds,
+	shouldResizeHudOverlayFallback,
+} from "./hudOverlayBounds";
 import { getPackagedRendererBaseUrl } from "./rendererServer";
 
 const electronWindowsDir = path.dirname(fileURLToPath(import.meta.url));
@@ -294,8 +298,9 @@ function setHudOverlayMousePassthrough(ignore: boolean) {
 		return;
 	}
 
-	if (!isHudOverlayMousePassthroughSupported()) {
-		if (process.platform !== "linux") {
+	const mousePassthroughSupported = isHudOverlayMousePassthroughSupported();
+	if (!mousePassthroughSupported) {
+		if (shouldResizeHudOverlayFallback(mousePassthroughSupported, hudOverlayRecordingActive)) {
 			setHudOverlayFallbackExpanded(!ignore);
 		}
 		hudOverlayWindow.setIgnoreMouseEvents(false);
