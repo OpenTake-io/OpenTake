@@ -135,6 +135,10 @@ export function shouldUseLinuxPortalCapture({
 	browserCaptureSourceId?: string;
 	selectedSourceId?: string;
 }) {
+	if (browserCaptureSourceId && browserCaptureSourceId !== LINUX_PORTAL_SOURCE.id) {
+		return false;
+	}
+
 	return (
 		selectedSourceId === LINUX_PORTAL_SOURCE.id ||
 		browserCaptureSourceId === LINUX_PORTAL_SOURCE.id

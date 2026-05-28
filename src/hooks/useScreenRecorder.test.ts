@@ -212,7 +212,7 @@ describe("shouldUseLinuxPortalCapture", () => {
 	it("uses the portal when the selected source is the Linux sentinel", () => {
 		expect(
 			shouldUseLinuxPortalCapture({
-				browserCaptureSourceId: "screen:0:0",
+				browserCaptureSourceId: "screen:linux-portal",
 				selectedSourceId: "screen:linux-portal",
 			}),
 		).toBe(true);
@@ -232,6 +232,15 @@ describe("shouldUseLinuxPortalCapture", () => {
 			shouldUseLinuxPortalCapture({
 				browserCaptureSourceId: "screen:42:0",
 				selectedSourceId: "screen:42:0",
+			}),
+		).toBe(false);
+	});
+
+	it("prefers a live Electron source over stale portal selection state", () => {
+		expect(
+			shouldUseLinuxPortalCapture({
+				browserCaptureSourceId: "screen:42:0",
+				selectedSourceId: "screen:linux-portal",
 			}),
 		).toBe(false);
 	});
