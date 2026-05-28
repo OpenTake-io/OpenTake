@@ -613,7 +613,11 @@ export function getHudOverlayWindow(): BrowserWindow | null {
  * hover detection on the HUD is immediately restored without requiring the
  * user to move their mouse over the bar.
  */
-export function reassertHudOverlayMousePassthrough(): void {
+export function reassertHudOverlayMousePassthrough({
+	interactiveGraceMs = 50,
+}: {
+	interactiveGraceMs?: number;
+} = {}): void {
 	if (process.platform !== "win32" || !isHudOverlayMousePassthroughSupported()) {
 		return;
 	}
@@ -639,7 +643,7 @@ export function reassertHudOverlayMousePassthrough(): void {
 		if (!hud.isDestroyed()) {
 			setHudOverlayMousePassthrough(hudOverlayIgnoringMouse);
 		}
-	}, 50);
+	}, interactiveGraceMs);
 }
 
 export function setHudOverlayRecordingActive(recording: boolean): void {
