@@ -1222,10 +1222,18 @@ export default function VideoEditor() {
 		setExportProgress(resolveSavingExportProgress);
 	}, []);
 
-	const handleShowCursorChange = useCallback((nextShowCursor: boolean) => {
-		setSessionShowCursorOverride(null);
-		setShowCursor(nextShowCursor);
-	}, []);
+	const handleShowCursorChange = useCallback(
+		(nextShowCursor: boolean) => {
+			if (nextShowCursor && sessionNativeCaptureUnavailable) {
+				setNativeCaptureUnavailableModalOpen(true);
+				return;
+			}
+
+			setSessionShowCursorOverride(null);
+			setShowCursor(nextShowCursor);
+		},
+		[sessionNativeCaptureUnavailable],
+	);
 
 	const remountPreview = useCallback(() => {
 		setIsPreviewReady(false);
