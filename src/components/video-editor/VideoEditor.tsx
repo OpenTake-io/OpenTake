@@ -705,6 +705,7 @@ export default function VideoEditor() {
 			borderRadius,
 			padding: { ...padding },
 			frame,
+			cropRegion: { ...cropRegion },
 			webcam: { ...webcam },
 			aspectRatio,
 			exportEncodingMode,
@@ -756,6 +757,7 @@ export default function VideoEditor() {
 			borderRadius,
 			padding,
 			frame,
+			cropRegion,
 			webcam,
 			aspectRatio,
 			exportEncodingMode,
@@ -848,6 +850,7 @@ export default function VideoEditor() {
 		setBorderRadius(snapshot.borderRadius);
 		setPadding({ ...snapshot.padding });
 		setFrame(snapshot.frame);
+		setCropRegion({ ...snapshot.cropRegion });
 		setWebcam({ ...snapshot.webcam });
 		setAspectRatio(snapshot.aspectRatio);
 		setExportEncodingMode(snapshot.exportEncodingMode);

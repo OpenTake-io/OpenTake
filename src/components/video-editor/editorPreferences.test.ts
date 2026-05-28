@@ -10,7 +10,7 @@ import {
 	saveEditorPreferences,
 	saveEditorPresets,
 } from "./editorPreferences";
-import { DEFAULT_AUTO_CAPTION_SETTINGS } from "./types";
+import { DEFAULT_AUTO_CAPTION_SETTINGS, DEFAULT_CROP_REGION } from "./types";
 
 function createStorageMock(initialValues: Record<string, string> = {}): Storage {
 	const store = new Map(Object.entries(initialValues));
@@ -358,6 +358,7 @@ describe("editorPreferences", () => {
 					updatedAt: "2026-05-01T00:00:00.000Z",
 					snapshot: {
 						...DEFAULT_EDITOR_PREFERENCES,
+						cropRegion: DEFAULT_CROP_REGION,
 						autoCaptionSettings: DEFAULT_AUTO_CAPTION_SETTINGS,
 					},
 				},
@@ -385,6 +386,7 @@ describe("editorPreferences", () => {
 					updatedAt: "2026-05-02T00:00:00.000Z",
 					snapshot: {
 						...DEFAULT_EDITOR_PREFERENCES,
+						cropRegion: DEFAULT_CROP_REGION,
 						autoCaptionSettings: DEFAULT_AUTO_CAPTION_SETTINGS,
 					},
 				},
@@ -397,6 +399,34 @@ describe("editorPreferences", () => {
 				name: "Demo Preset",
 			},
 		]);
+	});
+
+	it("preserves crop region in editor preset snapshots", () => {
+		const localStorage = createStorageMock();
+		vi.stubGlobal("localStorage", localStorage);
+
+		expect(
+			saveEditorPresets([
+				{
+					id: "preset-1",
+					name: "Cropped Demo",
+					createdAt: "2026-05-01T00:00:00.000Z",
+					updatedAt: "2026-05-01T00:00:00.000Z",
+					snapshot: {
+						...DEFAULT_EDITOR_PREFERENCES,
+						cropRegion: { x: 0.08, y: 0.12, width: 0.8, height: 0.7 },
+						autoCaptionSettings: DEFAULT_AUTO_CAPTION_SETTINGS,
+					},
+				},
+			]),
+		).toBe(true);
+
+		expect(loadEditorPresets()[0]?.snapshot.cropRegion).toEqual({
+			x: 0.08,
+			y: 0.12,
+			width: 0.8,
+			height: 0.7,
+		});
 	});
 
 	it("returns false when preset persistence fails", () => {
