@@ -128,6 +128,23 @@ type DesktopCaptureMediaDevices = {
 	getDisplayMedia: (constraints: unknown) => Promise<MediaStream>;
 };
 
+export function shouldUseLinuxPortalCapture({
+	browserCaptureSourceId,
+	selectedSourceId,
+}: {
+	browserCaptureSourceId?: string;
+	selectedSourceId?: string;
+}) {
+	if (browserCaptureSourceId && browserCaptureSourceId !== LINUX_PORTAL_SOURCE.id) {
+		return false;
+	}
+
+	return (
+		selectedSourceId === LINUX_PORTAL_SOURCE.id ||
+		browserCaptureSourceId === LINUX_PORTAL_SOURCE.id
+	);
+}
+
 type UseScreenRecorderReturn = {
 	recording: boolean;
 	paused: boolean;
@@ -684,7 +701,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		// on Wayland that triggers an additional xdg-desktop-portal dialog.
 		// The sentinel is handled later by routing through getDisplayMedia,
 		// which lets the portal pick the source in a single dialog.
-		if (source.id === "screen:linux-portal") {
+		if (source.id === LINUX_PORTAL_SOURCE.id) {
 			return source;
 		}
 
@@ -1430,7 +1447,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			// Persist the synthetic Linux portal sentinel to main so that the
 			// setDisplayMediaRequestHandler can short-circuit getSources() and
 			// avoid triggering an extra portal dialog.
-			if (!existingSource && selectedSource.id === "screen:linux-portal") {
+			if (!existingSource && selectedSource.id === LINUX_PORTAL_SOURCE.id) {
 				try {
 					await window.electronAPI.selectSource(selectedSource);
 				} catch (err) {
@@ -1655,7 +1672,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			let videoTrack: MediaStreamTrack | undefined;
 			let systemAudioIncluded = false;
 			const mediaDevices = navigator.mediaDevices as DesktopCaptureMediaDevices;
-			const useLinuxPortal = selectedSource.id === "screen:linux-portal";
+			const useLinuxPortal = shouldUseLinuxPortalCapture({
+				browserCaptureSourceId: browserCaptureSource.id,
+				selectedSourceId: selectedSource.id,
+			});
 			const browserScreenVideoConstraints = {
 				mandatory: {
 					chromeMediaSource: CHROME_MEDIA_SOURCE,
