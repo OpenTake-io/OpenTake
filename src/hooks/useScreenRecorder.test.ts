@@ -1,9 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+	createBrowserRecordingOptions,
 	createProcessedMicrophoneConstraints,
+	getScreenCaptureCursorSetting,
 	normalizeBrowserMicrophoneProfile,
 	resolveBrowserCaptureCursorPolicy,
+	resolveLinuxPortalCursorPresentation,
+	shouldUseNativeWindowsCaptureForSource,
 } from "./useScreenRecorder";
 
 type RecordingState = "inactive" | "recording" | "paused";
@@ -31,12 +35,12 @@ function createMockMediaRecorder(initialState: RecordingState = "inactive") {
 }
 
 describe("createProcessedMicrophoneConstraints", () => {
-	it("requests browser voice processing without AGC for the default microphone", () => {
+	it("requests browser voice processing with AGC for the default microphone", () => {
 		expect(createProcessedMicrophoneConstraints()).toEqual({
 			audio: {
 				echoCancellation: true,
 				noiseSuppression: true,
-				autoGainControl: false,
+				autoGainControl: true,
 				channelCount: { ideal: 1 },
 				sampleRate: { ideal: 48000 },
 			},
@@ -44,13 +48,13 @@ describe("createProcessedMicrophoneConstraints", () => {
 		});
 	});
 
-	it("keeps no-AGC voice processing when a specific microphone is selected", () => {
+	it("keeps default voice processing when a specific microphone is selected", () => {
 		expect(createProcessedMicrophoneConstraints("device-123")).toMatchObject({
 			audio: {
 				deviceId: { exact: "device-123" },
 				echoCancellation: true,
 				noiseSuppression: true,
-				autoGainControl: false,
+				autoGainControl: true,
 				channelCount: { ideal: 1 },
 				sampleRate: { ideal: 48000 },
 			},
@@ -102,10 +106,38 @@ describe("createProcessedMicrophoneConstraints", () => {
 		});
 	});
 
-	it("normalizes invalid lab microphone profiles to production no-AGC processing", () => {
+	it("normalizes invalid lab microphone profiles to production voice processing", () => {
 		expect(normalizeBrowserMicrophoneProfile("RAW")).toBe("raw");
-		expect(normalizeBrowserMicrophoneProfile("unknown")).toBe("no-agc");
-		expect(normalizeBrowserMicrophoneProfile(null)).toBe("no-agc");
+		expect(normalizeBrowserMicrophoneProfile("unknown")).toBe("processed");
+		expect(normalizeBrowserMicrophoneProfile(null)).toBe("processed");
+	});
+});
+
+describe("createBrowserRecordingOptions", () => {
+	it("sets an aggregate bitrate target for browser screen recordings", () => {
+		expect(
+			createBrowserRecordingOptions({
+				audioBitsPerSecond: 128_000,
+				mimeType: "video/webm;codecs=vp9",
+				videoBitsPerSecond: 30_600_000,
+			}),
+		).toEqual({
+			audioBitsPerSecond: 128_000,
+			bitsPerSecond: 30_728_000,
+			mimeType: "video/webm;codecs=vp9",
+			videoBitsPerSecond: 30_600_000,
+		});
+	});
+
+	it("keeps video-only recordings on the requested video budget", () => {
+		expect(
+			createBrowserRecordingOptions({
+				videoBitsPerSecond: 30_600_000,
+			}),
+		).toEqual({
+			bitsPerSecond: 30_600_000,
+			videoBitsPerSecond: 30_600_000,
+		});
 	});
 });
 
@@ -115,6 +147,7 @@ describe("resolveBrowserCaptureCursorPolicy", () => {
 			streamCursor: "never",
 			hideOsCursorBeforeRecording: true,
 			hideEditorOverlayCursorByDefault: true,
+			nativeCaptureUnavailable: false,
 		});
 	});
 
@@ -125,7 +158,73 @@ describe("resolveBrowserCaptureCursorPolicy", () => {
 			streamCursor: "always",
 			hideOsCursorBeforeRecording: false,
 			hideEditorOverlayCursorByDefault: true,
+			nativeCaptureUnavailable: true,
 		});
+	});
+
+	it("does not fake OS cursor hiding on Linux portal capture", () => {
+		expect(resolveBrowserCaptureCursorPolicy({ platform: "linux" })).toEqual({
+			streamCursor: "never",
+			hideOsCursorBeforeRecording: false,
+			hideEditorOverlayCursorByDefault: true,
+			nativeCaptureUnavailable: true,
+		});
+	});
+});
+
+describe("resolveLinuxPortalCursorPresentation", () => {
+	it("enables the Recordly overlay only when the portal confirms cursor-hidden capture", () => {
+		expect(
+			resolveLinuxPortalCursorPresentation({
+				requestedCursor: "never",
+				actualCursor: "never",
+			}),
+		).toEqual({
+			hideEditorOverlayCursorByDefault: false,
+			nativeCaptureUnavailable: false,
+		});
+	});
+
+	it("keeps the overlay disabled when the portal embeds or omits cursor settings", () => {
+		expect(
+			resolveLinuxPortalCursorPresentation({
+				requestedCursor: "never",
+				actualCursor: "always",
+			}),
+		).toEqual({
+			hideEditorOverlayCursorByDefault: true,
+			nativeCaptureUnavailable: true,
+		});
+		expect(
+			resolveLinuxPortalCursorPresentation({
+				requestedCursor: "never",
+				actualCursor: null,
+			}),
+		).toEqual({
+			hideEditorOverlayCursorByDefault: true,
+			nativeCaptureUnavailable: true,
+		});
+	});
+});
+
+describe("getScreenCaptureCursorSetting", () => {
+	it("normalizes only supported screen-capture cursor settings", () => {
+		expect(getScreenCaptureCursorSetting({ cursor: "motion" } as MediaTrackSettings)).toBe(
+			"motion",
+		);
+		expect(
+			getScreenCaptureCursorSetting({ cursor: "hidden" } as MediaTrackSettings),
+		).toBeNull();
+	});
+});
+
+describe("shouldUseNativeWindowsCaptureForSource", () => {
+	it("keeps native Windows capture on screen sources", () => {
+		expect(shouldUseNativeWindowsCaptureForSource({ id: "screen:101:0" })).toBe(true);
+	});
+
+	it("routes window sources through browser capture", () => {
+		expect(shouldUseNativeWindowsCaptureForSource({ id: "window:123456:0" })).toBe(false);
 	});
 });
 

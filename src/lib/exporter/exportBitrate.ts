@@ -42,8 +42,12 @@ function getBaseMp4ExportBitrate(width: number, height: number, quality: ExportQ
 	return 30_000_000;
 }
 
-function getFrameRateBitrateScale(frameRate: ExportMp4FrameRate): number {
-	return Math.sqrt(Math.max(frameRate, REFERENCE_FRAME_RATE) / REFERENCE_FRAME_RATE);
+function getFrameRateBitrateMultiplier(frameRate: ExportMp4FrameRate): number {
+	// This only scales requestedBitrate above REFERENCE_FRAME_RATE, so 24fps
+	// and 30fps share the same multiplier. useModernNativeStaticLayout can
+	// still change the final bitrate because pixelRateScale uses frameRate
+	// against REFERENCE_PIXEL_RATE for the native layout floor/cap.
+	return Math.sqrt(Math.max(1, frameRate / REFERENCE_FRAME_RATE));
 }
 
 function getModernNativeStaticLayoutBitrateCap(
@@ -92,8 +96,8 @@ export function getMp4ExportBitrate(options: {
 }): number {
 	const requestedBitrate = Math.round(
 		getBaseMp4ExportBitrate(options.width, options.height, options.quality) *
-			getEncodingModeBitrateMultiplier(options.encodingMode) *
-			getFrameRateBitrateScale(options.frameRate),
+			getFrameRateBitrateMultiplier(options.frameRate) *
+			getEncodingModeBitrateMultiplier(options.encodingMode),
 	);
 	const nativeStaticLayoutBitrate =
 		options.useModernNativeStaticLayout && options.encodingMode !== "fast"
