@@ -7,6 +7,7 @@ import {
 	normalizeBrowserMicrophoneProfile,
 	resolveBrowserCaptureCursorPolicy,
 	resolveLinuxPortalCursorPresentation,
+	shouldUseLinuxPortalCapture,
 	shouldUseNativeWindowsCaptureForSource,
 } from "./useScreenRecorder";
 
@@ -204,6 +205,44 @@ describe("resolveLinuxPortalCursorPresentation", () => {
 			hideEditorOverlayCursorByDefault: true,
 			nativeCaptureUnavailable: true,
 		});
+	});
+});
+
+describe("shouldUseLinuxPortalCapture", () => {
+	it("uses the portal when the selected source is the Linux sentinel", () => {
+		expect(
+			shouldUseLinuxPortalCapture({
+				browserCaptureSourceId: "screen:linux-portal",
+				selectedSourceId: "screen:linux-portal",
+			}),
+		).toBe(true);
+	});
+
+	it("uses the portal when a stale screen fallback resolves to the Linux sentinel", () => {
+		expect(
+			shouldUseLinuxPortalCapture({
+				browserCaptureSourceId: "screen:linux-portal",
+				selectedSourceId: "screen:fallback:42",
+			}),
+		).toBe(true);
+	});
+
+	it("keeps live Electron screen sources on browser getUserMedia", () => {
+		expect(
+			shouldUseLinuxPortalCapture({
+				browserCaptureSourceId: "screen:42:0",
+				selectedSourceId: "screen:42:0",
+			}),
+		).toBe(false);
+	});
+
+	it("prefers a live Electron source over stale portal selection state", () => {
+		expect(
+			shouldUseLinuxPortalCapture({
+				browserCaptureSourceId: "screen:42:0",
+				selectedSourceId: "screen:linux-portal",
+			}),
+		).toBe(false);
 	});
 });
 
