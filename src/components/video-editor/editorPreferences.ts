@@ -1,12 +1,12 @@
+import { loadAppSetting, saveAppSetting } from "../../lib/appSettings";
 import {
 	normalizeExportBackendPreference,
 	normalizeExportMp4FrameRate,
 	normalizeExportPipelineModel,
 	normalizeProjectEditor,
-	stripPersistedDevMotionBlurSettings,
 	type ProjectEditorState,
+	stripPersistedDevMotionBlurSettings,
 } from "./projectPersistence";
-import { loadAppSetting, saveAppSetting } from "../../lib/appSettings";
 
 type PersistedEditorControls = Pick<
 	ProjectEditorState,
@@ -61,8 +61,10 @@ type PersistedEditorControls = Pick<
 type PartialEditorControls = Partial<PersistedEditorControls>;
 
 type PresetAutoCaptionSettings = ProjectEditorState["autoCaptionSettings"];
+type PresetCropRegion = ProjectEditorState["cropRegion"];
 
 export interface EditorPresetSnapshot extends PersistedEditorControls {
+	cropRegion: PresetCropRegion;
 	autoCaptionSettings: PresetAutoCaptionSettings;
 	whisperExecutablePath: string | null;
 	whisperModelPath: string | null;
@@ -196,9 +198,13 @@ function normalizeEditorPresetSnapshot(candidate: unknown): EditorPresetSnapshot
 		candidate && typeof candidate === "object"
 			? (candidate as Partial<EditorPresetSnapshot>)
 			: {};
+	const normalizedCropRegion = normalizeProjectEditor({
+		cropRegion: raw.cropRegion,
+	}).cropRegion;
 
 	return {
 		...normalizeEditorControls(normalizedPreferences, normalizedPreferences),
+		cropRegion: normalizedCropRegion,
 		autoCaptionSettings: normalizePresetAutoCaptionSettings(raw.autoCaptionSettings),
 		whisperExecutablePath:
 			normalizeNullablePath(raw.whisperExecutablePath) ??
