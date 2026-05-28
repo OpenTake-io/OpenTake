@@ -128,6 +128,7 @@ export function registerSourceHandlers({
 			return {
 				id: getScreenSourceIdForDisplay({
 					displayId,
+					env: process.env,
 					matchedSourceId: matchedSource?.id,
 					platform: process.platform,
 				}),

@@ -17,14 +17,26 @@ describe("getScreenSourceIdForDisplay", () => {
 		).toBe("screen:42:0");
 	});
 
-	it("routes unmatched Linux screens through the portal sentinel", () => {
+	it("routes unmatched Linux Wayland screens through the portal sentinel", () => {
 		expect(
 			getScreenSourceIdForDisplay({
 				displayId: "42",
+				env: { XDG_SESSION_TYPE: "wayland", WAYLAND_DISPLAY: "wayland-0" },
 				matchedSourceId: null,
 				platform: "linux",
 			}),
 		).toBe(LINUX_PORTAL_SCREEN_SOURCE_ID);
+	});
+
+	it("keeps unmatched Linux X11 screens on the explicit fallback id", () => {
+		expect(
+			getScreenSourceIdForDisplay({
+				displayId: "42",
+				env: { XDG_SESSION_TYPE: "x11", DISPLAY: ":0" },
+				matchedSourceId: null,
+				platform: "linux",
+			}),
+		).toBe("screen:fallback:42");
 	});
 
 	it("keeps non-Linux unmatched screens on the explicit fallback id", () => {
@@ -57,6 +69,16 @@ describe("shouldUseSyntheticLinuxPortalSource", () => {
 				sourceId: LINUX_PORTAL_SCREEN_SOURCE_ID,
 			}),
 		).toBe(false);
+	});
+
+	it("recovers stale fallback ids through the synthetic path on Wayland", () => {
+		expect(
+			shouldUseSyntheticLinuxPortalSource({
+				env: { WAYLAND_DISPLAY: "wayland-0" },
+				platform: "linux",
+				sourceId: "screen:fallback:0",
+			}),
+		).toBe(true);
 	});
 
 	it("defaults unknown Linux sessions with WAYLAND_DISPLAY to the synthetic path", () => {
