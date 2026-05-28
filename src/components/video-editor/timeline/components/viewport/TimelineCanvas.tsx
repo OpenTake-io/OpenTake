@@ -251,7 +251,6 @@ interface TimelineCanvasRowsProps {
 	onZoomRowMouseLeave: MouseEventHandler<HTMLDivElement>;
 	onZoomRowMouseDown: MouseEventHandler<HTMLDivElement>;
 	onZoomRowClick: MouseEventHandler<HTMLDivElement>;
-	isLoading?: boolean;
 }
 
 interface AudioItemWithWaveformProps {
@@ -319,7 +318,6 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 	onZoomRowMouseLeave,
 	onZoomRowMouseDown,
 	onZoomRowClick,
-	isLoading = false,
 }: TimelineCanvasRowsProps) {
 	const hiddenIds = useMemo(() => new Set(liveHiddenItemIds ?? []), [liveHiddenItemIds]);
 	const { clipItems, zoomItems, annotationRows, audioRows } = useMemo(() => {
@@ -387,8 +385,6 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 						onSelectId={onSelectClip}
 						variant="clip"
 						speedValue={item.speedValue}
-						isLoading={isLoading}
-						loadingLabel="Analyzing..."
 					>
 						{item.label}
 					</Item>
@@ -783,7 +779,6 @@ export default function TimelineCanvas({
 					onZoomRowMouseLeave={handleZoomRowMouseLeave}
 					onZoomRowMouseDown={handleZoomRowMouseDown}
 					onZoomRowClick={handleZoomRowClick}
-					isLoading={isLoading}
 				/>
 			</div>
 		</div>
