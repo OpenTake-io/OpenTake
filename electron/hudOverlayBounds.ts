@@ -38,6 +38,13 @@ export function getHudOverlayWindowBounds(
 	};
 }
 
+export function shouldResizeHudOverlayFallback(
+	mousePassthroughSupported: boolean,
+	recordingActive: boolean,
+): boolean {
+	return !mousePassthroughSupported && !recordingActive;
+}
+
 export function shouldExpandHudOverlayFallback({
 	fallbackExpanded,
 	recordingActive,
