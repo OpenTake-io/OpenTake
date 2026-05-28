@@ -127,7 +127,7 @@ export default function TimelineWrapper({
 	);
 
 	const resolveDragPreviewSpan = useCallback(
-		(event: DragMoveEvent, span: Span): Span => {
+		(event: DragMoveEvent, span: Span): Span | null => {
 			const proposedRowId = event.over?.id as string | undefined;
 			if (!proposedRowId) return span;
 
@@ -145,7 +145,7 @@ export default function TimelineWrapper({
 				resolveTargetRowId,
 			);
 
-			return resolved?.span ?? span;
+			return resolved?.span ?? null;
 		},
 		[allRegionSpans, hasOverlap, minItemDurationMs, resolveTargetRowId, totalMs],
 	);
@@ -166,7 +166,11 @@ export default function TimelineWrapper({
 				event.activatorEvent && "clientX" in event.activatorEvent
 					? (event.activatorEvent as PointerEvent).clientX + (event.delta?.x ?? 0)
 					: undefined;
-			if (previewSpan) showTooltip(previewSpan, screenX);
+			if (previewSpan) {
+				showTooltip(previewSpan, screenX);
+			} else {
+				showTooltip(null);
+			}
 			const moved = Math.hypot(event.delta?.x ?? 0, event.delta?.y ?? 0) > 0.01;
 			if (moved) {
 				onLiveSpanPreviewChange?.(event.active.id as string, previewSpan);
