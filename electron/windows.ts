@@ -5,7 +5,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { USER_DATA_PATH } from "./appPaths";
-import { getHudOverlayWindowBounds, resizeHudOverlayFallbackBounds } from "./hudOverlayBounds";
+import {
+	getHudOverlayWindowBounds,
+	resizeHudOverlayFallbackBounds,
+	shouldExpandHudOverlayFallback,
+} from "./hudOverlayBounds";
 import { getPackagedRendererBaseUrl } from "./rendererServer";
 
 const electronWindowsDir = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +33,7 @@ let hudOverlayFallbackExpanded = false;
 let hudOverlayIgnoringMouse = true;
 let hudOverlayMouseReassertTimer: NodeJS.Timeout | null = null;
 let hudOverlayRecordingActive = false;
+let hudOverlayWebcamPreviewVisible = false;
 let countdownWindow: BrowserWindow | null = null;
 let updateToastWindow: BrowserWindow | null = null;
 
@@ -189,10 +194,15 @@ function getHudOverlayDisplay() {
 
 function getHudOverlayBounds() {
 	const { workArea } = getHudOverlayDisplay();
+	const fallbackExpanded = shouldExpandHudOverlayFallback({
+		fallbackExpanded: hudOverlayFallbackExpanded,
+		recordingActive: hudOverlayRecordingActive,
+		webcamPreviewVisible: hudOverlayWebcamPreviewVisible,
+	});
 	return getHudOverlayWindowBounds(
 		workArea,
 		isHudOverlayMousePassthroughSupported() && !hudOverlayRecordingActive,
-		hudOverlayFallbackExpanded,
+		fallbackExpanded,
 	);
 }
 
@@ -393,6 +403,18 @@ ipcMain.handle("get-hud-overlay-mouse-passthrough-supported", () => {
 	};
 });
 
+ipcMain.on("hud-overlay-set-webcam-preview-visible", (_event, visible: boolean) => {
+	const nextVisible = Boolean(visible);
+	if (hudOverlayWebcamPreviewVisible === nextVisible) {
+		return;
+	}
+
+	hudOverlayWebcamPreviewVisible = nextVisible;
+	if (hudOverlayRecordingActive) {
+		applyHudOverlayBounds();
+	}
+});
+
 ipcMain.handle("set-hud-overlay-capture-protection", (_event, enabled: boolean) => {
 	loadHudOverlayCaptureProtectionSetting();
 	hudOverlayHiddenFromCapture = Boolean(enabled);
@@ -415,6 +437,7 @@ ipcMain.handle("set-hud-overlay-capture-protection", (_event, enabled: boolean) 
 export function createHudOverlayWindow(): BrowserWindow {
 	loadHudOverlayCaptureProtectionSetting();
 	hudOverlayFallbackExpanded = false;
+	hudOverlayWebcamPreviewVisible = false;
 	const initialBounds = getHudOverlayBounds();
 	let hasShownHudWindow = false;
 
