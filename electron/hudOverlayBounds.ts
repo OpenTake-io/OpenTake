@@ -41,8 +41,9 @@ export function getHudOverlayWindowBounds(
 export function shouldResizeHudOverlayFallback(
 	mousePassthroughSupported: boolean,
 	recordingActive: boolean,
+	interactionLocked = false,
 ): boolean {
-	return !mousePassthroughSupported && !recordingActive;
+	return !mousePassthroughSupported && !recordingActive && !interactionLocked;
 }
 
 export function shouldExpandHudOverlayFallback({

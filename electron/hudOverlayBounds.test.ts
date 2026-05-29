@@ -158,6 +158,10 @@ describe("shouldResizeHudOverlayFallback", () => {
 	it("keeps the recording HUD compact in non-passthrough mode", () => {
 		expect(shouldResizeHudOverlayFallback(false, true)).toBe(false);
 	});
+
+	it("keeps the fallback stable while source selection is active", () => {
+		expect(shouldResizeHudOverlayFallback(false, false, true)).toBe(false);
+	});
 });
 
 describe("shouldExpandHudOverlayFallback", () => {
