@@ -145,6 +145,16 @@ export function shouldUseLinuxPortalCapture({
 	);
 }
 
+export function shouldLockHudDuringDisplaySelection({
+	platform,
+	useLinuxPortal,
+}: {
+	platform?: string;
+	useLinuxPortal: boolean;
+}) {
+	return platform === "linux" && useLinuxPortal;
+}
+
 type UseScreenRecorderReturn = {
 	recording: boolean;
 	paused: boolean;
@@ -1429,6 +1439,16 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			return;
 		}
 
+		let hudSourceSelectionActive = false;
+		const setHudSourceSelectionActive = (active: boolean) => {
+			if (hudSourceSelectionActive === active) {
+				return;
+			}
+
+			hudSourceSelectionActive = active;
+			window.electronAPI?.hudOverlaySetSourceSelectionActive?.(active);
+		};
+
 		hasPromptedForReselect.current = false;
 		startInFlight.current = true;
 		setStarting(true);
@@ -1628,7 +1648,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					}
 
 					setRecording(true);
-					window.electronAPI?.setRecordingState(true);
+					try {
+						await window.electronAPI?.setRecordingState(true);
+					} catch (stateError) {
+						console.warn(
+							"Failed to notify main process that native recording started:",
+							stateError,
+						);
+					}
 
 					return;
 				}
@@ -1676,6 +1703,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				browserCaptureSourceId: browserCaptureSource.id,
 				selectedSourceId: selectedSource.id,
 			});
+			if (shouldLockHudDuringDisplaySelection({ platform, useLinuxPortal })) {
+				setHudSourceSelectionActive(true);
+			}
 			const browserScreenVideoConstraints = {
 				mandatory: {
 					chromeMediaSource: CHROME_MEDIA_SOURCE,
@@ -1990,7 +2020,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				webcamStartTime.current === null ? 0 : webcamStartTime.current - mainStartedAt;
 			recorder.start(RECORDER_TIMESLICE_MS);
 			setRecording(true);
-			window.electronAPI?.setRecordingState(true);
+			try {
+				await window.electronAPI?.setRecordingState(true);
+			} catch (stateError) {
+				console.warn("Failed to notify main process that recording started:", stateError);
+			}
 		} catch (error) {
 			console.error("Failed to start recording:", error);
 			alert(
@@ -2008,6 +2042,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				await stopWebcamRecorder();
 			}
 		} finally {
+			setHudSourceSelectionActive(false);
 			startInFlight.current = false;
 			setStarting(false);
 		}
