@@ -550,20 +550,17 @@ function CursorClickEffectPreview({
 				</svg>
 			) : null}
 			{effect === "spotlight" ? (
-				<>
-					<span
-						className="absolute h-12 w-12 rounded-full blur-[8px]"
-						style={{ backgroundColor: hexToRgba(color, 0.18) }}
-					/>
-					<span
-						className="absolute h-9 w-9 rounded-full"
-						style={{ backgroundColor: hexToRgba(color, 0.1) }}
-					/>
-					<span
-						className="absolute h-7 w-7 rounded-full border-[1.5px]"
-						style={{ borderColor: hexToRgba(color, 0.42) }}
-					/>
-				</>
+				<svg
+					className="absolute h-12 w-12"
+					style={{ color: hexToRgba(color, 0.92) }}
+					viewBox="0 0 48 48"
+					aria-hidden="true"
+				>
+					<g fill="none" stroke="currentColor">
+						<circle cx="24" cy="24" r="13.5" strokeWidth="1.5" opacity="0.3" />
+						<circle cx="24" cy="24" r="9.75" strokeWidth="1.7" opacity="0.56" />
+					</g>
+				</svg>
 			) : null}
 			{effect === "echo" ? (
 				<svg
