@@ -5108,7 +5108,7 @@ export default function VideoEditor() {
 			zoomInEasing={zoomInEasing}
 			zoomOutEasing={zoomOutEasing}
 			connectedZoomEasing={connectedZoomEasing}
-			borderRadius={16}
+			borderRadius={borderRadius}
 			padding={padding}
 			frame={frame}
 			cropRegion={cropRegion}
