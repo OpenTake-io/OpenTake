@@ -14,8 +14,8 @@ type OfflineRenderTestHarness = AudioProcessor & {
 		sourceAudioFallbackPaths: string[],
 		sourceAudioFallbackStartDelayMsByPath?: Record<string, number>,
 	): Promise<{
-		mainBuffer: AudioBuffer | null;
-		companionEntries: Array<{ buffer: AudioBuffer; startDelaySec: number }>;
+		mainBufferEntry: { buffer: AudioBuffer; gain: number } | null;
+		companionEntries: Array<{ buffer: AudioBuffer; startDelaySec: number; gain: number }>;
 	}>;
 	renderAndMuxOfflineAudio(
 		videoUrl: string,
@@ -55,9 +55,11 @@ describe("AudioProcessor offline render preparation", () => {
 			["/tmp/recording.mp4", "/tmp/recording.mic.wav"],
 		);
 
-		expect(prepared.mainBuffer).toBe(mainBuffer);
+		expect(prepared.mainBufferEntry?.buffer).toBe(mainBuffer);
+		expect(prepared.mainBufferEntry?.gain).toBe(1);
 		expect(prepared.companionEntries).toHaveLength(1);
 		expect(prepared.companionEntries[0]?.buffer).toBe(micBuffer);
+		expect(prepared.companionEntries[0]?.gain).toBe(1);
 		expect(decodeAudioFromUrl).toHaveBeenCalledWith("file:///tmp/recording.mp4");
 		expect(decodeAudioFromUrl).toHaveBeenCalledWith("/tmp/recording.mic.wav");
 		expect(decodeAudioFromUrl).not.toHaveBeenCalledWith("/tmp/recording.mp4");
