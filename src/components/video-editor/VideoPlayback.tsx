@@ -135,6 +135,7 @@ import {
 	DEFAULT_CURSOR_CLICK_BOUNCE,
 	DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
 	DEFAULT_CURSOR_CLICK_EFFECT,
+	DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
 	DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
 	DEFAULT_CURSOR_CLICK_EFFECT_OPACITY,
 	DEFAULT_CURSOR_CLICK_EFFECT_SCALE,
@@ -378,6 +379,7 @@ interface VideoPlaybackProps {
 	zoomMotionBlurTuning?: ZoomMotionBlurTuning;
 	cursorMotionBlur?: number;
 	cursorClickEffect?: CursorClickEffectStyle;
+	cursorClickEffectColor?: string;
 	cursorClickEffectScale?: number;
 	cursorClickEffectOpacity?: number;
 	cursorClickEffectDurationMs?: number;
@@ -460,6 +462,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			zoomMotionBlurTuning = DEFAULT_ZOOM_MOTION_BLUR_TUNING,
 			cursorMotionBlur = DEFAULT_CURSOR_MOTION_BLUR,
 			cursorClickEffect = DEFAULT_CURSOR_CLICK_EFFECT,
+			cursorClickEffectColor = DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
 			cursorClickEffectScale = DEFAULT_CURSOR_CLICK_EFFECT_SCALE,
 			cursorClickEffectOpacity = DEFAULT_CURSOR_CLICK_EFFECT_OPACITY,
 			cursorClickEffectDurationMs = DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
@@ -586,6 +589,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		const cameraSpringMassMultiplierRef = useRef(cameraSpringMassMultiplier);
 		const cursorMotionBlurRef = useRef(cursorMotionBlur);
 		const cursorClickEffectRef = useRef(cursorClickEffect);
+		const cursorClickEffectColorRef = useRef(cursorClickEffectColor);
 		const cursorClickEffectScaleRef = useRef(cursorClickEffectScale);
 		const cursorClickEffectOpacityRef = useRef(cursorClickEffectOpacity);
 		const cursorClickEffectDurationMsRef = useRef(cursorClickEffectDurationMs);
@@ -1620,6 +1624,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		}, [cursorClickEffect]);
 
 		useEffect(() => {
+			cursorClickEffectColorRef.current = cursorClickEffectColor;
+		}, [cursorClickEffectColor]);
+
+		useEffect(() => {
 			cursorClickEffectScaleRef.current = cursorClickEffectScale;
 		}, [cursorClickEffectScale]);
 
@@ -1930,6 +1938,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 						},
 						motionBlur: cursorMotionBlurRef.current,
 						clickEffect: cursorClickEffectRef.current,
+						clickEffectColor: cursorClickEffectColorRef.current,
 						clickEffectScale: cursorClickEffectScaleRef.current,
 						clickEffectOpacity: cursorClickEffectOpacityRef.current,
 						clickEffectDurationMs: cursorClickEffectDurationMsRef.current,
@@ -2517,6 +2526,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			});
 			overlay.setMotionBlur(cursorMotionBlur);
 			overlay.setClickEffect(cursorClickEffect);
+			overlay.setClickEffectColor(cursorClickEffectColor);
 			overlay.setClickEffectScale(cursorClickEffectScale);
 			overlay.setClickEffectOpacity(cursorClickEffectOpacity);
 			overlay.setClickEffectDurationMs(cursorClickEffectDurationMs);
@@ -2552,6 +2562,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			cursorSpringMassMultiplier,
 			cursorMotionBlur,
 			cursorClickEffect,
+			cursorClickEffectColor,
 			cursorClickEffectScale,
 			cursorClickEffectOpacity,
 			cursorClickEffectDurationMs,
@@ -2771,10 +2782,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
 		return (
 			<div
-				className="relative rounded-sm overflow-hidden"
+				className="relative overflow-hidden"
 				style={{
 					width: "100%",
 					aspectRatio: formatAspectRatioForCSS(aspectRatio, nativeAspectRatio),
+					borderRadius: `${Math.max(0, borderRadius)}px`,
 				}}
 			>
 				{/* Background layer */}

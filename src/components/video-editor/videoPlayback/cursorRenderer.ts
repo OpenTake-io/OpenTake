@@ -9,10 +9,12 @@ import {
 	type CursorTelemetryPoint,
 	DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
 	DEFAULT_CURSOR_CLICK_EFFECT,
+	DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
 	DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
 	DEFAULT_CURSOR_CLICK_EFFECT_OPACITY,
 	DEFAULT_CURSOR_CLICK_EFFECT_SCALE,
 	DEFAULT_CURSOR_STYLE,
+	normalizeCursorClickEffectColor,
 } from "../types";
 import { computeCursorSwayRotation } from "./cursorSway";
 import { type CursorViewportRect, projectCursorPositionToViewport } from "./cursorViewport";
@@ -92,6 +94,8 @@ export interface CursorRenderConfig {
 	clickBounceDuration: number;
 	/** Click effect graphics rendered around the pointer. */
 	clickEffect: CursorClickEffectStyle;
+	/** Click effect base color. */
+	clickEffectColor: string;
 	/** Click effect size multiplier. */
 	clickEffectScale: number;
 	/** Click effect opacity multiplier. */
@@ -119,6 +123,7 @@ export const DEFAULT_CURSOR_CONFIG: CursorRenderConfig = {
 	clickBounce: 1,
 	clickBounceDuration: DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
 	clickEffect: DEFAULT_CURSOR_CLICK_EFFECT,
+	clickEffectColor: DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
 	clickEffectScale: DEFAULT_CURSOR_CLICK_EFFECT_SCALE,
 	clickEffectOpacity: DEFAULT_CURSOR_CLICK_EFFECT_OPACITY,
 	clickEffectDurationMs: DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
@@ -274,6 +279,53 @@ async function createCursorPackAsset(
 	};
 }
 
+async function createRasterizedCursorAsset(
+	url: string,
+	anchor: { x: number; y: number },
+): Promise<LoadedCursorAsset> {
+	const image = await loadImage(url);
+	const sourceCanvas = document.createElement("canvas");
+	sourceCanvas.width = image.naturalWidth;
+	sourceCanvas.height = image.naturalHeight;
+	const sourceCtx = sourceCanvas.getContext("2d");
+	if (!sourceCtx) {
+		await Assets.load(url);
+		const texture = configureCursorTexture(Texture.from(url));
+		return {
+			texture,
+			image,
+			aspectRatio: image.naturalHeight > 0 ? image.naturalWidth / image.naturalHeight : 1,
+			anchorX: clamp(anchor.x, 0, 1),
+			anchorY: clamp(anchor.y, 0, 1),
+		};
+	}
+
+	sourceCtx.clearRect(0, 0, sourceCanvas.width, sourceCanvas.height);
+	sourceCtx.drawImage(image, 0, 0);
+
+	const trimmed = trimCanvasToAlpha(sourceCanvas, {
+		x: sourceCanvas.width * clamp(anchor.x, 0, 1),
+		y: sourceCanvas.height * clamp(anchor.y, 0, 1),
+	});
+	await Assets.load(trimmed.dataUrl);
+	const trimmedImage = await loadImage(trimmed.dataUrl);
+	const texture = configureCursorTexture(Texture.from(trimmed.dataUrl));
+
+	return {
+		texture,
+		image: trimmedImage,
+		aspectRatio: trimmed.height > 0 ? trimmed.width / trimmed.height : 1,
+		anchorX:
+			trimmed.hotspot && trimmed.width > 0
+				? clamp(trimmed.hotspot.x / trimmed.width, 0, 1)
+				: clamp(anchor.x, 0, 1),
+		anchorY:
+			trimmed.hotspot && trimmed.height > 0
+				? clamp(trimmed.hotspot.y / trimmed.height, 0, 1)
+				: clamp(anchor.y, 0, 1),
+	};
+}
+
 function loadImage(dataUrl: string) {
 	return new Promise<HTMLImageElement>((resolve, reject) => {
 		const image = new Image();
@@ -290,7 +342,7 @@ function clamp(value: number, min: number, max: number) {
 
 function configureCursorTexture(texture: Texture) {
 	texture.source.scaleMode = "linear";
-	texture.source.autoGenerateMipmaps = true;
+	texture.source.autoGenerateMipmaps = false;
 	return texture;
 }
 
@@ -499,22 +551,14 @@ export async function preloadCursorAssets() {
 						}
 
 						try {
-							await Assets.load(sourceAsset.url);
-							const image = await loadImage(sourceAsset.url);
-							const texture = configureCursorTexture(Texture.from(sourceAsset.url));
+							const asset = await createRasterizedCursorAsset(
+								sourceAsset.url,
+								sourceAsset.fallbackAnchor,
+							);
 
 							return [
 								key,
-								{
-									texture,
-									image,
-									aspectRatio:
-										image.naturalHeight > 0
-											? image.naturalWidth / image.naturalHeight
-											: 1,
-									anchorX: clamp(sourceAsset.fallbackAnchor.x, 0, 1),
-									anchorY: clamp(sourceAsset.fallbackAnchor.y, 0, 1),
-								} satisfies LoadedCursorAsset,
+								asset,
 							] as const;
 						} catch (error) {
 							console.warn(
@@ -764,8 +808,7 @@ function findLatestStableCursorType(samples: CursorTelemetryPoint[], timeMs: num
 }
 
 function getCursorViewportScale(viewport: CursorViewportRect) {
-	const renderWidth = viewport.renderWidth ?? viewport.width;
-	return Math.max(MIN_CURSOR_VIEWPORT_SCALE, renderWidth / REFERENCE_WIDTH);
+	return Math.max(MIN_CURSOR_VIEWPORT_SCALE, viewport.width / REFERENCE_WIDTH);
 }
 
 function getCursorSwaySpringConfig(smoothingFactor: number, springTuning: CursorSpringTuning) {
@@ -789,17 +832,9 @@ function getCursorSwaySpringConfig(smoothingFactor: number, springTuning: Cursor
 	};
 }
 
-function getClickEffectColor(interactionType?: CursorTelemetryPoint["interactionType"]) {
-	switch (interactionType) {
-		case "right-click":
-			return 0xf59e0b;
-		case "middle-click":
-			return 0xa855f7;
-		case "double-click":
-			return 0x22c55e;
-		default:
-			return 0x2563eb;
-	}
+function getClickEffectColor(clickEffectColor: string) {
+	const normalized = normalizeCursorClickEffectColor(clickEffectColor);
+	return Number.parseInt(normalized.slice(1), 16);
 }
 
 function getExtensionStyleRippleMetrics(
@@ -827,7 +862,7 @@ function drawClickEffectGraphics(
 	clickProgress: number,
 	effectScale: number,
 	effectOpacity: number,
-	interactionType?: CursorTelemetryPoint["interactionType"],
+	effectColor: string = DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
 ) {
 	graphics.clear();
 	if (effect === "none" || clickProgress <= 0) {
@@ -836,7 +871,7 @@ function drawClickEffectGraphics(
 
 	const reveal = 1 - clickProgress;
 	const alpha = clickProgress * effectOpacity;
-	const color = getClickEffectColor(interactionType);
+	const color = getClickEffectColor(effectColor);
 	const baseRadius = Math.max(12, cursorSize * 0.55 * effectScale);
 	const strokeWidth = Math.max(2, cursorSize * 0.08);
 
@@ -861,17 +896,14 @@ function drawClickEffectGraphics(
 		return;
 	}
 
-	const burstRadius = baseRadius + reveal * cursorSize * 1.15 * effectScale;
-	graphics.circle(px, py, burstRadius * 0.78);
-	graphics.stroke({ width: strokeWidth, color, alpha: alpha * 0.7 });
-	for (let index = 0; index < 8; index += 1) {
-		const angle = (Math.PI * 2 * index) / 8 + reveal * 0.35;
-		const startRadius = burstRadius * 0.95;
-		const endRadius = burstRadius * 1.4;
-		graphics.moveTo(px + Math.cos(angle) * startRadius, py + Math.sin(angle) * startRadius);
-		graphics.lineTo(px + Math.cos(angle) * endRadius, py + Math.sin(angle) * endRadius);
-	}
-	graphics.stroke({ width: Math.max(1.25, strokeWidth * 0.58), color, alpha: alpha * 0.88 });
+	const echoOuterRadius = baseRadius + reveal * cursorSize * 1.22 * effectScale;
+	const echoInnerRadius = Math.max(baseRadius * 0.58, echoOuterRadius * 0.62);
+	graphics.circle(px, py, echoOuterRadius);
+	graphics.stroke({ width: strokeWidth, color, alpha: alpha * 0.72 });
+	graphics.circle(px, py, echoInnerRadius);
+	graphics.stroke({ width: Math.max(1.4, strokeWidth * 0.72), color, alpha: alpha * 0.42 });
+	graphics.circle(px, py, Math.max(3, baseRadius * 0.18));
+	graphics.fill({ color, alpha: alpha * 0.14 });
 }
 
 function drawClickEffectOnCanvas(
@@ -883,7 +915,7 @@ function drawClickEffectOnCanvas(
 	clickProgress: number,
 	effectScale: number,
 	effectOpacity: number,
-	interactionType?: CursorTelemetryPoint["interactionType"],
+	effectColor: string = DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
 ) {
 	if (effect === "none" || clickProgress <= 0) {
 		return;
@@ -891,7 +923,7 @@ function drawClickEffectOnCanvas(
 
 	const reveal = 1 - clickProgress;
 	const alpha = clickProgress * effectOpacity;
-	const color = getClickEffectColor(interactionType);
+	const color = getClickEffectColor(effectColor);
 	const strokeColor = `rgba(${(color >> 16) & 255}, ${(color >> 8) & 255}, ${color & 255}, `;
 	const baseRadius = Math.max(12, cursorSize * 0.55 * effectScale);
 	const strokeWidth = Math.max(2, cursorSize * 0.08);
@@ -929,23 +961,22 @@ function drawClickEffectOnCanvas(
 		return;
 	}
 
-	const burstRadius = baseRadius + reveal * cursorSize * 1.15 * effectScale;
+	const echoOuterRadius = baseRadius + reveal * cursorSize * 1.22 * effectScale;
+	const echoInnerRadius = Math.max(baseRadius * 0.58, echoOuterRadius * 0.62);
 	ctx.lineWidth = strokeWidth;
-	ctx.strokeStyle = `${strokeColor}${(alpha * 0.7).toFixed(3)})`;
+	ctx.strokeStyle = `${strokeColor}${(alpha * 0.72).toFixed(3)})`;
 	ctx.beginPath();
-	ctx.arc(px, py, burstRadius * 0.78, 0, Math.PI * 2);
+	ctx.arc(px, py, echoOuterRadius, 0, Math.PI * 2);
 	ctx.stroke();
-	ctx.lineWidth = Math.max(1.25, strokeWidth * 0.58);
-	ctx.strokeStyle = `${strokeColor}${(alpha * 0.88).toFixed(3)})`;
+	ctx.lineWidth = Math.max(1.4, strokeWidth * 0.72);
+	ctx.strokeStyle = `${strokeColor}${(alpha * 0.42).toFixed(3)})`;
 	ctx.beginPath();
-	for (let index = 0; index < 8; index += 1) {
-		const angle = (Math.PI * 2 * index) / 8 + reveal * 0.35;
-		const startRadius = burstRadius * 0.95;
-		const endRadius = burstRadius * 1.4;
-		ctx.moveTo(px + Math.cos(angle) * startRadius, py + Math.sin(angle) * startRadius);
-		ctx.lineTo(px + Math.cos(angle) * endRadius, py + Math.sin(angle) * endRadius);
-	}
+	ctx.arc(px, py, echoInnerRadius, 0, Math.PI * 2);
 	ctx.stroke();
+	ctx.fillStyle = `${strokeColor}${(alpha * 0.14).toFixed(3)})`;
+	ctx.beginPath();
+	ctx.arc(px, py, Math.max(3, baseRadius * 0.18), 0, Math.PI * 2);
+	ctx.fill();
 	ctx.restore();
 }
 
@@ -973,6 +1004,7 @@ function getCursorVisualState(
 	return {
 		cursorType: findLatestStableCursorType(samples, timeMs),
 		interactionType,
+		clickSample: latestClick && isClickEvent ? latestClick : null,
 		clickBounceProgress,
 		clickProgress:
 			latestClick &&
@@ -1112,6 +1144,7 @@ export class PixiCursorOverlay {
 			initialCustomAsset.anchorY,
 		);
 		this.customCursorShadowSprite.visible = false;
+		this.customCursorShadowSprite.roundPixels = true;
 		this.customCursorShadowSprite.tint = CURSOR_SHADOW_COLOR;
 		this.customCursorShadowSprite.alpha = CURSOR_SHADOW_ALPHA;
 		this.customCursorShadowFilter = new BlurFilter();
@@ -1123,6 +1156,7 @@ export class PixiCursorOverlay {
 		this.customCursorSprite = new Sprite(initialCustomAsset.texture);
 		this.customCursorSprite.anchor.set(initialCustomAsset.anchorX, initialCustomAsset.anchorY);
 		this.customCursorSprite.visible = false;
+		this.customCursorSprite.roundPixels = true;
 		this.cursorShadowSprites = {};
 		this.cursorShadowFilters = {};
 		this.cursorSprites = {};
@@ -1131,6 +1165,7 @@ export class PixiCursorOverlay {
 			const shadowSprite = new Sprite(asset.texture);
 			shadowSprite.anchor.set(asset.anchorX, asset.anchorY);
 			shadowSprite.visible = false;
+			shadowSprite.roundPixels = true;
 			shadowSprite.tint = CURSOR_SHADOW_COLOR;
 			shadowSprite.alpha = CURSOR_SHADOW_ALPHA;
 			const shadowFilter = new BlurFilter();
@@ -1144,6 +1179,7 @@ export class PixiCursorOverlay {
 			const sprite = new Sprite(asset.texture);
 			sprite.anchor.set(asset.anchorX, asset.anchorY);
 			sprite.visible = false;
+			sprite.roundPixels = true;
 			this.cursorSprites[key] = sprite;
 		}
 
@@ -1194,6 +1230,10 @@ export class PixiCursorOverlay {
 
 	setClickEffect(clickEffect: CursorClickEffectStyle) {
 		this.config.clickEffect = clickEffect;
+	}
+
+	setClickEffectColor(clickEffectColor: string) {
+		this.config.clickEffectColor = normalizeCursorClickEffectColor(clickEffectColor);
 	}
 
 	setClickEffectScale(clickEffectScale: number) {
@@ -1313,13 +1353,24 @@ export class PixiCursorOverlay {
 		const px = viewport.x + this.state.x * viewport.width;
 		const py = viewport.y + this.state.y * viewport.height;
 		const h = this.config.dotRadius * getCursorViewportScale(viewport);
-		const { cursorType, interactionType, clickBounceProgress, clickProgress } =
+		const { cursorType, clickSample, clickBounceProgress, clickProgress } =
 			getCursorVisualState(
 				samples,
 				timeMs,
 				this.config.clickBounceDuration,
 				this.config.clickEffectDurationMs,
 			);
+		const projectedClickSample = clickSample
+			? projectCursorPositionToViewport(clickSample, viewport.sourceCrop)
+			: null;
+		const clickEffectPx =
+			projectedClickSample && projectedClickSample.visible
+				? viewport.x + projectedClickSample.cx * viewport.width
+				: px;
+		const clickEffectPy =
+			projectedClickSample && projectedClickSample.visible
+				? viewport.y + projectedClickSample.cy * viewport.height
+				: py;
 		const bounceScale = Math.max(
 			0.72,
 			1 - Math.sin(clickBounceProgress * Math.PI) * (0.08 * this.config.clickBounce),
@@ -1330,13 +1381,13 @@ export class PixiCursorOverlay {
 		drawClickEffectGraphics(
 			this.clickRingGraphics,
 			this.config.clickEffect,
-			px,
-			py,
+			clickEffectPx,
+			clickEffectPy,
 			scaledH,
 			clickProgress,
 			this.config.clickEffectScale,
 			this.config.clickEffectOpacity,
-			interactionType,
+			this.config.clickEffectColor,
 		);
 
 		const spriteKey = (
@@ -1534,13 +1585,24 @@ export function drawCursorOnCanvas(
 	const px = viewport.x + smoothedState.x * viewport.width;
 	const py = viewport.y + smoothedState.y * viewport.height;
 	const h = config.dotRadius * getCursorViewportScale(viewport);
-	const { cursorType, interactionType, clickBounceProgress, clickProgress } =
+	const { cursorType, clickSample, clickBounceProgress, clickProgress } =
 		getCursorVisualState(
 			samples,
 			timeMs,
 			config.clickBounceDuration,
 			config.clickEffectDurationMs,
 		);
+	const projectedClickSample = clickSample
+		? projectCursorPositionToViewport(clickSample, viewport.sourceCrop)
+		: null;
+	const clickEffectPx =
+		projectedClickSample && projectedClickSample.visible
+			? viewport.x + projectedClickSample.cx * viewport.width
+			: px;
+	const clickEffectPy =
+		projectedClickSample && projectedClickSample.visible
+			? viewport.y + projectedClickSample.cy * viewport.height
+			: py;
 	const spriteKey = (
 		cursorType && loadedCursorAssets[cursorType] ? cursorType : "arrow"
 	) as CursorAssetKey;
@@ -1557,13 +1619,13 @@ export function drawCursorOnCanvas(
 	drawClickEffectOnCanvas(
 		ctx,
 		config.clickEffect,
-		px,
-		py,
+		clickEffectPx,
+		clickEffectPy,
 		drawHeight,
 		clickProgress,
 		config.clickEffectScale,
 		config.clickEffectOpacity,
-		interactionType,
+		config.clickEffectColor,
 	);
 
 	ctx.save();

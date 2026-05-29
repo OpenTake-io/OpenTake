@@ -1,8 +1,9 @@
 import {
+	ArrowsInSimple,
+	ArrowsOutSimple,
 	BookmarkSimple,
 	Check,
 	CaretDown as ChevronDown,
-	CaretUp as ChevronUp,
 	ClosedCaptioning,
 	Crop,
 	Cursor,
@@ -188,7 +189,6 @@ import {
 	DEFAULT_CONNECTED_ZOOM_EASING,
 	DEFAULT_CONNECTED_ZOOM_GAP_MS,
 	DEFAULT_CROP_REGION,
-	DEFAULT_CURSOR_CLICK_EFFECT,
 	DEFAULT_CURSOR_STYLE,
 	DEFAULT_FIGURE_DATA,
 	DEFAULT_WEBCAM_OVERLAY,
@@ -226,10 +226,6 @@ import {
 
 type PendingExportSave = {
 	fileName: string;
-	// Exactly one of these is populated. `tempFilePath` is the preferred form
-	// for MP4 exports — the main process holds the finished file on disk, so
-	// "Save Again" just renames it instead of round-tripping through the
-	// renderer's ArrayBuffer heap.
 	arrayBuffer?: ArrayBuffer;
 	tempFilePath?: string;
 };
@@ -472,6 +468,9 @@ export default function VideoEditor() {
 	const [cursorClickEffect, setCursorClickEffect] = useState<CursorClickEffectStyle>(
 		initialEditorPreferences.cursorClickEffect,
 	);
+	const [cursorClickEffectColor, setCursorClickEffectColor] = useState(
+		initialEditorPreferences.cursorClickEffectColor,
+	);
 	const [cursorClickEffectScale, setCursorClickEffectScale] = useState(
 		initialEditorPreferences.cursorClickEffectScale,
 	);
@@ -640,6 +639,7 @@ export default function VideoEditor() {
 	const smokeExportReadyStateRef = useRef<Record<string, unknown>>({});
 	const [historyVersion, setHistoryVersion] = useState(0);
 	const timelineRef = useRef<TimelineEditorHandle>(null);
+	const previewShellRef = useRef<HTMLDivElement | null>(null);
 
 	function formatTime(seconds: number) {
 		if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return "0:00";
@@ -648,7 +648,68 @@ export default function VideoEditor() {
 		return `${mins}:${secs.toString().padStart(2, "0")}`;
 	}
 
-	const [timelineCollapsed, setTimelineCollapsed] = useState(false);
+	const [isPreviewPlayerOpen, setIsPreviewPlayerOpen] = useState(false);
+
+	const handleTogglePreviewFullscreen = useCallback(async () => {
+		if (typeof document === "undefined") {
+			setIsPreviewPlayerOpen((current) => !current);
+			return;
+		}
+
+		const previewShell = previewShellRef.current;
+		if (!previewShell?.requestFullscreen) {
+			setIsPreviewPlayerOpen((current) => !current);
+			return;
+		}
+
+		if (document.fullscreenElement === previewShell) {
+			try {
+				await document.exitFullscreen();
+			} catch (error) {
+				console.warn("[VideoEditor] Failed to exit preview fullscreen", error);
+			}
+			setIsPreviewPlayerOpen(false);
+			return;
+		}
+
+		try {
+			await previewShell.requestFullscreen();
+			setIsPreviewPlayerOpen(true);
+		} catch (error) {
+			console.warn("[VideoEditor] Failed to enter preview fullscreen", error);
+			setIsPreviewPlayerOpen(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape" && isPreviewPlayerOpen) {
+				event.preventDefault();
+				setIsPreviewPlayerOpen(false);
+			}
+		};
+
+		window.addEventListener("keydown", handleKeyDown);
+		return () => {
+			window.removeEventListener("keydown", handleKeyDown);
+		};
+	}, [isPreviewPlayerOpen]);
+
+	useEffect(() => {
+		if (typeof document === "undefined") {
+			return;
+		}
+
+		const handleFullscreenChange = () => {
+			setIsPreviewPlayerOpen(document.fullscreenElement === previewShellRef.current);
+		};
+
+		document.addEventListener("fullscreenchange", handleFullscreenChange);
+
+		return () => {
+			document.removeEventListener("fullscreenchange", handleFullscreenChange);
+		};
+	}, []);
 
 	useEffect(() => {
 		void window.electronAPI?.getPlatform?.()?.then((platform) => {
@@ -714,6 +775,7 @@ export default function VideoEditor() {
 			cameraSpringMassMultiplier,
 			cursorMotionBlur,
 			cursorClickEffect,
+			cursorClickEffectColor,
 			cursorClickEffectScale,
 			cursorClickEffectOpacity,
 			cursorClickEffectDurationMs,
@@ -769,6 +831,7 @@ export default function VideoEditor() {
 			cameraSpringMassMultiplier,
 			cursorMotionBlur,
 			cursorClickEffect,
+			cursorClickEffectColor,
 			cursorClickEffectScale,
 			cursorClickEffectOpacity,
 			cursorClickEffectDurationMs,
@@ -865,6 +928,7 @@ export default function VideoEditor() {
 		setCameraSpringMassMultiplier(snapshot.cameraSpringMassMultiplier);
 		setCursorMotionBlur(snapshot.cursorMotionBlur);
 		setCursorClickEffect(snapshot.cursorClickEffect);
+		setCursorClickEffectColor(snapshot.cursorClickEffectColor);
 		setCursorClickEffectScale(snapshot.cursorClickEffectScale);
 		setCursorClickEffectOpacity(snapshot.cursorClickEffectOpacity);
 		setCursorClickEffectDurationMs(snapshot.cursorClickEffectDurationMs);
@@ -1141,6 +1205,7 @@ export default function VideoEditor() {
 					zoomClassicMode,
 					cursorMotionBlur,
 					cursorClickEffect,
+					cursorClickEffectColor,
 					cursorClickEffectScale,
 					cursorClickEffectOpacity,
 					cursorClickEffectDurationMs,
@@ -1614,6 +1679,8 @@ export default function VideoEditor() {
 				zoomSmoothness: number;
 				zoomClassicMode: boolean;
 				cursorMotionBlur: number;
+				cursorClickEffect: CursorClickEffectStyle;
+				cursorClickEffectColor: string;
 				cursorClickEffectScale: number;
 				cursorClickEffectOpacity: number;
 				cursorClickEffectDurationMs: number;
@@ -1721,6 +1788,7 @@ export default function VideoEditor() {
 				zoomClassicMode,
 				cursorMotionBlur,
 				cursorClickEffect,
+				cursorClickEffectColor,
 				cursorClickEffectScale,
 				cursorClickEffectOpacity,
 				cursorClickEffectDurationMs,
@@ -1787,6 +1855,7 @@ export default function VideoEditor() {
 			zoomClassicMode,
 			cursorMotionBlur,
 			cursorClickEffect,
+			cursorClickEffectColor,
 			cursorClickEffectScale,
 			cursorClickEffectOpacity,
 			cursorClickEffectDurationMs,
@@ -1972,6 +2041,7 @@ export default function VideoEditor() {
 			setCameraSpringDampingMultiplier(normalizedEditor.cameraSpringDampingMultiplier);
 			setCameraSpringMassMultiplier(normalizedEditor.cameraSpringMassMultiplier);
 			setCursorClickEffect(normalizedEditor.cursorClickEffect);
+			setCursorClickEffectColor(normalizedEditor.cursorClickEffectColor);
 			setCursorClickEffectScale(normalizedEditor.cursorClickEffectScale);
 			setCursorClickEffectOpacity(normalizedEditor.cursorClickEffectOpacity);
 			setCursorClickEffectDurationMs(normalizedEditor.cursorClickEffectDurationMs);
@@ -2476,6 +2546,7 @@ export default function VideoEditor() {
 			cameraSpringMassMultiplier,
 			cursorMotionBlur,
 			cursorClickEffect,
+			cursorClickEffectColor,
 			cursorClickEffectScale,
 			cursorClickEffectOpacity,
 			cursorClickEffectDurationMs,
@@ -3293,17 +3364,19 @@ export default function VideoEditor() {
 		},
 	});
 
+	const getActivePlayback = useCallback(() => videoPlaybackRef.current, []);
+
 	const startPlayback = useCallback(() => {
-		const playback = videoPlaybackRef.current;
+		const playback = getActivePlayback();
 		const video = playback?.video;
 		if (!playback || !video) return;
 
 		audio.playSourceAudioPreview();
 		playback.play().catch((err) => console.error("Video play failed:", err));
-	}, [audio.playSourceAudioPreview]);
+	}, [audio.playSourceAudioPreview, getActivePlayback]);
 
 	function togglePlayPause() {
-		const playback = videoPlaybackRef.current;
+		const playback = getActivePlayback();
 		const video = playback?.video;
 		if (!playback || !video) return;
 
@@ -3320,7 +3393,7 @@ export default function VideoEditor() {
 
 	const handleSeek = useCallback(
 		(time: number, options: { pause?: boolean } = {}) => {
-			const playback = videoPlaybackRef.current;
+			const playback = getActivePlayback();
 			const video = playback?.video;
 			if (!video) return;
 
@@ -3330,7 +3403,7 @@ export default function VideoEditor() {
 
 			video.currentTime = mapTimelineTimeToSourceTime(time * 1000) / 1000;
 		},
-		[mapTimelineTimeToSourceTime],
+		[getActivePlayback, mapTimelineTimeToSourceTime],
 	);
 
 	const handleTimelineSeek = useCallback(
@@ -3339,6 +3412,22 @@ export default function VideoEditor() {
 		},
 		[handleSeek],
 	);
+
+	const handlePreviewSkipBack = useCallback(() => {
+		const currentMs = timelinePlayheadTime * 1000;
+		const keyframes = timelineRef.current?.keyframes ?? [];
+		const previous = [...keyframes].reverse().find((keyframe) => keyframe.time < currentMs - 50);
+		handleSeek(previous ? previous.time / 1000 : Math.max(0, timelinePlayheadTime - 5));
+	}, [handleSeek, timelinePlayheadTime]);
+
+	const handlePreviewSkipForward = useCallback(() => {
+		const currentMs = timelinePlayheadTime * 1000;
+		const keyframes = timelineRef.current?.keyframes ?? [];
+		const next = keyframes.find((keyframe) => keyframe.time > currentMs + 50);
+		handleSeek(
+			next ? next.time / 1000 : Math.min(timelineDuration, timelinePlayheadTime + 5),
+		);
+	}, [handleSeek, timelineDuration, timelinePlayheadTime]);
 
 	const handleSelectZoom = useCallback((id: string | null) => {
 		setSelectedZoomId(id);
@@ -4215,6 +4304,7 @@ export default function VideoEditor() {
 						zoomClassicMode,
 						cursorMotionBlur,
 						cursorClickEffect,
+						cursorClickEffectColor,
 						cursorClickEffectScale,
 						cursorClickEffectOpacity,
 						cursorClickEffectDurationMs,
@@ -4397,6 +4487,7 @@ export default function VideoEditor() {
 						zoomClassicMode,
 						cursorMotionBlur,
 						cursorClickEffect,
+						cursorClickEffectColor,
 						cursorClickEffectScale,
 						cursorClickEffectOpacity,
 						cursorClickEffectDurationMs,
@@ -5039,6 +5130,100 @@ export default function VideoEditor() {
 								percent: Math.round(exportProgress.percentage),
 							})
 		: t("editor.exportStatus.preparing", "Preparing export...");
+	const previewAspectRatioValue = getAspectRatioValue(
+		aspectRatio,
+		(() => {
+			const previewVideo = videoPlaybackRef.current?.video;
+			if (previewVideo && previewVideo.videoHeight > 0) {
+				return previewVideo.videoWidth / previewVideo.videoHeight;
+			}
+			return 16 / 9;
+		})(),
+	);
+	const renderPreviewPlayback = (
+		playbackRef: typeof videoPlaybackRef | undefined,
+		suspendRendering: boolean,
+		keySuffix: "inline" | "fullscreen",
+	) => (
+		<VideoPlayback
+			key={`${videoPath || "no-video"}:${previewVersion}:${keySuffix}`}
+			aspectRatio={aspectRatio}
+			ref={playbackRef}
+			videoPath={videoPath || ""}
+			onDurationChange={setDuration}
+			onPreviewReadyChange={setIsPreviewReady}
+			onTimeUpdate={setCurrentTime}
+			currentTime={currentTime}
+			onPlayStateChange={setIsPlaying}
+			onError={setError}
+			wallpaper={wallpaper}
+			zoomRegions={effectiveZoomRegions}
+			selectedZoomId={selectedZoomId}
+			onSelectZoom={handleSelectZoom}
+			onZoomFocusChange={handleZoomFocusChange}
+			isPlaying={isPlaying}
+			showShadow={shadowIntensity > 0}
+			shadowIntensity={shadowIntensity}
+			backgroundBlur={backgroundBlur}
+			connectZooms={connectZooms}
+			zoomInDurationMs={zoomInDurationMs}
+			zoomInOverlapMs={zoomInOverlapMs}
+			zoomOutDurationMs={zoomOutDurationMs}
+			connectedZoomGapMs={connectedZoomGapMs}
+			connectedZoomDurationMs={connectedZoomDurationMs}
+			zoomInEasing={zoomInEasing}
+			zoomOutEasing={zoomOutEasing}
+			connectedZoomEasing={connectedZoomEasing}
+			borderRadius={isPreviewPlayerOpen ? 0 : borderRadius}
+			padding={padding}
+			frame={frame}
+			cropRegion={cropRegion}
+			webcam={webcam}
+			webcamVideoPath={webcam.sourcePath ? resolvedWebcamVideoUrl : null}
+			trimRegions={trimRegions}
+			speedRegions={effectiveSpeedRegions}
+			annotationRegions={annotationRegions}
+			autoCaptions={autoCaptions}
+			autoCaptionSettings={autoCaptionSettings}
+			selectedAnnotationId={selectedAnnotationId}
+			onSelectAnnotation={handleSelectAnnotation}
+			onAnnotationPositionChange={handleAnnotationPositionChange}
+			onAnnotationSizeChange={handleAnnotationSizeChange}
+			cursorTelemetry={effectiveCursorTelemetry}
+			showCursor={effectiveShowCursor}
+			cursorStyle={cursorStyle}
+			cursorSize={cursorSize}
+			cursorSmoothing={cursorSmoothing}
+			cursorSpringStiffnessMultiplier={cursorSpringStiffnessMultiplier}
+			cursorSpringDampingMultiplier={cursorSpringDampingMultiplier}
+			cursorSpringMassMultiplier={cursorSpringMassMultiplier}
+			cameraSpringStiffnessMultiplier={cameraSpringStiffnessMultiplier}
+			cameraSpringDampingMultiplier={cameraSpringDampingMultiplier}
+			cameraSpringMassMultiplier={cameraSpringMassMultiplier}
+			zoomSmoothness={zoomSmoothness}
+			zoomClassicMode={zoomClassicMode}
+			zoomMotionBlur={zoomMotionBlur}
+			zoomMotionBlurTuning={zoomMotionBlurTuning}
+			cursorMotionBlur={cursorMotionBlur}
+			cursorClickEffect={cursorClickEffect}
+			cursorClickEffectColor={cursorClickEffectColor}
+			cursorClickEffectScale={cursorClickEffectScale}
+			cursorClickEffectOpacity={cursorClickEffectOpacity}
+			cursorClickEffectDurationMs={cursorClickEffectDurationMs}
+			cursorClickBounce={cursorClickBounce}
+			cursorClickBounceDuration={cursorClickBounceDuration}
+			cursorSway={cursorSway}
+			volume={
+				audio.shouldMutePreviewVideo || audio.isCurrentClipMuted
+					? 0
+					: Math.max(
+							0,
+							Math.min(1, previewVolume * audio.embeddedSourcePreviewGain),
+						)
+			}
+			suspendRendering={suspendRendering}
+		/>
+	);
 
 	const projectBrowser = (
 		<ProjectBrowserDialog
@@ -5797,7 +5982,9 @@ export default function VideoEditor() {
 								cursorMotionBlur={cursorMotionBlur}
 								onCursorMotionBlurChange={setCursorMotionBlur}
 								cursorClickEffect={cursorClickEffect}
+								cursorClickEffectColor={cursorClickEffectColor}
 								onCursorClickEffectChange={setCursorClickEffect}
+								onCursorClickEffectColorChange={setCursorClickEffectColor}
 								cursorClickEffectScale={cursorClickEffectScale}
 								onCursorClickEffectScaleChange={setCursorClickEffectScale}
 								cursorClickEffectOpacity={cursorClickEffectOpacity}
@@ -5920,136 +6107,115 @@ export default function VideoEditor() {
 								>
 									<div className="flex min-w-0 flex-1 items-center justify-center px-1">
 										<div
-											className="relative overflow-hidden rounded-[30px]"
+											ref={previewShellRef}
+											className={cn(
+												"relative",
+												isPreviewPlayerOpen &&
+													"flex h-full w-full items-center justify-center",
+											)}
 											style={{
-												width: "auto",
-												height: "100%",
-												aspectRatio: getAspectRatioValue(
-													aspectRatio,
-													(() => {
-														const previewVideo =
-															videoPlaybackRef.current?.video;
-														if (
-															previewVideo &&
-															previewVideo.videoHeight > 0
-														) {
-															return (
-																previewVideo.videoWidth /
-																previewVideo.videoHeight
-															);
-														}
-														return 16 / 9;
-													})(),
-												),
-												maxWidth: "100%",
-												margin: "0 auto",
+												width: isPreviewPlayerOpen ? "100vw" : "auto",
+												height: isPreviewPlayerOpen ? "100vh" : "100%",
+												maxWidth: isPreviewPlayerOpen ? "100vw" : "100%",
+												maxHeight: isPreviewPlayerOpen ? "100vh" : "100%",
+												margin: isPreviewPlayerOpen ? "0" : "0 auto",
 												boxSizing: "border-box",
 											}}
 										>
-											<VideoPlayback
-												key={`${videoPath || "no-video"}:${previewVersion}`}
-												aspectRatio={aspectRatio}
-												ref={videoPlaybackRef}
-												videoPath={videoPath || ""}
-												onDurationChange={setDuration}
-												onPreviewReadyChange={setIsPreviewReady}
-												onTimeUpdate={setCurrentTime}
-												currentTime={currentTime}
-												onPlayStateChange={setIsPlaying}
-												onError={setError}
-												wallpaper={wallpaper}
-												zoomRegions={effectiveZoomRegions}
-												selectedZoomId={selectedZoomId}
-												onSelectZoom={handleSelectZoom}
-												onZoomFocusChange={handleZoomFocusChange}
-												isPlaying={isPlaying}
-												showShadow={shadowIntensity > 0}
-												shadowIntensity={shadowIntensity}
-												backgroundBlur={backgroundBlur}
-												connectZooms={connectZooms}
-												zoomInDurationMs={zoomInDurationMs}
-												zoomInOverlapMs={zoomInOverlapMs}
-												zoomOutDurationMs={zoomOutDurationMs}
-												connectedZoomGapMs={connectedZoomGapMs}
-												connectedZoomDurationMs={connectedZoomDurationMs}
-												zoomInEasing={zoomInEasing}
-												zoomOutEasing={zoomOutEasing}
-												connectedZoomEasing={connectedZoomEasing}
-												borderRadius={borderRadius}
-												padding={padding}
-												frame={frame}
-												cropRegion={cropRegion}
-												webcam={webcam}
-												webcamVideoPath={
-													webcam.sourcePath
-														? resolvedWebcamVideoUrl
-														: null
-												}
-												trimRegions={trimRegions}
-												speedRegions={effectiveSpeedRegions}
-												annotationRegions={annotationRegions}
-												autoCaptions={autoCaptions}
-												autoCaptionSettings={autoCaptionSettings}
-												selectedAnnotationId={selectedAnnotationId}
-												onSelectAnnotation={handleSelectAnnotation}
-												onAnnotationPositionChange={
-													handleAnnotationPositionChange
-												}
-												onAnnotationSizeChange={handleAnnotationSizeChange}
-												cursorTelemetry={effectiveCursorTelemetry}
-												showCursor={effectiveShowCursor}
-												cursorStyle={cursorStyle}
-												cursorSize={cursorSize}
-												cursorSmoothing={cursorSmoothing}
-												cursorSpringStiffnessMultiplier={
-													cursorSpringStiffnessMultiplier
-												}
-												cursorSpringDampingMultiplier={
-													cursorSpringDampingMultiplier
-												}
-												cursorSpringMassMultiplier={
-													cursorSpringMassMultiplier
-												}
-												cameraSpringStiffnessMultiplier={
-													cameraSpringStiffnessMultiplier
-												}
-												cameraSpringDampingMultiplier={
-													cameraSpringDampingMultiplier
-												}
-												cameraSpringMassMultiplier={
-													cameraSpringMassMultiplier
-												}
-												zoomSmoothness={zoomSmoothness}
-												zoomClassicMode={zoomClassicMode}
-												zoomMotionBlur={zoomMotionBlur}
-												zoomMotionBlurTuning={zoomMotionBlurTuning}
-												cursorMotionBlur={cursorMotionBlur}
-												cursorClickEffect={cursorClickEffect}
-												cursorClickEffectScale={cursorClickEffectScale}
-												cursorClickEffectOpacity={cursorClickEffectOpacity}
-												cursorClickEffectDurationMs={
-													cursorClickEffectDurationMs
-												}
-												cursorClickBounce={cursorClickBounce}
-												cursorClickBounceDuration={
-													cursorClickBounceDuration
-												}
-												cursorSway={cursorSway}
-												volume={
-													audio.shouldMutePreviewVideo ||
-													audio.isCurrentClipMuted
-														? 0
-														: Math.max(
-																0,
-																Math.min(
-																	1,
-																	previewVolume *
-																		audio.embeddedSourcePreviewGain,
-																),
-															)
-												}
-												suspendRendering={shouldSuspendPreviewRendering}
-											/>
+											<div
+												className="relative"
+												style={{
+													width: isPreviewPlayerOpen ? "100%" : "auto",
+													height: isPreviewPlayerOpen ? "auto" : "100%",
+													aspectRatio: previewAspectRatioValue,
+													maxWidth: isPreviewPlayerOpen
+														? `min(100vw, calc(100vh * ${previewAspectRatioValue}))`
+														: "100%",
+													maxHeight: isPreviewPlayerOpen ? "100vh" : "100%",
+													margin: isPreviewPlayerOpen ? "0 auto" : "0",
+												}}
+											>
+												{renderPreviewPlayback(
+													videoPlaybackRef,
+													shouldSuspendPreviewRendering,
+													"inline",
+												)}
+											</div>
+											{isPreviewPlayerOpen ? (
+												<div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-6 pb-6">
+													<div className="pointer-events-auto flex w-full max-w-5xl items-center gap-3 rounded-[20px] border border-white/10 bg-black/72 px-4 py-3 text-white shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+														<Button
+															variant="ghost"
+															size="icon"
+															onClick={() => void handleTogglePreviewFullscreen()}
+															className="h-10 w-10 rounded-full text-white/82 transition-colors hover:bg-white/10 hover:text-white"
+															title={t("editor.preview.exitFullscreen", "Exit fullscreen preview")}
+														>
+															<ArrowsInSimple className="h-4 w-4" />
+														</Button>
+														<Button
+															variant="ghost"
+															size="icon"
+															onClick={handlePreviewSkipBack}
+															className="h-10 w-10 rounded-full text-white/82 transition-colors hover:bg-white/10 hover:text-white"
+															title={t("editor.playback.skipBack")}
+														>
+															<SkipBack className="h-4 w-4" weight="fill" />
+														</Button>
+														<Button
+															variant="ghost"
+															size="icon"
+															onClick={togglePlayPause}
+															className="h-11 w-11 rounded-full border border-white/12 bg-white/10 text-white transition-colors hover:bg-white/18"
+															title={isPlaying ? "Pause" : "Play"}
+														>
+															{isPlaying ? (
+																<Pause className="h-4 w-4" weight="fill" />
+															) : (
+																<Play className="h-4 w-4" weight="fill" />
+															)}
+														</Button>
+														<Button
+															variant="ghost"
+															size="icon"
+															onClick={handlePreviewSkipForward}
+															className="h-10 w-10 rounded-full text-white/82 transition-colors hover:bg-white/10 hover:text-white"
+															title={t("editor.playback.skipForward")}
+														>
+															<SkipForward className="h-4 w-4" weight="fill" />
+														</Button>
+														<span className="w-12 text-right text-xs font-medium tabular-nums text-white/78">
+															{formatTime(timelinePlayheadTime)}
+														</span>
+														<input
+															type="range"
+															min="0"
+															max={Math.max(0.01, timelineDuration)}
+															step="0.01"
+															value={Math.min(timelinePlayheadTime, Math.max(0.01, timelineDuration))}
+															onChange={(event) => handleSeek(Number(event.target.value))}
+															className="h-2 flex-1 cursor-pointer accent-white"
+														/>
+														<span className="w-12 text-xs font-medium tabular-nums text-white/58">
+															{formatTime(timelineDuration)}
+														</span>
+														<button
+															type="button"
+															className="text-white/82 transition-colors hover:text-white"
+															title={t("editor.playback.muteUnmute")}
+															onClick={() => setPreviewVolume(previewVolume <= 0.001 ? 1 : 0)}
+														>
+															{previewVolume <= 0.001 ? (
+																<VolumeX className="h-4 w-4" />
+															) : previewVolume < 0.5 ? (
+																<Volume1 className="h-4 w-4" />
+															) : (
+																<Volume2 className="h-4 w-4" />
+															)}
+														</button>
+													</div>
+												</div>
+											) : null}
 										</div>
 									</div>
 								</div>
@@ -6152,18 +6318,7 @@ export default function VideoEditor() {
 										size="icon"
 										className="h-7 w-7 rounded-full text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
 										title={t("editor.playback.skipBack")}
-										onClick={() => {
-											const currentMs = timelinePlayheadTime * 1000;
-											const kfs = timelineRef.current?.keyframes ?? [];
-											const prev = [...kfs]
-												.reverse()
-												.find((k) => k.time < currentMs - 50);
-											handleSeek(
-												prev
-													? prev.time / 1000
-													: Math.max(0, timelinePlayheadTime - 5),
-											);
-										}}
+										onClick={handlePreviewSkipBack}
 									>
 										<SkipBack className="w-3.5 h-3.5" weight="fill" />
 									</Button>
@@ -6185,19 +6340,7 @@ export default function VideoEditor() {
 										size="icon"
 										className="h-7 w-7 rounded-full text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
 										title={t("editor.playback.skipForward")}
-										onClick={() => {
-											const currentMs = timelinePlayheadTime * 1000;
-											const kfs = timelineRef.current?.keyframes ?? [];
-											const next = kfs.find((k) => k.time > currentMs + 50);
-											handleSeek(
-												next
-													? next.time / 1000
-													: Math.min(
-															timelineDuration,
-															timelinePlayheadTime + 5,
-														),
-											);
-										}}
+										onClick={handlePreviewSkipForward}
 									>
 										<SkipForward className="w-3.5 h-3.5" weight="fill" />
 									</Button>
@@ -6212,19 +6355,17 @@ export default function VideoEditor() {
 									variant="ghost"
 									size="icon"
 									title={
-										timelineCollapsed
-											? t("editor.timeline.expand")
-											: t("editor.timeline.collapse")
+										isPreviewPlayerOpen
+											? t("editor.preview.exitFullscreen", "Exit fullscreen preview")
+											: t("editor.preview.enterFullscreen", "Open preview player")
 									}
 									className="h-7 w-7 rounded-full text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
-									onClick={() => {
-										setTimelineCollapsed((p) => !p);
-									}}
+									onClick={() => void handleTogglePreviewFullscreen()}
 								>
-									{timelineCollapsed ? (
-										<ChevronUp className="w-3.5 h-3.5" />
+									{isPreviewPlayerOpen ? (
+										<ArrowsInSimple className="w-3.5 h-3.5" />
 									) : (
-										<ChevronDown className="w-3.5 h-3.5" />
+										<ArrowsOutSimple className="w-3.5 h-3.5" />
 									)}
 								</Button>
 								<div className="flex items-center gap-1.5">
@@ -6281,8 +6422,8 @@ export default function VideoEditor() {
 				<div
 					className="flex-shrink-0 flex flex-col"
 					style={{
-						height: timelineCollapsed ? undefined : "15%",
-						minHeight: timelineCollapsed ? 0 : 160,
+						height: "15%",
+						minHeight: 160,
 					}}
 				>
 					<TimelineEditor
