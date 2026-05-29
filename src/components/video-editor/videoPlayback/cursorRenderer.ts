@@ -889,9 +889,10 @@ function drawClickEffectGraphics(
 
 	if (effect === "spotlight") {
 		const glowRadius = baseRadius + reveal * cursorSize * effectScale;
+		const innerRadius = Math.max(baseRadius * 0.72, glowRadius * 0.76);
 		graphics.circle(px, py, glowRadius);
-		graphics.fill({ color, alpha: alpha * 0.16 });
-		graphics.circle(px, py, glowRadius * 0.78);
+		graphics.stroke({ width: Math.max(1.25, strokeWidth * 0.68), color, alpha: alpha * 0.28 });
+		graphics.circle(px, py, innerRadius);
 		graphics.stroke({ width: Math.max(1.5, strokeWidth * 0.75), color, alpha: alpha * 0.5 });
 		return;
 	}
@@ -948,14 +949,16 @@ function drawClickEffectOnCanvas(
 
 	if (effect === "spotlight") {
 		const glowRadius = baseRadius + reveal * cursorSize * effectScale;
-		ctx.fillStyle = `${strokeColor}${(alpha * 0.16).toFixed(3)})`;
+		const innerRadius = Math.max(baseRadius * 0.72, glowRadius * 0.76);
+		ctx.lineWidth = Math.max(1.25, strokeWidth * 0.68);
+		ctx.strokeStyle = `${strokeColor}${(alpha * 0.28).toFixed(3)})`;
 		ctx.beginPath();
 		ctx.arc(px, py, glowRadius, 0, Math.PI * 2);
-		ctx.fill();
+		ctx.stroke();
 		ctx.lineWidth = Math.max(1.5, strokeWidth * 0.75);
 		ctx.strokeStyle = `${strokeColor}${(alpha * 0.5).toFixed(3)})`;
 		ctx.beginPath();
-		ctx.arc(px, py, glowRadius * 0.78, 0, Math.PI * 2);
+		ctx.arc(px, py, innerRadius, 0, Math.PI * 2);
 		ctx.stroke();
 		ctx.restore();
 		return;
