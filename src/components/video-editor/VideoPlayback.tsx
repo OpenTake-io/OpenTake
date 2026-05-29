@@ -475,6 +475,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		ref,
 	) => {
 		const videoRef = useRef<HTMLVideoElement | null>(null);
+		const previewFrameRef = useRef<HTMLDivElement | null>(null);
 		const containerRef = useRef<HTMLDivElement | null>(null);
 		const appRef = useRef<Application | null>(null);
 		const videoSpriteRef = useRef<Sprite | null>(null);
@@ -1730,6 +1731,53 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 		}, [pixiReady, videoReady, layoutVideoContent, cropRegion]);
 
 		useEffect(() => {
+			const previewFrame = previewFrameRef.current;
+			if (!previewFrame) {
+				return;
+			}
+			let frameId: number | null = null;
+
+			const applyPreviewFrameSquircle = () => {
+				const width = previewFrame.offsetWidth;
+				const height = previewFrame.offsetHeight;
+				if (width <= 0 || height <= 0) {
+					return;
+				}
+
+				const squirclePath = getSquircleSvgPath({
+					x: 0,
+					y: 0,
+					width,
+					height,
+					radius: 12,
+				});
+				previewFrame.style.clipPath = `path('${squirclePath}')`;
+				previewFrame.style.setProperty("-webkit-clip-path", `path('${squirclePath}')`);
+			};
+
+			applyPreviewFrameSquircle();
+
+			if (typeof ResizeObserver === "undefined") {
+				return;
+			}
+
+			const observer = new ResizeObserver(() => {
+				if (frameId !== null) {
+					cancelAnimationFrame(frameId);
+				}
+				frameId = requestAnimationFrame(applyPreviewFrameSquircle);
+			});
+
+			observer.observe(previewFrame);
+			return () => {
+				if (frameId !== null) {
+					cancelAnimationFrame(frameId);
+				}
+				observer.disconnect();
+			};
+		}, []);
+
+		useEffect(() => {
 			if (!pixiReady || !videoReady) return;
 			const container = containerRef.current;
 			if (!container) return;
@@ -2782,11 +2830,12 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 
 		return (
 			<div
+				ref={previewFrameRef}
 				className="relative overflow-hidden"
 				style={{
 					width: "100%",
 					aspectRatio: formatAspectRatioForCSS(aspectRatio, nativeAspectRatio),
-					borderRadius: `${Math.max(0, borderRadius)}px`,
+					borderRadius: "12px",
 				}}
 			>
 				{/* Background layer */}
