@@ -3,6 +3,8 @@ import { drawSquircleOnGraphics } from "@/lib/geometry/squircle";
 import type { CropRegion, Padding } from "../types";
 
 export const PADDING_SCALE_FACTOR = 0.2;
+export const BASE_PREVIEW_WIDTH = 1920;
+export const BASE_PREVIEW_HEIGHT = 1080;
 
 export function isZeroPadding(padding: Padding | number): boolean {
 	if (typeof padding === "number") {
@@ -196,12 +198,13 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
 	videoSprite.position.set(layout.spriteX, layout.spriteY);
 
 	maskGraphics.clear();
+	const canvasScaleFactor = Math.min(width / BASE_PREVIEW_WIDTH, height / BASE_PREVIEW_HEIGHT);
 	drawSquircleOnGraphics(maskGraphics, {
 		x: layout.centerOffsetX,
 		y: layout.centerOffsetY,
 		width: layout.croppedDisplayWidth,
 		height: layout.croppedDisplayHeight,
-		radius: borderRadius,
+		radius: Math.max(0, borderRadius * canvasScaleFactor),
 	});
 	maskGraphics.fill({ color: 0xffffff });
 

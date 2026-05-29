@@ -40,6 +40,7 @@ type PersistedEditorControls = Pick<
 	| "cameraSpringMassMultiplier"
 	| "cursorMotionBlur"
 	| "cursorClickEffect"
+	| "cursorClickEffectColor"
 	| "cursorClickEffectScale"
 	| "cursorClickEffectOpacity"
 	| "cursorClickEffectDurationMs"
@@ -125,6 +126,7 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
 	cameraSpringMassMultiplier: DEFAULT_EDITOR_CONTROLS.cameraSpringMassMultiplier,
 	cursorMotionBlur: DEFAULT_EDITOR_CONTROLS.cursorMotionBlur,
 	cursorClickEffect: DEFAULT_EDITOR_CONTROLS.cursorClickEffect,
+	cursorClickEffectColor: DEFAULT_EDITOR_CONTROLS.cursorClickEffectColor,
 	cursorClickEffectScale: DEFAULT_EDITOR_CONTROLS.cursorClickEffectScale,
 	cursorClickEffectOpacity: DEFAULT_EDITOR_CONTROLS.cursorClickEffectOpacity,
 	cursorClickEffectDurationMs: DEFAULT_EDITOR_CONTROLS.cursorClickEffectDurationMs,
@@ -314,6 +316,8 @@ function normalizeEditorControls(
 			sanitizedRaw.cameraSpringMassMultiplier ?? fallback.cameraSpringMassMultiplier,
 		cursorMotionBlur: sanitizedRaw.cursorMotionBlur ?? fallback.cursorMotionBlur,
 		cursorClickEffect: sanitizedRaw.cursorClickEffect ?? fallback.cursorClickEffect,
+		cursorClickEffectColor:
+			sanitizedRaw.cursorClickEffectColor ?? fallback.cursorClickEffectColor,
 		cursorClickEffectScale:
 			sanitizedRaw.cursorClickEffectScale ?? fallback.cursorClickEffectScale,
 		cursorClickEffectOpacity:
@@ -382,6 +386,7 @@ function normalizeEditorControls(
 		cameraSpringMassMultiplier: normalized.cameraSpringMassMultiplier,
 		cursorMotionBlur: normalized.cursorMotionBlur,
 		cursorClickEffect: normalized.cursorClickEffect,
+		cursorClickEffectColor: normalized.cursorClickEffectColor,
 		cursorClickEffectScale: normalized.cursorClickEffectScale,
 		cursorClickEffectOpacity: normalized.cursorClickEffectOpacity,
 		cursorClickEffectDurationMs: normalized.cursorClickEffectDurationMs,

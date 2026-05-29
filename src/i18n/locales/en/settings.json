@@ -102,6 +102,7 @@
 			"advanced": "Advanced",
 			"advancedShow": "Show advanced click effect controls",
 			"advancedHide": "Hide advanced click effect controls",
+			"color": "Effect Color",
 			"size": "Effect Size",
 			"opacity": "Effect Opacity",
 			"duration": "Effect Duration",
