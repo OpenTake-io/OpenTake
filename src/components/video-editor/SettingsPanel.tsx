@@ -78,6 +78,7 @@ import {
 	DEFAULT_CURSOR_CLICK_BOUNCE,
 	DEFAULT_CURSOR_CLICK_BOUNCE_DURATION,
 	DEFAULT_CURSOR_CLICK_EFFECT,
+	DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
 	DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
 	DEFAULT_CURSOR_CLICK_EFFECT_OPACITY,
 	DEFAULT_CURSOR_CLICK_EFFECT_SCALE,
@@ -158,9 +159,32 @@ const CAPTION_ANIMATION_OPTIONS: Array<{ value: AutoCaptionAnimation; label: str
 	{ value: "pop", label: "Pop" },
 ];
 
+const CLICK_EFFECT_COLOR_OPTIONS = [
+	"#2563EB",
+	"#EF4444",
+	"#F59E0B",
+	"#22C55E",
+	"#A855F7",
+	"#EC4899",
+	"#14B8A6",
+	"#F97316",
+] as const;
+
 type BackgroundTab = "image" | "video" | "color" | "gradient";
 function isHexWallpaper(value: string): boolean {
 	return /^#(?:[0-9a-f]{3}){1,2}$/i.test(value);
+}
+
+function hexToRgba(hex: string, alpha: number) {
+	const normalized = isHexWallpaper(hex) ? hex : DEFAULT_CURSOR_CLICK_EFFECT_COLOR;
+	const value = normalized.length === 4
+		? `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`
+		: normalized;
+	const color = Number.parseInt(value.slice(1), 16);
+	const red = (color >> 16) & 255;
+	const green = (color >> 8) & 255;
+	const blue = color & 255;
+	return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
 function getBackgroundTabForWallpaper(value: string): BackgroundTab {
@@ -408,19 +432,19 @@ const CURSOR_CLICK_EFFECT_OPTIONS: Array<{
 		description: "No click animation. Keeps the pointer steady on every tap.",
 	},
 	{
-		id: "ripple",
-		label: "Ripple",
-		description: "Concentric rings that expand from the click point.",
-	},
-	{
 		id: "spotlight",
 		label: "Spotlight",
 		description: "A soft pulse that blooms behind the cursor on click.",
 	},
 	{
-		id: "burst",
-		label: "Burst",
-		description: "A sharper burst with sparks for more energetic demos.",
+		id: "ripple",
+		label: "Ripple",
+		description: "Concentric rings that expand from the click point.",
+	},
+	{
+		id: "echo",
+		label: "Echo",
+		description: "A pair of soft rings that spread outward with a cleaner pulse.",
 	},
 ];
 
@@ -482,7 +506,13 @@ function MotionPresetCards({
 	);
 }
 
-function CursorClickEffectPreview({ effect }: { effect: CursorClickEffectStyle }) {
+function CursorClickEffectPreview({
+	effect,
+	color = DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
+}: {
+	effect: CursorClickEffectStyle;
+	color?: string;
+}) {
 	return (
 		<div
 			className="relative flex items-center justify-center"
@@ -492,14 +522,19 @@ function CursorClickEffectPreview({ effect }: { effect: CursorClickEffectStyle }
 			}}
 		>
 			{effect === "none" ? (
-				<div className="relative flex h-10 w-10 items-center justify-center">
-					<span className="absolute h-7 w-7 rounded-full border border-foreground/12" />
-					<span className="absolute h-px w-8 -rotate-12 rounded-full bg-foreground/35" />
-				</div>
+				<svg
+					className="absolute h-10 w-10 text-foreground/40"
+					viewBox="0 0 40 40"
+					aria-hidden="true"
+				>
+					<circle cx="20" cy="20" r="11.5" fill="none" stroke="currentColor" strokeWidth="1.8" opacity="0.75" />
+					<path d="M12.5 27.5 27.5 12.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2.2" opacity="0.92" />
+				</svg>
 			) : null}
 			{effect === "ripple" ? (
 				<svg
-					className="absolute h-12 w-12 text-[#2563EB]"
+					className="absolute h-12 w-12"
+					style={{ color }}
 					viewBox="0 0 48 48"
 					aria-hidden="true"
 				>
@@ -516,32 +551,34 @@ function CursorClickEffectPreview({ effect }: { effect: CursorClickEffectStyle }
 			) : null}
 			{effect === "spotlight" ? (
 				<>
-					<span className="absolute h-12 w-12 rounded-full bg-[#2563EB]/18 blur-[8px]" />
-					<span className="absolute h-9 w-9 rounded-full bg-[#2563EB]/10" />
-					<span className="absolute h-7 w-7 rounded-full border-[1.5px] border-[#2563EB]/42" />
+					<span
+						className="absolute h-12 w-12 rounded-full blur-[8px]"
+						style={{ backgroundColor: hexToRgba(color, 0.18) }}
+					/>
+					<span
+						className="absolute h-9 w-9 rounded-full"
+						style={{ backgroundColor: hexToRgba(color, 0.1) }}
+					/>
+					<span
+						className="absolute h-7 w-7 rounded-full border-[1.5px]"
+						style={{ borderColor: hexToRgba(color, 0.42) }}
+					/>
 				</>
 			) : null}
-			{effect === "burst" ? (
+			{effect === "echo" ? (
 				<svg
-					className="absolute h-12 w-12 text-[#2563EB]/90"
+					className="absolute h-12 w-12"
+					style={{ color: hexToRgba(color, 0.92) }}
 					viewBox="0 0 48 48"
 					aria-hidden="true"
 				>
 					<g
 						fill="none"
 						stroke="currentColor"
-						strokeLinecap="round"
-						strokeLinejoin="round"
 					>
-						<circle cx="24" cy="24" r="8.5" strokeWidth="1.8" opacity="0.54" />
-						<path d="M24 7.5v6.5" strokeWidth="1.8" opacity="0.9" />
-						<path d="M24 34v6.5" strokeWidth="1.8" opacity="0.9" />
-						<path d="M7.5 24H14" strokeWidth="1.8" opacity="0.9" />
-						<path d="M34 24h6.5" strokeWidth="1.8" opacity="0.9" />
-						<path d="M12.3 12.3l4.6 4.6" strokeWidth="1.7" opacity="0.82" />
-						<path d="M31.1 31.1l4.6 4.6" strokeWidth="1.7" opacity="0.82" />
-						<path d="M35.7 12.3l-4.6 4.6" strokeWidth="1.7" opacity="0.82" />
-						<path d="M16.9 31.1l-4.6 4.6" strokeWidth="1.7" opacity="0.82" />
+						<circle cx="24" cy="24" r="9" strokeWidth="1.8" opacity="0.72" />
+						<circle cx="24" cy="24" r="14.5" strokeWidth="1.5" opacity="0.4" />
+						<circle cx="24" cy="24" r="4.25" fill="currentColor" opacity="0.22" stroke="none" />
 					</g>
 				</svg>
 			) : null}
@@ -552,6 +589,7 @@ function CursorClickEffectPreview({ effect }: { effect: CursorClickEffectStyle }
 function CursorClickEffectCards({
 	title,
 	activeEffectId,
+	effectColor,
 	onApply,
 	showAdvanced,
 	onToggleAdvanced,
@@ -559,6 +597,7 @@ function CursorClickEffectCards({
 }: {
 	title: string;
 	activeEffectId: CursorClickEffectStyle;
+	effectColor: string;
 	onApply: (effectId: CursorClickEffectStyle) => void;
 	showAdvanced: boolean;
 	onToggleAdvanced: () => void;
@@ -621,8 +660,8 @@ function CursorClickEffectCards({
 							)}
 						>
 							<div className="flex h-full flex-col items-center justify-between gap-3">
-								<div className="flex min-h-0 flex-1 items-center justify-center rounded-lg px-2 py-1.5">
-									<CursorClickEffectPreview effect={effect.id} />
+								<div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[8px] px-2 py-1.5">
+									<CursorClickEffectPreview effect={effect.id} color={effectColor} />
 								</div>
 							</div>
 						</ToggleGroupItem>
@@ -723,6 +762,8 @@ interface SettingsPanelProps {
 	onCursorMotionBlurChange?: (amount: number) => void;
 	cursorClickEffect?: CursorClickEffectStyle;
 	onCursorClickEffectChange?: (effect: CursorClickEffectStyle) => void;
+	cursorClickEffectColor?: string;
+	onCursorClickEffectColorChange?: (color: string) => void;
 	cursorClickEffectScale?: number;
 	onCursorClickEffectScaleChange?: (scale: number) => void;
 	cursorClickEffectOpacity?: number;
@@ -1157,6 +1198,8 @@ export function SettingsPanel({
 	onCursorMotionBlurChange,
 	cursorClickEffect = DEFAULT_CURSOR_CLICK_EFFECT,
 	onCursorClickEffectChange,
+	cursorClickEffectColor = DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
+	onCursorClickEffectColorChange,
 	cursorClickEffectScale = DEFAULT_CURSOR_CLICK_EFFECT_SCALE,
 	onCursorClickEffectScaleChange,
 	cursorClickEffectOpacity = DEFAULT_CURSOR_CLICK_EFFECT_OPACITY,
@@ -1396,6 +1439,7 @@ export function SettingsPanel({
 		getBackgroundTabForWallpaper(selected),
 	);
 	const customColorInputRef = useRef<HTMLInputElement | null>(null);
+	const cursorClickEffectColorInputRef = useRef<HTMLInputElement | null>(null);
 	const defaultWebcam = initialEditorPreferences.webcam;
 	const [internalActiveEffectSection] = useState<EditorEffectSection>("scene");
 	const activeEffectSection = activeEffectSectionProp ?? internalActiveEffectSection;
@@ -3632,6 +3676,7 @@ export function SettingsPanel({
 									"Click Effects",
 								)}
 								activeEffectId={cursorClickEffect}
+								effectColor={cursorClickEffectColor}
 								onApply={(effectId) => onCursorClickEffectChange?.(effectId)}
 								showAdvanced={showCursorClickEffectAdvanced}
 								onToggleAdvanced={() =>
@@ -3641,6 +3686,57 @@ export function SettingsPanel({
 							/>
 							{showCursorClickEffectAdvanced ? (
 								<div className="grid gap-1.5">
+									<input
+										ref={cursorClickEffectColorInputRef}
+										type="color"
+										value={cursorClickEffectColor}
+										onChange={(event) =>
+											onCursorClickEffectColorChange?.(event.target.value)
+										}
+										className="sr-only"
+									/>
+									<div className="grid gap-1">
+										<div className="text-[10px] text-muted-foreground">
+											{tSettings(
+												"effects.cursorClickEffects.color",
+												"Effect Color",
+											)}
+										</div>
+										<div className="flex flex-wrap gap-1.5">
+											{CLICK_EFFECT_COLOR_OPTIONS.map((color) => {
+												const isSelected =
+													cursorClickEffectColor.toLowerCase() === color.toLowerCase();
+												return (
+													<button
+														key={color}
+														type="button"
+														onClick={() => onCursorClickEffectColorChange?.(color)}
+														className={cn(
+															"h-6 w-6 rounded-[8px] border transition-transform hover:scale-[1.04]",
+															isSelected
+																? "border-foreground/80 ring-1 ring-[#2563EB]/50"
+																: "border-foreground/10",
+														)}
+														style={{ backgroundColor: color }}
+														aria-label={`Effect color ${color}`}
+													/>
+												);
+											})}
+											<button
+												type="button"
+												onClick={() => cursorClickEffectColorInputRef.current?.click()}
+												className="relative h-6 w-10 overflow-hidden rounded-[8px] border border-foreground/10 text-[8px] font-semibold uppercase tracking-[0.18em] text-foreground"
+												style={{
+													background: `linear-gradient(135deg, ${cursorClickEffectColor} 0%, ${cursorClickEffectColor} 58%, rgba(255,255,255,0.92) 58%, rgba(255,255,255,0.92) 100%)`,
+												}}
+												aria-label="Custom effect color picker"
+											>
+												<div className="absolute inset-0 flex items-center justify-center">
+													Pick
+												</div>
+											</button>
+										</div>
+									</div>
 									<SliderControl
 										label={tSettings(
 											"effects.cursorClickEffects.size",

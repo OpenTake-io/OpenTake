@@ -47,6 +47,7 @@ export interface CursorVisualSettings {
 	clickBounce: number;
 	clickBounceDuration: number;
 	clickEffect: CursorClickEffectStyle;
+	clickEffectColor: string;
 	clickEffectScale: number;
 	clickEffectOpacity: number;
 	clickEffectDurationMs: number;
@@ -57,8 +58,9 @@ export interface CursorVisualSettings {
 export type CursorStyle = "macos" | "tahoe" | "tahoe-inverted" | "dot" | "figma" | (string & {}); // extension-contributed cursor styles
 export const DEFAULT_CURSOR_STYLE: CursorStyle = "tahoe";
 
-export type CursorClickEffectStyle = "none" | "ripple" | "spotlight" | "burst";
-export const DEFAULT_CURSOR_CLICK_EFFECT: CursorClickEffectStyle = "ripple";
+export type CursorClickEffectStyle = "none" | "spotlight" | "ripple" | "echo";
+export const DEFAULT_CURSOR_CLICK_EFFECT: CursorClickEffectStyle = "none";
+export const DEFAULT_CURSOR_CLICK_EFFECT_COLOR = "#2563EB";
 export const DEFAULT_CURSOR_CLICK_EFFECT_SCALE = 1;
 export const DEFAULT_CURSOR_CLICK_EFFECT_OPACITY = 1;
 export const DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS = 600;
@@ -67,9 +69,34 @@ export function normalizeCursorClickEffectStyle(
 	value: unknown,
 	fallback: CursorClickEffectStyle = DEFAULT_CURSOR_CLICK_EFFECT,
 ): CursorClickEffectStyle {
-	return value === "none" || value === "ripple" || value === "spotlight" || value === "burst"
+	if (value === "burst") {
+		return "echo";
+	}
+
+	return value === "none" || value === "spotlight" || value === "ripple" || value === "echo"
 		? value
 		: fallback;
+}
+
+export function normalizeCursorClickEffectColor(
+	value: unknown,
+	fallback: string = DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
+): string {
+	if (typeof value !== "string") {
+		return fallback;
+	}
+
+	const trimmed = value.trim();
+	if (!/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmed)) {
+		return fallback;
+	}
+
+	if (trimmed.length === 4) {
+		const [red, green, blue] = trimmed.slice(1).split("");
+		return `#${red}${red}${green}${green}${blue}${blue}`.toUpperCase();
+	}
+
+	return trimmed.toUpperCase();
 }
 
 export type EditorEffectSection =

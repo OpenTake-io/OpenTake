@@ -41,6 +41,7 @@ import {
 	DEFAULT_CONNECTED_ZOOM_GAP_MS,
 	DEFAULT_CROP_REGION,
 	DEFAULT_CURSOR_CLICK_EFFECT,
+	DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
 	DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS,
 	DEFAULT_CURSOR_CLICK_EFFECT_OPACITY,
 	DEFAULT_CURSOR_CLICK_EFFECT_SCALE,
@@ -67,6 +68,7 @@ import {
 	DEFAULT_ZOOM_OUT_EASING,
 	DEFAULT_ZOOM_SMOOTHNESS,
 	getDefaultCaptionFontFamily,
+	normalizeCursorClickEffectColor,
 	normalizeCursorClickEffectStyle,
 	type Padding,
 	type SpeedRegion,
@@ -104,6 +106,7 @@ export interface ProjectEditorState {
 	loopCursor: boolean;
 	cursorStyle: CursorStyle;
 	cursorClickEffect: CursorClickEffectStyle;
+	cursorClickEffectColor: string;
 	cursorClickEffectScale: number;
 	cursorClickEffectOpacity: number;
 	cursorClickEffectDurationMs: number;
@@ -880,6 +883,10 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 				1200,
 			)
 		: DEFAULT_CURSOR_CLICK_EFFECT_DURATION_MS;
+	const normalizedCursorClickEffectColor = normalizeCursorClickEffectColor(
+		(editor as Partial<ProjectEditorState>).cursorClickEffectColor,
+		DEFAULT_CURSOR_CLICK_EFFECT_COLOR,
+	);
 	const normalizedMotionPreset =
 		CURSOR_MOTION_PRESETS[resolveCursorMotionPresetId(normalizedMotionValues)];
 
@@ -911,6 +918,7 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 			(editor as Partial<ProjectEditorState>).cursorClickEffect,
 			DEFAULT_CURSOR_CLICK_EFFECT,
 		),
+		cursorClickEffectColor: normalizedCursorClickEffectColor,
 		cursorClickEffectScale: normalizedCursorClickEffectScale,
 		cursorClickEffectOpacity: normalizedCursorClickEffectOpacity,
 		cursorClickEffectDurationMs: normalizedCursorClickEffectDurationMs,
