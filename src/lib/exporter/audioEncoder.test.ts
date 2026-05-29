@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AudioProcessor } from "./audioEncoder";
+import { AudioProcessor, softLimitOfflineMixPeaksInPlace } from "./audioEncoder";
 
 type OfflineRenderTestHarness = AudioProcessor & {
 	decodeAudioFromUrl(url: string): Promise<AudioBuffer | null>;
@@ -26,7 +26,31 @@ type OfflineRenderTestHarness = AudioProcessor & {
 		sourceAudioFallbackStartDelayMsByPath: Record<string, number> | undefined,
 		muxer: unknown,
 	): Promise<void>;
+	renderChunked(
+		prepared: {
+			mainBufferEntry: null;
+			companionEntries: [];
+			regionEntries: [];
+			mutedSourceOutputRangesSec: [];
+			slices: [];
+			outputDurationMs: number;
+			numChannels: number;
+		},
+		totalOutputSec: number,
+		onChunk: (
+			rendered: AudioBuffer,
+			outputOffsetSec: number,
+			chunkIndex: number,
+		) => Promise<void>,
+	): Promise<void>;
 };
+
+function fakeAudioBuffer(channels: Float32Array[]): AudioBuffer {
+	return {
+		numberOfChannels: channels.length,
+		getChannelData: (channel: number) => channels[channel],
+	} as AudioBuffer;
+}
 
 describe("AudioProcessor offline render preparation", () => {
 	it("keeps embedded source audio separate from external companion sidecars", async () => {
@@ -135,5 +159,72 @@ describe("AudioProcessor offline render preparation", () => {
 
 		expect(loadAudioFileDemuxer).not.toHaveBeenCalled();
 		expect(renderAndMuxOfflineAudio).toHaveBeenCalled();
+	});
+
+	it("soft-limits mixed peaks before encoding or WAV conversion", () => {
+		const samples = new Float32Array([
+			-1.6,
+			-0.5,
+			Number.NEGATIVE_INFINITY,
+			Number.NaN,
+			0,
+			0.5,
+			0.95,
+			Number.POSITIVE_INFINITY,
+			1.6,
+		]);
+		const changed = softLimitOfflineMixPeaksInPlace(fakeAudioBuffer([samples]));
+
+		expect(changed).toBe(true);
+		expect(samples[0]).toBeGreaterThanOrEqual(-0.986);
+		expect(samples[1]).toBe(-0.5);
+		expect(samples[2]).toBe(0);
+		expect(samples[3]).toBe(0);
+		expect(samples[5]).toBe(0.5);
+		expect(samples[6]).toBeLessThan(0.95);
+		expect(samples[6]).toBeGreaterThan(0.9);
+		expect(samples[7]).toBe(0);
+		expect(samples[8]).toBeLessThanOrEqual(0.986);
+	});
+
+	it("runs the offline mix limiter for every rendered chunk", async () => {
+		const processor = new AudioProcessor() as unknown as OfflineRenderTestHarness;
+		const renderedSamples = new Float32Array([1.4]);
+		const renderedBuffer = fakeAudioBuffer([renderedSamples]);
+		const originalOfflineAudioContext = globalThis.OfflineAudioContext;
+		(
+			globalThis as unknown as { OfflineAudioContext: typeof OfflineAudioContext }
+		).OfflineAudioContext = class {
+			constructor() {}
+
+			startRendering() {
+				return Promise.resolve(renderedBuffer);
+			}
+		} as unknown as typeof OfflineAudioContext;
+
+		try {
+			let observedPeak = Number.POSITIVE_INFINITY;
+			await processor.renderChunked(
+				{
+					mainBufferEntry: null,
+					companionEntries: [],
+					regionEntries: [],
+					mutedSourceOutputRangesSec: [],
+					slices: [],
+					outputDurationMs: 100,
+					numChannels: 1,
+				},
+				0.1,
+				async (rendered) => {
+					observedPeak = rendered.getChannelData(0)[0] ?? 0;
+				},
+			);
+
+			expect(observedPeak).toBeLessThanOrEqual(0.986);
+		} finally {
+			(
+				globalThis as unknown as { OfflineAudioContext: typeof OfflineAudioContext }
+			).OfflineAudioContext = originalOfflineAudioContext;
+		}
 	});
 });
