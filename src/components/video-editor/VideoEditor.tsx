@@ -1,6 +1,4 @@
 import {
-	ArrowsInSimple,
-	ArrowsOutSimple,
 	BookmarkSimple,
 	Check,
 	CaretDown as ChevronDown,
@@ -639,7 +637,6 @@ export default function VideoEditor() {
 	const smokeExportReadyStateRef = useRef<Record<string, unknown>>({});
 	const [historyVersion, setHistoryVersion] = useState(0);
 	const timelineRef = useRef<TimelineEditorHandle>(null);
-	const previewShellRef = useRef<HTMLDivElement | null>(null);
 
 	function formatTime(seconds: number) {
 		if (!isFinite(seconds) || isNaN(seconds) || seconds < 0) return "0:00";
@@ -647,69 +644,6 @@ export default function VideoEditor() {
 		const secs = Math.floor(seconds % 60);
 		return `${mins}:${secs.toString().padStart(2, "0")}`;
 	}
-
-	const [isPreviewPlayerOpen, setIsPreviewPlayerOpen] = useState(false);
-
-	const handleTogglePreviewFullscreen = useCallback(async () => {
-		if (typeof document === "undefined") {
-			setIsPreviewPlayerOpen((current) => !current);
-			return;
-		}
-
-		const previewShell = previewShellRef.current;
-		if (!previewShell?.requestFullscreen) {
-			setIsPreviewPlayerOpen((current) => !current);
-			return;
-		}
-
-		if (document.fullscreenElement === previewShell) {
-			try {
-				await document.exitFullscreen();
-			} catch (error) {
-				console.warn("[VideoEditor] Failed to exit preview fullscreen", error);
-			}
-			setIsPreviewPlayerOpen(false);
-			return;
-		}
-
-		try {
-			await previewShell.requestFullscreen();
-			setIsPreviewPlayerOpen(true);
-		} catch (error) {
-			console.warn("[VideoEditor] Failed to enter preview fullscreen", error);
-			setIsPreviewPlayerOpen(false);
-		}
-	}, []);
-
-	useEffect(() => {
-		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape" && isPreviewPlayerOpen) {
-				event.preventDefault();
-				setIsPreviewPlayerOpen(false);
-			}
-		};
-
-		window.addEventListener("keydown", handleKeyDown);
-		return () => {
-			window.removeEventListener("keydown", handleKeyDown);
-		};
-	}, [isPreviewPlayerOpen]);
-
-	useEffect(() => {
-		if (typeof document === "undefined") {
-			return;
-		}
-
-		const handleFullscreenChange = () => {
-			setIsPreviewPlayerOpen(document.fullscreenElement === previewShellRef.current);
-		};
-
-		document.addEventListener("fullscreenchange", handleFullscreenChange);
-
-		return () => {
-			document.removeEventListener("fullscreenchange", handleFullscreenChange);
-		};
-	}, []);
 
 	useEffect(() => {
 		void window.electronAPI?.getPlatform?.()?.then((platform) => {
@@ -5177,7 +5111,7 @@ export default function VideoEditor() {
 			zoomInEasing={zoomInEasing}
 			zoomOutEasing={zoomOutEasing}
 			connectedZoomEasing={connectedZoomEasing}
-			borderRadius={isPreviewPlayerOpen ? 0 : borderRadius}
+			borderRadius={16}
 			padding={padding}
 			frame={frame}
 			cropRegion={cropRegion}
@@ -6110,115 +6044,21 @@ export default function VideoEditor() {
 								>
 									<div className="flex min-w-0 flex-1 items-center justify-center px-1">
 										<div
-											ref={previewShellRef}
-											className={cn(
-												"relative",
-												isPreviewPlayerOpen &&
-													"flex h-full w-full items-center justify-center",
-											)}
+											className="relative"
 											style={{
-												width: isPreviewPlayerOpen ? "100vw" : "auto",
-												height: isPreviewPlayerOpen ? "100vh" : "100%",
-												maxWidth: isPreviewPlayerOpen ? "100vw" : "100%",
-												maxHeight: isPreviewPlayerOpen ? "100vh" : "100%",
-												margin: isPreviewPlayerOpen ? "0" : "0 auto",
+												width: "auto",
+												height: "100%",
+												aspectRatio: previewAspectRatioValue,
+												maxWidth: "100%",
+												margin: "0 auto",
 												boxSizing: "border-box",
 											}}
 										>
-											<div
-												className="relative"
-												style={{
-													width: isPreviewPlayerOpen ? "100%" : "auto",
-													height: isPreviewPlayerOpen ? "auto" : "100%",
-													aspectRatio: previewAspectRatioValue,
-													maxWidth: isPreviewPlayerOpen
-														? `min(100vw, calc(100vh * ${previewAspectRatioValue}))`
-														: "100%",
-													maxHeight: isPreviewPlayerOpen ? "100vh" : "100%",
-													margin: isPreviewPlayerOpen ? "0 auto" : "0",
-												}}
-											>
-												{renderPreviewPlayback(
-													videoPlaybackRef,
-													shouldSuspendPreviewRendering,
-													"inline",
-												)}
-											</div>
-											{isPreviewPlayerOpen ? (
-												<div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-6 pb-6">
-													<div className="pointer-events-auto flex w-full max-w-5xl items-center gap-3 rounded-[20px] border border-white/10 bg-black/72 px-4 py-3 text-white shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-														<Button
-															variant="ghost"
-															size="icon"
-															onClick={() => void handleTogglePreviewFullscreen()}
-															className="h-10 w-10 rounded-full text-white/82 transition-colors hover:bg-white/10 hover:text-white"
-															title={t("editor.preview.exitFullscreen", "Exit fullscreen preview")}
-														>
-															<ArrowsInSimple className="h-4 w-4" />
-														</Button>
-														<Button
-															variant="ghost"
-															size="icon"
-															onClick={handlePreviewSkipBack}
-															className="h-10 w-10 rounded-full text-white/82 transition-colors hover:bg-white/10 hover:text-white"
-															title={t("editor.playback.skipBack")}
-														>
-															<SkipBack className="h-4 w-4" weight="fill" />
-														</Button>
-														<Button
-															variant="ghost"
-															size="icon"
-															onClick={togglePlayPause}
-															className="h-11 w-11 rounded-full border border-white/12 bg-white/10 text-white transition-colors hover:bg-white/18"
-															title={isPlaying ? "Pause" : "Play"}
-														>
-															{isPlaying ? (
-																<Pause className="h-4 w-4" weight="fill" />
-															) : (
-																<Play className="h-4 w-4" weight="fill" />
-															)}
-														</Button>
-														<Button
-															variant="ghost"
-															size="icon"
-															onClick={handlePreviewSkipForward}
-															className="h-10 w-10 rounded-full text-white/82 transition-colors hover:bg-white/10 hover:text-white"
-															title={t("editor.playback.skipForward")}
-														>
-															<SkipForward className="h-4 w-4" weight="fill" />
-														</Button>
-														<span className="w-12 text-right text-xs font-medium tabular-nums text-white/78">
-															{formatTime(timelinePlayheadTime)}
-														</span>
-														<input
-															type="range"
-															min="0"
-															max={Math.max(0.01, timelineDuration)}
-															step="0.01"
-															value={Math.min(timelinePlayheadTime, Math.max(0.01, timelineDuration))}
-															onChange={(event) => handleSeek(Number(event.target.value))}
-															className="h-2 flex-1 cursor-pointer accent-white"
-														/>
-														<span className="w-12 text-xs font-medium tabular-nums text-white/58">
-															{formatTime(timelineDuration)}
-														</span>
-														<button
-															type="button"
-															className="text-white/82 transition-colors hover:text-white"
-															title={t("editor.playback.muteUnmute")}
-															onClick={() => setPreviewVolume(previewVolume <= 0.001 ? 1 : 0)}
-														>
-															{previewVolume <= 0.001 ? (
-																<VolumeX className="h-4 w-4" />
-															) : previewVolume < 0.5 ? (
-																<Volume1 className="h-4 w-4" />
-															) : (
-																<Volume2 className="h-4 w-4" />
-															)}
-														</button>
-													</div>
-												</div>
-											) : null}
+											{renderPreviewPlayback(
+												videoPlaybackRef,
+												shouldSuspendPreviewRendering,
+												"inline",
+											)}
 										</div>
 									</div>
 								</div>
@@ -6354,23 +6194,6 @@ export default function VideoEditor() {
 							</div>
 							{/* Right: collapse + volume */}
 							<div className="z-10 ml-auto flex items-center gap-2">
-								<Button
-									variant="ghost"
-									size="icon"
-									title={
-										isPreviewPlayerOpen
-											? t("editor.preview.exitFullscreen", "Exit fullscreen preview")
-											: t("editor.preview.enterFullscreen", "Open preview player")
-									}
-									className="h-7 w-7 rounded-full text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
-									onClick={() => void handleTogglePreviewFullscreen()}
-								>
-									{isPreviewPlayerOpen ? (
-										<ArrowsInSimple className="w-3.5 h-3.5" />
-									) : (
-										<ArrowsOutSimple className="w-3.5 h-3.5" />
-									)}
-								</Button>
 								<div className="flex items-center gap-1.5">
 									<button
 										type="button"
