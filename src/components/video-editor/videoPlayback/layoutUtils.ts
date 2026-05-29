@@ -6,6 +6,19 @@ export const PADDING_SCALE_FACTOR = 0.2;
 export const BASE_PREVIEW_WIDTH = 1920;
 export const BASE_PREVIEW_HEIGHT = 1080;
 
+export function scalePreviewBorderRadius(
+	width: number,
+	height: number,
+	borderRadius = 0,
+): number {
+	if (width <= 0 || height <= 0) {
+		return 0;
+	}
+
+	const canvasScaleFactor = Math.min(width / BASE_PREVIEW_WIDTH, height / BASE_PREVIEW_HEIGHT);
+	return Math.max(0, borderRadius * canvasScaleFactor);
+}
+
 export function isZeroPadding(padding: Padding | number): boolean {
 	if (typeof padding === "number") {
 		return padding === 0;
@@ -198,13 +211,12 @@ export function layoutVideoContent(params: LayoutParams): LayoutResult | null {
 	videoSprite.position.set(layout.spriteX, layout.spriteY);
 
 	maskGraphics.clear();
-	const canvasScaleFactor = Math.min(width / BASE_PREVIEW_WIDTH, height / BASE_PREVIEW_HEIGHT);
 	drawSquircleOnGraphics(maskGraphics, {
 		x: layout.centerOffsetX,
 		y: layout.centerOffsetY,
 		width: layout.croppedDisplayWidth,
 		height: layout.croppedDisplayHeight,
-		radius: Math.max(0, borderRadius * canvasScaleFactor),
+		radius: scalePreviewBorderRadius(width, height, borderRadius),
 	});
 	maskGraphics.fill({ color: 0xffffff });
 
