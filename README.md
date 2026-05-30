@@ -372,13 +372,17 @@ Pull requests are welcome.
 
 [![Ko-Fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/webadderall)
 
+- Tom Egan @tomegan on X
+- Robin Ebers @robinebers on X
 - Tadees
 - buildwithfur
+- piccinato
 - Tobias
 - Anonymous Supporter
 - Tandava Appadoo
 - Digitalfastmind
 - Roberto Marcelino
+- Tony
 - Rajan RK
 - Francesco
 - Erwan
