@@ -2,7 +2,6 @@ import {
 	BookmarkSimple,
 	Check,
 	CaretDown as ChevronDown,
-	CaretUp as ChevronUp,
 	ClosedCaptioning,
 	Crop,
 	Cursor,
@@ -174,6 +173,7 @@ import {
 	type CaptionCue,
 	type ClipRegion,
 	type CropRegion,
+	type CursorClickEffectStyle,
 	type CursorStyle,
 	type CursorTelemetryPoint,
 	clampFocusToDepth,
@@ -224,10 +224,6 @@ import {
 
 type PendingExportSave = {
 	fileName: string;
-	// Exactly one of these is populated. `tempFilePath` is the preferred form
-	// for MP4 exports — the main process holds the finished file on disk, so
-	// "Save Again" just renames it instead of round-tripping through the
-	// renderer's ArrayBuffer heap.
 	arrayBuffer?: ArrayBuffer;
 	tempFilePath?: string;
 };
@@ -467,6 +463,21 @@ export default function VideoEditor() {
 	const [cursorMotionBlur, setCursorMotionBlur] = useState(
 		initialEditorPreferences.cursorMotionBlur,
 	);
+	const [cursorClickEffect, setCursorClickEffect] = useState<CursorClickEffectStyle>(
+		initialEditorPreferences.cursorClickEffect,
+	);
+	const [cursorClickEffectColor, setCursorClickEffectColor] = useState(
+		initialEditorPreferences.cursorClickEffectColor,
+	);
+	const [cursorClickEffectScale, setCursorClickEffectScale] = useState(
+		initialEditorPreferences.cursorClickEffectScale,
+	);
+	const [cursorClickEffectOpacity, setCursorClickEffectOpacity] = useState(
+		initialEditorPreferences.cursorClickEffectOpacity,
+	);
+	const [cursorClickEffectDurationMs, setCursorClickEffectDurationMs] = useState(
+		initialEditorPreferences.cursorClickEffectDurationMs,
+	);
 	const [cursorClickBounce, setCursorClickBounce] = useState(
 		initialEditorPreferences.cursorClickBounce,
 	);
@@ -634,8 +645,6 @@ export default function VideoEditor() {
 		return `${mins}:${secs.toString().padStart(2, "0")}`;
 	}
 
-	const [timelineCollapsed, setTimelineCollapsed] = useState(false);
-
 	useEffect(() => {
 		void window.electronAPI?.getPlatform?.()?.then((platform) => {
 			setAppPlatform(platform);
@@ -699,6 +708,11 @@ export default function VideoEditor() {
 			cameraSpringDampingMultiplier,
 			cameraSpringMassMultiplier,
 			cursorMotionBlur,
+			cursorClickEffect,
+			cursorClickEffectColor,
+			cursorClickEffectScale,
+			cursorClickEffectOpacity,
+			cursorClickEffectDurationMs,
 			cursorClickBounce,
 			cursorClickBounceDuration,
 			cursorSway,
@@ -751,6 +765,11 @@ export default function VideoEditor() {
 			cameraSpringDampingMultiplier,
 			cameraSpringMassMultiplier,
 			cursorMotionBlur,
+			cursorClickEffect,
+			cursorClickEffectColor,
+			cursorClickEffectScale,
+			cursorClickEffectOpacity,
+			cursorClickEffectDurationMs,
 			cursorClickBounce,
 			cursorClickBounceDuration,
 			cursorSway,
@@ -844,6 +863,11 @@ export default function VideoEditor() {
 		setCameraSpringDampingMultiplier(snapshot.cameraSpringDampingMultiplier);
 		setCameraSpringMassMultiplier(snapshot.cameraSpringMassMultiplier);
 		setCursorMotionBlur(snapshot.cursorMotionBlur);
+		setCursorClickEffect(snapshot.cursorClickEffect);
+		setCursorClickEffectColor(snapshot.cursorClickEffectColor);
+		setCursorClickEffectScale(snapshot.cursorClickEffectScale);
+		setCursorClickEffectOpacity(snapshot.cursorClickEffectOpacity);
+		setCursorClickEffectDurationMs(snapshot.cursorClickEffectDurationMs);
 		setCursorClickBounce(snapshot.cursorClickBounce);
 		setCursorClickBounceDuration(snapshot.cursorClickBounceDuration);
 		setCursorSway(snapshot.cursorSway);
@@ -1117,6 +1141,11 @@ export default function VideoEditor() {
 					zoomSmoothness,
 					zoomClassicMode,
 					cursorMotionBlur,
+					cursorClickEffect,
+					cursorClickEffectColor,
+					cursorClickEffectScale,
+					cursorClickEffectOpacity,
+					cursorClickEffectDurationMs,
 					cursorClickBounce,
 					cursorClickBounceDuration,
 					cursorSway,
@@ -1186,6 +1215,10 @@ export default function VideoEditor() {
 		currentTime,
 		cursorClickBounce,
 		cursorClickBounceDuration,
+		cursorClickEffect,
+		cursorClickEffectScale,
+		cursorClickEffectOpacity,
+		cursorClickEffectDurationMs,
 		cursorMotionBlur,
 		cursorSize,
 		cursorSmoothing,
@@ -1583,6 +1616,11 @@ export default function VideoEditor() {
 				zoomSmoothness: number;
 				zoomClassicMode: boolean;
 				cursorMotionBlur: number;
+				cursorClickEffect: CursorClickEffectStyle;
+				cursorClickEffectColor: string;
+				cursorClickEffectScale: number;
+				cursorClickEffectOpacity: number;
+				cursorClickEffectDurationMs: number;
 				cursorClickBounce: number;
 				cursorClickBounceDuration: number;
 				cursorSway: number;
@@ -1686,6 +1724,11 @@ export default function VideoEditor() {
 				zoomSmoothness,
 				zoomClassicMode,
 				cursorMotionBlur,
+				cursorClickEffect,
+				cursorClickEffectColor,
+				cursorClickEffectScale,
+				cursorClickEffectOpacity,
+				cursorClickEffectDurationMs,
 				cursorClickBounce,
 				cursorClickBounceDuration,
 				cursorSway,
@@ -1748,6 +1791,11 @@ export default function VideoEditor() {
 			zoomSmoothness,
 			zoomClassicMode,
 			cursorMotionBlur,
+			cursorClickEffect,
+			cursorClickEffectColor,
+			cursorClickEffectScale,
+			cursorClickEffectOpacity,
+			cursorClickEffectDurationMs,
 			cursorClickBounce,
 			cursorClickBounceDuration,
 			cursorSway,
@@ -1929,6 +1977,11 @@ export default function VideoEditor() {
 			setCameraSpringStiffnessMultiplier(normalizedEditor.cameraSpringStiffnessMultiplier);
 			setCameraSpringDampingMultiplier(normalizedEditor.cameraSpringDampingMultiplier);
 			setCameraSpringMassMultiplier(normalizedEditor.cameraSpringMassMultiplier);
+			setCursorClickEffect(normalizedEditor.cursorClickEffect);
+			setCursorClickEffectColor(normalizedEditor.cursorClickEffectColor);
+			setCursorClickEffectScale(normalizedEditor.cursorClickEffectScale);
+			setCursorClickEffectOpacity(normalizedEditor.cursorClickEffectOpacity);
+			setCursorClickEffectDurationMs(normalizedEditor.cursorClickEffectDurationMs);
 			setZoomSmoothness(normalizedEditor.zoomSmoothness);
 			setZoomClassicMode(normalizedEditor.zoomClassicMode);
 			setCursorMotionBlur(normalizedEditor.cursorMotionBlur);
@@ -2429,6 +2482,11 @@ export default function VideoEditor() {
 			cameraSpringDampingMultiplier,
 			cameraSpringMassMultiplier,
 			cursorMotionBlur,
+			cursorClickEffect,
+			cursorClickEffectColor,
+			cursorClickEffectScale,
+			cursorClickEffectOpacity,
+			cursorClickEffectDurationMs,
 			cursorClickBounce,
 			cursorClickBounceDuration,
 			cursorSway,
@@ -2480,6 +2538,10 @@ export default function VideoEditor() {
 		cameraSpringDampingMultiplier,
 		cameraSpringMassMultiplier,
 		cursorMotionBlur,
+		cursorClickEffect,
+		cursorClickEffectScale,
+		cursorClickEffectOpacity,
+		cursorClickEffectDurationMs,
 		cursorClickBounce,
 		cursorClickBounceDuration,
 		cursorSway,
@@ -3239,17 +3301,19 @@ export default function VideoEditor() {
 		},
 	});
 
+	const getActivePlayback = useCallback(() => videoPlaybackRef.current, []);
+
 	const startPlayback = useCallback(() => {
-		const playback = videoPlaybackRef.current;
+		const playback = getActivePlayback();
 		const video = playback?.video;
 		if (!playback || !video) return;
 
 		audio.playSourceAudioPreview();
 		playback.play().catch((err) => console.error("Video play failed:", err));
-	}, [audio.playSourceAudioPreview]);
+	}, [audio.playSourceAudioPreview, getActivePlayback]);
 
 	function togglePlayPause() {
-		const playback = videoPlaybackRef.current;
+		const playback = getActivePlayback();
 		const video = playback?.video;
 		if (!playback || !video) return;
 
@@ -3266,7 +3330,7 @@ export default function VideoEditor() {
 
 	const handleSeek = useCallback(
 		(time: number, options: { pause?: boolean } = {}) => {
-			const playback = videoPlaybackRef.current;
+			const playback = getActivePlayback();
 			const video = playback?.video;
 			if (!video) return;
 
@@ -3276,7 +3340,7 @@ export default function VideoEditor() {
 
 			video.currentTime = mapTimelineTimeToSourceTime(time * 1000) / 1000;
 		},
-		[mapTimelineTimeToSourceTime],
+		[getActivePlayback, mapTimelineTimeToSourceTime],
 	);
 
 	const handleTimelineSeek = useCallback(
@@ -3285,6 +3349,22 @@ export default function VideoEditor() {
 		},
 		[handleSeek],
 	);
+
+	const handlePreviewSkipBack = useCallback(() => {
+		const currentMs = timelinePlayheadTime * 1000;
+		const keyframes = timelineRef.current?.keyframes ?? [];
+		const previous = [...keyframes].reverse().find((keyframe) => keyframe.time < currentMs - 50);
+		handleSeek(previous ? previous.time / 1000 : Math.max(0, timelinePlayheadTime - 5));
+	}, [handleSeek, timelinePlayheadTime]);
+
+	const handlePreviewSkipForward = useCallback(() => {
+		const currentMs = timelinePlayheadTime * 1000;
+		const keyframes = timelineRef.current?.keyframes ?? [];
+		const next = keyframes.find((keyframe) => keyframe.time > currentMs + 50);
+		handleSeek(
+			next ? next.time / 1000 : Math.min(timelineDuration, timelinePlayheadTime + 5),
+		);
+	}, [handleSeek, timelineDuration, timelinePlayheadTime]);
 
 	const handleSelectZoom = useCallback((id: string | null) => {
 		setSelectedZoomId(id);
@@ -4160,6 +4240,11 @@ export default function VideoEditor() {
 						zoomSmoothness,
 						zoomClassicMode,
 						cursorMotionBlur,
+						cursorClickEffect,
+						cursorClickEffectColor,
+						cursorClickEffectScale,
+						cursorClickEffectOpacity,
+						cursorClickEffectDurationMs,
 						cursorClickBounce,
 						cursorClickBounceDuration,
 						cursorSway,
@@ -4338,6 +4423,11 @@ export default function VideoEditor() {
 						zoomSmoothness,
 						zoomClassicMode,
 						cursorMotionBlur,
+						cursorClickEffect,
+						cursorClickEffectColor,
+						cursorClickEffectScale,
+						cursorClickEffectOpacity,
+						cursorClickEffectDurationMs,
 						cursorClickBounce,
 						cursorClickBounceDuration,
 						cursorSway,
@@ -4590,6 +4680,10 @@ export default function VideoEditor() {
 			zoomSmoothness,
 			zoomClassicMode,
 			cursorMotionBlur,
+			cursorClickEffect,
+			cursorClickEffectScale,
+			cursorClickEffectOpacity,
+			cursorClickEffectDurationMs,
 			cursorClickBounce,
 			cursorClickBounceDuration,
 			cursorSway,
@@ -4973,6 +5067,100 @@ export default function VideoEditor() {
 								percent: Math.round(exportProgress.percentage),
 							})
 		: t("editor.exportStatus.preparing", "Preparing export...");
+	const previewAspectRatioValue = getAspectRatioValue(
+		aspectRatio,
+		(() => {
+			const previewVideo = videoPlaybackRef.current?.video;
+			if (previewVideo && previewVideo.videoHeight > 0) {
+				return previewVideo.videoWidth / previewVideo.videoHeight;
+			}
+			return 16 / 9;
+		})(),
+	);
+	const renderPreviewPlayback = (
+		playbackRef: typeof videoPlaybackRef | undefined,
+		suspendRendering: boolean,
+		keySuffix: "inline" | "fullscreen",
+	) => (
+		<VideoPlayback
+			key={`${videoPath || "no-video"}:${previewVersion}:${keySuffix}`}
+			aspectRatio={aspectRatio}
+			ref={playbackRef}
+			videoPath={videoPath || ""}
+			onDurationChange={setDuration}
+			onPreviewReadyChange={setIsPreviewReady}
+			onTimeUpdate={setCurrentTime}
+			currentTime={currentTime}
+			onPlayStateChange={setIsPlaying}
+			onError={setError}
+			wallpaper={wallpaper}
+			zoomRegions={effectiveZoomRegions}
+			selectedZoomId={selectedZoomId}
+			onSelectZoom={handleSelectZoom}
+			onZoomFocusChange={handleZoomFocusChange}
+			isPlaying={isPlaying}
+			showShadow={shadowIntensity > 0}
+			shadowIntensity={shadowIntensity}
+			backgroundBlur={backgroundBlur}
+			connectZooms={connectZooms}
+			zoomInDurationMs={zoomInDurationMs}
+			zoomInOverlapMs={zoomInOverlapMs}
+			zoomOutDurationMs={zoomOutDurationMs}
+			connectedZoomGapMs={connectedZoomGapMs}
+			connectedZoomDurationMs={connectedZoomDurationMs}
+			zoomInEasing={zoomInEasing}
+			zoomOutEasing={zoomOutEasing}
+			connectedZoomEasing={connectedZoomEasing}
+			borderRadius={borderRadius}
+			padding={padding}
+			frame={frame}
+			cropRegion={cropRegion}
+			webcam={webcam}
+			webcamVideoPath={webcam.sourcePath ? resolvedWebcamVideoUrl : null}
+			trimRegions={trimRegions}
+			speedRegions={effectiveSpeedRegions}
+			annotationRegions={annotationRegions}
+			autoCaptions={autoCaptions}
+			autoCaptionSettings={autoCaptionSettings}
+			selectedAnnotationId={selectedAnnotationId}
+			onSelectAnnotation={handleSelectAnnotation}
+			onAnnotationPositionChange={handleAnnotationPositionChange}
+			onAnnotationSizeChange={handleAnnotationSizeChange}
+			cursorTelemetry={effectiveCursorTelemetry}
+			showCursor={effectiveShowCursor}
+			cursorStyle={cursorStyle}
+			cursorSize={cursorSize}
+			cursorSmoothing={cursorSmoothing}
+			cursorSpringStiffnessMultiplier={cursorSpringStiffnessMultiplier}
+			cursorSpringDampingMultiplier={cursorSpringDampingMultiplier}
+			cursorSpringMassMultiplier={cursorSpringMassMultiplier}
+			cameraSpringStiffnessMultiplier={cameraSpringStiffnessMultiplier}
+			cameraSpringDampingMultiplier={cameraSpringDampingMultiplier}
+			cameraSpringMassMultiplier={cameraSpringMassMultiplier}
+			zoomSmoothness={zoomSmoothness}
+			zoomClassicMode={zoomClassicMode}
+			zoomMotionBlur={zoomMotionBlur}
+			zoomMotionBlurTuning={zoomMotionBlurTuning}
+			cursorMotionBlur={cursorMotionBlur}
+			cursorClickEffect={cursorClickEffect}
+			cursorClickEffectColor={cursorClickEffectColor}
+			cursorClickEffectScale={cursorClickEffectScale}
+			cursorClickEffectOpacity={cursorClickEffectOpacity}
+			cursorClickEffectDurationMs={cursorClickEffectDurationMs}
+			cursorClickBounce={cursorClickBounce}
+			cursorClickBounceDuration={cursorClickBounceDuration}
+			cursorSway={cursorSway}
+			volume={
+				audio.shouldMutePreviewVideo || audio.isCurrentClipMuted
+					? 0
+					: Math.max(
+							0,
+							Math.min(1, previewVolume * audio.embeddedSourcePreviewGain),
+						)
+			}
+			suspendRendering={suspendRendering}
+		/>
+	);
 
 	const projectBrowser = (
 		<ProjectBrowserDialog
@@ -5730,6 +5918,16 @@ export default function VideoEditor() {
 								onZoomClassicModeChange={setZoomClassicMode}
 								cursorMotionBlur={cursorMotionBlur}
 								onCursorMotionBlurChange={setCursorMotionBlur}
+								cursorClickEffect={cursorClickEffect}
+								cursorClickEffectColor={cursorClickEffectColor}
+								onCursorClickEffectChange={setCursorClickEffect}
+								onCursorClickEffectColorChange={setCursorClickEffectColor}
+								cursorClickEffectScale={cursorClickEffectScale}
+								onCursorClickEffectScaleChange={setCursorClickEffectScale}
+								cursorClickEffectOpacity={cursorClickEffectOpacity}
+								onCursorClickEffectOpacityChange={setCursorClickEffectOpacity}
+								cursorClickEffectDurationMs={cursorClickEffectDurationMs}
+								onCursorClickEffectDurationMsChange={setCursorClickEffectDurationMs}
 								cursorClickBounce={cursorClickBounce}
 								onCursorClickBounceChange={setCursorClickBounce}
 								cursorClickBounceDuration={cursorClickBounceDuration}
@@ -5846,130 +6044,21 @@ export default function VideoEditor() {
 								>
 									<div className="flex min-w-0 flex-1 items-center justify-center px-1">
 										<div
-											className="relative overflow-hidden rounded-[30px]"
+											className="relative"
 											style={{
 												width: "auto",
 												height: "100%",
-												aspectRatio: getAspectRatioValue(
-													aspectRatio,
-													(() => {
-														const previewVideo =
-															videoPlaybackRef.current?.video;
-														if (
-															previewVideo &&
-															previewVideo.videoHeight > 0
-														) {
-															return (
-																previewVideo.videoWidth /
-																previewVideo.videoHeight
-															);
-														}
-														return 16 / 9;
-													})(),
-												),
+												aspectRatio: previewAspectRatioValue,
 												maxWidth: "100%",
 												margin: "0 auto",
 												boxSizing: "border-box",
 											}}
 										>
-											<VideoPlayback
-												key={`${videoPath || "no-video"}:${previewVersion}`}
-												aspectRatio={aspectRatio}
-												ref={videoPlaybackRef}
-												videoPath={videoPath || ""}
-												onDurationChange={setDuration}
-												onPreviewReadyChange={setIsPreviewReady}
-												onTimeUpdate={setCurrentTime}
-												currentTime={currentTime}
-												onPlayStateChange={setIsPlaying}
-												onError={setError}
-												wallpaper={wallpaper}
-												zoomRegions={effectiveZoomRegions}
-												selectedZoomId={selectedZoomId}
-												onSelectZoom={handleSelectZoom}
-												onZoomFocusChange={handleZoomFocusChange}
-												isPlaying={isPlaying}
-												showShadow={shadowIntensity > 0}
-												shadowIntensity={shadowIntensity}
-												backgroundBlur={backgroundBlur}
-												connectZooms={connectZooms}
-												zoomInDurationMs={zoomInDurationMs}
-												zoomInOverlapMs={zoomInOverlapMs}
-												zoomOutDurationMs={zoomOutDurationMs}
-												connectedZoomGapMs={connectedZoomGapMs}
-												connectedZoomDurationMs={connectedZoomDurationMs}
-												zoomInEasing={zoomInEasing}
-												zoomOutEasing={zoomOutEasing}
-												connectedZoomEasing={connectedZoomEasing}
-												borderRadius={borderRadius}
-												padding={padding}
-												frame={frame}
-												cropRegion={cropRegion}
-												webcam={webcam}
-												webcamVideoPath={
-													webcam.sourcePath
-														? resolvedWebcamVideoUrl
-														: null
-												}
-												trimRegions={trimRegions}
-												speedRegions={effectiveSpeedRegions}
-												annotationRegions={annotationRegions}
-												autoCaptions={autoCaptions}
-												autoCaptionSettings={autoCaptionSettings}
-												selectedAnnotationId={selectedAnnotationId}
-												onSelectAnnotation={handleSelectAnnotation}
-												onAnnotationPositionChange={
-													handleAnnotationPositionChange
-												}
-												onAnnotationSizeChange={handleAnnotationSizeChange}
-												cursorTelemetry={effectiveCursorTelemetry}
-												showCursor={effectiveShowCursor}
-												cursorStyle={cursorStyle}
-												cursorSize={cursorSize}
-												cursorSmoothing={cursorSmoothing}
-												cursorSpringStiffnessMultiplier={
-													cursorSpringStiffnessMultiplier
-												}
-												cursorSpringDampingMultiplier={
-													cursorSpringDampingMultiplier
-												}
-												cursorSpringMassMultiplier={
-													cursorSpringMassMultiplier
-												}
-												cameraSpringStiffnessMultiplier={
-													cameraSpringStiffnessMultiplier
-												}
-												cameraSpringDampingMultiplier={
-													cameraSpringDampingMultiplier
-												}
-												cameraSpringMassMultiplier={
-													cameraSpringMassMultiplier
-												}
-												zoomSmoothness={zoomSmoothness}
-												zoomClassicMode={zoomClassicMode}
-												zoomMotionBlur={zoomMotionBlur}
-												zoomMotionBlurTuning={zoomMotionBlurTuning}
-												cursorMotionBlur={cursorMotionBlur}
-												cursorClickBounce={cursorClickBounce}
-												cursorClickBounceDuration={
-													cursorClickBounceDuration
-												}
-												cursorSway={cursorSway}
-												volume={
-													audio.shouldMutePreviewVideo ||
-													audio.isCurrentClipMuted
-														? 0
-														: Math.max(
-																0,
-																Math.min(
-																	1,
-																	previewVolume *
-																		audio.embeddedSourcePreviewGain,
-																),
-															)
-												}
-												suspendRendering={shouldSuspendPreviewRendering}
-											/>
+											{renderPreviewPlayback(
+												videoPlaybackRef,
+												shouldSuspendPreviewRendering,
+												"inline",
+											)}
 										</div>
 									</div>
 								</div>
@@ -6072,18 +6161,7 @@ export default function VideoEditor() {
 										size="icon"
 										className="h-7 w-7 rounded-full text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
 										title={t("editor.playback.skipBack")}
-										onClick={() => {
-											const currentMs = timelinePlayheadTime * 1000;
-											const kfs = timelineRef.current?.keyframes ?? [];
-											const prev = [...kfs]
-												.reverse()
-												.find((k) => k.time < currentMs - 50);
-											handleSeek(
-												prev
-													? prev.time / 1000
-													: Math.max(0, timelinePlayheadTime - 5),
-											);
-										}}
+										onClick={handlePreviewSkipBack}
 									>
 										<SkipBack className="w-3.5 h-3.5" weight="fill" />
 									</Button>
@@ -6105,19 +6183,7 @@ export default function VideoEditor() {
 										size="icon"
 										className="h-7 w-7 rounded-full text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
 										title={t("editor.playback.skipForward")}
-										onClick={() => {
-											const currentMs = timelinePlayheadTime * 1000;
-											const kfs = timelineRef.current?.keyframes ?? [];
-											const next = kfs.find((k) => k.time > currentMs + 50);
-											handleSeek(
-												next
-													? next.time / 1000
-													: Math.min(
-															timelineDuration,
-															timelinePlayheadTime + 5,
-														),
-											);
-										}}
+										onClick={handlePreviewSkipForward}
 									>
 										<SkipForward className="w-3.5 h-3.5" weight="fill" />
 									</Button>
@@ -6128,25 +6194,6 @@ export default function VideoEditor() {
 							</div>
 							{/* Right: collapse + volume */}
 							<div className="z-10 ml-auto flex items-center gap-2">
-								<Button
-									variant="ghost"
-									size="icon"
-									title={
-										timelineCollapsed
-											? t("editor.timeline.expand")
-											: t("editor.timeline.collapse")
-									}
-									className="h-7 w-7 rounded-full text-muted-foreground transition-all hover:bg-foreground/10 hover:text-foreground"
-									onClick={() => {
-										setTimelineCollapsed((p) => !p);
-									}}
-								>
-									{timelineCollapsed ? (
-										<ChevronUp className="w-3.5 h-3.5" />
-									) : (
-										<ChevronDown className="w-3.5 h-3.5" />
-									)}
-								</Button>
 								<div className="flex items-center gap-1.5">
 									<button
 										type="button"
@@ -6201,8 +6248,8 @@ export default function VideoEditor() {
 				<div
 					className="flex-shrink-0 flex flex-col"
 					style={{
-						height: timelineCollapsed ? undefined : "15%",
-						minHeight: timelineCollapsed ? 0 : 160,
+						height: "15%",
+						minHeight: 160,
 					}}
 				>
 					<TimelineEditor

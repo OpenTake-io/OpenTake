@@ -15,6 +15,25 @@ describe("export bitrate policy", () => {
 		).toBe(27_000_000);
 	});
 
+	it("raises non-native export bitrate when fps increases", () => {
+		const bitrate30 = getMp4ExportBitrate({
+			width: 1920,
+			height: 1080,
+			frameRate: 30,
+			quality: "source",
+			encodingMode: "quality",
+		});
+		const bitrate60 = getMp4ExportBitrate({
+			width: 1920,
+			height: 1080,
+			frameRate: 60,
+			quality: "source",
+			encodingMode: "quality",
+		});
+
+		expect(bitrate60).toBeGreaterThan(bitrate30);
+	});
+
 	it("raises high-resolution 60fps source-quality exports above the 30fps budget", () => {
 		const sharedOptions = {
 			width: 2560,
