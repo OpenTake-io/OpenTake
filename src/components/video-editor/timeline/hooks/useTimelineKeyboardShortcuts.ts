@@ -1,4 +1,4 @@
-import { type RefObject, useEffect } from "react";
+import { useEffect, type RefObject } from "react";
 import { matchesShortcut } from "@/lib/shortcuts";
 import type { TimelineShortcutBindings } from "../core/timelineTypes";
 import { resolveDeleteSelectionTarget } from "./utils/timelineSelectionUtils";
@@ -7,8 +7,7 @@ interface UseTimelineKeyboardShortcutsParams {
 	isMac: boolean;
 	keyShortcuts: TimelineShortcutBindings;
 	isTimelineFocusedRef: RefObject<boolean>;
-	hasAnyZoomBlocks: boolean;
-	activateSelectAllZooms: () => void;
+	hasAnyTimelineBlocks: boolean;
 	annotationCount: number;
 	selectedKeyframeId: string | null;
 	selectedZoomId: string | null;
@@ -16,10 +15,13 @@ interface UseTimelineKeyboardShortcutsParams {
 	selectedAnnotationId?: string | null;
 	selectedAudioId?: string | null;
 	selectAllBlocksActive: boolean;
+	setSelectAllBlocksActive: (active: boolean) => void;
+	setSelectedKeyframeId: (id: string | null) => void;
 	addKeyframe: () => void;
 	handleAddZoom: () => void;
 	handleSplitClip: () => void;
 	handleAddAnnotation: () => void;
+	deleteAllBlocks: () => void;
 	deleteSelectedKeyframe: () => void;
 	deleteSelectedZoom: () => void;
 	deleteSelectedClip: () => void;
@@ -32,8 +34,7 @@ export function useTimelineKeyboardShortcuts({
 	isMac,
 	keyShortcuts,
 	isTimelineFocusedRef,
-	hasAnyZoomBlocks,
-	activateSelectAllZooms,
+	hasAnyTimelineBlocks,
 	annotationCount,
 	selectedKeyframeId,
 	selectedZoomId,
@@ -41,10 +42,13 @@ export function useTimelineKeyboardShortcuts({
 	selectedAnnotationId,
 	selectedAudioId,
 	selectAllBlocksActive,
+	setSelectAllBlocksActive,
+	setSelectedKeyframeId,
 	addKeyframe,
 	handleAddZoom,
 	handleSplitClip,
 	handleAddAnnotation,
+	deleteAllBlocks,
 	deleteSelectedKeyframe,
 	deleteSelectedZoom,
 	deleteSelectedClip,
@@ -69,11 +73,12 @@ export function useTimelineKeyboardShortcuts({
 			}
 
 			if (matchesShortcut(e, { key: "a", ctrl: true }, isMac)) {
-				if (!hasAnyZoomBlocks) {
+				if (!hasAnyTimelineBlocks) {
 					return;
 				}
 				e.preventDefault();
-				activateSelectAllZooms();
+				setSelectedKeyframeId(null);
+				setSelectAllBlocksActive(true);
 				return;
 			}
 
@@ -106,7 +111,9 @@ export function useTimelineKeyboardShortcuts({
 				if (target !== "none") {
 					e.preventDefault();
 				}
-				if (target === "keyframe") {
+				if (target === "all") {
+					deleteAllBlocks();
+				} else if (target === "keyframe") {
 					deleteSelectedKeyframe();
 				} else if (target === "zoom") {
 					deleteSelectedZoom();
@@ -123,10 +130,10 @@ export function useTimelineKeyboardShortcuts({
 		window.addEventListener("keydown", handleKeyDown);
 		return () => window.removeEventListener("keydown", handleKeyDown);
 	}, [
-		activateSelectAllZooms,
 		addKeyframe,
 		annotationCount,
 		cycleAnnotationsAtCurrentTime,
+		deleteAllBlocks,
 		deleteSelectedAnnotation,
 		deleteSelectedAudio,
 		deleteSelectedClip,
@@ -135,7 +142,7 @@ export function useTimelineKeyboardShortcuts({
 		handleAddAnnotation,
 		handleAddZoom,
 		handleSplitClip,
-		hasAnyZoomBlocks,
+		hasAnyTimelineBlocks,
 		isMac,
 		isTimelineFocusedRef,
 		keyShortcuts,
@@ -145,5 +152,7 @@ export function useTimelineKeyboardShortcuts({
 		selectedClipId,
 		selectedKeyframeId,
 		selectedZoomId,
+		setSelectAllBlocksActive,
+		setSelectedKeyframeId,
 	]);
 }

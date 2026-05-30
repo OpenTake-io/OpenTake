@@ -27,7 +27,9 @@ export function useTimelineSelection({
 	totalMs,
 	currentTimeMs,
 	zoomRegions,
+	clipRegions,
 	annotationRegions,
+	audioRegions,
 	selectedZoomId,
 	selectedClipId,
 	selectedAnnotationId,
@@ -44,7 +46,6 @@ export function useTimelineSelection({
 	const [keyframes, setKeyframes] = useState<{ id: string; time: number }[]>([]);
 	const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null);
 	const [selectAllBlocksActive, setSelectAllBlocksActive] = useState(false);
-	const hasAnyZoomBlocks = useMemo(() => zoomRegions.length > 0, [zoomRegions.length]);
 
 	const addKeyframe = useCallback(() => {
 		if (totalMs === 0) return;
@@ -71,29 +72,10 @@ export function useTimelineSelection({
 	);
 
 	const deleteSelectedZoom = useCallback(() => {
-		if (selectAllBlocksActive) {
-			zoomRegions.map((region) => region.id).forEach((id) => onZoomDelete(id));
-		} else if (selectedZoomId) {
-			onZoomDelete(selectedZoomId);
-		} else {
-			return;
-		}
-
+		if (!selectedZoomId) return;
+		onZoomDelete(selectedZoomId);
 		onSelectZoom(null);
-		onSelectClip?.(null);
-		onSelectAnnotation?.(null);
-		onSelectAudio?.(null);
-		setSelectAllBlocksActive(false);
-	}, [
-		selectAllBlocksActive,
-		zoomRegions,
-		onZoomDelete,
-		selectedZoomId,
-		onSelectZoom,
-		onSelectClip,
-		onSelectAnnotation,
-		onSelectAudio,
-	]);
+	}, [selectedZoomId, onZoomDelete, onSelectZoom]);
 
 	const deleteSelectedClip = useCallback(() => {
 		if (!selectedClipId || !onClipDelete || !onSelectClip) return;
@@ -121,14 +103,33 @@ export function useTimelineSelection({
 		setSelectAllBlocksActive(false);
 	}, [onSelectZoom, onSelectClip, onSelectAnnotation, onSelectAudio]);
 
-	const activateSelectAllZooms = useCallback(() => {
-		onSelectZoom(null);
-		onSelectClip?.(null);
-		onSelectAnnotation?.(null);
-		onSelectAudio?.(null);
+	const hasAnyTimelineBlocks = useMemo(
+		() =>
+			zoomRegions.length > 0 ||
+			clipRegions.length > 0 ||
+			annotationRegions.length > 0 ||
+			audioRegions.length > 0,
+		[zoomRegions.length, clipRegions.length, annotationRegions.length, audioRegions.length],
+	);
+
+	const deleteAllBlocks = useCallback(() => {
+		zoomRegions.map((r) => r.id).forEach((id) => onZoomDelete(id));
+		clipRegions.map((r) => r.id).forEach((id) => onClipDelete?.(id));
+		annotationRegions.map((r) => r.id).forEach((id) => onAnnotationDelete?.(id));
+		audioRegions.map((r) => r.id).forEach((id) => onAudioDelete?.(id));
+		clearSelectedBlocks();
 		setSelectedKeyframeId(null);
-		setSelectAllBlocksActive(true);
-	}, [onSelectZoom, onSelectClip, onSelectAnnotation, onSelectAudio]);
+	}, [
+		zoomRegions,
+		clipRegions,
+		annotationRegions,
+		audioRegions,
+		onZoomDelete,
+		onClipDelete,
+		onAnnotationDelete,
+		onAudioDelete,
+		clearSelectedBlocks,
+	]);
 
 	const handleSelectZoom = useCallback(
 		(id: string | null) => {
@@ -192,8 +193,7 @@ export function useTimelineSelection({
 		setSelectedKeyframeId,
 		selectAllBlocksActive,
 		setSelectAllBlocksActive,
-		hasAnyZoomBlocks,
-		activateSelectAllZooms,
+		hasAnyTimelineBlocks,
 		addKeyframe,
 		deleteSelectedKeyframe,
 		handleKeyframeMove,
@@ -202,6 +202,7 @@ export function useTimelineSelection({
 		deleteSelectedAnnotation,
 		deleteSelectedAudio,
 		clearSelectedBlocks,
+		deleteAllBlocks,
 		handleSelectZoom,
 		handleSelectClip,
 		handleSelectAnnotation,

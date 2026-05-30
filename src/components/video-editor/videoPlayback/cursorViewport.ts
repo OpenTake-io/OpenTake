@@ -7,8 +7,6 @@ export interface CursorViewportRect {
 	y: number;
 	width: number;
 	height: number;
-	renderWidth?: number;
-	renderHeight?: number;
 	sourceCrop?: CropRegion;
 }
 
