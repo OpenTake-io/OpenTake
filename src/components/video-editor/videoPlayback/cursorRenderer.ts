@@ -1618,13 +1618,14 @@ export function drawCursorOnCanvas(
 		0.72,
 		1 - Math.sin(clickBounceProgress * Math.PI) * (0.08 * config.clickBounce),
 	);
-	const drawHeight = h * bounceScale * getCursorStyleSizeMultiplier(config.style);
+	const effectHeight = h * getCursorStyleSizeMultiplier(config.style);
+	const drawHeight = effectHeight * bounceScale;
 	drawClickEffectOnCanvas(
 		ctx,
 		config.clickEffect,
 		clickEffectPx,
 		clickEffectPy,
-		drawHeight,
+		effectHeight,
 		clickProgress,
 		config.clickEffectScale,
 		config.clickEffectOpacity,

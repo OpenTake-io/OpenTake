@@ -118,9 +118,9 @@
 				"label": "Spotlight",
 				"description": "A soft halo flashes around the pointer to emphasize the clicked area."
 			},
-			"burst": {
-				"label": "Burst",
-				"description": "A sharper radial burst adds more energy for demos and product walkthroughs."
+			"echo": {
+				"label": "Echo",
+				"description": "A pair of soft rings that spread outward with a cleaner pulse."
 			}
 		},
 		"cursorMotionBlur": "Cursor Motion Blur",

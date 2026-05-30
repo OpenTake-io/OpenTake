@@ -1816,6 +1816,7 @@ export function SettingsPanel({
 		onCursorSpringMassMultiplierChange?.(initialEditorPreferences.cursorSpringMassMultiplier);
 		onCursorMotionBlurChange?.(initialEditorPreferences.cursorMotionBlur);
 		onCursorClickEffectChange?.(initialEditorPreferences.cursorClickEffect);
+		onCursorClickEffectColorChange?.(initialEditorPreferences.cursorClickEffectColor);
 		onCursorClickEffectScaleChange?.(initialEditorPreferences.cursorClickEffectScale);
 		onCursorClickEffectOpacityChange?.(initialEditorPreferences.cursorClickEffectOpacity);
 		onCursorClickEffectDurationMsChange?.(initialEditorPreferences.cursorClickEffectDurationMs);
