@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolveDeleteSelectionTarget } from "./timelineSelectionUtils";
 
 describe("timelineSelectionUtils", () => {
-	it("treats zoom select-all as a zoom deletion target", () => {
+	it("prioritizes select-all over any individual selection", () => {
 		expect(
 			resolveDeleteSelectionTarget({
 				selectAllBlocksActive: true,
@@ -12,7 +12,7 @@ describe("timelineSelectionUtils", () => {
 				selectedAnnotationId: "a-1",
 				selectedAudioId: "au-1",
 			}),
-		).toBe("zoom");
+		).toBe("all");
 	});
 
 	it("follows selection priority order", () => {

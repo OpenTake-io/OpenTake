@@ -1,4 +1,11 @@
-export type DeleteSelectionTarget = "keyframe" | "zoom" | "clip" | "annotation" | "audio" | "none";
+export type DeleteSelectionTarget =
+	| "all"
+	| "keyframe"
+	| "zoom"
+	| "clip"
+	| "annotation"
+	| "audio"
+	| "none";
 
 interface ResolveDeleteSelectionTargetParams {
 	selectAllBlocksActive: boolean;
@@ -17,7 +24,7 @@ export function resolveDeleteSelectionTarget({
 	selectedAnnotationId,
 	selectedAudioId,
 }: ResolveDeleteSelectionTargetParams): DeleteSelectionTarget {
-	if (selectAllBlocksActive) return "zoom";
+	if (selectAllBlocksActive) return "all";
 	if (selectedKeyframeId) return "keyframe";
 	if (selectedZoomId) return "zoom";
 	if (selectedClipId) return "clip";
