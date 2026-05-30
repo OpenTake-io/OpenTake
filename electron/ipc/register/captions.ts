@@ -7,6 +7,7 @@ import {
 	sendWhisperModelDownloadProgress,
 } from "../captions/whisper";
 import { generateAutoCaptionsFromVideo } from "../captions/generate";
+import { exportSubtitleFile } from "../captions/exportSubtitleFile";
 import { approveUserPath, getRecordingsDir } from "../utils";
 
 export function registerCaptionHandlers() {
@@ -203,5 +204,7 @@ export function registerCaptionHandlers() {
       }
     }
   })
+
+  ipcMain.handle('export-subtitle-file', exportSubtitleFile)
 
 }
