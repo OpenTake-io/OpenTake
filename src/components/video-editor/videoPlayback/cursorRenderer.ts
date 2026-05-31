@@ -1122,6 +1122,7 @@ export class PixiCursorOverlay {
 	private config: CursorRenderConfig;
 	private lastRenderedPoint: { px: number; py: number } | null = null;
 	private lastRenderedTimeMs: number | null = null;
+	private cursorVisible = false;
 	private swayRotation = 0;
 	private swaySpring = createSpringState(0);
 
@@ -1292,7 +1293,7 @@ export class PixiCursorOverlay {
 		cy: number;
 		trail: Array<{ cx: number; cy: number }>;
 	} | null {
-		if (!this.container.visible) {
+		if (!this.container.visible || !this.cursorVisible) {
 			return null;
 		}
 
@@ -1310,51 +1311,36 @@ export class PixiCursorOverlay {
 		visible: boolean,
 		freeze = false,
 	): void {
-		if (!visible || samples.length === 0 || viewport.width <= 0 || viewport.height <= 0) {
+		if (samples.length === 0 || viewport.width <= 0 || viewport.height <= 0) {
 			this.container.visible = false;
+			this.cursorVisible = false;
+			this.clickRingGraphics.clear();
 			this.lastRenderedPoint = null;
 			this.lastRenderedTimeMs = null;
 			this.swayRotation = 0;
 			resetSpringState(this.swaySpring, 0);
 			this.cursorMotionBlurFilter.velocity = { x: 0, y: 0 };
+			this.customCursorShadowSprite.visible = false;
+			this.customCursorSprite.visible = false;
+			for (const shadowSprite of Object.values(this.cursorShadowSprites)) {
+				shadowSprite.visible = false;
+			}
+			for (const sprite of Object.values(this.cursorSprites)) {
+				sprite.visible = false;
+			}
 			return;
 		}
 
 		const target = interpolateCursorPosition(samples, timeMs);
 		if (!target) {
 			this.container.visible = false;
+			this.cursorVisible = false;
+			this.clickRingGraphics.clear();
 			return;
 		}
 
 		const projectedTarget = projectCursorPositionToViewport(target, viewport.sourceCrop);
-		if (!projectedTarget.visible) {
-			this.container.visible = false;
-			this.lastRenderedPoint = null;
-			this.lastRenderedTimeMs = null;
-			this.swayRotation = 0;
-			resetSpringState(this.swaySpring, 0);
-			this.cursorMotionBlurFilter.velocity = { x: 0, y: 0 };
-			return;
-		}
 
-		const sameFrameTime =
-			this.lastRenderedTimeMs !== null && Math.abs(this.lastRenderedTimeMs - timeMs) < 0.0001;
-		const hasTimeDiscontinuity =
-			this.lastRenderedTimeMs !== null &&
-			Math.abs(timeMs - this.lastRenderedTimeMs) > CURSOR_TIME_DISCONTINUITY_MS;
-		const shouldFreezeCursorMotion = freeze || hasTimeDiscontinuity;
-
-		if (shouldFreezeCursorMotion) {
-			if (!sameFrameTime || !this.lastRenderedPoint) {
-				this.state.snapTo(projectedTarget.cx, projectedTarget.cy, timeMs);
-			}
-		} else {
-			this.state.update(projectedTarget.cx, projectedTarget.cy, timeMs);
-		}
-		this.container.visible = true;
-
-		const px = viewport.x + this.state.x * viewport.width;
-		const py = viewport.y + this.state.y * viewport.height;
 		const h = this.config.dotRadius * getCursorViewportScale(viewport);
 		const { cursorType, clickSample, clickBounceProgress, clickProgress } =
 			getCursorVisualState(
@@ -1369,11 +1355,73 @@ export class PixiCursorOverlay {
 		const clickEffectPx =
 			projectedClickSample && projectedClickSample.visible
 				? viewport.x + projectedClickSample.cx * viewport.width
-				: px;
+				: viewport.x + projectedTarget.cx * viewport.width;
 		const clickEffectPy =
 			projectedClickSample && projectedClickSample.visible
 				? viewport.y + projectedClickSample.cy * viewport.height
-				: py;
+				: viewport.y + projectedTarget.cy * viewport.height;
+		const shouldShowCursorSprite = visible && projectedTarget.visible;
+		const shouldDrawClickEffect =
+			this.config.clickEffect !== "none" &&
+			clickProgress > 0 &&
+			Boolean(projectedClickSample?.visible);
+
+		if (!shouldShowCursorSprite && !shouldDrawClickEffect) {
+			this.container.visible = false;
+			this.cursorVisible = false;
+			this.clickRingGraphics.clear();
+			this.customCursorShadowSprite.visible = false;
+			this.customCursorSprite.visible = false;
+			for (const shadowSprite of Object.values(this.cursorShadowSprites)) {
+				shadowSprite.visible = false;
+			}
+			for (const sprite of Object.values(this.cursorSprites)) {
+				sprite.visible = false;
+			}
+			this.lastRenderedPoint = null;
+			this.lastRenderedTimeMs = null;
+			this.swayRotation = 0;
+			resetSpringState(this.swaySpring, 0);
+			this.cursorMotionBlurFilter.velocity = { x: 0, y: 0 };
+			return;
+		}
+
+		this.container.visible = true;
+		this.cursorVisible = shouldShowCursorSprite;
+
+		let px = viewport.x + projectedTarget.cx * viewport.width;
+		let py = viewport.y + projectedTarget.cy * viewport.height;
+		let shouldFreezeCursorMotion = true;
+
+		if (shouldShowCursorSprite) {
+			const sameFrameTime =
+				this.lastRenderedTimeMs !== null && Math.abs(this.lastRenderedTimeMs - timeMs) < 0.0001;
+			const hasTimeDiscontinuity =
+				this.lastRenderedTimeMs !== null &&
+				Math.abs(timeMs - this.lastRenderedTimeMs) > CURSOR_TIME_DISCONTINUITY_MS;
+			shouldFreezeCursorMotion = freeze || hasTimeDiscontinuity;
+
+			if (shouldFreezeCursorMotion) {
+				if (!sameFrameTime || !this.lastRenderedPoint) {
+					this.state.snapTo(projectedTarget.cx, projectedTarget.cy, timeMs);
+				}
+			} else {
+				this.state.update(projectedTarget.cx, projectedTarget.cy, timeMs);
+			}
+
+			px = viewport.x + this.state.x * viewport.width;
+			py = viewport.y + this.state.y * viewport.height;
+		} else {
+			this.customCursorShadowSprite.visible = false;
+			this.customCursorSprite.visible = false;
+			for (const shadowSprite of Object.values(this.cursorShadowSprites)) {
+				shadowSprite.visible = false;
+			}
+			for (const sprite of Object.values(this.cursorSprites)) {
+				sprite.visible = false;
+			}
+		}
+
 		const bounceScale = Math.max(
 			0.72,
 			1 - Math.sin(clickBounceProgress * Math.PI) * (0.08 * this.config.clickBounce),
@@ -1397,7 +1445,7 @@ export class PixiCursorOverlay {
 			cursorType in this.cursorSprites ? cursorType : "arrow"
 		) as CursorAssetKey;
 
-		if (isStatefulCursorStyle(this.config.style)) {
+		if (shouldShowCursorSprite && isStatefulCursorStyle(this.config.style)) {
 			this.customCursorShadowSprite.visible = false;
 			this.customCursorSprite.visible = false;
 
@@ -1432,7 +1480,7 @@ export class PixiCursorOverlay {
 				sprite.position.set(px, py);
 				sprite.rotation = swayRotation;
 			}
-		} else {
+		} else if (shouldShowCursorSprite) {
 			for (const currentShadowSprite of Object.values(this.cursorShadowSprites)) {
 				currentShadowSprite.visible = false;
 			}
@@ -1469,7 +1517,7 @@ export class PixiCursorOverlay {
 		}
 
 		this.applyCursorMotionBlur(px, py, timeMs, shouldFreezeCursorMotion);
-		this.lastRenderedPoint = { px, py };
+		this.lastRenderedPoint = shouldShowCursorSprite ? { px, py } : null;
 		this.lastRenderedTimeMs = timeMs;
 	}
 
@@ -1534,6 +1582,7 @@ export class PixiCursorOverlay {
 	reset(): void {
 		this.state.reset();
 		this.clickRingGraphics.clear();
+		this.cursorVisible = false;
 		for (const shadowSprite of Object.values(this.cursorShadowSprites)) {
 			shadowSprite.visible = false;
 			shadowSprite.scale.set(1);

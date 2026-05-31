@@ -1519,7 +1519,6 @@ export class ModernVideoExporter {
 
 		const speedRegions = this.config.speedRegions ?? [];
 		const hasCursorClickEffect =
-			this.config.showCursor === true &&
 			(this.config.cursorTelemetry?.length ?? 0) > 0 &&
 			(this.config.cursorClickEffect ?? "none") !== "none";
 		const configuredWallpaper = this.config.wallpaper?.trim() ?? "";
