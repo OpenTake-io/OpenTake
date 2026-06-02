@@ -15,3 +15,29 @@ export function getWebcamMediaTargetTimeSeconds({
 }
 
 export const getWebcamPreviewTargetTimeSeconds = getWebcamMediaTargetTimeSeconds;
+
+export function shouldSeekWebcamMedia({
+	desiredTime,
+	isPlaying,
+	isSeeking,
+	previousTimelineTime,
+	timelineTime,
+	webcamCurrentTime,
+}: {
+	desiredTime: number;
+	isPlaying: boolean;
+	isSeeking: boolean;
+	previousTimelineTime: number | null;
+	timelineTime: number;
+	webcamCurrentTime: number;
+}): boolean {
+	if (isSeeking) {
+		return false;
+	}
+
+	const timelineJumped =
+		previousTimelineTime === null || Math.abs(timelineTime - previousTimelineTime) > 0.25;
+	const driftThreshold = isPlaying ? 0.35 : 0.01;
+
+	return timelineJumped || Math.abs(webcamCurrentTime - desiredTime) > driftThreshold;
+}
