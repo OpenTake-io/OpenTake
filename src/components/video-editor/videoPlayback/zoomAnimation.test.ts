@@ -400,7 +400,7 @@ describe("findDominantRegion", () => {
 		const result = findDominantRegion(regions, 3100, { connectZooms: true });
 		expect(result.transition).toBeNull();
 		expect(result.region?.id).toBe("a");
-		expect(result.strength).toBeGreaterThan(0);
+		expect(result.strength).toBe(1);
 	});
 
 	it("keeps the incoming region at full strength after a connected handoff", () => {
