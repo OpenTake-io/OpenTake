@@ -16,6 +16,7 @@ export function useLaunchHudInteractionState({
 
 	useEffect(() => {
 		if (openId !== null) {
+			if (timeoutRef.current) clearTimeout(timeoutRef.current);
 			window.electronAPI?.hudOverlaySetIgnoreMouse?.(false);
 		} else {
 			// Proactively check if we should ignore mouse when popover closes
@@ -39,11 +40,12 @@ export function useLaunchHudInteractionState({
 				isMouseOverHudRef.current = true;
 				if (timeoutRef.current) clearTimeout(timeoutRef.current);
 				window.electronAPI?.hudOverlaySetIgnoreMouse?.(false);
-			} else {
+			} else if (openId === null) {
 				isMouseOverHudRef.current = false;
 				if (timeoutRef.current) clearTimeout(timeoutRef.current);
 				timeoutRef.current = setTimeout(() => {
 					if (
+						openId === null &&
 						!isHudDraggingRef.current &&
 						!isWebcamPreviewDraggingRef.current &&
 						!webcamPreviewDragStartRef.current &&
@@ -57,7 +59,7 @@ export function useLaunchHudInteractionState({
 
 		window.addEventListener("mouseover", handleMouseOver);
 		return () => window.removeEventListener("mouseover", handleMouseOver);
-	}, [isHudDraggingRef, isWebcamPreviewDraggingRef, webcamPreviewDragStartRef]);
+	}, [openId, isHudDraggingRef, isWebcamPreviewDraggingRef, webcamPreviewDragStartRef]);
 
 	const beginInteractiveHudAction = useCallback(() => {
 		isMouseOverHudRef.current = true;
@@ -83,6 +85,7 @@ export function useLaunchHudInteractionState({
 
 			timeoutRef.current = setTimeout(() => {
 				if (
+					openId === null &&
 					!isHudDraggingRef.current &&
 					!isWebcamPreviewDraggingRef.current &&
 					!webcamPreviewDragStartRef.current &&
@@ -92,7 +95,7 @@ export function useLaunchHudInteractionState({
 				}
 			}, 300);
 		},
-		[isHudDraggingRef, isWebcamPreviewDraggingRef, webcamPreviewDragStartRef],
+		[openId, isHudDraggingRef, isWebcamPreviewDraggingRef, webcamPreviewDragStartRef],
 	);
 
 	return {
