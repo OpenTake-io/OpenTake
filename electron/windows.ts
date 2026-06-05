@@ -5,12 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain } from "electron";
 import { USER_DATA_PATH } from "./appPaths";
-import {
-	getHudOverlayWindowBounds,
-	resizeHudOverlayFallbackBounds,
-	shouldExpandHudOverlayFallback,
-	shouldResizeHudOverlayFallback,
-} from "./hudOverlayBounds";
+import { getHudOverlayWindowBounds, resizeHudOverlayFallbackBounds } from "./hudOverlayBounds";
 import { getPackagedRendererBaseUrl } from "./rendererServer";
 
 const electronWindowsDir = path.dirname(fileURLToPath(import.meta.url));
@@ -196,15 +191,10 @@ function getHudOverlayDisplay() {
 
 function getHudOverlayBounds() {
 	const { workArea } = getHudOverlayDisplay();
-	const fallbackExpanded = shouldExpandHudOverlayFallback({
-		fallbackExpanded: hudOverlayFallbackExpanded,
-		recordingActive: hudOverlayRecordingActive,
-		webcamPreviewVisible: hudOverlayWebcamPreviewVisible,
-	});
 	return getHudOverlayWindowBounds(
 		workArea,
 		isHudOverlayMousePassthroughSupported() && !hudOverlayRecordingActive,
-		fallbackExpanded,
+		hudOverlayFallbackExpanded,
 	);
 }
 
@@ -311,21 +301,8 @@ function setHudOverlayMousePassthrough(ignore: boolean) {
 		return;
 	}
 
-	if (hudOverlaySourceSelectionActive) {
-		hudOverlayFallbackExpanded = false;
-		hudOverlayWindow.setIgnoreMouseEvents(false);
-		return;
-	}
-
-	const mousePassthroughSupported = isHudOverlayMousePassthroughSupported();
-	if (!mousePassthroughSupported) {
-		if (
-			shouldResizeHudOverlayFallback(
-				mousePassthroughSupported,
-				hudOverlayRecordingActive,
-				hudOverlaySourceSelectionActive,
-			)
-		) {
+	if (!isHudOverlayMousePassthroughSupported()) {
+		if (process.platform !== "linux") {
 			setHudOverlayFallbackExpanded(!ignore);
 		}
 		hudOverlayWindow.setIgnoreMouseEvents(false);
