@@ -676,7 +676,6 @@ interface Window {
 			options?: {
 				preserveProjectPath?: boolean;
 				hideOverlayCursorByDefault?: boolean;
-				nativeCaptureUnavailable?: boolean;
 			},
 		) => Promise<{ success: boolean; webcamPath: string | null }>;
 		setCurrentRecordingSession: (
@@ -685,7 +684,6 @@ interface Window {
 				webcamPath?: string | null;
 				timeOffsetMs?: number;
 				hideOverlayCursorByDefault?: boolean;
-				nativeCaptureUnavailable?: boolean;
 			},
 			options?: { preserveProjectPath?: boolean },
 		) => Promise<{ success: boolean }>;
@@ -696,7 +694,6 @@ interface Window {
 				webcamPath?: string | null;
 				timeOffsetMs?: number;
 				hideOverlayCursorByDefault?: boolean;
-				nativeCaptureUnavailable?: boolean;
 			};
 		}>;
 		getCurrentVideoPath: () => Promise<{ success: boolean; path?: string }>;
@@ -842,11 +839,7 @@ interface Window {
 		/** Returns the app version from package.json */
 		getAppVersion: () => Promise<string>;
 		/** Hide the OS cursor before browser capture starts. */
-		hideOsCursor: () => Promise<{
-			success: boolean;
-			unsupported?: boolean;
-			platform?: string;
-		}>;
+		hideOsCursor: () => Promise<{ success: boolean }>;
 		/** Recording preferences (mic, system audio) */
 		getRecordingPreferences: () => Promise<{
 			success: boolean;

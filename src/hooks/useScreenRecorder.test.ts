@@ -3,10 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	createBrowserRecordingOptions,
 	createProcessedMicrophoneConstraints,
-	getScreenCaptureCursorSetting,
 	normalizeBrowserMicrophoneProfile,
 	resolveBrowserCaptureCursorPolicy,
-	resolveLinuxPortalCursorPresentation,
 	shouldUseNativeWindowsCaptureForSource,
 } from "./useScreenRecorder";
 
@@ -147,7 +145,6 @@ describe("resolveBrowserCaptureCursorPolicy", () => {
 			streamCursor: "never",
 			hideOsCursorBeforeRecording: true,
 			hideEditorOverlayCursorByDefault: true,
-			nativeCaptureUnavailable: false,
 		});
 	});
 
@@ -158,63 +155,7 @@ describe("resolveBrowserCaptureCursorPolicy", () => {
 			streamCursor: "always",
 			hideOsCursorBeforeRecording: false,
 			hideEditorOverlayCursorByDefault: true,
-			nativeCaptureUnavailable: true,
 		});
-	});
-
-	it("does not fake OS cursor hiding on Linux portal capture", () => {
-		expect(resolveBrowserCaptureCursorPolicy({ platform: "linux" })).toEqual({
-			streamCursor: "never",
-			hideOsCursorBeforeRecording: false,
-			hideEditorOverlayCursorByDefault: true,
-			nativeCaptureUnavailable: true,
-		});
-	});
-});
-
-describe("resolveLinuxPortalCursorPresentation", () => {
-	it("enables the Recordly overlay only when the portal confirms cursor-hidden capture", () => {
-		expect(
-			resolveLinuxPortalCursorPresentation({
-				requestedCursor: "never",
-				actualCursor: "never",
-			}),
-		).toEqual({
-			hideEditorOverlayCursorByDefault: false,
-			nativeCaptureUnavailable: false,
-		});
-	});
-
-	it("keeps the overlay disabled when the portal embeds or omits cursor settings", () => {
-		expect(
-			resolveLinuxPortalCursorPresentation({
-				requestedCursor: "never",
-				actualCursor: "always",
-			}),
-		).toEqual({
-			hideEditorOverlayCursorByDefault: true,
-			nativeCaptureUnavailable: true,
-		});
-		expect(
-			resolveLinuxPortalCursorPresentation({
-				requestedCursor: "never",
-				actualCursor: null,
-			}),
-		).toEqual({
-			hideEditorOverlayCursorByDefault: true,
-			nativeCaptureUnavailable: true,
-		});
-	});
-});
-
-describe("getScreenCaptureCursorSetting", () => {
-	it("normalizes only supported screen-capture cursor settings", () => {
-		expect(getScreenCaptureCursorSetting({ cursor: "motion" } as MediaTrackSettings)).toBe(
-			"motion",
-		);
-		expect(
-			getScreenCaptureCursorSetting({ cursor: "hidden" } as MediaTrackSettings),
-		).toBeNull();
 	});
 });
 
