@@ -7,8 +7,6 @@ import {
 	normalizeBrowserMicrophoneProfile,
 	resolveBrowserCaptureCursorPolicy,
 	resolveLinuxPortalCursorPresentation,
-	shouldLockHudDuringDisplaySelection,
-	shouldUseLinuxPortalCapture,
 	shouldUseNativeWindowsCaptureForSource,
 } from "./useScreenRecorder";
 
@@ -206,70 +204,6 @@ describe("resolveLinuxPortalCursorPresentation", () => {
 			hideEditorOverlayCursorByDefault: true,
 			nativeCaptureUnavailable: true,
 		});
-	});
-});
-
-describe("shouldUseLinuxPortalCapture", () => {
-	it("uses the portal when the selected source is the Linux sentinel", () => {
-		expect(
-			shouldUseLinuxPortalCapture({
-				browserCaptureSourceId: "screen:linux-portal",
-				selectedSourceId: "screen:linux-portal",
-			}),
-		).toBe(true);
-	});
-
-	it("uses the portal when a stale screen fallback resolves to the Linux sentinel", () => {
-		expect(
-			shouldUseLinuxPortalCapture({
-				browserCaptureSourceId: "screen:linux-portal",
-				selectedSourceId: "screen:fallback:42",
-			}),
-		).toBe(true);
-	});
-
-	it("keeps live Electron screen sources on browser getUserMedia", () => {
-		expect(
-			shouldUseLinuxPortalCapture({
-				browserCaptureSourceId: "screen:42:0",
-				selectedSourceId: "screen:42:0",
-			}),
-		).toBe(false);
-	});
-
-	it("prefers a live Electron source over stale portal selection state", () => {
-		expect(
-			shouldUseLinuxPortalCapture({
-				browserCaptureSourceId: "screen:42:0",
-				selectedSourceId: "screen:linux-portal",
-			}),
-		).toBe(false);
-	});
-});
-
-describe("shouldLockHudDuringDisplaySelection", () => {
-	it("locks HUD fallback resizing while Linux portal selection is active", () => {
-		expect(
-			shouldLockHudDuringDisplaySelection({
-				platform: "linux",
-				useLinuxPortal: true,
-			}),
-		).toBe(true);
-	});
-
-	it("keeps non-portal capture flows interactive", () => {
-		expect(
-			shouldLockHudDuringDisplaySelection({
-				platform: "linux",
-				useLinuxPortal: false,
-			}),
-		).toBe(false);
-		expect(
-			shouldLockHudDuringDisplaySelection({
-				platform: "win32",
-				useLinuxPortal: true,
-			}),
-		).toBe(false);
 	});
 });
 

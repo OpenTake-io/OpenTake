@@ -128,33 +128,6 @@ type DesktopCaptureMediaDevices = {
 	getDisplayMedia: (constraints: unknown) => Promise<MediaStream>;
 };
 
-export function shouldUseLinuxPortalCapture({
-	browserCaptureSourceId,
-	selectedSourceId,
-}: {
-	browserCaptureSourceId?: string;
-	selectedSourceId?: string;
-}) {
-	if (browserCaptureSourceId && browserCaptureSourceId !== LINUX_PORTAL_SOURCE.id) {
-		return false;
-	}
-
-	return (
-		selectedSourceId === LINUX_PORTAL_SOURCE.id ||
-		browserCaptureSourceId === LINUX_PORTAL_SOURCE.id
-	);
-}
-
-export function shouldLockHudDuringDisplaySelection({
-	platform,
-	useLinuxPortal,
-}: {
-	platform?: string;
-	useLinuxPortal: boolean;
-}) {
-	return platform === "linux" && useLinuxPortal;
-}
-
 type UseScreenRecorderReturn = {
 	recording: boolean;
 	paused: boolean;
@@ -711,7 +684,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		// on Wayland that triggers an additional xdg-desktop-portal dialog.
 		// The sentinel is handled later by routing through getDisplayMedia,
 		// which lets the portal pick the source in a single dialog.
-		if (source.id === LINUX_PORTAL_SOURCE.id) {
+		if (source.id === "screen:linux-portal") {
 			return source;
 		}
 
@@ -1467,7 +1440,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			// Persist the synthetic Linux portal sentinel to main so that the
 			// setDisplayMediaRequestHandler can short-circuit getSources() and
 			// avoid triggering an extra portal dialog.
-			if (!existingSource && selectedSource.id === LINUX_PORTAL_SOURCE.id) {
+			if (!existingSource && selectedSource.id === "screen:linux-portal") {
 				try {
 					await window.electronAPI.selectSource(selectedSource);
 				} catch (err) {
@@ -1699,13 +1672,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			let videoTrack: MediaStreamTrack | undefined;
 			let systemAudioIncluded = false;
 			const mediaDevices = navigator.mediaDevices as DesktopCaptureMediaDevices;
-			const useLinuxPortal = shouldUseLinuxPortalCapture({
-				browserCaptureSourceId: browserCaptureSource.id,
-				selectedSourceId: selectedSource.id,
-			});
-			if (shouldLockHudDuringDisplaySelection({ platform, useLinuxPortal })) {
-				setHudSourceSelectionActive(true);
-			}
+			const useLinuxPortal = selectedSource.id === "screen:linux-portal";
 			const browserScreenVideoConstraints = {
 				mandatory: {
 					chromeMediaSource: CHROME_MEDIA_SOURCE,

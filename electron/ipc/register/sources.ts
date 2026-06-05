@@ -1,20 +1,19 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { app, BrowserWindow, desktopCapturer, ipcMain } from "electron";
-import { reassertHudOverlayMousePassthrough } from "../../windows";
 import { ALLOW_RECORDLY_WINDOW_CAPTURE } from "../constants";
-import {
-	getNativeMacWindowSources,
-	resolveLinuxWindowBounds,
-	resolveMacWindowBounds,
-	resolveWindowsWindowBounds,
-	stopWindowBoundsCapture,
-} from "../cursor/bounds";
-import { getDisplayBoundsForSource, getDisplayWorkAreaForSource } from "../recording/ffmpeg";
 import { selectedSource, setSelectedSource } from "../state";
 import type { SelectedSource } from "../types";
 import { getScreen, parseWindowId } from "../utils";
-import { getScreenSourceIdForDisplay } from "./sourceMapping";
+import { getDisplayBoundsForSource, getDisplayWorkAreaForSource } from "../recording/ffmpeg";
+import {
+	getNativeMacWindowSources,
+	resolveMacWindowBounds,
+	resolveWindowsWindowBounds,
+	resolveLinuxWindowBounds,
+	stopWindowBoundsCapture,
+} from "../cursor/bounds";
+import { reassertHudOverlayMousePassthrough } from "../../windows";
 
 const execFileAsync = promisify(execFile);
 const SOURCE_LIST_CACHE_TTL_MS = 1200;
@@ -126,12 +125,7 @@ export function registerSourceHandlers({
 					: `Screen ${index + 1}`;
 
 			return {
-				id: getScreenSourceIdForDisplay({
-					displayId,
-					env: process.env,
-					matchedSourceId: matchedSource?.id,
-					platform: process.platform,
-				}),
+				id: matchedSource?.id ?? `screen:fallback:${displayId}`,
 				name: displayName,
 				originalName: matchedSource?.name ?? displayName,
 				display_id: displayId,
