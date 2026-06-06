@@ -182,9 +182,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	hudOverlayRendererReady: () => {
 		ipcRenderer.send("hud-overlay-renderer-ready");
 	},
-	hudOverlaySetWebcamPreviewVisible: (visible: boolean) => {
-		ipcRenderer.send("hud-overlay-set-webcam-preview-visible", visible);
-	},
 	getHudOverlayCaptureProtection: () => {
 		return ipcRenderer.invoke("get-hud-overlay-capture-protection");
 	},
@@ -693,7 +690,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		options?: {
 			preserveProjectPath?: boolean;
 			hideOverlayCursorByDefault?: boolean;
-			nativeCaptureUnavailable?: boolean;
 		},
 	) => {
 		return ipcRenderer.invoke("set-current-video-path", path, options);
@@ -704,7 +700,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
 			webcamPath?: string | null;
 			timeOffsetMs?: number;
 			hideOverlayCursorByDefault?: boolean;
-			nativeCaptureUnavailable?: boolean;
 		},
 		options?: { preserveProjectPath?: boolean },
 	) => {
