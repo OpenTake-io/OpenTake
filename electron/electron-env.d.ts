@@ -543,6 +543,14 @@ interface Window {
 			tempPath: string;
 			fileName: string;
 			outputPath?: string | null;
+			captionSidecar?: {
+				format: "srt" | "vtt" | "both";
+				cues: Array<{
+					startMs: number;
+					endMs: number;
+					text: string;
+				}>;
+			};
 		}) => Promise<{
 			success: boolean;
 			path?: string;
@@ -614,10 +622,26 @@ interface Window {
 		saveExportedVideo: (
 			videoData: ArrayBuffer,
 			fileName: string,
+			captionSidecar?: {
+				format: "srt" | "vtt" | "both";
+				cues: Array<{
+					startMs: number;
+					endMs: number;
+					text: string;
+				}>;
+			},
 		) => Promise<{ success: boolean; path?: string; message?: string; canceled?: boolean }>;
 		writeExportedVideoToPath: (
 			videoData: ArrayBuffer,
 			outputPath: string,
+			captionSidecar?: {
+				format: "srt" | "vtt" | "both";
+				cues: Array<{
+					startMs: number;
+					endMs: number;
+					text: string;
+				}>;
+			},
 		) => Promise<{
 			success: boolean;
 			path?: string;
