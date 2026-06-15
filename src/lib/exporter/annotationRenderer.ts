@@ -8,6 +8,28 @@ export interface AnnotationRenderAssets {
 	imageCache: Map<string, HTMLImageElement>;
 }
 
+interface AnnotationSceneTransform {
+	scale: number;
+	x: number;
+	y: number;
+}
+
+function transformAnnotationRect(
+	rect: { x: number; y: number; width: number; height: number },
+	sceneTransform?: AnnotationSceneTransform,
+) {
+	if (!sceneTransform) {
+		return rect;
+	}
+
+	return {
+		x: rect.x * sceneTransform.scale + sceneTransform.x,
+		y: rect.y * sceneTransform.scale + sceneTransform.y,
+		width: rect.width * sceneTransform.scale,
+		height: rect.height * sceneTransform.scale,
+	};
+}
+
 const annotationImagePromiseCache = new Map<string, Promise<HTMLImageElement | null>>();
 
 let blurBufferCanvas: HTMLCanvasElement | null = null;
@@ -334,6 +356,7 @@ export async function renderAnnotations(
 	currentTimeMs: number,
 	scaleFactor: number = 1.0,
 	assets?: AnnotationRenderAssets,
+	sceneTransform?: AnnotationSceneTransform,
 ): Promise<void> {
 	const activeAnnotations = annotations.filter(
 		(ann) => currentTimeMs >= ann.startMs && currentTimeMs <= ann.endMs,
@@ -342,14 +365,21 @@ export async function renderAnnotations(
 	const sortedAnnotations = [...activeAnnotations].sort((a, b) => a.zIndex - b.zIndex);
 
 	for (const annotation of sortedAnnotations) {
-		const x = (annotation.position.x / 100) * canvasWidth;
-		const y = (annotation.position.y / 100) * canvasHeight;
-		const width = (annotation.size.width / 100) * canvasWidth;
-		const height = (annotation.size.height / 100) * canvasHeight;
+		const rect = transformAnnotationRect(
+			{
+				x: (annotation.position.x / 100) * canvasWidth,
+				y: (annotation.position.y / 100) * canvasHeight,
+				width: (annotation.size.width / 100) * canvasWidth,
+				height: (annotation.size.height / 100) * canvasHeight,
+			},
+			sceneTransform,
+		);
+		const { x, y, width, height } = rect;
+		const effectiveScaleFactor = scaleFactor * (sceneTransform?.scale ?? 1);
 
 		switch (annotation.type) {
 			case "text":
-				renderText(ctx, annotation, x, y, width, height, scaleFactor);
+				renderText(ctx, annotation, x, y, width, height, effectiveScaleFactor);
 				break;
 
 			case "image":
@@ -367,20 +397,20 @@ export async function renderAnnotations(
 						y,
 						width,
 						height,
-						scaleFactor,
+						effectiveScaleFactor,
 					);
 				}
 				break;
 
 			case "blur": {
 				const blurStrength =
-					(annotation.blurIntensity ?? BLUR_ANNOTATION_STRENGTH) * scaleFactor;
+					(annotation.blurIntensity ?? BLUR_ANNOTATION_STRENGTH) * effectiveScaleFactor;
 				const padding = Math.ceil(blurStrength * 2);
 
 				ctx.save();
 
 				ctx.beginPath();
-				const borderRadius = (annotation.style.borderRadius ?? 0) * scaleFactor;
+				const borderRadius = (annotation.style.borderRadius ?? 0) * effectiveScaleFactor;
 				ctx.roundRect(x, y, width, height, borderRadius);
 				ctx.clip();
 

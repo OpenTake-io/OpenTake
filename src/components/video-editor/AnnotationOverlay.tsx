@@ -14,6 +14,7 @@ interface AnnotationOverlayProps {
 	onClick: (id: string) => void;
 	zIndex: number;
 	isSelectedBoost: boolean; // Boost z-index when selected for easy editing
+	scale?: number;
 }
 
 export function AnnotationOverlay({
@@ -26,6 +27,7 @@ export function AnnotationOverlay({
 	onClick,
 	zIndex,
 	isSelectedBoost,
+	scale = 1,
 }: AnnotationOverlayProps) {
 	const x = (annotation.position.x / 100) * containerWidth;
 	const y = (annotation.position.y / 100) * containerHeight;
@@ -143,6 +145,7 @@ export function AnnotationOverlay({
 		<Rnd
 			position={{ x, y }}
 			size={{ width, height }}
+			scale={scale}
 			onDragStart={() => {
 				isDraggingRef.current = true;
 			}}
