@@ -3362,7 +3362,28 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 								</div>
 							</div>
 						) : null}
-						<div className="absolute inset-0" style={{ pointerEvents: "none" }}>
+						<div
+							className="absolute"
+							style={{
+								pointerEvents: "none",
+								left: 0,
+								top: 0,
+								width:
+									annotationRecordingRect.width ||
+									(overlayRef.current?.clientWidth || 800),
+								height:
+									annotationRecordingRect.height ||
+									(overlayRef.current?.clientHeight || 600),
+								transform: `translate(${
+									(annotationRecordingRect.x || 0) * annotationSceneTransform.scale +
+									annotationSceneTransform.x
+								}px, ${
+									(annotationRecordingRect.y || 0) * annotationSceneTransform.scale +
+									annotationSceneTransform.y
+								}px) scale(${annotationSceneTransform.scale})`,
+								transformOrigin: "top left",
+							}}
+						>
 							{(() => {
 								const filtered = (annotationRegions || []).filter((annotation) => {
 									if (
@@ -3405,10 +3426,26 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 										key={annotation.id}
 										annotation={annotation}
 										isSelected={annotation.id === selectedAnnotationId}
-										containerWidth={overlayRef.current?.clientWidth || 800}
-										containerHeight={overlayRef.current?.clientHeight || 600}
-												recordingRect={annotationRecordingRect}
-												sceneTransform={annotationSceneTransform}
+												containerWidth={
+													annotationRecordingRect.width ||
+													(overlayRef.current?.clientWidth || 800)
+												}
+												containerHeight={
+													annotationRecordingRect.height ||
+													(overlayRef.current?.clientHeight || 600)
+												}
+												recordingRect={{
+													x: 0,
+													y: 0,
+													width:
+														annotationRecordingRect.width ||
+														(overlayRef.current?.clientWidth || 800),
+													height:
+														annotationRecordingRect.height ||
+														(overlayRef.current?.clientHeight || 600),
+												}}
+												sceneTransform={{ scale: 1, x: 0, y: 0 }}
+												interactionScale={annotationSceneTransform.scale}
 										onPositionChange={(id, position) =>
 											onAnnotationPositionChange?.(id, position)
 										}

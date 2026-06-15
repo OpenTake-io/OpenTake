@@ -24,6 +24,7 @@ interface AnnotationOverlayProps {
 	containerHeight: number;
 	recordingRect: Rect;
 	sceneTransform: SceneTransform;
+	interactionScale?: number;
 	onPositionChange: (id: string, position: { x: number; y: number }) => void;
 	onSizeChange: (id: string, size: { width: number; height: number }) => void;
 	onClick: (id: string) => void;
@@ -46,6 +47,7 @@ export function AnnotationOverlay({
 	containerHeight,
 	recordingRect,
 	sceneTransform,
+	interactionScale = 1,
 	onPositionChange,
 	onSizeChange,
 	onClick,
@@ -202,6 +204,7 @@ export function AnnotationOverlay({
 		<Rnd
 			position={{ x, y }}
 			size={{ width, height }}
+			scale={interactionScale}
 			onDragStart={() => {
 				isDraggingRef.current = true;
 			}}
