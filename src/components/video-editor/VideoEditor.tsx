@@ -298,6 +298,10 @@ type SaveProjectOptions = {
 	captureThumbnail?: boolean;
 };
 
+type PendingProjectSaveDialog = {
+	resolve: (saved: boolean) => void;
+};
+
 async function writeSmokeExportReport(
 	outputPath: string | null,
 	report: Record<string, unknown>,
@@ -382,6 +386,9 @@ export default function VideoEditor() {
 	const [isEditingProjectName, setIsEditingProjectName] = useState(false);
 	const [projectNameDraft, setProjectNameDraft] = useState("");
 	const [isSavingProjectName, setIsSavingProjectName] = useState(false);
+	const [projectSaveDialogOpen, setProjectSaveDialogOpen] = useState(false);
+	const [projectSaveDialogDraft, setProjectSaveDialogDraft] = useState("");
+	const [isSavingProjectDialog, setIsSavingProjectDialog] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
@@ -648,6 +655,7 @@ export default function VideoEditor() {
 	const projectBrowserTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const projectBrowserFallbackTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const projectNameInputRef = useRef<HTMLInputElement | null>(null);
+	const projectSaveDialogInputRef = useRef<HTMLInputElement | null>(null);
 	const nextZoomIdRef = useRef(1);
 	const nextClipIdRef = useRef(1);
 	const nextAudioIdRef = useRef(1);
@@ -668,6 +676,7 @@ export default function VideoEditor() {
 	const mp4SupportRequestRef = useRef(0);
 	const smokeExportStartedRef = useRef(false);
 	const projectAutosaveTimeoutRef = useRef<number | null>(null);
+	const pendingProjectSaveDialogRef = useRef<PendingProjectSaveDialog | null>(null);
 	const projectSaveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 	const smokeExportReadyStateRef = useRef<Record<string, unknown>>({});
 	const [historyVersion, setHistoryVersion] = useState(0);
@@ -1734,6 +1743,21 @@ export default function VideoEditor() {
 		};
 	}, [isEditingProjectName]);
 
+	useEffect(() => {
+		if (!projectSaveDialogOpen) {
+			return;
+		}
+
+		const frameId = window.requestAnimationFrame(() => {
+			projectSaveDialogInputRef.current?.focus();
+			projectSaveDialogInputRef.current?.select();
+		});
+
+		return () => {
+			window.cancelAnimationFrame(frameId);
+		};
+	}, [projectSaveDialogOpen]);
+
 	const currentPersistedEditorState = useMemo(
 		() =>
 			buildPersistedEditorState({
@@ -2126,6 +2150,25 @@ export default function VideoEditor() {
 			lastSavedSnapshot?.projectId ?? null,
 		);
 	}, [currentPersistedEditorState, currentSourcePath, lastSavedSnapshot?.projectId]);
+
+	const resolveProjectSaveDialog = useCallback((saved: boolean) => {
+		const pendingDialog = pendingProjectSaveDialogRef.current;
+		pendingProjectSaveDialogRef.current = null;
+		setProjectSaveDialogOpen(false);
+		setIsSavingProjectDialog(false);
+		pendingDialog?.resolve(saved);
+	}, []);
+
+	const openProjectSaveDialog = useCallback((initialName: string) => {
+		pendingProjectSaveDialogRef.current?.resolve(false);
+		setProjectSaveDialogDraft(initialName);
+		setProjectSaveDialogOpen(true);
+		setIsSavingProjectDialog(false);
+
+		return new Promise<boolean>((resolve) => {
+			pendingProjectSaveDialogRef.current = { resolve };
+		});
+	}, []);
 
 	const syncRecordingSessionWebcam = useCallback(
 		async (webcamPath: string | null, timeOffsetMs?: number) => {
@@ -2831,6 +2874,14 @@ export default function VideoEditor() {
 						}
 					}
 
+					if (forceSaveAs || !targetProjectPath) {
+						if (options?.silent) {
+							return false;
+						}
+
+						return openProjectSaveDialog(projectDisplayName || fileNameBase);
+					}
+
 					const thumbnailDataUrl = shouldCaptureThumbnail
 						? await captureProjectThumbnail()
 						: undefined;
@@ -2891,6 +2942,8 @@ export default function VideoEditor() {
 			currentProjectSnapshot,
 			currentPersistedEditorState,
 			lastSavedSnapshot?.projectId,
+			openProjectSaveDialog,
+			projectDisplayName,
 			queueProjectSave,
 			refreshProjectLibrary,
 			remountPreview,
@@ -3013,6 +3066,38 @@ export default function VideoEditor() {
 		],
 	);
 
+	const handleProjectSaveDialogSubmit = useCallback(
+		async (event?: React.FormEvent<HTMLFormElement>) => {
+			event?.preventDefault();
+			const trimmedProjectName = projectSaveDialogDraft.trim();
+
+			if (!trimmedProjectName) {
+				toast.error("Project name is required");
+				projectSaveDialogInputRef.current?.focus();
+				return;
+			}
+
+			setIsSavingProjectDialog(true);
+			let saved = false;
+			try {
+				saved = await saveProjectWithName(trimmedProjectName);
+			} catch (error) {
+				toast.error(getErrorMessage(error));
+			} finally {
+				setIsSavingProjectDialog(false);
+			}
+
+			if (saved) {
+				resolveProjectSaveDialog(true);
+				return;
+			}
+
+			projectSaveDialogInputRef.current?.focus();
+			projectSaveDialogInputRef.current?.select();
+		},
+		[projectSaveDialogDraft, resolveProjectSaveDialog, saveProjectWithName],
+	);
+
 	/**
 	 * Resets the inline project-name editor back to the current saved display name.
 	 */
@@ -3079,6 +3164,74 @@ export default function VideoEditor() {
 		},
 		[applyLoadedProject, refreshProjectLibrary],
 	);
+
+	const handleImportMediaOrProject = useCallback(async () => {
+		const result = await window.electronAPI.openVideoFilePicker({ includeProjects: true });
+
+		if (result.canceled) {
+			return;
+		}
+
+		if (!result.success) {
+			toast.error(result.message || "Failed to import file");
+			return;
+		}
+
+		if (result.kind === "project" || result.project) {
+			const restored = await applyLoadedProject(result.project, result.path ?? null);
+			if (!restored) {
+				toast.error("Invalid project file format");
+				return;
+			}
+
+			setProjectBrowserOpen(false);
+			await refreshProjectLibrary();
+			toast.success(result.path ? `Project loaded from ${result.path}` : "Project loaded");
+			return;
+		}
+
+		if (!result.path) {
+			toast.error("No media file selected");
+			return;
+		}
+
+		const sourcePath = fromFileUrl(result.path);
+		const sourceVideoUrl = await resolveVideoUrl(sourcePath);
+		try {
+			videoPlaybackRef.current?.pause();
+		} catch {
+			// no-op
+		}
+
+		setIsPlaying(false);
+		setCurrentTime(0);
+		setDuration(0);
+		setVideoSourcePath(sourcePath);
+		setVideoPath(sourceVideoUrl);
+		setCurrentProjectPath(null);
+		setLastSavedSnapshot(null);
+		resetSourceScopedEditorState();
+		pendingFreshRecordingAutoZoomPathRef.current = autoApplyFreshRecordingAutoZooms
+			? sourceVideoUrl
+			: null;
+		setWebcam((prev) => ({
+			...prev,
+			enabled: false,
+			sourcePath: null,
+			timeOffsetMs: DEFAULT_WEBCAM_TIME_OFFSET_MS,
+		}));
+		applySessionPresentation(null);
+		await window.electronAPI.setCurrentVideoPath(sourcePath, { preserveProjectPath: false });
+		setProjectBrowserOpen(false);
+		await refreshProjectLibrary();
+		toast.success("Media imported");
+	}, [
+		applyLoadedProject,
+		applySessionPresentation,
+		autoApplyFreshRecordingAutoZooms,
+		refreshProjectLibrary,
+		resetSourceScopedEditorState,
+	]);
 
 	const handleOpenProjectBrowser = useCallback(async () => {
 		if (projectBrowserOpen) {
@@ -3398,7 +3551,9 @@ export default function VideoEditor() {
 	const handlePreviewSkipBack = useCallback(() => {
 		const currentMs = timelinePlayheadTime * 1000;
 		const keyframes = timelineRef.current?.keyframes ?? [];
-		const previous = [...keyframes].reverse().find((keyframe) => keyframe.time < currentMs - 50);
+		const previous = [...keyframes]
+			.reverse()
+			.find((keyframe) => keyframe.time < currentMs - 50);
 		handleSeek(previous ? previous.time / 1000 : Math.max(0, timelinePlayheadTime - 5));
 	}, [handleSeek, timelinePlayheadTime]);
 
@@ -3406,9 +3561,7 @@ export default function VideoEditor() {
 		const currentMs = timelinePlayheadTime * 1000;
 		const keyframes = timelineRef.current?.keyframes ?? [];
 		const next = keyframes.find((keyframe) => keyframe.time > currentMs + 50);
-		handleSeek(
-			next ? next.time / 1000 : Math.min(timelineDuration, timelinePlayheadTime + 5),
-		);
+		handleSeek(next ? next.time / 1000 : Math.min(timelineDuration, timelinePlayheadTime + 5));
 	}, [handleSeek, timelineDuration, timelinePlayheadTime]);
 
 	const handleSelectZoom = useCallback((id: string | null) => {
@@ -5215,13 +5368,73 @@ export default function VideoEditor() {
 			volume={
 				audio.shouldMutePreviewVideo || audio.isCurrentClipMuted
 					? 0
-					: Math.max(
-							0,
-							Math.min(1, previewVolume * audio.embeddedSourcePreviewGain),
-						)
+					: Math.max(0, Math.min(1, previewVolume * audio.embeddedSourcePreviewGain))
 			}
 			suspendRendering={suspendRendering}
 		/>
+	);
+
+	const projectSaveDialog = (
+		<Dialog
+			open={projectSaveDialogOpen}
+			onOpenChange={(open) => {
+				if (open) {
+					setProjectSaveDialogOpen(true);
+					return;
+				}
+
+				if (!isSavingProjectDialog) {
+					resolveProjectSaveDialog(false);
+				}
+			}}
+		>
+			<DialogContent className="max-w-sm border-foreground/10 bg-editor-dialog text-foreground">
+				<form onSubmit={(event) => void handleProjectSaveDialogSubmit(event)}>
+					<DialogHeader>
+						<DialogTitle>{t("editor.project.saveTitle", "Save Project")}</DialogTitle>
+						<DialogDescription className="text-muted-foreground">
+							{t(
+								"editor.project.saveDescription",
+								"Name this project. It will be saved in your Recordly Projects folder.",
+							)}
+						</DialogDescription>
+					</DialogHeader>
+					<div className="py-4">
+						<label className="mb-2 block text-xs font-medium text-muted-foreground">
+							{t("editor.project.saveNameLabel", "Project name")}
+						</label>
+						<div className="flex items-center overflow-hidden rounded-md border border-foreground/10 bg-editor-panel">
+							<Input
+								ref={projectSaveDialogInputRef}
+								value={projectSaveDialogDraft}
+								onChange={(event) => setProjectSaveDialogDraft(event.target.value)}
+								disabled={isSavingProjectDialog}
+								className="h-10 flex-1 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0"
+								aria-label={t("editor.project.saveNameLabel", "Project name")}
+							/>
+							<span className="shrink-0 px-3 text-xs font-medium text-muted-foreground/70">
+								.recordly
+							</span>
+						</div>
+					</div>
+					<DialogFooter>
+						<Button
+							type="button"
+							variant="ghost"
+							onClick={() => resolveProjectSaveDialog(false)}
+							disabled={isSavingProjectDialog}
+						>
+							{t("common.actions.cancel", "Cancel")}
+						</Button>
+						<Button type="submit" disabled={isSavingProjectDialog}>
+							{isSavingProjectDialog
+								? t("editor.project.saving", "Saving...")
+								: t("common.actions.save", "Save")}
+						</Button>
+					</DialogFooter>
+				</form>
+			</DialogContent>
+		</Dialog>
 	);
 
 	const projectBrowser = (
@@ -5230,6 +5443,9 @@ export default function VideoEditor() {
 			onOpenChange={setProjectBrowserOpen}
 			entries={projectLibraryEntries}
 			anchorRef={error ? projectBrowserFallbackTriggerRef : projectBrowserTriggerRef}
+			onImportFile={() => {
+				void handleImportMediaOrProject();
+			}}
 			onOpenProject={(projectPath) => {
 				void handleOpenProjectFromLibrary(projectPath);
 			}}
@@ -5269,6 +5485,7 @@ export default function VideoEditor() {
 			<div className="flex h-screen items-center justify-center bg-background">
 				<div className="text-foreground">Loading video...</div>
 				{projectBrowser}
+				{projectSaveDialog}
 				{nativeCaptureUnavailableDialog}
 				<Toaster className="pointer-events-auto" />
 			</div>
@@ -5289,6 +5506,7 @@ export default function VideoEditor() {
 					</button>
 				</div>
 				{projectBrowser}
+				{projectSaveDialog}
 				{nativeCaptureUnavailableDialog}
 				<Toaster className="pointer-events-auto" />
 			</div>
@@ -5736,7 +5954,9 @@ export default function VideoEditor() {
 									onGifLoopChange={setGifLoop}
 									gifSizePreset={gifSizePreset}
 									onGifSizePresetChange={setGifSizePreset}
-									showCaptionSidecarOption={hasCaptionsForSidecar && exportFormat === "mp4"}
+									showCaptionSidecarOption={
+										hasCaptionsForSidecar && exportFormat === "mp4"
+									}
 									includeCaptionSidecar={includeCaptionSidecar}
 									onIncludeCaptionSidecarChange={setIncludeCaptionSidecar}
 									mp4OutputDimensions={mp4OutputDimensions}
@@ -6415,6 +6635,7 @@ export default function VideoEditor() {
 			) : null}
 
 			{projectBrowser}
+			{projectSaveDialog}
 			{nativeCaptureUnavailableDialog}
 
 			<Toaster className="pointer-events-auto" />

@@ -671,8 +671,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
 			captionSidecar,
 		);
 	},
-	openVideoFilePicker: () => {
-		return ipcRenderer.invoke("open-video-file-picker");
+	openVideoFilePicker: (options?: { includeProjects?: boolean }) => {
+		return ipcRenderer.invoke("open-video-file-picker", options);
 	},
 	openAudioFilePicker: () => {
 		return ipcRenderer.invoke("open-audio-file-picker");
