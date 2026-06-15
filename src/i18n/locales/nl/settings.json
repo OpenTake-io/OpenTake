@@ -88,6 +88,8 @@
 		"webcamFootageAdded": "Webcambeelden gekoppeld",
 		"webcamFootageRemoved": "Webcambeelden verwijderd",
 		"webcamSize": "Webcamgrootte",
+		"webcamWidth": "Webcambreedte",
+		"webcamHeight": "Webcamhoogte",
 		"webcamCrop": "Webcam bijsnijden",
 		"webcamReactToZoom": "Webcam reageert op zoom",
 		"webcamMirror": "Webcam spiegelen",

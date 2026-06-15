@@ -107,6 +107,7 @@ import {
 } from "./videoPlayback/uploadedCursorAssets";
 import { WebcamCropControl } from "./WebcamCropControl";
 import {
+	getCropMatchedWebcamHeightPercent,
 	getWebcamPositionForPreset,
 	normalizeWebcamCropRegion,
 	resolveWebcamCorner,
@@ -1662,6 +1663,8 @@ export function SettingsPanel({
 	const webcamPositionPreset = webcam?.positionPreset ?? DEFAULT_WEBCAM_POSITION_PRESET;
 	const webcamPositionX = webcam?.positionX ?? DEFAULT_WEBCAM_POSITION_X;
 	const webcamPositionY = webcam?.positionY ?? DEFAULT_WEBCAM_POSITION_Y;
+	const webcamWidth = webcam?.width ?? webcam?.size ?? DEFAULT_WEBCAM_SIZE;
+	const webcamHeight = webcam?.height ?? webcam?.size ?? DEFAULT_WEBCAM_SIZE;
 	const webcamCrop = normalizeWebcamCropRegion(webcam?.cropRegion);
 
 	const getWallpaperTileState = (candidateValue: string, previewPath?: string) => {
@@ -3874,13 +3877,24 @@ export function SettingsPanel({
 								/>
 							</div>
 							<SliderControl
-								label={tSettings("effects.webcamSize")}
-								value={webcam?.size ?? DEFAULT_WEBCAM_SIZE}
+								label={tSettings("effects.webcamWidth", "Webcam Width")}
+								value={webcamWidth}
 								defaultValue={DEFAULT_WEBCAM_SIZE}
 								min={10}
 								max={100}
 								step={1}
-								onChange={(v) => updateWebcam({ size: v })}
+								onChange={(v) => updateWebcam({ width: v, size: v })}
+								formatValue={(v) => `${Math.round(v)}%`}
+								parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
+							/>
+							<SliderControl
+								label={tSettings("effects.webcamHeight", "Webcam Height")}
+								value={webcamHeight}
+								defaultValue={DEFAULT_WEBCAM_SIZE}
+								min={10}
+								max={100}
+								step={1}
+								onChange={(v) => updateWebcam({ height: v })}
 								formatValue={(v) => `${Math.round(v)}%`}
 								parseInput={(text) => parseFloat(text.replace(/%$/, ""))}
 							/>
@@ -3906,7 +3920,20 @@ export function SettingsPanel({
 									previewCurrentTime={webcamPreviewCurrentTime}
 									previewPlaying={webcamPreviewPlaying}
 									previewTimeOffsetMs={webcam?.timeOffsetMs}
-									onCropChange={(cropRegion) => updateWebcam({ cropRegion })}
+									onCropChange={(cropRegion, previewFrame) =>
+										updateWebcam({
+											cropRegion,
+											height: previewFrame
+												? getCropMatchedWebcamHeightPercent(
+														webcamWidth,
+														webcamWidth,
+														previewFrame.width,
+														previewFrame.height,
+														cropRegion,
+													)
+												: webcamHeight,
+										})
+									}
 								/>
 							</div>
 							<div className="rounded-lg bg-foreground/[0.03] px-2.5 py-2">

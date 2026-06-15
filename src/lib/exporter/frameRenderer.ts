@@ -5,8 +5,8 @@ import type {
 	AnnotationRegion,
 	AutoCaptionSettings,
 	CaptionCue,
-	CursorClickEffectStyle,
 	CropRegion,
+	CursorClickEffectStyle,
 	CursorStyle,
 	CursorTelemetryPoint,
 	Padding,
@@ -51,9 +51,10 @@ import {
 	type MotionBlurState,
 } from "@/components/video-editor/videoPlayback/zoomTransform";
 import {
+	getCropMatchedWebcamHeightPercent,
 	getWebcamCropSourceRect,
+	getWebcamOverlayDimensionsPx,
 	getWebcamOverlayPosition,
-	getWebcamOverlaySizePx,
 } from "@/components/video-editor/webcamOverlay";
 import { getAssetPath, getExportableVideoUrl, getRenderableAssetUrl } from "@/lib/assetPath";
 import { extensionHost } from "@/lib/extensions";
@@ -2405,33 +2406,7 @@ export class FrameRenderer {
 			return;
 		}
 
-		const margin = webcam.margin ?? 24;
-		const size = getWebcamOverlaySizePx({
-			containerWidth: width,
-			containerHeight: height,
-			sizePercent: webcam.size ?? 50,
-			margin,
-			zoomScale: this.animationState.appliedScale || 1,
-			reactToZoom: webcam.reactToZoom ?? true,
-		});
-		const { x, y } = getWebcamOverlayPosition({
-			containerWidth: width,
-			containerHeight: height,
-			size,
-			margin,
-			positionPreset: webcam.positionPreset ?? webcam.corner,
-			positionX: webcam.positionX ?? 1,
-			positionY: webcam.positionY ?? 1,
-			legacyCorner: webcam.corner,
-		});
-		const radius = Math.max(0, webcam.cornerRadius ?? 18);
-
 		const bubbleCanvas = this.webcamBubbleCanvas ?? document.createElement("canvas");
-		const bubbleSize = Math.max(1, Math.ceil(size));
-		if (bubbleCanvas.width !== bubbleSize || bubbleCanvas.height !== bubbleSize) {
-			bubbleCanvas.width = bubbleSize;
-			bubbleCanvas.height = bubbleSize;
-		}
 		this.webcamBubbleCanvas = bubbleCanvas;
 		const bubbleCtx =
 			this.webcamBubbleCtx ?? configureHighQuality2DContext(bubbleCanvas.getContext("2d"));
@@ -2439,9 +2414,6 @@ export class FrameRenderer {
 			return;
 		}
 		this.webcamBubbleCtx = bubbleCtx;
-		bubbleCtx.clearRect(0, 0, bubbleCanvas.width, bubbleCanvas.height);
-		bubbleCtx.imageSmoothingEnabled = true;
-		bubbleCtx.imageSmoothingQuality = "high";
 
 		const expectedWebcamTargetTime = getWebcamMediaTargetTimeSeconds({
 			currentTime: this.currentVideoTime,
@@ -2507,30 +2479,75 @@ export class FrameRenderer {
 				? webcamFrameSource.displayWidth
 				: "videoWidth" in webcamFrameSource
 					? webcamFrameSource.videoWidth
-					: webcamFrameSource.width) || size;
+					: webcamFrameSource.width) || 1;
 		const sourceHeight =
 			("displayHeight" in webcamFrameSource
 				? webcamFrameSource.displayHeight
 				: "videoHeight" in webcamFrameSource
 					? webcamFrameSource.videoHeight
-					: webcamFrameSource.height) || size;
+					: webcamFrameSource.height) || sourceWidth;
+		const margin = webcam.margin ?? 24;
+		const widthPercent = webcam.width ?? webcam.size ?? 50;
+		const heightPercent = getCropMatchedWebcamHeightPercent(
+			widthPercent,
+			webcam.height ?? webcam.size ?? 50,
+			sourceWidth,
+			sourceHeight,
+			webcam.cropRegion,
+		);
+		const dimensions = getWebcamOverlayDimensionsPx({
+			containerWidth: width,
+			containerHeight: height,
+			widthPercent,
+			heightPercent,
+			margin,
+			zoomScale: this.animationState.appliedScale || 1,
+			reactToZoom: webcam.reactToZoom ?? true,
+		});
+		const { x, y } = getWebcamOverlayPosition({
+			containerWidth: width,
+			containerHeight: height,
+			width: dimensions.width,
+			height: dimensions.height,
+			margin,
+			positionPreset: webcam.positionPreset ?? webcam.corner,
+			positionX: webcam.positionX ?? 1,
+			positionY: webcam.positionY ?? 1,
+			legacyCorner: webcam.corner,
+		});
+		const radius = Math.max(0, webcam.cornerRadius ?? 18);
+		const bubbleWidth = Math.max(1, Math.ceil(dimensions.width));
+		const bubbleHeight = Math.max(1, Math.ceil(dimensions.height));
+		if (bubbleCanvas.width !== bubbleWidth || bubbleCanvas.height !== bubbleHeight) {
+			bubbleCanvas.width = bubbleWidth;
+			bubbleCanvas.height = bubbleHeight;
+		}
+		bubbleCtx.clearRect(0, 0, bubbleCanvas.width, bubbleCanvas.height);
+		bubbleCtx.imageSmoothingEnabled = true;
+		bubbleCtx.imageSmoothingQuality = "high";
 		const { sx, sy, sw, sh } = getWebcamCropSourceRect(
 			webcam.cropRegion,
 			sourceWidth,
 			sourceHeight,
 		);
-		const coverScale = Math.max(size / sw, size / sh);
+		const coverScale = Math.max(dimensions.width / sw, dimensions.height / sh);
 		const drawWidth = sw * coverScale;
 		const drawHeight = sh * coverScale;
-		const drawX = (size - drawWidth) / 2;
-		const drawY = (size - drawHeight) / 2;
+		const drawX = (dimensions.width - drawWidth) / 2;
+		const drawY = (dimensions.height - drawHeight) / 2;
 
 		bubbleCtx.save();
-		drawSquircleOnCanvas(bubbleCtx, { x: 0, y: 0, width: size, height: size, radius });
+		drawSquircleOnCanvas(bubbleCtx, {
+			x: 0,
+			y: 0,
+			width: dimensions.width,
+			height: dimensions.height,
+			radius,
+		});
 		bubbleCtx.clip();
 		if (webcam.mirror) {
 			bubbleCtx.save();
-			bubbleCtx.translate(size, 0);
+			bubbleCtx.translate(dimensions.width, 0);
 			bubbleCtx.scale(-1, 1);
 			bubbleCtx.drawImage(
 				webcamFrameSource,
@@ -2561,14 +2578,15 @@ export class FrameRenderer {
 
 		if ((webcam.shadow ?? 0) > 0) {
 			const shadow = Math.max(0, Math.min(1, webcam.shadow));
+			const shadowSize = Math.min(dimensions.width, dimensions.height);
 			ctx.save();
-			ctx.filter = `drop-shadow(0 ${Math.round(size * 0.06)}px ${Math.round(size * 0.22)}px rgba(0,0,0,${shadow}))`;
-			ctx.drawImage(bubbleCanvas, x, y, size, size);
+			ctx.filter = `drop-shadow(0 ${Math.round(shadowSize * 0.06)}px ${Math.round(shadowSize * 0.22)}px rgba(0,0,0,${shadow}))`;
+			ctx.drawImage(bubbleCanvas, x, y, dimensions.width, dimensions.height);
 			ctx.restore();
 			return;
 		}
 
-		ctx.drawImage(bubbleCanvas, x, y, size, size);
+		ctx.drawImage(bubbleCanvas, x, y, dimensions.width, dimensions.height);
 	}
 
 	private closeWebcamDecodedFrame(): void {

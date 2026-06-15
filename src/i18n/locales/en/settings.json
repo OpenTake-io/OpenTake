@@ -136,6 +136,8 @@
 		"webcamFootageAdded": "Webcam footage linked",
 		"webcamFootageRemoved": "Webcam footage removed",
 		"webcamSize": "Webcam Size",
+		"webcamWidth": "Webcam Width",
+		"webcamHeight": "Webcam Height",
 		"webcamCrop": "Webcam Crop",
 		"webcamReactToZoom": "Webcam Reacts To Zoom",
 		"webcamMirror": "Mirror webcam",

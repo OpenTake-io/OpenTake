@@ -41,6 +41,7 @@ import {
 import {
 	getWebcamOverlayPosition,
 	getWebcamOverlaySizePx,
+	isWebcamCropRegionDefault,
 } from "@/components/video-editor/webcamOverlay";
 import { extensionHost } from "@/lib/extensions";
 import { getEffectiveVideoStreamDurationSeconds } from "@/lib/mediaTiming";
@@ -1495,6 +1496,17 @@ export class ModernVideoExporter {
 		}
 	}
 
+	private hasUnsupportedNativeStaticLayoutWebcamShape(): boolean {
+		const webcam = this.config.webcam;
+		if (!webcam?.enabled) {
+			return false;
+		}
+
+		const width = webcam.width ?? webcam.size ?? 40;
+		const height = webcam.height ?? webcam.size ?? 40;
+		return Math.abs(width - height) > 0.001 || !isWebcamCropRegionDefault(webcam.cropRegion);
+	}
+
 	private getNativeStaticLayoutSkipReasons(
 		audioPlan: NativeAudioPlan,
 		videoInfo: DecodedVideoInfo,
@@ -1559,6 +1571,9 @@ export class ModernVideoExporter {
 
 		if (this.config.webcam?.enabled && !this.getNativeWebcamSourcePath()) {
 			reasons.push("unsupported-webcam-source");
+		}
+		if (this.hasUnsupportedNativeStaticLayoutWebcamShape()) {
+			reasons.push("unsupported-rectangular-webcam-overlay");
 		}
 
 		if (this.config.frame) {
@@ -2021,7 +2036,7 @@ export class ModernVideoExporter {
 		const rawSize = getWebcamOverlaySizePx({
 			containerWidth: this.config.width,
 			containerHeight: this.config.height,
-			sizePercent: webcam.size ?? 40,
+			sizePercent: webcam.width ?? webcam.size ?? 40,
 			margin,
 			zoomScale: 1,
 			reactToZoom: webcam.reactToZoom ?? true,
@@ -2533,8 +2548,7 @@ export class ModernVideoExporter {
 				timelineSegments,
 				chunkDurationSec: STATIC_LAYOUT_CHUNK_DURATION_SEC,
 				experimentalWindowsGpuCompositor: this.config.experimentalNativeExport === true,
-				experimentalNvidiaCudaExport:
-					this.config.experimentalNvidiaCudaExport === true,
+				experimentalNvidiaCudaExport: this.config.experimentalNvidiaCudaExport === true,
 				audioOptions: {
 					...audioOptions,
 					outputDurationSec: effectiveDuration,
