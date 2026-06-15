@@ -2340,6 +2340,14 @@ export default function VideoEditor() {
 							smokeExportConfig.webcamSize === undefined
 								? prev.size
 								: smokeExportConfig.webcamSize,
+						width:
+							smokeExportConfig.webcamSize === undefined
+								? (prev.width ?? prev.size)
+								: smokeExportConfig.webcamSize,
+						height:
+							smokeExportConfig.webcamSize === undefined
+								? (prev.height ?? prev.size)
+								: smokeExportConfig.webcamSize,
 					}));
 					setError(null);
 					return;

@@ -15,8 +15,8 @@ import type {
 	AnnotationRegion,
 	AutoCaptionSettings,
 	CaptionCue,
-	CursorClickEffectStyle,
 	CropRegion,
+	CursorClickEffectStyle,
 	CursorStyle,
 	CursorTelemetryPoint,
 	Padding,
@@ -57,9 +57,10 @@ import {
 	type MotionBlurState,
 } from "@/components/video-editor/videoPlayback/zoomTransform";
 import {
+	getCropMatchedWebcamHeightPercent,
 	getWebcamCropSourceRect,
+	getWebcamOverlayDimensionsPx,
 	getWebcamOverlayPosition,
-	getWebcamOverlaySizePx,
 	isWebcamCropRegionDefault,
 } from "@/components/video-editor/webcamOverlay";
 import { getAssetPath, getExportableVideoUrl, getRenderableAssetUrl } from "@/lib/assetPath";
@@ -211,7 +212,8 @@ interface WebcamRenderSource {
 interface WebcamLayoutCache {
 	sourceWidth: number;
 	sourceHeight: number;
-	size: number;
+	width: number;
+	height: number;
 	positionX: number;
 	positionY: number;
 	radius: number;
@@ -2604,7 +2606,8 @@ export class FrameRenderer {
 			previousLayout.mirror === nextLayout.mirror &&
 			areNearlyEqual(previousLayout.sourceWidth, nextLayout.sourceWidth) &&
 			areNearlyEqual(previousLayout.sourceHeight, nextLayout.sourceHeight) &&
-			areNearlyEqual(previousLayout.size, nextLayout.size) &&
+			areNearlyEqual(previousLayout.width, nextLayout.width) &&
+			areNearlyEqual(previousLayout.height, nextLayout.height) &&
 			areNearlyEqual(previousLayout.positionX, nextLayout.positionX) &&
 			areNearlyEqual(previousLayout.positionY, nextLayout.positionY) &&
 			areNearlyEqual(previousLayout.radius, nextLayout.radius) &&
@@ -2623,10 +2626,10 @@ export class FrameRenderer {
 			this.webcamSprite,
 			nextLayout.sourceWidth,
 			nextLayout.sourceHeight,
-			nextLayout.size,
-			nextLayout.size,
-			nextLayout.size / 2,
-			nextLayout.size / 2,
+			nextLayout.width,
+			nextLayout.height,
+			nextLayout.width / 2,
+			nextLayout.height / 2,
 			nextLayout.mirror,
 		);
 
@@ -2634,8 +2637,8 @@ export class FrameRenderer {
 		drawSquircleOnGraphics(this.webcamMaskGraphics, {
 			x: 0,
 			y: 0,
-			width: nextLayout.size,
-			height: nextLayout.size,
+			width: nextLayout.width,
+			height: nextLayout.height,
 			radius: nextLayout.radius,
 		});
 		this.webcamMaskGraphics.fill({ color: 0xffffff });
@@ -2646,16 +2649,17 @@ export class FrameRenderer {
 				continue;
 			}
 
-			const offsetY = nextLayout.size * layer.offsetScale * nextLayout.shadowStrength;
+			const shadowSize = Math.min(nextLayout.width, nextLayout.height);
+			const offsetY = shadowSize * layer.offsetScale * nextLayout.shadowStrength;
 			this.rasterizeShadowLayer(layer, {
 				x: 0,
 				y: 0,
-				width: nextLayout.size,
-				height: nextLayout.size,
+				width: nextLayout.width,
+				height: nextLayout.height,
 				radius: nextLayout.radius,
 				offsetY,
 				alpha: layer.alphaScale * nextLayout.shadowStrength,
-				blur: Math.max(0, nextLayout.size * layer.blurScale * nextLayout.shadowStrength),
+				blur: Math.max(0, shadowSize * layer.blurScale * nextLayout.shadowStrength),
 			});
 		}
 
@@ -2904,10 +2908,19 @@ export class FrameRenderer {
 		}
 
 		const margin = webcam.margin ?? 24;
-		const size = getWebcamOverlaySizePx({
+		const widthPercent = webcam.width ?? webcam.size ?? 50;
+		const heightPercent = getCropMatchedWebcamHeightPercent(
+			widthPercent,
+			webcam.height ?? webcam.size ?? 50,
+			renderableWebcamSource.width,
+			renderableWebcamSource.height,
+			webcam.cropRegion,
+		);
+		const dimensions = getWebcamOverlayDimensionsPx({
 			containerWidth: this.config.width,
 			containerHeight: this.config.height,
-			sizePercent: webcam.size ?? 50,
+			widthPercent,
+			heightPercent,
 			margin,
 			zoomScale: this.animationState.appliedScale || 1,
 			reactToZoom: webcam.reactToZoom ?? true,
@@ -2915,7 +2928,8 @@ export class FrameRenderer {
 		const position = getWebcamOverlayPosition({
 			containerWidth: this.config.width,
 			containerHeight: this.config.height,
-			size,
+			width: dimensions.width,
+			height: dimensions.height,
 			margin,
 			positionPreset: webcam.positionPreset ?? webcam.corner,
 			positionX: webcam.positionX ?? 1,
@@ -2930,7 +2944,8 @@ export class FrameRenderer {
 		const nextLayout: WebcamLayoutCache = {
 			sourceWidth: renderableWebcamSource.width,
 			sourceHeight: renderableWebcamSource.height,
-			size,
+			width: dimensions.width,
+			height: dimensions.height,
 			positionX: position.x,
 			positionY: position.y,
 			radius,
