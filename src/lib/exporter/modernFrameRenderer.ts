@@ -1591,6 +1591,7 @@ export class FrameRenderer {
 				x: this.animationState.x,
 				y: this.animationState.y,
 			},
+			this.layoutCache?.maskRect,
 		);
 
 		this.drawCaptionOverlay(context);
@@ -1614,10 +1615,16 @@ export class FrameRenderer {
 		);
 
 		for (const annotation of annotations) {
-			const x = (annotation.position.x / 100) * this.config.width;
-			const y = (annotation.position.y / 100) * this.config.height;
-			const width = (annotation.size.width / 100) * this.config.width;
-			const height = (annotation.size.height / 100) * this.config.height;
+			const annotationRect = this.layoutCache?.maskRect ?? {
+				x: 0,
+				y: 0,
+				width: this.config.width,
+				height: this.config.height,
+			};
+			const x = annotationRect.x + (annotation.position.x / 100) * annotationRect.width;
+			const y = annotationRect.y + (annotation.position.y / 100) * annotationRect.height;
+			const width = (annotation.size.width / 100) * annotationRect.width;
+			const height = (annotation.size.height / 100) * annotationRect.height;
 
 			if (width <= 0 || height <= 0) {
 				continue;

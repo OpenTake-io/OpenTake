@@ -1549,6 +1549,7 @@ export class FrameRenderer {
 					scaleFactor,
 					undefined,
 					temporalSnapshot.sceneTransform,
+					this.layoutCache?.maskRect,
 				);
 			}
 
@@ -1739,6 +1740,7 @@ export class FrameRenderer {
 					x: this.animationState.x,
 					y: this.animationState.y,
 				},
+				this.layoutCache?.maskRect,
 			);
 		}
 

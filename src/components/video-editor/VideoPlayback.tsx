@@ -206,6 +206,13 @@ type SceneTransformState = {
 	y: number;
 };
 
+type AnnotationRecordingRect = {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+};
+
 function createPlaybackAnimationState(): PlaybackAnimationState {
 	return {
 		scale: 1,
@@ -512,6 +519,13 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				scale: 1,
 				x: 0,
 				y: 0,
+			});
+		const [annotationRecordingRect, setAnnotationRecordingRect] =
+			useState<AnnotationRecordingRect>({
+				x: 0,
+				y: 0,
+				width: 0,
+				height: 0,
 			});
 
 		useEffect(() => {
@@ -1140,6 +1154,23 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					renderWidth: result.maskRect.width * renderResolution,
 					renderHeight: result.maskRect.height * renderResolution,
 				};
+				setAnnotationRecordingRect((current) => {
+					if (
+						Math.abs(current.x - result.maskRect.x) < 0.1 &&
+						Math.abs(current.y - result.maskRect.y) < 0.1 &&
+						Math.abs(current.width - result.maskRect.width) < 0.1 &&
+						Math.abs(current.height - result.maskRect.height) < 0.1
+					) {
+						return current;
+					}
+
+					return {
+						x: result.maskRect.x,
+						y: result.maskRect.y,
+						width: result.maskRect.width,
+						height: result.maskRect.height,
+					};
+				});
 				cropBoundsRef.current = result.cropBounds;
 
 				// Sync extension cursor effects canvas resolution with renderer
@@ -3331,14 +3362,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 								</div>
 							</div>
 						) : null}
-						<div
-							className="absolute inset-0"
-							style={{
-								pointerEvents: "none",
-								transform: `translate(${annotationSceneTransform.x}px, ${annotationSceneTransform.y}px) scale(${annotationSceneTransform.scale})`,
-								transformOrigin: "top left",
-							}}
-						>
+						<div className="absolute inset-0" style={{ pointerEvents: "none" }}>
 							{(() => {
 								const filtered = (annotationRegions || []).filter((annotation) => {
 									if (
@@ -3383,6 +3407,8 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 										isSelected={annotation.id === selectedAnnotationId}
 										containerWidth={overlayRef.current?.clientWidth || 800}
 										containerHeight={overlayRef.current?.clientHeight || 600}
+												recordingRect={annotationRecordingRect}
+												sceneTransform={annotationSceneTransform}
 										onPositionChange={(id, position) =>
 											onAnnotationPositionChange?.(id, position)
 										}
@@ -3392,7 +3418,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 										onClick={handleAnnotationClick}
 										zIndex={annotation.zIndex}
 										isSelectedBoost={annotation.id === selectedAnnotationId}
-										scale={annotationSceneTransform.scale}
 									/>
 								));
 							})()}

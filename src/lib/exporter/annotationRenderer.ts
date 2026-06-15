@@ -14,6 +14,13 @@ interface AnnotationSceneTransform {
 	y: number;
 }
 
+interface AnnotationCoordinateRect {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
 function transformAnnotationRect(
 	rect: { x: number; y: number; width: number; height: number },
 	sceneTransform?: AnnotationSceneTransform,
@@ -357,20 +364,22 @@ export async function renderAnnotations(
 	scaleFactor: number = 1.0,
 	assets?: AnnotationRenderAssets,
 	sceneTransform?: AnnotationSceneTransform,
+	coordinateRect?: AnnotationCoordinateRect,
 ): Promise<void> {
 	const activeAnnotations = annotations.filter(
 		(ann) => currentTimeMs >= ann.startMs && currentTimeMs <= ann.endMs,
 	);
 
 	const sortedAnnotations = [...activeAnnotations].sort((a, b) => a.zIndex - b.zIndex);
+	const annotationRect = coordinateRect ?? { x: 0, y: 0, width: canvasWidth, height: canvasHeight };
 
 	for (const annotation of sortedAnnotations) {
 		const rect = transformAnnotationRect(
 			{
-				x: (annotation.position.x / 100) * canvasWidth,
-				y: (annotation.position.y / 100) * canvasHeight,
-				width: (annotation.size.width / 100) * canvasWidth,
-				height: (annotation.size.height / 100) * canvasHeight,
+				x: annotationRect.x + (annotation.position.x / 100) * annotationRect.width,
+				y: annotationRect.y + (annotation.position.y / 100) * annotationRect.height,
+				width: (annotation.size.width / 100) * annotationRect.width,
+				height: (annotation.size.height / 100) * annotationRect.height,
 			},
 			sceneTransform,
 		);
