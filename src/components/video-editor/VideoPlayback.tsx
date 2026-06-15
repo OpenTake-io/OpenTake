@@ -3363,27 +3363,27 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 							</div>
 						) : null}
 						<div
-							className="absolute"
+							className="absolute inset-0"
 							style={{
 								pointerEvents: "none",
-								left: 0,
-								top: 0,
-								width:
-									annotationRecordingRect.width ||
-									(overlayRef.current?.clientWidth || 800),
-								height:
-									annotationRecordingRect.height ||
-									(overlayRef.current?.clientHeight || 600),
-								transform: `translate(${
-									(annotationRecordingRect.x || 0) * annotationSceneTransform.scale +
-									annotationSceneTransform.x
-								}px, ${
-									(annotationRecordingRect.y || 0) * annotationSceneTransform.scale +
-									annotationSceneTransform.y
-								}px) scale(${annotationSceneTransform.scale})`,
+								transform: `matrix(${annotationSceneTransform.scale}, 0, 0, ${annotationSceneTransform.scale}, ${annotationSceneTransform.x}, ${annotationSceneTransform.y})`,
 								transformOrigin: "top left",
 							}}
 						>
+							<div
+								className="absolute"
+								style={{
+									pointerEvents: "none",
+									left: annotationRecordingRect.x || 0,
+									top: annotationRecordingRect.y || 0,
+									width:
+										annotationRecordingRect.width ||
+										(overlayRef.current?.clientWidth || 800),
+									height:
+										annotationRecordingRect.height ||
+										(overlayRef.current?.clientHeight || 600),
+								}}
+							>
 							{(() => {
 								const filtered = (annotationRegions || []).filter((annotation) => {
 									if (
@@ -3458,6 +3458,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 									/>
 								));
 							})()}
+							</div>
 						</div>
 					</div>
 				)}
