@@ -119,6 +119,7 @@ import { extensionHost } from "@/lib/extensions";
 import { useVideoEditorAudio } from "./audio/useVideoEditorAudio";
 import { resolveAutoCaptionSourcePath } from "./autoCaptionSource";
 import { CropControl } from "./CropControl";
+import { type CaptionEditTarget, updateCaptionCuesForEditedTarget } from "./captionEditing";
 import { ExportSettingsMenu } from "./ExportSettingsMenu";
 import ExtensionManager from "./ExtensionManager";
 import {
@@ -2831,6 +2832,14 @@ export default function VideoEditor() {
 		setAutoCaptionSettings((prev) => ({ ...prev, enabled: false }));
 	}, []);
 
+	const handleSaveAutoCaptionEdit = useCallback(
+		(target: CaptionEditTarget, text: string) => {
+			setAutoCaptions((captions) => updateCaptionCuesForEditedTarget(captions, target, text));
+			toast.success(t("settings.captions.editSaved", "Caption updated"));
+		},
+		[t],
+	);
+
 	const saveProject = useCallback(
 		async (forceSaveAs: boolean, options?: SaveProjectOptions) => {
 			clearPendingProjectAutosave();
@@ -5337,6 +5346,7 @@ export default function VideoEditor() {
 			annotationRegions={annotationRegions}
 			autoCaptions={autoCaptions}
 			autoCaptionSettings={autoCaptionSettings}
+			onEditAutoCaption={handleSaveAutoCaptionEdit}
 			selectedAnnotationId={selectedAnnotationId}
 			onSelectAnnotation={handleSelectAnnotation}
 			onAnnotationPositionChange={handleAnnotationPositionChange}

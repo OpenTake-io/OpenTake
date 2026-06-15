@@ -22,6 +22,7 @@ import {
 	DEFAULT_WALLPAPER_RELATIVE_PATH,
 	isVideoWallpaperSource,
 } from "@/lib/wallpapers";
+import { type CaptionEditTarget, normalizeCaptionEditText } from "./captionEditing";
 import { buildActiveCaptionLayout } from "./captionLayout";
 import {
 	CAPTION_FONT_WEIGHT,
@@ -169,10 +170,7 @@ import { clampFocusToStage as clampFocusToStageUtil } from "./videoPlayback/focu
 import { layoutVideoContent as layoutVideoContentUtil } from "./videoPlayback/layoutUtils";
 import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
 import { createVideoEventHandlers } from "./videoPlayback/videoEventHandlers";
-import {
-	getWebcamMediaTargetTimeSeconds,
-	shouldSeekWebcamMedia,
-} from "./videoPlayback/webcamSync";
+import { getWebcamMediaTargetTimeSeconds, shouldSeekWebcamMedia } from "./videoPlayback/webcamSync";
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
 import {
 	applyZoomTransform,
@@ -195,6 +193,11 @@ type PlaybackAnimationState = {
 	progress: number;
 	x: number;
 	y: number;
+};
+
+type CaptionEditSession = {
+	target: CaptionEditTarget;
+	draft: string;
 };
 
 function createPlaybackAnimationState(): PlaybackAnimationState {
@@ -361,6 +364,7 @@ interface VideoPlaybackProps {
 	annotationRegions?: AnnotationRegion[];
 	autoCaptions?: CaptionCue[];
 	autoCaptionSettings?: AutoCaptionSettings;
+	onEditAutoCaption?: (target: CaptionEditTarget, text: string) => void;
 	selectedAnnotationId?: string | null;
 	onSelectAnnotation?: (id: string | null) => void;
 	onAnnotationPositionChange?: (id: string, position: { x: number; y: number }) => void;
@@ -444,6 +448,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			annotationRegions = [],
 			autoCaptions = [],
 			autoCaptionSettings,
+			onEditAutoCaption,
 			selectedAnnotationId,
 			onSelectAnnotation,
 			onAnnotationPositionChange,
@@ -525,6 +530,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			height: number;
 		} | null>(null);
 		const captionBoxRef = useRef<HTMLDivElement | null>(null);
+		const captionEditInputRef = useRef<HTMLTextAreaElement | null>(null);
+		const captionEditSessionRef = useRef<CaptionEditSession | null>(null);
+		const [captionEditSession, setCaptionEditSession] = useState<CaptionEditSession | null>(
+			null,
+		);
 		const currentTimeRef = useRef(0);
 		const zoomRegionsRef = useRef<ZoomRegion[]>([]);
 		const selectedZoomIdRef = useRef<string | null>(null);
@@ -728,6 +738,127 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				measureText: (text) => measurementContext.measureText(text).width,
 			});
 		}, [autoCaptionSettings, autoCaptions, currentTime]);
+		const isCaptionEditing = captionEditSession !== null;
+		const captionEditDraft = captionEditSession?.draft ?? "";
+		const captionEditTargetId = captionEditSession?.target.id ?? null;
+		const captionEditTextMetrics = useMemo(() => {
+			if (!captionEditSession || !autoCaptionSettings || typeof document === "undefined") {
+				return null;
+			}
+
+			const overlayWidth = overlayRef.current?.clientWidth || 960;
+			const fontSize = getCaptionScaledFontSize(
+				autoCaptionSettings.fontSize,
+				overlayWidth,
+				autoCaptionSettings.maxWidth,
+			);
+			const maxTextWidthPx = getCaptionTextMaxWidth(
+				overlayWidth,
+				autoCaptionSettings.maxWidth,
+				fontSize,
+			);
+			const measurementCanvas = document.createElement("canvas");
+			const measurementContext = measurementCanvas.getContext("2d");
+			if (!measurementContext) {
+				return null;
+			}
+
+			measurementContext.font = `${CAPTION_FONT_WEIGHT} ${fontSize}px ${getDefaultCaptionFontFamily()}`;
+			const measuredWidth = Math.max(
+				...captionEditSession.draft
+					.split(/\r?\n/)
+					.map((line) => measurementContext.measureText(line || " ").width),
+			);
+
+			return {
+				fontSize,
+				maxTextWidthPx,
+				widthPx: Math.ceil(
+					Math.min(maxTextWidthPx, Math.max(fontSize * 2, measuredWidth + 2)),
+				),
+			};
+		}, [autoCaptionSettings, captionEditSession]);
+		const captionEditSizeKey = captionEditSession
+			? `${captionEditTextMetrics?.widthPx ?? 0}:${captionEditDraft}`
+			: "";
+
+		const beginCaptionEdit = useCallback(() => {
+			if (!activeCaptionLayout?.editTarget || !onEditAutoCaption) {
+				return;
+			}
+
+			videoRef.current?.pause();
+			onPlayStateChange(false);
+			const nextSession = {
+				target: activeCaptionLayout.editTarget,
+				draft: activeCaptionLayout.editTarget.text,
+			};
+			captionEditSessionRef.current = nextSession;
+			setCaptionEditSession(nextSession);
+		}, [activeCaptionLayout, onEditAutoCaption, onPlayStateChange]);
+
+		const commitCaptionEdit = useCallback(() => {
+			const session = captionEditSessionRef.current;
+			if (!session || !onEditAutoCaption) {
+				captionEditSessionRef.current = null;
+				setCaptionEditSession(null);
+				return;
+			}
+
+			const normalizedDraft = normalizeCaptionEditText(session.draft);
+			captionEditSessionRef.current = null;
+			if (!normalizedDraft) {
+				setCaptionEditSession(null);
+				return;
+			}
+
+			if (normalizedDraft !== normalizeCaptionEditText(session.target.text)) {
+				onEditAutoCaption(session.target, session.draft);
+			}
+			setCaptionEditSession(null);
+		}, [onEditAutoCaption]);
+
+		const cancelCaptionEdit = useCallback(() => {
+			captionEditSessionRef.current = null;
+			setCaptionEditSession(null);
+		}, []);
+
+		useEffect(() => {
+			if (!captionEditTargetId) {
+				return;
+			}
+
+			const frame = requestAnimationFrame(() => {
+				const input = captionEditInputRef.current;
+				if (!input) {
+					return;
+				}
+
+				input.focus();
+				const cursorPosition = input.value.length;
+				input.setSelectionRange(cursorPosition, cursorPosition);
+			});
+
+			return () => cancelAnimationFrame(frame);
+		}, [captionEditTargetId]);
+
+		useEffect(() => {
+			if (!captionEditSizeKey) {
+				return;
+			}
+
+			const frame = requestAnimationFrame(() => {
+				const input = captionEditInputRef.current;
+				if (!input) {
+					return;
+				}
+
+				input.style.height = "auto";
+				input.style.height = `${input.scrollHeight}px`;
+			});
+
+			return () => cancelAnimationFrame(frame);
+		}, [captionEditSizeKey]);
 
 		useEffect(() => {
 			const captionBox = captionBoxRef.current;
@@ -2951,9 +3082,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 						) : null}
 						{activeCaptionLayout && autoCaptionSettings ? (
 							<div
-								className="pointer-events-none absolute inset-x-0 flex justify-center"
+								className="absolute inset-x-0 flex justify-center"
 								style={{
 									bottom: `${autoCaptionSettings.bottomOffset}%`,
+									pointerEvents: onEditAutoCaption ? "auto" : "none",
 								}}
 							>
 								<div
@@ -2967,6 +3099,38 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 								>
 									<div
 										ref={captionBoxRef}
+										role={
+											onEditAutoCaption && !isCaptionEditing
+												? "button"
+												: undefined
+										}
+										tabIndex={
+											onEditAutoCaption && !isCaptionEditing ? 0 : undefined
+										}
+										aria-label={
+											onEditAutoCaption && !isCaptionEditing
+												? "Edit current caption"
+												: undefined
+										}
+										onClick={(event) => {
+											event.stopPropagation();
+											if (!isCaptionEditing) {
+												beginCaptionEdit();
+											}
+										}}
+										onPointerDown={(event) => {
+											event.stopPropagation();
+										}}
+										onKeyDown={(event) => {
+											if (!onEditAutoCaption || isCaptionEditing) {
+												return;
+											}
+
+											if (event.key === "Enter" || event.key === " ") {
+												event.preventDefault();
+												beginCaptionEdit();
+											}
+										}}
 										style={{
 											backgroundColor: `rgba(0, 0, 0, ${autoCaptionSettings.backgroundOpacity})`,
 											fontFamily: getDefaultCaptionFontFamily(),
@@ -3004,42 +3168,138 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 												),
 											)}px`,
 											boxSizing: "border-box",
+											cursor:
+												onEditAutoCaption && !isCaptionEditing
+													? "text"
+													: undefined,
+											pointerEvents: onEditAutoCaption ? "auto" : undefined,
 										}}
 									>
-										{activeCaptionLayout.visibleLines.map((line) => (
-											<div
-												key={`${activeCaptionLayout.blockKey}-${line.startWordIndex}`}
-												style={{
-													display: "flex",
-													justifyContent: "center",
-													flexWrap: "nowrap",
-													whiteSpace: "nowrap",
+										{captionEditSession ? (
+											<textarea
+												ref={captionEditInputRef}
+												value={captionEditSession.draft}
+												onChange={(event) => {
+													const draft = event.target.value;
+													setCaptionEditSession((session) => {
+														const nextSession = session
+															? { ...session, draft }
+															: session;
+														captionEditSessionRef.current = nextSession;
+														return nextSession;
+													});
 												}}
-											>
-												{line.words.map((word) => {
-													const visualState = getCaptionWordVisualState(
-														activeCaptionLayout.hasWordTimings,
-														word.state,
-													);
+												onBlur={commitCaptionEdit}
+												onClick={(event) => event.stopPropagation()}
+												onKeyDown={(event) => {
+													if (event.key === "Escape") {
+														event.preventDefault();
+														cancelCaptionEdit();
+														return;
+													}
 
-													return (
-														<span
-															key={`${activeCaptionLayout.blockKey}-${word.index}`}
-															style={{
-																display: "inline-block",
-																whiteSpace: "pre",
-																color: visualState.isInactive
-																	? autoCaptionSettings.inactiveTextColor
-																	: autoCaptionSettings.textColor,
-																opacity: visualState.opacity,
-															}}
-														>
-															{`${word.leadingSpace ? " " : ""}${word.text}`}
-														</span>
-													);
-												})}
-											</div>
-										))}
+													if (event.key === "Enter" && !event.shiftKey) {
+														event.preventDefault();
+														event.currentTarget.blur();
+													}
+												}}
+												rows={Math.max(
+													1,
+													activeCaptionLayout.visibleLines.length,
+												)}
+												aria-label="Edit current caption"
+												style={{
+													display: "block",
+													width: `${
+														captionEditTextMetrics?.widthPx ??
+														Math.max(
+															48,
+															activeCaptionLayout.visibleLines.reduce(
+																(width, line) =>
+																	Math.max(width, line.width),
+																0,
+															),
+														)
+													}px`,
+													maxWidth: `${
+														captionEditTextMetrics?.maxTextWidthPx ??
+														getCaptionTextMaxWidth(
+															overlayRef.current?.clientWidth || 960,
+															autoCaptionSettings.maxWidth,
+															getCaptionScaledFontSize(
+																autoCaptionSettings.fontSize,
+																overlayRef.current?.clientWidth ||
+																	960,
+																autoCaptionSettings.maxWidth,
+															),
+														)
+													}px`,
+													minHeight: `${
+														Math.max(
+															1,
+															activeCaptionLayout.visibleLines.length,
+														) *
+														(
+															captionEditTextMetrics?.fontSize ??
+																getCaptionScaledFontSize(
+																	autoCaptionSettings.fontSize,
+																	overlayRef.current
+																		?.clientWidth || 960,
+																	autoCaptionSettings.maxWidth,
+																)
+														) *
+														CAPTION_LINE_HEIGHT
+													}px`,
+													resize: "none",
+													border: "0",
+													outline: "0",
+													padding: "0",
+													margin: "0",
+													overflow: "hidden",
+													background: "transparent",
+													color: autoCaptionSettings.textColor,
+													font: "inherit",
+													lineHeight: "inherit",
+													textAlign: "center",
+												}}
+											/>
+										) : (
+											activeCaptionLayout.visibleLines.map((line) => (
+												<div
+													key={`${activeCaptionLayout.blockKey}-${line.startWordIndex}`}
+													style={{
+														display: "flex",
+														justifyContent: "center",
+														flexWrap: "nowrap",
+														whiteSpace: "nowrap",
+													}}
+												>
+													{line.words.map((word) => {
+														const visualState =
+															getCaptionWordVisualState(
+																activeCaptionLayout.hasWordTimings,
+																word.state,
+															);
+
+														return (
+															<span
+																key={`${activeCaptionLayout.blockKey}-${word.index}`}
+																style={{
+																	display: "inline-block",
+																	whiteSpace: "pre",
+																	color: visualState.isInactive
+																		? autoCaptionSettings.inactiveTextColor
+																		: autoCaptionSettings.textColor,
+																	opacity: visualState.opacity,
+																}}
+															>
+																{`${word.leadingSpace ? " " : ""}${word.text}`}
+															</span>
+														);
+													})}
+												</div>
+											))
+										)}
 									</div>
 								</div>
 							</div>
