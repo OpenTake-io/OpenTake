@@ -2809,7 +2809,6 @@ export default function VideoEditor() {
 			}
 
 			setAutoCaptions(result.cues);
-			setAutoCaptionSettings((prev) => ({ ...prev, enabled: true }));
 			toast.success(result.message || `Generated ${result.cues.length} captions`);
 		} catch (error) {
 			toast.error(getErrorMessage(error));

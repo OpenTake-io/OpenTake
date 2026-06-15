@@ -4,17 +4,39 @@ import { cn } from "@/lib/utils";
 import { getArrowComponent } from "./ArrowSvgs";
 import { type AnnotationRegion, BASE_PREVIEW_WIDTH, BLUR_ANNOTATION_STRENGTH } from "./types";
 
+type Rect = {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+};
+
+type SceneTransform = {
+	scale: number;
+	x: number;
+	y: number;
+};
+
 interface AnnotationOverlayProps {
 	annotation: AnnotationRegion;
 	isSelected: boolean;
 	containerWidth: number;
 	containerHeight: number;
+	recordingRect: Rect;
+	sceneTransform: SceneTransform;
 	onPositionChange: (id: string, position: { x: number; y: number }) => void;
 	onSizeChange: (id: string, size: { width: number; height: number }) => void;
 	onClick: (id: string) => void;
 	zIndex: number;
 	isSelectedBoost: boolean; // Boost z-index when selected for easy editing
-	scale?: number;
+}
+
+function clampPercent(value: number) {
+	if (!Number.isFinite(value)) {
+		return 0;
+	}
+
+	return Math.min(100, Math.max(0, value));
 }
 
 export function AnnotationOverlay({
@@ -22,19 +44,54 @@ export function AnnotationOverlay({
 	isSelected,
 	containerWidth,
 	containerHeight,
+	recordingRect,
+	sceneTransform,
 	onPositionChange,
 	onSizeChange,
 	onClick,
 	zIndex,
 	isSelectedBoost,
-	scale = 1,
 }: AnnotationOverlayProps) {
-	const x = (annotation.position.x / 100) * containerWidth;
-	const y = (annotation.position.y / 100) * containerHeight;
-	const width = (annotation.size.width / 100) * containerWidth;
-	const height = (annotation.size.height / 100) * containerHeight;
+	const safeRecordingRect =
+		recordingRect.width > 0 && recordingRect.height > 0
+			? recordingRect
+			: { x: 0, y: 0, width: containerWidth, height: containerHeight };
+	const sceneX = safeRecordingRect.x + (annotation.position.x / 100) * safeRecordingRect.width;
+	const sceneY = safeRecordingRect.y + (annotation.position.y / 100) * safeRecordingRect.height;
+	const sceneWidth = (annotation.size.width / 100) * safeRecordingRect.width;
+	const sceneHeight = (annotation.size.height / 100) * safeRecordingRect.height;
+	const x = sceneX * sceneTransform.scale + sceneTransform.x;
+	const y = sceneY * sceneTransform.scale + sceneTransform.y;
+	const width = sceneWidth * sceneTransform.scale;
+	const height = sceneHeight * sceneTransform.scale;
+	const sizeScale = safeRecordingRect.width / BASE_PREVIEW_WIDTH;
+	const blurScaleFactor = sizeScale * sceneTransform.scale;
 
 	const isDraggingRef = useRef(false);
+
+	const screenRectToRecordingPercent = (rect: Rect) => {
+		const nextSceneX = (rect.x - sceneTransform.x) / sceneTransform.scale;
+		const nextSceneY = (rect.y - sceneTransform.y) / sceneTransform.scale;
+		const nextSceneWidth = rect.width / sceneTransform.scale;
+		const nextSceneHeight = rect.height / sceneTransform.scale;
+
+		return {
+			position: {
+				x: clampPercent(
+					((nextSceneX - safeRecordingRect.x) / Math.max(1, safeRecordingRect.width)) *
+						100,
+				),
+				y: clampPercent(
+					((nextSceneY - safeRecordingRect.y) / Math.max(1, safeRecordingRect.height)) *
+						100,
+				),
+			},
+			size: {
+				width: clampPercent((nextSceneWidth / Math.max(1, safeRecordingRect.width)) * 100),
+				height: clampPercent((nextSceneHeight / Math.max(1, safeRecordingRect.height)) * 100),
+			},
+		};
+	};
 
 	const renderArrow = () => {
 		const direction = annotation.figureData?.arrowDirection || "right";
@@ -50,7 +107,7 @@ export function AnnotationOverlay({
 			case "text":
 				return (
 					<div
-						className="w-full h-full flex items-center p-2 overflow-hidden"
+						className="w-full h-full flex items-center overflow-hidden"
 						style={{
 							justifyContent:
 								annotation.style.textAlign === "left"
@@ -59,13 +116,14 @@ export function AnnotationOverlay({
 										? "flex-end"
 										: "center",
 							alignItems: "center",
+							padding: `${8 * sceneTransform.scale}px`,
 						}}
 					>
 						<span
 							style={{
 								color: annotation.style.color,
 								backgroundColor: annotation.style.backgroundColor,
-								fontSize: `${annotation.style.fontSize}px`,
+								fontSize: `${annotation.style.fontSize * sceneTransform.scale}px`,
 								fontFamily: annotation.style.fontFamily,
 								fontWeight: annotation.style.fontWeight,
 								fontStyle: annotation.style.fontStyle,
@@ -76,7 +134,7 @@ export function AnnotationOverlay({
 								boxDecorationBreak: "clone",
 								WebkitBoxDecorationBreak: "clone",
 								padding: "0.1em 0.2em",
-								borderRadius: "4px",
+								borderRadius: `${4 * sceneTransform.scale}px`,
 								lineHeight: "1.4",
 							}}
 						>
@@ -118,9 +176,8 @@ export function AnnotationOverlay({
 				);
 
 			case "blur": {
-				const previewScaleFactor = containerWidth / BASE_PREVIEW_WIDTH;
 				const currentBlurStrength = annotation.blurIntensity ?? BLUR_ANNOTATION_STRENGTH;
-				const blurPx = currentBlurStrength * previewScaleFactor;
+				const blurPx = currentBlurStrength * blurScaleFactor;
 				const blurStyle = `blur(${blurPx}px)`;
 
 				return (
@@ -130,7 +187,7 @@ export function AnnotationOverlay({
 							backdropFilter: blurStyle,
 							WebkitBackdropFilter: blurStyle,
 							backgroundColor: annotation.blurColor || "transparent",
-							borderRadius: `${(annotation.style.borderRadius ?? 0) * previewScaleFactor}px`,
+							borderRadius: `${(annotation.style.borderRadius ?? 0) * blurScaleFactor}px`,
 						}}
 					/>
 				);
@@ -145,14 +202,12 @@ export function AnnotationOverlay({
 		<Rnd
 			position={{ x, y }}
 			size={{ width, height }}
-			scale={scale}
 			onDragStart={() => {
 				isDraggingRef.current = true;
 			}}
 			onDragStop={(_e, d) => {
-				const xPercent = (d.x / containerWidth) * 100;
-				const yPercent = (d.y / containerHeight) * 100;
-				onPositionChange(annotation.id, { x: xPercent, y: yPercent });
+				const next = screenRectToRecordingPercent({ x: d.x, y: d.y, width, height });
+				onPositionChange(annotation.id, next.position);
 
 				// Reset dragging flag after a short delay to prevent click event
 				setTimeout(() => {
@@ -160,12 +215,14 @@ export function AnnotationOverlay({
 				}, 100);
 			}}
 			onResizeStop={(_e, _direction, ref, _delta, position) => {
-				const xPercent = (position.x / containerWidth) * 100;
-				const yPercent = (position.y / containerHeight) * 100;
-				const widthPercent = (ref.offsetWidth / containerWidth) * 100;
-				const heightPercent = (ref.offsetHeight / containerHeight) * 100;
-				onPositionChange(annotation.id, { x: xPercent, y: yPercent });
-				onSizeChange(annotation.id, { width: widthPercent, height: heightPercent });
+				const next = screenRectToRecordingPercent({
+					x: position.x,
+					y: position.y,
+					width: ref.offsetWidth,
+					height: ref.offsetHeight,
+				});
+				onPositionChange(annotation.id, next.position);
+				onSizeChange(annotation.id, next.size);
 			}}
 			onClick={() => {
 				if (isDraggingRef.current) return;
