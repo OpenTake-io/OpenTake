@@ -200,6 +200,12 @@ type CaptionEditSession = {
 	draft: string;
 };
 
+type SceneTransformState = {
+	scale: number;
+	x: number;
+	y: number;
+};
+
 function createPlaybackAnimationState(): PlaybackAnimationState {
 	return {
 		scale: 1,
@@ -501,6 +507,12 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			null,
 		);
 		const [frameUpdateCounter, setFrameUpdateCounter] = useState(0);
+		const [annotationSceneTransform, setAnnotationSceneTransform] =
+			useState<SceneTransformState>({
+				scale: 1,
+				x: 0,
+				y: 0,
+			});
 
 		useEffect(() => {
 			let framesSignature = getRegisteredFramesSignature();
@@ -2324,6 +2336,21 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				state.x = appliedTransform.x;
 				state.y = appliedTransform.y;
 				state.appliedScale = appliedTransform.scale;
+				setAnnotationSceneTransform((current) => {
+					if (
+						Math.abs(current.scale - appliedTransform.scale) < 0.001 &&
+						Math.abs(current.x - appliedTransform.x) < 0.1 &&
+						Math.abs(current.y - appliedTransform.y) < 0.1
+					) {
+						return current;
+					}
+
+					return {
+						scale: appliedTransform.scale,
+						x: appliedTransform.x,
+						y: appliedTransform.y,
+					};
+				});
 			};
 
 			const ticker = () => {
@@ -3304,58 +3331,72 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 								</div>
 							</div>
 						) : null}
-						{(() => {
-							const filtered = (annotationRegions || []).filter((annotation) => {
-								if (
-									typeof annotation.startMs !== "number" ||
-									typeof annotation.endMs !== "number"
-								)
-									return false;
+						<div
+							className="absolute inset-0"
+							style={{
+								pointerEvents: "none",
+								transform: `translate(${annotationSceneTransform.x}px, ${annotationSceneTransform.y}px) scale(${annotationSceneTransform.scale})`,
+								transformOrigin: "top left",
+							}}
+						>
+							{(() => {
+								const filtered = (annotationRegions || []).filter((annotation) => {
+									if (
+										typeof annotation.startMs !== "number" ||
+										typeof annotation.endMs !== "number"
+									)
+										return false;
 
-								if (annotation.id === selectedAnnotationId) return true;
+									if (annotation.id === selectedAnnotationId) return true;
 
-								const timeMs = Math.round(currentTime * 1000);
-								return timeMs >= annotation.startMs && timeMs <= annotation.endMs;
-							});
-
-							// Sort by z-index (lowest to highest) so higher z-index renders on top
-							const sorted = [...filtered].sort((a, b) => a.zIndex - b.zIndex);
-
-							// Handle click-through cycling: when clicking same annotation, cycle to next
-							const handleAnnotationClick = (clickedId: string) => {
-								if (!onSelectAnnotation) return;
-
-								// If clicking on already selected annotation and there are multiple overlapping
-								if (clickedId === selectedAnnotationId && sorted.length > 1) {
-									// Find current index and cycle to next
-									const currentIndex = sorted.findIndex(
-										(a) => a.id === clickedId,
+									const timeMs = Math.round(currentTime * 1000);
+									return (
+										timeMs >= annotation.startMs && timeMs <= annotation.endMs
 									);
-									const nextIndex = (currentIndex + 1) % sorted.length;
-									onSelectAnnotation(sorted[nextIndex].id);
-								} else {
-									// First click or clicking different annotation
-									onSelectAnnotation(clickedId);
-								}
-							};
+								});
 
-							return sorted.map((annotation) => (
-								<AnnotationOverlay
-									key={annotation.id}
-									annotation={annotation}
-									isSelected={annotation.id === selectedAnnotationId}
-									containerWidth={overlayRef.current?.clientWidth || 800}
-									containerHeight={overlayRef.current?.clientHeight || 600}
-									onPositionChange={(id, position) =>
-										onAnnotationPositionChange?.(id, position)
+								// Sort by z-index (lowest to highest) so higher z-index renders on top
+								const sorted = [...filtered].sort((a, b) => a.zIndex - b.zIndex);
+
+								// Handle click-through cycling: when clicking same annotation, cycle to next
+								const handleAnnotationClick = (clickedId: string) => {
+									if (!onSelectAnnotation) return;
+
+									// If clicking on already selected annotation and there are multiple overlapping
+									if (clickedId === selectedAnnotationId && sorted.length > 1) {
+										// Find current index and cycle to next
+										const currentIndex = sorted.findIndex(
+											(a) => a.id === clickedId,
+										);
+										const nextIndex = (currentIndex + 1) % sorted.length;
+										onSelectAnnotation(sorted[nextIndex].id);
+									} else {
+										// First click or clicking different annotation
+										onSelectAnnotation(clickedId);
 									}
-									onSizeChange={(id, size) => onAnnotationSizeChange?.(id, size)}
-									onClick={handleAnnotationClick}
-									zIndex={annotation.zIndex}
-									isSelectedBoost={annotation.id === selectedAnnotationId}
-								/>
-							));
-						})()}
+								};
+
+								return sorted.map((annotation) => (
+									<AnnotationOverlay
+										key={annotation.id}
+										annotation={annotation}
+										isSelected={annotation.id === selectedAnnotationId}
+										containerWidth={overlayRef.current?.clientWidth || 800}
+										containerHeight={overlayRef.current?.clientHeight || 600}
+										onPositionChange={(id, position) =>
+											onAnnotationPositionChange?.(id, position)
+										}
+										onSizeChange={(id, size) =>
+											onAnnotationSizeChange?.(id, size)
+										}
+										onClick={handleAnnotationClick}
+										zIndex={annotation.zIndex}
+										isSelectedBoost={annotation.id === selectedAnnotationId}
+										scale={annotationSceneTransform.scale}
+									/>
+								));
+							})()}
+						</div>
 					</div>
 				)}
 				{/* Keep the source video off-screen instead of display:none so the
