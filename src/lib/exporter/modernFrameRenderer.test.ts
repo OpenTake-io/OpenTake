@@ -236,6 +236,45 @@ describe("ModernFrameRenderer blur export path", () => {
 		expect(renderer.capturePixelsForNativeExport()).not.toBeNull();
 	});
 
+	it("uses the sampled scene transform for blur annotations during temporal blur", async () => {
+		const renderer = createRenderer() as any;
+		renderer.config.zoomTemporalMotionBlur = 1;
+		renderer.config.zoomMotionBlurSampleCount = 3;
+		renderer.config.zoomMotionBlurShutterFraction = 0.5;
+		renderer.app = { canvas: createMockCanvas() };
+		renderer.annotationScaleFactor = 1;
+		renderer.annotationAssets = { imageCache: new Map() };
+		renderer.updateCaptionLayer = vi.fn();
+		renderer.renderSceneSample = vi.fn(async (sampleTimestamp: number) => ({
+			timeMs: sampleTimestamp / 1000,
+			cursorTimeMs: sampleTimestamp / 1000,
+			backgroundTimelineTimeMs: sampleTimestamp / 1000,
+			sceneTransform: { scale: 1.75, x: 120, y: -48 },
+			zoom: { scale: 1, focusX: 0.5, focusY: 0.5, progress: 0 },
+		}));
+
+		await renderer.renderTemporalMotionBlurFrame(1_000_000, 1_000_000, 1_000_000, 33_333, {
+			stageSize: { width: 1920, height: 1080 },
+			videoSize: { width: 1920, height: 1080 },
+			baseScale: 1,
+			baseOffset: { x: 0, y: 0 },
+			maskRect: {
+				x: 0,
+				y: 0,
+				width: 1920,
+				height: 1080,
+				sourceCrop: { x: 0, y: 0, width: 1, height: 1 },
+			},
+		});
+
+		expect(renderAnnotations).toHaveBeenCalled();
+		expect(vi.mocked(renderAnnotations).mock.lastCall?.[7]).toEqual({
+			scale: 1.75,
+			x: 120,
+			y: -48,
+		});
+	});
+
 	it("prefers decoder-backed sync for video wallpapers during export", async () => {
 		vi.clearAllMocks();
 		const renderer = new FrameRenderer({

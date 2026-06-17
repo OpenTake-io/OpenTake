@@ -45,7 +45,6 @@ import { getWebcamMediaTargetTimeSeconds } from "@/components/video-editor/video
 import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
 import {
 	applyZoomTransform,
-	computeFocusFromTransform,
 	computeZoomTransform,
 	createMotionBlurState,
 	type MotionBlurState,
@@ -1547,6 +1546,9 @@ export class FrameRenderer {
 					this.config.height,
 					temporalSnapshot.timeMs,
 					scaleFactor,
+					undefined,
+					temporalSnapshot.sceneTransform,
+					this.layoutCache?.maskRect,
 				);
 			}
 
@@ -1731,6 +1733,13 @@ export class FrameRenderer {
 				this.config.height,
 				timeMs,
 				scaleFactor,
+				undefined,
+				{
+					scale: this.animationState.appliedScale,
+					x: this.animationState.x,
+					y: this.animationState.y,
+				},
+				this.layoutCache?.maskRect,
 			);
 		}
 
@@ -1961,7 +1970,7 @@ export class FrameRenderer {
 	private updateAnimationState(timeMs: number): number {
 		if (!this.cameraContainer || !this.layoutCache) return 0;
 
-		const { region, strength, blendedScale, transition } = findDominantRegion(
+		const { region, strength, blendedScale } = findDominantRegion(
 			this.config.zoomRegions,
 			timeMs,
 			{
@@ -2001,43 +2010,6 @@ export class FrameRenderer {
 			targetScaleFactor = zoomScale;
 			targetFocus = regionFocus;
 			targetProgress = strength;
-
-			if (transition) {
-				const startTransform = computeZoomTransform({
-					stageSize: this.layoutCache.stageSize,
-					baseMask: this.layoutCache.maskRect,
-					zoomScale: transition.startScale,
-					zoomProgress: 1,
-					focusX: transition.startFocus.cx,
-					focusY: transition.startFocus.cy,
-				});
-				const endTransform = computeZoomTransform({
-					stageSize: this.layoutCache.stageSize,
-					baseMask: this.layoutCache.maskRect,
-					zoomScale: transition.endScale,
-					zoomProgress: 1,
-					focusX: transition.endFocus.cx,
-					focusY: transition.endFocus.cy,
-				});
-
-				const interpolatedTransform = {
-					scale:
-						startTransform.scale +
-						(endTransform.scale - startTransform.scale) * transition.progress,
-					x: startTransform.x + (endTransform.x - startTransform.x) * transition.progress,
-					y: startTransform.y + (endTransform.y - startTransform.y) * transition.progress,
-				};
-
-				targetScaleFactor = interpolatedTransform.scale;
-				targetFocus = computeFocusFromTransform({
-					stageSize: this.layoutCache.stageSize,
-					baseMask: this.layoutCache.maskRect,
-					zoomScale: interpolatedTransform.scale,
-					x: interpolatedTransform.x,
-					y: interpolatedTransform.y,
-				});
-				targetProgress = 1;
-			}
 		}
 
 		const state = this.animationState;

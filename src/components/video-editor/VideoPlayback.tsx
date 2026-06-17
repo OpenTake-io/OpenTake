@@ -166,7 +166,10 @@ import {
 	SNAP_TO_EDGES_RATIO_AUTO,
 } from "./videoPlayback/cursorFollowCamera";
 import { clampFocusToStage as clampFocusToStageUtil } from "./videoPlayback/focusUtils";
-import { layoutVideoContent as layoutVideoContentUtil } from "./videoPlayback/layoutUtils";
+import {
+	layoutVideoContent as layoutVideoContentUtil,
+	scalePreviewBorderRadius,
+} from "./videoPlayback/layoutUtils";
 import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
 import { createVideoEventHandlers } from "./videoPlayback/videoEventHandlers";
 import {
@@ -176,7 +179,6 @@ import {
 import { findDominantRegion } from "./videoPlayback/zoomRegionUtils";
 import {
 	applyZoomTransform,
-	computeFocusFromTransform,
 	computeZoomTransform,
 	createMotionBlurState,
 	type MotionBlurState,
@@ -195,6 +197,19 @@ type PlaybackAnimationState = {
 	progress: number;
 	x: number;
 	y: number;
+};
+
+type SceneTransformState = {
+	scale: number;
+	x: number;
+	y: number;
+};
+
+type AnnotationRecordingRect = {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
 };
 
 function createPlaybackAnimationState(): PlaybackAnimationState {
@@ -496,6 +511,19 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 			null,
 		);
 		const [frameUpdateCounter, setFrameUpdateCounter] = useState(0);
+		const [annotationSceneTransform, setAnnotationSceneTransform] =
+			useState<SceneTransformState>({
+				scale: 1,
+				x: 0,
+				y: 0,
+			});
+		const [annotationRecordingRect, setAnnotationRecordingRect] =
+			useState<AnnotationRecordingRect>({
+				x: 0,
+				y: 0,
+				width: 0,
+				height: 0,
+			});
 
 		useEffect(() => {
 			let framesSignature = getRegisteredFramesSignature();
@@ -847,7 +875,11 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					y: 0,
 					width: scaledSize,
 					height: scaledSize,
-					radius: webcamCornerRadius,
+					radius: scalePreviewBorderRadius(
+						overlay.clientWidth,
+						overlay.clientHeight,
+						webcamCornerRadius,
+					),
 				});
 				bubble.style.filter = `drop-shadow(0 ${Math.round(scaledSize * 0.06)}px ${Math.round(
 					scaledSize * 0.22,
@@ -997,6 +1029,23 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					renderWidth: result.maskRect.width * renderResolution,
 					renderHeight: result.maskRect.height * renderResolution,
 				};
+				setAnnotationRecordingRect((current) => {
+					if (
+						Math.abs(current.x - result.maskRect.x) < 0.1 &&
+						Math.abs(current.y - result.maskRect.y) < 0.1 &&
+						Math.abs(current.width - result.maskRect.width) < 0.1 &&
+						Math.abs(current.height - result.maskRect.height) < 0.1
+					) {
+						return current;
+					}
+
+					return {
+						x: result.maskRect.x,
+						y: result.maskRect.y,
+						width: result.maskRect.width,
+						height: result.maskRect.height,
+					};
+				});
 				cropBoundsRef.current = result.cropBounds;
 
 				// Sync extension cursor effects canvas resolution with renderer
@@ -1983,6 +2032,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				if (cursorOverlayEnabled) {
 					const cursorOverlay = new PixiCursorOverlay({
 						dotRadius: DEFAULT_CURSOR_CONFIG.dotRadius * cursorSizeRef.current,
+						minViewportScale: 0,
 						style: cursorStyleRef.current,
 						smoothingFactor: cursorSmoothingRef.current,
 						springTuning: {
@@ -2193,6 +2243,21 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				state.x = appliedTransform.x;
 				state.y = appliedTransform.y;
 				state.appliedScale = appliedTransform.scale;
+				setAnnotationSceneTransform((current) => {
+					if (
+						Math.abs(current.scale - appliedTransform.scale) < 0.001 &&
+						Math.abs(current.x - appliedTransform.x) < 0.1 &&
+						Math.abs(current.y - appliedTransform.y) < 0.1
+					) {
+						return current;
+					}
+
+					return {
+						scale: appliedTransform.scale,
+						x: appliedTransform.x,
+						y: appliedTransform.y,
+					};
+				});
 			};
 
 			const ticker = () => {
@@ -2200,7 +2265,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					return;
 				}
 
-				const { region, strength, blendedScale, transition } = findDominantRegion(
+				const { region, strength, blendedScale } = findDominantRegion(
 					zoomRegionsRef.current,
 					currentTimeRef.current,
 					{
@@ -2245,47 +2310,6 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					targetScaleFactor = zoomScale;
 					targetFocus = regionFocus;
 					targetProgress = strength;
-
-					if (transition) {
-						const startTransform = computeZoomTransform({
-							stageSize: stageSizeRef.current,
-							baseMask: baseMaskRef.current,
-							zoomScale: transition.startScale,
-							zoomProgress: 1,
-							focusX: transition.startFocus.cx,
-							focusY: transition.startFocus.cy,
-						});
-						const endTransform = computeZoomTransform({
-							stageSize: stageSizeRef.current,
-							baseMask: baseMaskRef.current,
-							zoomScale: transition.endScale,
-							zoomProgress: 1,
-							focusX: transition.endFocus.cx,
-							focusY: transition.endFocus.cy,
-						});
-
-						const interpolatedTransform = {
-							scale:
-								startTransform.scale +
-								(endTransform.scale - startTransform.scale) * transition.progress,
-							x:
-								startTransform.x +
-								(endTransform.x - startTransform.x) * transition.progress,
-							y:
-								startTransform.y +
-								(endTransform.y - startTransform.y) * transition.progress,
-						};
-
-						targetScaleFactor = interpolatedTransform.scale;
-						targetFocus = computeFocusFromTransform({
-							stageSize: stageSizeRef.current,
-							baseMask: baseMaskRef.current,
-							zoomScale: interpolatedTransform.scale,
-							x: interpolatedTransform.x,
-							y: interpolatedTransform.y,
-						});
-						targetProgress = 1;
-					}
 				}
 
 				const state = animationStateRef.current;
@@ -3044,58 +3068,97 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 								</div>
 							</div>
 						) : null}
-						{(() => {
-							const filtered = (annotationRegions || []).filter((annotation) => {
-								if (
-									typeof annotation.startMs !== "number" ||
-									typeof annotation.endMs !== "number"
-								)
-									return false;
+						<div
+							className="absolute inset-0"
+							style={{
+								pointerEvents: "none",
+								transform: `matrix(${annotationSceneTransform.scale}, 0, 0, ${annotationSceneTransform.scale}, ${annotationSceneTransform.x}, ${annotationSceneTransform.y})`,
+								transformOrigin: "top left",
+							}}
+						>
+							<div
+								className="absolute"
+								style={{
+									pointerEvents: "none",
+									left: annotationRecordingRect.x || 0,
+									top: annotationRecordingRect.y || 0,
+									width:
+										annotationRecordingRect.width ||
+										(overlayRef.current?.clientWidth || 800),
+									height:
+										annotationRecordingRect.height ||
+										(overlayRef.current?.clientHeight || 600),
+								}}
+							>
+								{(() => {
+									const filtered = (annotationRegions || []).filter((annotation) => {
+										if (
+											typeof annotation.startMs !== "number" ||
+											typeof annotation.endMs !== "number"
+										)
+											return false;
 
-								if (annotation.id === selectedAnnotationId) return true;
+										if (annotation.id === selectedAnnotationId) return true;
 
-								const timeMs = Math.round(currentTime * 1000);
-								return timeMs >= annotation.startMs && timeMs <= annotation.endMs;
-							});
+										const timeMs = Math.round(currentTime * 1000);
+										return timeMs >= annotation.startMs && timeMs <= annotation.endMs;
+									});
 
-							// Sort by z-index (lowest to highest) so higher z-index renders on top
-							const sorted = [...filtered].sort((a, b) => a.zIndex - b.zIndex);
+									const sorted = [...filtered].sort((a, b) => a.zIndex - b.zIndex);
 
-							// Handle click-through cycling: when clicking same annotation, cycle to next
-							const handleAnnotationClick = (clickedId: string) => {
-								if (!onSelectAnnotation) return;
+									const handleAnnotationClick = (clickedId: string) => {
+										if (!onSelectAnnotation) return;
 
-								// If clicking on already selected annotation and there are multiple overlapping
-								if (clickedId === selectedAnnotationId && sorted.length > 1) {
-									// Find current index and cycle to next
-									const currentIndex = sorted.findIndex(
-										(a) => a.id === clickedId,
-									);
-									const nextIndex = (currentIndex + 1) % sorted.length;
-									onSelectAnnotation(sorted[nextIndex].id);
-								} else {
-									// First click or clicking different annotation
-									onSelectAnnotation(clickedId);
-								}
-							};
+										if (clickedId === selectedAnnotationId && sorted.length > 1) {
+											const currentIndex = sorted.findIndex(
+												(a) => a.id === clickedId,
+											);
+											const nextIndex = (currentIndex + 1) % sorted.length;
+											onSelectAnnotation(sorted[nextIndex].id);
+										} else {
+											onSelectAnnotation(clickedId);
+										}
+									};
 
-							return sorted.map((annotation) => (
-								<AnnotationOverlay
-									key={annotation.id}
-									annotation={annotation}
-									isSelected={annotation.id === selectedAnnotationId}
-									containerWidth={overlayRef.current?.clientWidth || 800}
-									containerHeight={overlayRef.current?.clientHeight || 600}
-									onPositionChange={(id, position) =>
-										onAnnotationPositionChange?.(id, position)
-									}
-									onSizeChange={(id, size) => onAnnotationSizeChange?.(id, size)}
-									onClick={handleAnnotationClick}
-									zIndex={annotation.zIndex}
-									isSelectedBoost={annotation.id === selectedAnnotationId}
-								/>
-							));
-						})()}
+									return sorted.map((annotation) => (
+										<AnnotationOverlay
+											key={annotation.id}
+											annotation={annotation}
+											isSelected={annotation.id === selectedAnnotationId}
+											containerWidth={
+												annotationRecordingRect.width ||
+												(overlayRef.current?.clientWidth || 800)
+											}
+											containerHeight={
+												annotationRecordingRect.height ||
+												(overlayRef.current?.clientHeight || 600)
+											}
+											recordingRect={{
+												x: 0,
+												y: 0,
+												width:
+													annotationRecordingRect.width ||
+													(overlayRef.current?.clientWidth || 800),
+												height:
+													annotationRecordingRect.height ||
+													(overlayRef.current?.clientHeight || 600),
+											}}
+											sceneTransform={{ scale: 1, x: 0, y: 0 }}
+											interactionScale={annotationSceneTransform.scale}
+											onPositionChange={(id, position) =>
+												onAnnotationPositionChange?.(id, position)
+											}
+											onSizeChange={(id, size) =>
+												onAnnotationSizeChange?.(id, size)
+											}
+											onClick={handleAnnotationClick}
+											zIndex={annotation.zIndex}
+											isSelectedBoost={annotation.id === selectedAnnotationId}
+										/>
+									));
+								})()}
+							</div>
+						</div>
 					</div>
 				)}
 				{/* Keep the source video off-screen instead of display:none so the

@@ -15,8 +15,8 @@ import type {
 	AnnotationRegion,
 	AutoCaptionSettings,
 	CaptionCue,
-	CursorClickEffectStyle,
 	CropRegion,
+	CursorClickEffectStyle,
 	CursorStyle,
 	CursorTelemetryPoint,
 	Padding,
@@ -39,7 +39,10 @@ import {
 	PixiCursorOverlay,
 	preloadCursorAssets,
 } from "@/components/video-editor/videoPlayback/cursorRenderer";
-import { computePaddedLayout } from "@/components/video-editor/videoPlayback/layoutUtils";
+import {
+	computePaddedLayout,
+	scalePreviewBorderRadius,
+} from "@/components/video-editor/videoPlayback/layoutUtils";
 import {
 	createSpringState,
 	getZoomSpringConfig,
@@ -51,7 +54,6 @@ import { getWebcamMediaTargetTimeSeconds } from "@/components/video-editor/video
 import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
 import {
 	applyZoomTransform,
-	computeFocusFromTransform,
 	computeZoomTransform,
 	createMotionBlurState,
 	type MotionBlurState,
@@ -599,7 +601,7 @@ export class FrameRenderer {
 		this.webcamRootContainer.visible = false;
 
 		this.overlayContainer.addChild(this.webcamRootContainer);
-		this.overlayContainer.addChild(this.annotationContainer);
+		this.cameraContainer.addChild(this.annotationContainer);
 		this.overlayContainer.addChild(this.captionContainer);
 
 		this.videoMaskGraphics = new Graphics();
@@ -622,14 +624,14 @@ export class FrameRenderer {
 					massMultiplier: this.config.cursorSpringMassMultiplier,
 				},
 				motionBlur: this.config.cursorMotionBlur ?? 0,
-				clickEffect:
-					this.config.cursorClickEffect ?? DEFAULT_CURSOR_CONFIG.clickEffect,
+				clickEffect: this.config.cursorClickEffect ?? DEFAULT_CURSOR_CONFIG.clickEffect,
 				clickEffectColor:
 					this.config.cursorClickEffectColor ?? DEFAULT_CURSOR_CONFIG.clickEffectColor,
 				clickEffectScale:
 					this.config.cursorClickEffectScale ?? DEFAULT_CURSOR_CONFIG.clickEffectScale,
 				clickEffectOpacity:
-					this.config.cursorClickEffectOpacity ?? DEFAULT_CURSOR_CONFIG.clickEffectOpacity,
+					this.config.cursorClickEffectOpacity ??
+					DEFAULT_CURSOR_CONFIG.clickEffectOpacity,
 				clickEffectDurationMs:
 					this.config.cursorClickEffectDurationMs ??
 					DEFAULT_CURSOR_CONFIG.clickEffectDurationMs,
@@ -1467,9 +1469,7 @@ export class FrameRenderer {
 	private calculateAnnotationScaleFactor(): number {
 		const previewWidth = this.config.previewWidth || 1920;
 		const previewHeight = this.config.previewHeight || 1080;
-		const scaleX = this.config.width / previewWidth;
-		const scaleY = this.config.height / previewHeight;
-		return (scaleX + scaleY) / 2;
+		return (this.config.width / previewWidth + this.config.height / previewHeight) / 2;
 	}
 
 	private hasActiveBlurAnnotations(timeMs: number): boolean {
@@ -1561,6 +1561,7 @@ export class FrameRenderer {
 
 	private async composeBlurAnnotationFrame(
 		timeMs: number,
+		sceneTransform?: { scale: number; x: number; y: number },
 		sourceCanvas?: CanvasImageSource,
 	): Promise<void> {
 		if (!this.app) {
@@ -1586,6 +1587,12 @@ export class FrameRenderer {
 			timeMs,
 			this.annotationScaleFactor,
 			this.annotationAssets ?? undefined,
+			sceneTransform ?? {
+				scale: this.animationState.appliedScale,
+				x: this.animationState.x,
+				y: this.animationState.y,
+			},
+			this.layoutCache?.maskRect,
 		);
 
 		this.drawCaptionOverlay(context);
@@ -1609,10 +1616,16 @@ export class FrameRenderer {
 		);
 
 		for (const annotation of annotations) {
-			const x = (annotation.position.x / 100) * this.config.width;
-			const y = (annotation.position.y / 100) * this.config.height;
-			const width = (annotation.size.width / 100) * this.config.width;
-			const height = (annotation.size.height / 100) * this.config.height;
+			const annotationRect = this.layoutCache?.maskRect ?? {
+				x: 0,
+				y: 0,
+				width: this.config.width,
+				height: this.config.height,
+			};
+			const x = annotationRect.x + (annotation.position.x / 100) * annotationRect.width;
+			const y = annotationRect.y + (annotation.position.y / 100) * annotationRect.height;
+			const width = (annotation.size.width / 100) * annotationRect.width;
+			const height = (annotation.size.height / 100) * annotationRect.height;
 
 			if (width <= 0 || height <= 0) {
 				continue;
@@ -2549,15 +2562,10 @@ export class FrameRenderer {
 			const usesDefaultCropRegion = isWebcamCropRegionDefault(this.config.webcam?.cropRegion);
 			const needsCacheBackedSource =
 				!usesDefaultCropRegion ||
-				(typeof HTMLVideoElement !== "undefined" &&
-					liveSource instanceof HTMLVideoElement);
+				(typeof HTMLVideoElement !== "undefined" && liveSource instanceof HTMLVideoElement);
 
 			if (needsCacheBackedSource) {
-				this.refreshWebcamFrameCache(
-					liveSource,
-					liveSourceWidth,
-					liveSourceHeight,
-				);
+				this.refreshWebcamFrameCache(liveSource, liveSourceWidth, liveSourceHeight);
 				const cachedSource = this.getCachedWebcamRenderSource();
 				if (cachedSource) {
 					this.setWebcamRenderMode("live");
@@ -3129,7 +3137,11 @@ export class FrameRenderer {
 			(this.config.annotationRegions?.length ?? 0) > 0 ||
 			Boolean(this.captionCanvas && this.captionSprite?.visible);
 		if (hasOverlayCanvasWork) {
-			await this.composeBlurAnnotationFrame(resolvedSnapshot.timeMs, compositeState.canvas);
+			await this.composeBlurAnnotationFrame(
+				resolvedSnapshot.timeMs,
+				resolvedSnapshot.sceneTransform,
+				compositeState.canvas,
+			);
 		} else {
 			this.outputCanvasOverride = compositeState.canvas;
 		}
@@ -3536,10 +3548,7 @@ export class FrameRenderer {
 		this.videoSprite.scale.set(layout.scale);
 		this.videoSprite.position.set(layout.spriteX, layout.spriteY);
 
-		const previewWidth = this.config.previewWidth || 1920;
-		const previewHeight = this.config.previewHeight || 1080;
-		const canvasScaleFactor = Math.min(width / previewWidth, height / previewHeight);
-		const scaledBorderRadius = borderRadius * canvasScaleFactor;
+		const scaledBorderRadius = scalePreviewBorderRadius(width, height, borderRadius);
 
 		this.videoMaskGraphics.clear();
 		drawSquircleOnGraphics(this.videoMaskGraphics, {
@@ -3689,7 +3698,7 @@ export class FrameRenderer {
 			return 0;
 		}
 
-		const { region, strength, blendedScale, transition } = findDominantRegion(
+		const { region, strength, blendedScale } = findDominantRegion(
 			this.config.zoomRegions,
 			timeMs,
 			{
@@ -3728,43 +3737,6 @@ export class FrameRenderer {
 			targetScaleFactor = zoomScale;
 			targetFocus = regionFocus;
 			targetProgress = strength;
-
-			if (transition) {
-				const startTransform = computeZoomTransform({
-					stageSize: this.layoutCache.stageSize,
-					baseMask: this.layoutCache.maskRect,
-					zoomScale: transition.startScale,
-					zoomProgress: 1,
-					focusX: transition.startFocus.cx,
-					focusY: transition.startFocus.cy,
-				});
-				const endTransform = computeZoomTransform({
-					stageSize: this.layoutCache.stageSize,
-					baseMask: this.layoutCache.maskRect,
-					zoomScale: transition.endScale,
-					zoomProgress: 1,
-					focusX: transition.endFocus.cx,
-					focusY: transition.endFocus.cy,
-				});
-
-				const interpolatedTransform = {
-					scale:
-						startTransform.scale +
-						(endTransform.scale - startTransform.scale) * transition.progress,
-					x: startTransform.x + (endTransform.x - startTransform.x) * transition.progress,
-					y: startTransform.y + (endTransform.y - startTransform.y) * transition.progress,
-				};
-
-				targetScaleFactor = interpolatedTransform.scale;
-				targetFocus = computeFocusFromTransform({
-					stageSize: this.layoutCache.stageSize,
-					baseMask: this.layoutCache.maskRect,
-					zoomScale: interpolatedTransform.scale,
-					x: interpolatedTransform.x,
-					y: interpolatedTransform.y,
-				});
-				targetProgress = 1;
-			}
 		}
 
 		const state = this.animationState;

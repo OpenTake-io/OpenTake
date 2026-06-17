@@ -69,6 +69,7 @@ function createExporter(overrides: Record<string, unknown> = {}) {
 			ctx: CanvasRenderingContext2D,
 			wallpaper: string,
 		) => CanvasGradient | null;
+		getNativeStaticLayoutCursorSize: (contentWidth: number) => number;
 	};
 }
 
@@ -233,6 +234,14 @@ describe("ModernVideoExporter native static-layout eligibility", () => {
 				60,
 			),
 		).toBeNull();
+	});
+
+	it("scales native static-layout cursor size with a minimum visible floor", () => {
+		const exporter = createExporter({ cursorSize: 3, cursorStyle: "tahoe" });
+
+		expect(exporter.getNativeStaticLayoutCursorSize(1920)).toBeCloseTo(84, 6);
+		expect(exporter.getNativeStaticLayoutCursorSize(960)).toBeCloseTo(46.2, 6);
+		expect(exporter.getNativeStaticLayoutCursorSize(480)).toBeCloseTo(46.2, 6);
 	});
 
 	it("skips native static-layout when cursor click effects are enabled", () => {
