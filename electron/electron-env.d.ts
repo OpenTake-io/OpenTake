@@ -649,7 +649,16 @@ interface Window {
 			error?: string;
 			canceled?: boolean;
 		}>;
-		openVideoFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
+		openVideoFilePicker: (options?: { includeProjects?: boolean }) => Promise<{
+			success: boolean;
+			kind?: "media" | "project";
+			path?: string;
+			project?: unknown;
+			extension?: string;
+			message?: string;
+			canceled?: boolean;
+			error?: string;
+		}>;
 		openAudioFilePicker: () => Promise<{ success: boolean; path?: string; canceled?: boolean }>;
 		openWhisperExecutablePicker: () => Promise<{
 			success: boolean;
