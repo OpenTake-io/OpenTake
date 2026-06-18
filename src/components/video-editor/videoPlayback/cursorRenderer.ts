@@ -342,7 +342,7 @@ function clamp(value: number, min: number, max: number) {
 
 function configureCursorTexture(texture: Texture) {
 	texture.source.scaleMode = "linear";
-	texture.source.autoGenerateMipmaps = false;
+	texture.source.autoGenerateMipmaps = true;
 	return texture;
 }
 

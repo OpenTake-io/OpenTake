@@ -5,8 +5,8 @@ import type {
 	AnnotationRegion,
 	AutoCaptionSettings,
 	CaptionCue,
-	CursorClickEffectStyle,
 	CropRegion,
+	CursorClickEffectStyle,
 	CursorStyle,
 	CursorTelemetryPoint,
 	Padding,
@@ -448,14 +448,14 @@ export class FrameRenderer {
 					massMultiplier: this.config.cursorSpringMassMultiplier,
 				},
 				motionBlur: this.config.cursorMotionBlur ?? 0,
-				clickEffect:
-					this.config.cursorClickEffect ?? DEFAULT_CURSOR_CONFIG.clickEffect,
+				clickEffect: this.config.cursorClickEffect ?? DEFAULT_CURSOR_CONFIG.clickEffect,
 				clickEffectColor:
 					this.config.cursorClickEffectColor ?? DEFAULT_CURSOR_CONFIG.clickEffectColor,
 				clickEffectScale:
 					this.config.cursorClickEffectScale ?? DEFAULT_CURSOR_CONFIG.clickEffectScale,
 				clickEffectOpacity:
-					this.config.cursorClickEffectOpacity ?? DEFAULT_CURSOR_CONFIG.clickEffectOpacity,
+					this.config.cursorClickEffectOpacity ??
+					DEFAULT_CURSOR_CONFIG.clickEffectOpacity,
 				clickEffectDurationMs:
 					this.config.cursorClickEffectDurationMs ??
 					DEFAULT_CURSOR_CONFIG.clickEffectDurationMs,
@@ -1547,6 +1547,9 @@ export class FrameRenderer {
 					this.config.height,
 					temporalSnapshot.timeMs,
 					scaleFactor,
+					undefined,
+					temporalSnapshot.sceneTransform,
+					this.layoutCache?.maskRect,
 				);
 			}
 
@@ -1731,6 +1734,13 @@ export class FrameRenderer {
 				this.config.height,
 				timeMs,
 				scaleFactor,
+				undefined,
+				{
+					scale: this.animationState.appliedScale,
+					x: this.animationState.x,
+					y: this.animationState.y,
+				},
+				this.layoutCache?.maskRect,
 			);
 		}
 

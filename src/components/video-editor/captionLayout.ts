@@ -95,7 +95,7 @@ function splitCaptionWordsFromText(text: string) {
 
 function splitCaptionWords(cue: CaptionCue) {
 	if (Array.isArray(cue.words) && cue.words.length > 0) {
-		return cue.words
+		const words = cue.words
 			.filter((word): word is CaptionCueWord =>
 				Boolean(word && typeof word.text === "string"),
 			)
@@ -109,6 +109,10 @@ function splitCaptionWords(cue: CaptionCue) {
 				endMs: word.endMs,
 			}))
 			.filter((word) => word.text.length > 0);
+
+		if (words.length > 0) {
+			return words;
+		}
 	}
 
 	return splitCaptionWordsFromText(cue.text).map((word) => ({
