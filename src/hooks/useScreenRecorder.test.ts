@@ -164,8 +164,12 @@ describe("shouldUseNativeWindowsCaptureForSource", () => {
 		expect(shouldUseNativeWindowsCaptureForSource({ id: "screen:101:0" })).toBe(true);
 	});
 
-	it("routes window sources through browser capture", () => {
-		expect(shouldUseNativeWindowsCaptureForSource({ id: "window:123456:0" })).toBe(false);
+	it("keeps native Windows capture on window sources", () => {
+		expect(shouldUseNativeWindowsCaptureForSource({ id: "window:123456:0" })).toBe(true);
+	});
+
+	it("keeps browser capture for non-desktop sources", () => {
+		expect(shouldUseNativeWindowsCaptureForSource({ id: "browser-tab:abc" })).toBe(false);
 	});
 });
 
