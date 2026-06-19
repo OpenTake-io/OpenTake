@@ -6,6 +6,12 @@ import type { Readable, Writable } from "node:stream";
 import type { SaveDialogOptions } from "electron";
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import {
+	parseCaptionSidecarPayload,
+	type CaptionSidecarPayload,
+	withCaptionSidecarMessage,
+	writeCaptionSidecarsBestEffort,
+} from "./exportCaptionSidecars";
+import {
 	closeExportStream,
 	isOwnedExportPath,
 	openExportStream,
@@ -987,13 +993,19 @@ export function registerExportHandlers() {
 				}
 
 				await fs.writeFile(result.filePath, Buffer.from(videoData));
-				await writeCaptionSidecars(result.filePath, sidecarPayload);
+				const captionSidecarResult = await writeCaptionSidecarsBestEffort(
+					result.filePath,
+					sidecarPayload,
+				);
 				approveUserPath(result.filePath);
 
 				return {
 					success: true,
 					path: result.filePath,
-					message: "Video exported successfully",
+					message: withCaptionSidecarMessage(
+						"Video exported successfully",
+						captionSidecarResult,
+					),
 				};
 			} catch (error) {
 				console.error("Failed to save exported video:", error);
@@ -1029,13 +1041,19 @@ export function registerExportHandlers() {
 				const resolvedPath = path.resolve(outputPath);
 				await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
 				await fs.writeFile(resolvedPath, Buffer.from(videoData));
-				await writeCaptionSidecars(resolvedPath, sidecarPayload);
+				const captionSidecarResult = await writeCaptionSidecarsBestEffort(
+					resolvedPath,
+					sidecarPayload,
+				);
 				approveUserPath(resolvedPath);
 
 				return {
 					success: true,
 					path: resolvedPath,
-					message: "Video exported successfully",
+					message: withCaptionSidecarMessage(
+						"Video exported successfully",
+						captionSidecarResult,
+					),
 					canceled: false,
 				};
 			} catch (error) {
@@ -1088,14 +1106,20 @@ export function registerExportHandlers() {
 				if (payload.outputPath) {
 					const resolvedPath = path.resolve(payload.outputPath);
 					await moveExportedTempFile(tempPath, resolvedPath);
-					await writeCaptionSidecars(resolvedPath, sidecarPayload);
 					releaseOwnedExportPath(tempPath);
+					const captionSidecarResult = await writeCaptionSidecarsBestEffort(
+						resolvedPath,
+						sidecarPayload,
+					);
 					approveUserPath(resolvedPath);
 					return {
 						success: true,
 						path: resolvedPath,
 						canceled: false,
-						message: "Video exported successfully",
+						message: withCaptionSidecarMessage(
+							"Video exported successfully",
+							captionSidecarResult,
+						),
 					};
 				}
 
@@ -1126,15 +1150,21 @@ export function registerExportHandlers() {
 				}
 
 				await moveExportedTempFile(tempPath, result.filePath);
-				await writeCaptionSidecars(result.filePath, sidecarPayload);
 				releaseOwnedExportPath(tempPath);
+				const captionSidecarResult = await writeCaptionSidecarsBestEffort(
+					result.filePath,
+					sidecarPayload,
+				);
 				approveUserPath(result.filePath);
 
 				return {
 					success: true,
 					path: result.filePath,
 					canceled: false,
-					message: "Video exported successfully",
+					message: withCaptionSidecarMessage(
+						"Video exported successfully",
+						captionSidecarResult,
+					),
 				};
 			} catch (error) {
 				console.error("Failed to finalize exported video:", error);
