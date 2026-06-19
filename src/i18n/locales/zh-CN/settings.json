@@ -105,6 +105,8 @@
 		"webcamFootageAdded": "已关联摄像头素材",
 		"webcamFootageRemoved": "已移除摄像头素材",
 		"webcamSize": "摄像头大小",
+		"webcamWidth": "摄像头宽度",
+		"webcamHeight": "摄像头高度",
 		"webcamCrop": "摄像头裁剪",
 		"webcamReactToZoom": "摄像头随缩放变化",
 		"webcamMirror": "镜像摄像头",
