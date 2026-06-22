@@ -136,6 +136,8 @@ export interface WebcamOverlaySettings {
 	positionX: number;
 	positionY: number;
 	size: number;
+	width: number;
+	height: number;
 	reactToZoom: boolean;
 	cornerRadius: number;
 	shadow: number;
@@ -198,6 +200,8 @@ export const DEFAULT_WEBCAM_OVERLAY: WebcamOverlaySettings = {
 	positionX: DEFAULT_WEBCAM_POSITION_X,
 	positionY: DEFAULT_WEBCAM_POSITION_Y,
 	size: DEFAULT_WEBCAM_SIZE,
+	width: DEFAULT_WEBCAM_SIZE,
+	height: DEFAULT_WEBCAM_SIZE,
 	reactToZoom: DEFAULT_WEBCAM_REACT_TO_ZOOM,
 	cornerRadius: DEFAULT_WEBCAM_CORNER_RADIUS,
 	shadow: DEFAULT_WEBCAM_SHADOW,
@@ -496,6 +500,8 @@ export const DEFAULT_CROP_REGION: CropRegion = {
 	width: 1,
 	height: 1,
 };
+
+export const ADVANCED_VERTICAL_PADDING_MAX = 250;
 
 export interface Padding {
 	top: number;
