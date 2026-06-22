@@ -671,8 +671,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
 			captionSidecar,
 		);
 	},
-	openVideoFilePicker: () => {
-		return ipcRenderer.invoke("open-video-file-picker");
+	openVideoFilePicker: (options?: { includeProjects?: boolean }) => {
+		return ipcRenderer.invoke("open-video-file-picker", options);
 	},
 	openAudioFilePicker: () => {
 		return ipcRenderer.invoke("open-audio-file-picker");
@@ -783,12 +783,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		projectData: unknown,
 		projectName: string,
 		thumbnailDataUrl?: string | null,
+		mode?: "rename" | "copy",
 	) => {
 		return ipcRenderer.invoke(
 			"save-project-file-named",
 			projectData,
 			projectName,
 			thumbnailDataUrl,
+			mode,
 		);
 	},
 	loadProjectFile: () => {
