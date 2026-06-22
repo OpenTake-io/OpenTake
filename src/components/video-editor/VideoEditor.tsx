@@ -118,8 +118,8 @@ import type { SourceAudioTrackSettings } from "@/components/video-editor/audio/a
 import { extensionHost } from "@/lib/extensions";
 import { useVideoEditorAudio } from "./audio/useVideoEditorAudio";
 import { resolveAutoCaptionSourcePath } from "./autoCaptionSource";
-import { CropControl } from "./CropControl";
 import { type CaptionEditTarget, updateCaptionCuesForEditedTarget } from "./captionEditing";
+import { CropControl } from "./CropControl";
 import { ExportSettingsMenu } from "./ExportSettingsMenu";
 import ExtensionManager from "./ExtensionManager";
 import {
@@ -299,8 +299,16 @@ type SaveProjectOptions = {
 	captureThumbnail?: boolean;
 };
 
+type NamedProjectSaveMode = "rename" | "copy";
+
 type PendingProjectSaveDialog = {
 	resolve: (saved: boolean) => void;
+};
+
+type PendingUnsavedChangesDialogDecision = "cancel" | "discard" | "save";
+
+type PendingUnsavedChangesDialog = {
+	resolve: (decision: PendingUnsavedChangesDialogDecision) => void;
 };
 
 async function writeSmokeExportReport(
@@ -390,6 +398,10 @@ export default function VideoEditor() {
 	const [projectSaveDialogOpen, setProjectSaveDialogOpen] = useState(false);
 	const [projectSaveDialogDraft, setProjectSaveDialogDraft] = useState("");
 	const [isSavingProjectDialog, setIsSavingProjectDialog] = useState(false);
+	const [unsavedChangesDialogOpen, setUnsavedChangesDialogOpen] = useState(false);
+	const [unsavedChangesDialogActionLabel, setUnsavedChangesDialogActionLabel] = useState(
+		"continue",
+	);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
@@ -678,6 +690,7 @@ export default function VideoEditor() {
 	const smokeExportStartedRef = useRef(false);
 	const projectAutosaveTimeoutRef = useRef<number | null>(null);
 	const pendingProjectSaveDialogRef = useRef<PendingProjectSaveDialog | null>(null);
+	const pendingUnsavedChangesDialogRef = useRef<PendingUnsavedChangesDialog | null>(null);
 	const projectSaveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 	const smokeExportReadyStateRef = useRef<Record<string, unknown>>({});
 	const [historyVersion, setHistoryVersion] = useState(0);
@@ -2171,6 +2184,26 @@ export default function VideoEditor() {
 		});
 	}, []);
 
+	const resolveUnsavedChangesDialog = useCallback(
+		(decision: PendingUnsavedChangesDialogDecision) => {
+			const pendingDialog = pendingUnsavedChangesDialogRef.current;
+			pendingUnsavedChangesDialogRef.current = null;
+			setUnsavedChangesDialogOpen(false);
+			pendingDialog?.resolve(decision);
+		},
+		[],
+	);
+
+	const openUnsavedChangesDialog = useCallback((actionLabel: string) => {
+		pendingUnsavedChangesDialogRef.current?.resolve("cancel");
+		setUnsavedChangesDialogActionLabel(actionLabel);
+		setUnsavedChangesDialogOpen(true);
+
+		return new Promise<PendingUnsavedChangesDialogDecision>((resolve) => {
+			pendingUnsavedChangesDialogRef.current = { resolve };
+		});
+	}, []);
+
 	const syncRecordingSessionWebcam = useCallback(
 		async (webcamPath: string | null, timeOffsetMs?: number) => {
 			if (!currentSourcePath || !window.electronAPI.setCurrentRecordingSession) {
@@ -2383,6 +2416,14 @@ export default function VideoEditor() {
 						size:
 							smokeExportConfig.webcamSize === undefined
 								? prev.size
+								: smokeExportConfig.webcamSize,
+						width:
+							smokeExportConfig.webcamSize === undefined
+								? (prev.width ?? prev.size)
+								: smokeExportConfig.webcamSize,
+						height:
+							smokeExportConfig.webcamSize === undefined
+								? (prev.height ?? prev.size)
 								: smokeExportConfig.webcamSize,
 					}));
 					setError(null);
@@ -3006,7 +3047,7 @@ export default function VideoEditor() {
 	 * Saves the current project directly into the projects library under a chosen name.
 	 */
 	const saveProjectWithName = useCallback(
-		async (projectName: string) => {
+		async (projectName: string, mode: NamedProjectSaveMode = "rename") => {
 			const trimmedProjectName = projectName.trim();
 			if (!trimmedProjectName) {
 				toast.error("Project name is required");
@@ -3032,6 +3073,7 @@ export default function VideoEditor() {
 					projectData,
 					trimmedProjectName,
 					thumbnailDataUrl,
+					mode,
 				);
 
 				if (result.canceled) {
@@ -3088,7 +3130,7 @@ export default function VideoEditor() {
 			setIsSavingProjectDialog(true);
 			let saved = false;
 			try {
-				saved = await saveProjectWithName(trimmedProjectName);
+				saved = await saveProjectWithName(trimmedProjectName, "copy");
 			} catch (error) {
 				toast.error(getErrorMessage(error));
 			} finally {
@@ -3129,7 +3171,7 @@ export default function VideoEditor() {
 			setIsSavingProjectName(true);
 			let saved = false;
 			try {
-				saved = await saveProjectWithName(trimmedProjectName);
+				saved = await saveProjectWithName(trimmedProjectName, "rename");
 			} catch (error) {
 				toast.error(getErrorMessage(error));
 			} finally {
@@ -3147,8 +3189,32 @@ export default function VideoEditor() {
 		[closeProjectNameEditor, projectNameDraft, saveProjectWithName],
 	);
 
+	const confirmReplaceSourceWithUnsavedChanges = useCallback(
+		async (actionLabel: string) => {
+			if (!hasUnsavedChanges) {
+				return true;
+			}
+
+			const decision = await openUnsavedChangesDialog(actionLabel);
+			if (decision === "discard") {
+				return true;
+			}
+
+			if (decision === "save") {
+				return saveProject(false);
+			}
+
+			return false;
+		},
+		[hasUnsavedChanges, openUnsavedChangesDialog, saveProject],
+	);
+
 	const handleOpenProjectFromLibrary = useCallback(
 		async (projectPath: string) => {
+			if (!(await confirmReplaceSourceWithUnsavedChanges("open another project"))) {
+				return;
+			}
+
 			const result = await window.electronAPI.openProjectFileAtPath(projectPath);
 
 			if (result.canceled) {
@@ -3170,10 +3236,14 @@ export default function VideoEditor() {
 			await refreshProjectLibrary();
 			toast.success(`Project loaded from ${result.path}`);
 		},
-		[applyLoadedProject, refreshProjectLibrary],
+		[applyLoadedProject, confirmReplaceSourceWithUnsavedChanges, refreshProjectLibrary],
 	);
 
 	const handleImportMediaOrProject = useCallback(async () => {
+		if (!(await confirmReplaceSourceWithUnsavedChanges("import a file"))) {
+			return;
+		}
+
 		const result = await window.electronAPI.openVideoFilePicker({ includeProjects: true });
 
 		if (result.canceled) {
@@ -3237,6 +3307,7 @@ export default function VideoEditor() {
 		applyLoadedProject,
 		applySessionPresentation,
 		autoApplyFreshRecordingAutoZooms,
+		confirmReplaceSourceWithUnsavedChanges,
 		refreshProjectLibrary,
 		resetSourceScopedEditorState,
 	]);
@@ -5446,6 +5517,48 @@ export default function VideoEditor() {
 		</Dialog>
 	);
 
+	const unsavedChangesDialog = (
+		<Dialog
+			open={unsavedChangesDialogOpen}
+			onOpenChange={(open) => {
+				if (open) {
+					setUnsavedChangesDialogOpen(true);
+					return;
+				}
+
+				resolveUnsavedChangesDialog("cancel");
+			}}
+		>
+			<DialogContent className="max-w-sm border-foreground/10 bg-editor-dialog text-foreground">
+				<DialogHeader>
+					<DialogTitle>Unsaved changes</DialogTitle>
+					<DialogDescription className="text-muted-foreground">
+						{`Save your current project before you ${unsavedChangesDialogActionLabel}?`}
+					</DialogDescription>
+				</DialogHeader>
+				<DialogFooter>
+					<Button
+						type="button"
+						variant="ghost"
+						onClick={() => resolveUnsavedChangesDialog("cancel")}
+					>
+						{t("common.actions.cancel", "Cancel")}
+					</Button>
+					<Button
+						type="button"
+						variant="ghost"
+						onClick={() => resolveUnsavedChangesDialog("discard")}
+					>
+						Discard changes
+					</Button>
+					<Button type="button" onClick={() => resolveUnsavedChangesDialog("save")}>
+						Save project
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	);
+
 	const projectBrowser = (
 		<ProjectBrowserDialog
 			open={projectBrowserOpen}
@@ -5495,6 +5608,7 @@ export default function VideoEditor() {
 				<div className="text-foreground">Loading video...</div>
 				{projectBrowser}
 				{projectSaveDialog}
+				{unsavedChangesDialog}
 				{nativeCaptureUnavailableDialog}
 				<Toaster className="pointer-events-auto" />
 			</div>
@@ -5516,6 +5630,7 @@ export default function VideoEditor() {
 				</div>
 				{projectBrowser}
 				{projectSaveDialog}
+				{unsavedChangesDialog}
 				{nativeCaptureUnavailableDialog}
 				<Toaster className="pointer-events-auto" />
 			</div>
@@ -6645,6 +6760,7 @@ export default function VideoEditor() {
 
 			{projectBrowser}
 			{projectSaveDialog}
+			{unsavedChangesDialog}
 			{nativeCaptureUnavailableDialog}
 
 			<Toaster className="pointer-events-auto" />

@@ -110,6 +110,8 @@
 		"webcamFootageAdded": "Filmato webcam collegato",
 		"webcamFootageRemoved": "Filmato webcam rimosso",
 		"webcamSize": "Dimensione webcam",
+		"webcamWidth": "Larghezza webcam",
+		"webcamHeight": "Altezza webcam",
 		"webcamCrop": "Ritaglio webcam",
 		"webcamReactToZoom": "La webcam reagisce allo zoom",
 		"webcamMirror": "Specchia webcam",

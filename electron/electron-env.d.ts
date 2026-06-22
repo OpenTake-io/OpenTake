@@ -752,6 +752,7 @@ interface Window {
 			projectData: unknown,
 			projectName: string,
 			thumbnailDataUrl?: string | null,
+			mode?: "rename" | "copy",
 		) => Promise<{
 			success: boolean;
 			path?: string;

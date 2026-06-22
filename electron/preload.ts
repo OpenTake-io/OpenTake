@@ -783,12 +783,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		projectData: unknown,
 		projectName: string,
 		thumbnailDataUrl?: string | null,
+		mode?: "rename" | "copy",
 	) => {
 		return ipcRenderer.invoke(
 			"save-project-file-named",
 			projectData,
 			projectName,
 			thumbnailDataUrl,
+			mode,
 		);
 	},
 	loadProjectFile: () => {

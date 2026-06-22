@@ -57,10 +57,10 @@ function buildCaptionWordsForEditedText(
 
 function normalizeCaptionWords(cue: CaptionCue): CaptionCueWord[] {
 	const validSourceWords = Array.isArray(cue.words)
-		? cue.words.filter((word): word is CaptionCueWord =>
-				Boolean(
-					word && typeof word.text === "string" && normalizeCaptionEditText(word.text),
-				),
+		? cue.words.filter(
+				(word): word is CaptionCueWord =>
+					Boolean(word && typeof word.text === "string") &&
+					normalizeCaptionEditText(word.text).length > 0,
 			)
 		: [];
 	const sourceWords =
@@ -69,6 +69,7 @@ function normalizeCaptionWords(cue: CaptionCue): CaptionCueWord[] {
 			: buildCaptionWordsForEditedText(cue.text, cue.startMs, cue.endMs);
 
 	return sourceWords
+		.filter((word): word is CaptionCueWord => Boolean(word && typeof word.text === "string"))
 		.map((word) => {
 			const startMs = Math.max(
 				cue.startMs,

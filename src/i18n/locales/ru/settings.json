@@ -110,6 +110,8 @@
 		"webcamFootageAdded": "Видео добавлено",
 		"webcamFootageRemoved": "Видео удалено",
 		"webcamSize": "Размер веб-камеры",
+		"webcamWidth": "Ширина веб-камеры",
+		"webcamHeight": "Высота веб-камеры",
 		"webcamCrop": "Обрезка веб-камеры",
 		"webcamReactToZoom": "Веб-камера реагирует на зум",
 		"webcamMirror": "Отразить веб-камеру",

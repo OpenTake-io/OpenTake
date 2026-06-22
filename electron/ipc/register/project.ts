@@ -80,6 +80,12 @@ function normalizeProjectSaveName(projectName?: string | null) {
   return sanitizedName || null;
 }
 
+type NamedProjectSaveMode = "rename" | "copy";
+
+function normalizeNamedProjectSaveMode(value: unknown): NamedProjectSaveMode {
+	return value === "copy" ? "copy" : "rename";
+}
+
 /**
  * Extracts the persisted source video path from a saved project payload.
  */
@@ -292,8 +298,10 @@ export function registerProjectHandlers() {
     try {
       const projectsDir = await getProjectsDir()
       const preparedProject = ensureProjectDataHasProjectId(projectData)
-      const trustedExistingProjectPath = isTrustedProjectPath(existingProjectPath)
-        ? existingProjectPath
+      const trustedExistingProjectPath = existingProjectPath &&
+        path.extname(existingProjectPath).toLowerCase() === `.${PROJECT_FILE_EXTENSION}` &&
+        (isTrustedProjectPath(existingProjectPath) || isPathInsideDirectory(existingProjectPath, projectsDir))
+        ? path.resolve(existingProjectPath)
         : null
 
       if (trustedExistingProjectPath) {
@@ -306,6 +314,13 @@ export function registerProjectHandlers() {
           path: trustedExistingProjectPath,
           projectId: preparedProject.projectId,
           message: 'Project saved successfully'
+        }
+      }
+
+      if (existingProjectPath) {
+        return {
+          success: false,
+          message: 'Project path is no longer trusted. Use Save As to choose a project file.',
         }
       }
 
@@ -351,7 +366,7 @@ export function registerProjectHandlers() {
     }
   })
 
-    ipcMain.handle('save-project-file-named', async (_, projectData: unknown, projectName: string, thumbnailDataUrl?: string | null) => {
+    ipcMain.handle('save-project-file-named', async (_, projectData: unknown, projectName: string, thumbnailDataUrl?: string | null, mode?: unknown) => {
       try {
         const normalizedProjectName = normalizeProjectSaveName(projectName)
         if (!normalizedProjectName) {
@@ -362,7 +377,7 @@ export function registerProjectHandlers() {
         }
 
         const projectsDir = await getProjectsDir()
-        const preparedProject = ensureProjectDataHasProjectId(projectData)
+        const namedSaveMode = normalizeNamedProjectSaveMode(mode)
         const activeProjectPath = isTrustedProjectPath(currentProjectPath)
           ? currentProjectPath
           : null
@@ -370,6 +385,22 @@ export function registerProjectHandlers() {
           projectsDir,
           `${normalizedProjectName}.${PROJECT_FILE_EXTENSION}`,
         )
+        const [activeResolvedPath, targetResolvedPath] = await Promise.all([
+          activeProjectPath ? resolveComparablePath(activeProjectPath) : Promise.resolve(null),
+          resolveComparablePath(targetProjectPath),
+        ])
+        const isSavingToDifferentPath =
+          !activeResolvedPath || activeResolvedPath !== targetResolvedPath
+        const preparedProject =
+          namedSaveMode === "copy" && isSavingToDifferentPath
+            ? (() => {
+                const projectId = randomUUID()
+                return {
+                  projectId,
+                  projectData: withProjectId(projectData, projectId),
+                }
+              })()
+            : ensureProjectDataHasProjectId(projectData)
 
         const overwriteCheck = await ensureNamedProjectSaveDoesNotOverwriteDifferentProject(
           targetProjectPath,
@@ -384,13 +415,7 @@ export function registerProjectHandlers() {
         await saveProjectThumbnail(targetProjectPath, thumbnailDataUrl)
         await rememberRecentProject(targetProjectPath)
 
-        if (activeProjectPath) {
-          const [activeResolvedPath, targetResolvedPath] = await Promise.all([
-            resolveComparablePath(activeProjectPath),
-            resolveComparablePath(targetProjectPath),
-          ])
-
-          if (activeResolvedPath !== targetResolvedPath) {
+        if (namedSaveMode === "rename" && activeProjectPath && isSavingToDifferentPath) {
             await fs.unlink(activeProjectPath).catch((unlinkError: NodeJS.ErrnoException) => {
               if (unlinkError.code !== 'ENOENT') {
                 throw unlinkError
@@ -407,7 +432,6 @@ export function registerProjectHandlers() {
               }
             }
             await saveRecentProjectPaths(filteredRecentProjectPaths)
-          }
         }
 
         setCurrentProjectPath(targetProjectPath)

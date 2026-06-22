@@ -25,7 +25,10 @@ import {
 	SNAP_TO_EDGES_RATIO_AUTO,
 } from "@/components/video-editor/videoPlayback/cursorFollowCamera";
 import { buildNativeCursorAtlas } from "@/components/video-editor/videoPlayback/cursorRenderer";
-import { computePaddedLayout } from "@/components/video-editor/videoPlayback/layoutUtils";
+import {
+	computePaddedLayout,
+	scalePreviewBorderRadius,
+} from "@/components/video-editor/videoPlayback/layoutUtils";
 import {
 	createSpringState,
 	getZoomSpringConfig,
@@ -34,13 +37,11 @@ import {
 } from "@/components/video-editor/videoPlayback/motionSmoothing";
 import { getCursorStyleSizeMultiplier } from "@/components/video-editor/videoPlayback/uploadedCursorAssets";
 import { findDominantRegion } from "@/components/video-editor/videoPlayback/zoomRegionUtils";
-import {
-	computeFocusFromTransform,
-	computeZoomTransform,
-} from "@/components/video-editor/videoPlayback/zoomTransform";
+import { computeZoomTransform } from "@/components/video-editor/videoPlayback/zoomTransform";
 import {
 	getWebcamOverlayPosition,
 	getWebcamOverlaySizePx,
+	isWebcamCropRegionDefault,
 } from "@/components/video-editor/webcamOverlay";
 import { extensionHost } from "@/lib/extensions";
 import { getEffectiveVideoStreamDurationSeconds } from "@/lib/mediaTiming";
@@ -1495,6 +1496,17 @@ export class ModernVideoExporter {
 		}
 	}
 
+	private hasUnsupportedNativeStaticLayoutWebcamShape(): boolean {
+		const webcam = this.config.webcam;
+		if (!webcam?.enabled) {
+			return false;
+		}
+
+		const width = webcam.width ?? webcam.size ?? 40;
+		const height = webcam.height ?? webcam.size ?? 40;
+		return Math.abs(width - height) > 0.001 || !isWebcamCropRegionDefault(webcam.cropRegion);
+	}
+
 	private getNativeStaticLayoutSkipReasons(
 		audioPlan: NativeAudioPlan,
 		videoInfo: DecodedVideoInfo,
@@ -1559,6 +1571,9 @@ export class ModernVideoExporter {
 
 		if (this.config.webcam?.enabled && !this.getNativeWebcamSourcePath()) {
 			reasons.push("unsupported-webcam-source");
+		}
+		if (this.hasUnsupportedNativeStaticLayoutWebcamShape()) {
+			reasons.push("unsupported-rectangular-webcam-overlay");
 		}
 
 		if (this.config.frame) {
@@ -2021,7 +2036,7 @@ export class ModernVideoExporter {
 		const rawSize = getWebcamOverlaySizePx({
 			containerWidth: this.config.width,
 			containerHeight: this.config.height,
-			sizePercent: webcam.size ?? 40,
+			sizePercent: webcam.width ?? webcam.size ?? 40,
 			margin,
 			zoomScale: 1,
 			reactToZoom: webcam.reactToZoom ?? true,
@@ -2126,13 +2141,9 @@ export class ModernVideoExporter {
 
 		for (let frameIndex = 0; frameIndex < totalFrames; frameIndex += 1) {
 			const timeMs = frameIndex * frameDurationMs;
-			const { region, strength, blendedScale, transition } = findDominantRegion(
-				zoomRegions,
-				timeMs,
-				{
-					connectZooms: this.config.connectZooms,
-				},
-			);
+			const { region, strength, blendedScale } = findDominantRegion(zoomRegions, timeMs, {
+				connectZooms: this.config.connectZooms,
+			});
 
 			let targetScale = 1;
 			let targetFocus = DEFAULT_FOCUS;
@@ -2160,46 +2171,6 @@ export class ModernVideoExporter {
 				targetScale = zoomScale;
 				targetFocus = regionFocus;
 				targetProgress = strength;
-
-				if (transition) {
-					const startTransform = computeZoomTransform({
-						stageSize,
-						baseMask,
-						zoomScale: transition.startScale,
-						zoomProgress: 1,
-						focusX: transition.startFocus.cx,
-						focusY: transition.startFocus.cy,
-					});
-					const endTransform = computeZoomTransform({
-						stageSize,
-						baseMask,
-						zoomScale: transition.endScale,
-						zoomProgress: 1,
-						focusX: transition.endFocus.cx,
-						focusY: transition.endFocus.cy,
-					});
-					const interpolatedTransform = {
-						scale:
-							startTransform.scale +
-							(endTransform.scale - startTransform.scale) * transition.progress,
-						x:
-							startTransform.x +
-							(endTransform.x - startTransform.x) * transition.progress,
-						y:
-							startTransform.y +
-							(endTransform.y - startTransform.y) * transition.progress,
-					};
-
-					targetScale = interpolatedTransform.scale;
-					targetFocus = computeFocusFromTransform({
-						stageSize,
-						baseMask,
-						zoomScale: interpolatedTransform.scale,
-						x: interpolatedTransform.x,
-						y: interpolatedTransform.y,
-					});
-					targetProgress = 1;
-				}
 			}
 
 			const projectedTransform = computeZoomTransform({
@@ -2336,13 +2307,11 @@ export class ModernVideoExporter {
 		const sourceCrop = this.isDefaultCropRegion()
 			? null
 			: this.getNativeStaticLayoutSourceCrop(videoInfo);
-		const previewWidth = this.config.previewWidth || 1920;
-		const previewHeight = this.config.previewHeight || 1080;
-		const canvasScaleFactor = Math.min(
-			this.config.width / previewWidth,
-			this.config.height / previewHeight,
+		const borderRadius = scalePreviewBorderRadius(
+			this.config.width,
+			this.config.height,
+			this.config.borderRadius ?? 0,
 		);
-		const borderRadius = Math.max(0, (this.config.borderRadius ?? 0) * canvasScaleFactor);
 		const shadowIntensity = this.config.showShadow
 			? Math.min(1, Math.max(0, this.config.shadowIntensity))
 			: 0;
@@ -2533,8 +2502,7 @@ export class ModernVideoExporter {
 				timelineSegments,
 				chunkDurationSec: STATIC_LAYOUT_CHUNK_DURATION_SEC,
 				experimentalWindowsGpuCompositor: this.config.experimentalNativeExport === true,
-				experimentalNvidiaCudaExport:
-					this.config.experimentalNvidiaCudaExport === true,
+				experimentalNvidiaCudaExport: this.config.experimentalNvidiaCudaExport === true,
 				audioOptions: {
 					...audioOptions,
 					outputDurationSec: effectiveDuration,

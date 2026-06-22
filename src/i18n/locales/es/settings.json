@@ -88,6 +88,8 @@
 		"webcamFootageAdded": "Metraje de cámara vinculado",
 		"webcamFootageRemoved": "Metraje de cámara eliminado",
 		"webcamSize": "Tamaño de cámara",
+		"webcamWidth": "Ancho de cámara",
+		"webcamHeight": "Alto de cámara",
 		"webcamCrop": "Recorte de cámara",
 		"webcamReactToZoom": "La cámara reacciona al zoom",
 		"webcamMirror": "Reflejar cámara",
