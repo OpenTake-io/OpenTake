@@ -2917,11 +2917,19 @@ export class FrameRenderer {
 
 		const margin = webcam.margin ?? 24;
 		const widthPercent = webcam.width ?? webcam.size ?? 50;
+		const aspectSourceWidth =
+			liveSourceDimensions.width > 0
+				? liveSourceDimensions.width
+				: renderableWebcamSource.width;
+		const aspectSourceHeight =
+			liveSourceDimensions.height > 0
+				? liveSourceDimensions.height
+				: renderableWebcamSource.height;
 		const heightPercent = getCropMatchedWebcamHeightPercent(
 			widthPercent,
 			webcam.height ?? webcam.size ?? 50,
-			renderableWebcamSource.width,
-			renderableWebcamSource.height,
+			aspectSourceWidth,
+			aspectSourceHeight,
 			webcam.cropRegion,
 		);
 		const dimensions = getWebcamOverlayDimensionsPx({

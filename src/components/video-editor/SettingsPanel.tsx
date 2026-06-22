@@ -3924,7 +3924,7 @@ export function SettingsPanel({
 											height: previewFrame
 												? getCropMatchedWebcamHeightPercent(
 														webcamWidth,
-														webcamWidth,
+														webcamHeight,
 														previewFrame.width,
 														previewFrame.height,
 														cropRegion,
