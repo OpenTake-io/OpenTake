@@ -132,6 +132,7 @@
 	"sections": {
 		"scene": "Scena",
 		"captions": "Sottotitoli",
+		"caption": "Sottotitolo",
 		"zoom": "Zoom",
 		"cursor": "Cursore",
 		"webcam": "Webcam",
@@ -139,6 +140,7 @@
 		"crop": "Ritaglio"
 	},
 	"captions": {
+		"selectOnTimeline": "Seleziona un sottotitolo sulla timeline per modificarlo.",
 		"enabled": "Mostra",
 		"language": "Lingua",
 		"downloading": "Download in corso...",

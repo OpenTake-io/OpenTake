@@ -158,6 +158,7 @@
 	"sections": {
 		"scene": "Scene",
 		"captions": "Captions",
+		"caption": "Caption",
 		"zoom": "Zoom",
 		"cursor": "Cursor",
 		"webcam": "Webcam",
@@ -165,6 +166,7 @@
 		"crop": "Crop"
 	},
 	"captions": {
+		"selectOnTimeline": "Select a caption on the timeline to edit it.",
 		"enabled": "Show",
 		"language": "Language",
 		"downloading": "Downloading...",

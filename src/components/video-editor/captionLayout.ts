@@ -131,7 +131,26 @@ function getActiveCaptionCue(cues: CaptionCue[], timeMs: number) {
 	return null;
 }
 
-function flattenCaptionWords(cues: CaptionCue[]) {
+function isWithinCaptionCoverage(cues: CaptionCue[], timeMs: number) {
+	const sorted = [...cues].sort((left, right) => left.startMs - right.startMs);
+	for (let index = 0; index < sorted.length; index += 1) {
+		const cue = sorted[index];
+		if (timeMs < cue.startMs) {
+			return false;
+		}
+		const next = sorted[index + 1];
+		const bridgesGap =
+			next !== undefined && next.startMs - cue.endMs < CAPTION_BLOCK_GAP_BREAK_MS;
+		const effectiveEndMs = bridgesGap ? Math.max(cue.endMs, next.startMs) : cue.endMs;
+		if (timeMs <= effectiveEndMs) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+export function flattenCaptionWords(cues: CaptionCue[]) {
 	const flattened: Array<{
 		cueId: string;
 		cueWordIndex: number;
@@ -418,6 +437,10 @@ export function buildActiveCaptionLayout(options: {
 }) {
 	const sourceWords = flattenCaptionWords(options.cues);
 	if (sourceWords.length === 0) {
+		return null;
+	}
+
+	if (!isWithinCaptionCoverage(options.cues, options.timeMs)) {
 		return null;
 	}
 

@@ -110,6 +110,7 @@
 	"sections": {
 		"scene": "Scène",
 		"captions": "Sous-titres",
+		"caption": "Sous-titre",
 		"zoom": "Zoom",
 		"cursor": "Curseur",
 		"webcam": "Webcam",
@@ -117,6 +118,7 @@
 		"crop": "Recadrage"
 	},
 	"captions": {
+		"selectOnTimeline": "Sélectionnez un sous-titre sur la timeline pour le modifier.",
 		"enabled": "Afficher",
 		"language": "Langue",
 		"downloading": "Téléchargement...",

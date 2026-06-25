@@ -110,6 +110,7 @@
 	"sections": {
 		"scene": "Cena",
 		"captions": "Legendas",
+		"caption": "Legenda",
 		"zoom": "Zoom",
 		"cursor": "Cursor",
 		"webcam": "Webcam",
@@ -117,6 +118,7 @@
 		"crop": "Corte"
 	},
 	"captions": {
+		"selectOnTimeline": "Selecione uma legenda na linha do tempo para editá-la.",
 		"enabled": "Mostrar",
 		"language": "Idioma",
 		"downloading": "Baixando...",
