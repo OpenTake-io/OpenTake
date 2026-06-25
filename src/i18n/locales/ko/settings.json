@@ -110,6 +110,7 @@
 	"sections": {
 		"scene": "장면",
 		"captions": "자막",
+		"caption": "자막",
 		"zoom": "확대",
 		"cursor": "커서",
 		"webcam": "웹캠",
@@ -117,6 +118,7 @@
 		"crop": "자르기"
 	},
 	"captions": {
+		"selectOnTimeline": "타임라인에서 자막을 선택하여 편집하세요.",
 		"enabled": "표시",
 		"language": "언어",
 		"downloading": "다운로드 중...",

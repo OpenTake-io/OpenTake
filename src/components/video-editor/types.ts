@@ -103,6 +103,7 @@ export type EditorEffectSection =
 	| "scene"
 	| "cursor"
 	| "captions"
+	| "caption"
 	| "webcam"
 	| "settings"
 	| "zoom"

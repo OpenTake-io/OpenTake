@@ -15,7 +15,12 @@ import type {
 	SourceAudioTrackWithPeaks,
 } from "@/components/video-editor/audio/audioTypes";
 import { cn } from "@/lib/utils";
-import { CLIP_ROW_ID, SOURCE_AUDIO_ROW_ID, ZOOM_ROW_ID } from "../../core/constants";
+import {
+	CAPTION_ROW_ID,
+	CLIP_ROW_ID,
+	SOURCE_AUDIO_ROW_ID,
+	ZOOM_ROW_ID,
+} from "../../core/constants";
 import {
 	getAnnotationTrackIndex,
 	getAnnotationTrackRowId,
@@ -53,11 +58,13 @@ interface TimelineCanvasProps {
 	onSelectClip?: (id: string | null) => void;
 	onSelectAnnotation?: (id: string | null) => void;
 	onSelectAudio?: (id: string | null) => void;
+	onSelectCaption?: (id: string | null) => void;
 	onAddZoomAtMs?: (startMs: number) => void;
 	selectedZoomId: string | null;
 	selectedClipId?: string | null;
 	selectedAnnotationId?: string | null;
 	selectedAudioId?: string | null;
+	selectedCaptionId?: string | null;
 	selectAllBlocksActive?: boolean;
 	onClearBlockSelection?: () => void;
 	keyframes?: { id: string; time: number }[];
@@ -231,10 +238,12 @@ interface TimelineCanvasRowsProps {
 	selectedClipId?: string | null;
 	selectedAnnotationId?: string | null;
 	selectedAudioId?: string | null;
+	selectedCaptionId?: string | null;
 	onSelectZoom?: (id: string | null) => void;
 	onSelectClip?: (id: string | null) => void;
 	onSelectAnnotation?: (id: string | null) => void;
 	onSelectAudio?: (id: string | null) => void;
+	onSelectCaption?: (id: string | null) => void;
 	sourceAudioTracks?: SourceAudioTrackWithPeaks[];
 	getSourceAudioTrackSettingsForClip?: (clipId: string | null) => SourceAudioTrackSettings;
 	showSourceAudioTrack?: boolean;
@@ -298,10 +307,12 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 	selectedClipId,
 	selectedAnnotationId,
 	selectedAudioId,
+	selectedCaptionId,
 	onSelectZoom,
 	onSelectClip,
 	onSelectAnnotation,
 	onSelectAudio,
+	onSelectCaption,
 	sourceAudioTracks = [],
 	getSourceAudioTrackSettingsForClip,
 	showSourceAudioTrack = false,
@@ -319,9 +330,10 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 	onZoomRowClick,
 }: TimelineCanvasRowsProps) {
 	const hiddenIds = useMemo(() => new Set(liveHiddenItemIds ?? []), [liveHiddenItemIds]);
-	const { clipItems, zoomItems, annotationRows, audioRows } = useMemo(() => {
+	const { clipItems, zoomItems, captionItems, annotationRows, audioRows } = useMemo(() => {
 		const nextClipItems: TimelineRenderItem[] = [];
 		const nextZoomItems: TimelineRenderItem[] = [];
+		const nextCaptionItems: TimelineRenderItem[] = [];
 		const annotationBuckets = new Map<number, TimelineRenderItem[]>();
 		const audioBuckets = new Map<number, TimelineRenderItem[]>();
 
@@ -332,6 +344,10 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 			}
 			if (item.rowId === ZOOM_ROW_ID) {
 				nextZoomItems.push(item);
+				continue;
+			}
+			if (item.rowId === CAPTION_ROW_ID) {
+				nextCaptionItems.push(item);
 				continue;
 			}
 			if (isAnnotationTrackRowId(item.rowId)) {
@@ -365,6 +381,7 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 		return {
 			clipItems: nextClipItems,
 			zoomItems: nextZoomItems,
+			captionItems: nextCaptionItems,
 			annotationRows: annotationRowsSorted,
 			audioRows: audioRowsSorted,
 		};
@@ -480,6 +497,24 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 					))}
 			</Row>
 
+			{captionItems.length > 0 && (
+				<Row id={CAPTION_ROW_ID} isEmpty={false}>
+					{captionItems.map((item) => (
+						<Item
+							id={item.id}
+							key={item.id}
+							rowId={item.rowId}
+							span={item.span}
+							isSelected={item.id === selectedCaptionId}
+							onSelectId={onSelectCaption}
+							variant="caption"
+						>
+							{item.label}
+						</Item>
+					))}
+				</Row>
+			)}
+
 			{annotationRows.map(({ rowId, items: rowItems }, index) => (
 				<Row
 					key={rowId}
@@ -537,10 +572,12 @@ export default function TimelineCanvas({
 	onSelectClip,
 	onSelectAnnotation,
 	onSelectAudio,
+	onSelectCaption,
 	selectedZoomId,
 	selectedClipId,
 	selectedAnnotationId,
 	selectedAudioId,
+	selectedCaptionId,
 	selectAllBlocksActive = false,
 	onClearBlockSelection,
 	keyframes = [],
@@ -578,6 +615,7 @@ export default function TimelineCanvas({
 				onSelectClip?.(null);
 				onSelectAnnotation?.(null);
 				onSelectAudio?.(null);
+				onSelectCaption?.(null);
 			}
 
 			const rect = e.currentTarget.getBoundingClientRect();
@@ -597,6 +635,7 @@ export default function TimelineCanvas({
 			onSelectClip,
 			onSelectAnnotation,
 			onSelectAudio,
+			onSelectCaption,
 			onClearBlockSelection,
 			videoDurationMs,
 			sidebarWidth,
@@ -633,6 +672,7 @@ export default function TimelineCanvas({
 				onSelectClip?.(null);
 				onSelectAnnotation?.(null);
 				onSelectAudio?.(null);
+				onSelectCaption?.(null);
 			}
 
 			const rect = localTimelineRef.current.getBoundingClientRect();
@@ -646,6 +686,7 @@ export default function TimelineCanvas({
 			onSeek,
 			onSelectAnnotation,
 			onSelectAudio,
+			onSelectCaption,
 			onSelectClip,
 			onSelectZoom,
 			videoDurationMs,
@@ -699,12 +740,16 @@ export default function TimelineCanvas({
 	const timelineRowCount = useMemo(() => {
 		const annotationRowIds = new Set<string>();
 		const audioRowIds = new Set<string>();
+		let hasCaptionRow = false;
 		for (const item of items) {
 			if (isAnnotationTrackRowId(item.rowId)) annotationRowIds.add(item.rowId);
 			if (isAudioTrackRowId(item.rowId)) audioRowIds.add(item.rowId);
+			if (item.rowId === CAPTION_ROW_ID) hasCaptionRow = true;
 		}
 		const sourceAudioRows = showSourceAudioTrack ? sourceAudioTracks.length : 0;
-		return 2 + sourceAudioRows + annotationRowIds.size + audioRowIds.size;
+		return (
+			2 + sourceAudioRows + annotationRowIds.size + audioRowIds.size + (hasCaptionRow ? 1 : 0)
+		);
 	}, [items, showSourceAudioTrack, sourceAudioTracks.length]);
 	const timelineRowsMinHeightPx = getTimelineRowsMinHeightPx(timelineRowCount);
 	const timelineContentMinHeightPx = getTimelineContentMinHeightPx(timelineRowCount);
@@ -786,10 +831,12 @@ export default function TimelineCanvas({
 					selectedClipId={selectedClipId}
 					selectedAnnotationId={selectedAnnotationId}
 					selectedAudioId={selectedAudioId}
+					selectedCaptionId={selectedCaptionId}
 					onSelectZoom={onSelectZoom}
 					onSelectClip={onSelectClip}
 					onSelectAnnotation={onSelectAnnotation}
 					onSelectAudio={onSelectAudio}
+					onSelectCaption={onSelectCaption}
 					sourceAudioTracks={sourceAudioTracks}
 					getSourceAudioTrackSettingsForClip={getSourceAudioTrackSettingsForClip}
 					showSourceAudioTrack={showSourceAudioTrack}

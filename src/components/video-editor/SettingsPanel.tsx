@@ -45,6 +45,8 @@ import { useI18n, useScopedT } from "../../contexts/I18nContext";
 import type { AppLocale } from "../../i18n/config";
 import { SUPPORTED_LOCALES } from "../../i18n/config";
 import { AnnotationSettingsPanel } from "./AnnotationSettingsPanel";
+import CaptionListPanel from "./CaptionListPanel";
+import type { CaptionRetimeSpan } from "./captionOps";
 import {
 	CURSOR_MOTION_PRESETS,
 	type CursorMotionPresetId,
@@ -179,9 +181,10 @@ function isHexWallpaper(value: string): boolean {
 
 function hexToRgba(hex: string, alpha: number) {
 	const normalized = isHexWallpaper(hex) ? hex : DEFAULT_CURSOR_CLICK_EFFECT_COLOR;
-	const value = normalized.length === 4
-		? `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`
-		: normalized;
+	const value =
+		normalized.length === 4
+			? `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`
+			: normalized;
 	const color = Number.parseInt(value.slice(1), 16);
 	const red = (color >> 16) & 255;
 	const green = (color >> 8) & 255;
@@ -529,8 +532,23 @@ function CursorClickEffectPreview({
 					viewBox="0 0 40 40"
 					aria-hidden="true"
 				>
-					<circle cx="20" cy="20" r="11.5" fill="none" stroke="currentColor" strokeWidth="1.8" opacity="0.75" />
-					<path d="M12.5 27.5 27.5 12.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2.2" opacity="0.92" />
+					<circle
+						cx="20"
+						cy="20"
+						r="11.5"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="1.8"
+						opacity="0.75"
+					/>
+					<path
+						d="M12.5 27.5 27.5 12.5"
+						fill="none"
+						stroke="currentColor"
+						strokeLinecap="round"
+						strokeWidth="2.2"
+						opacity="0.92"
+					/>
 				</svg>
 			) : null}
 			{effect === "ripple" ? (
@@ -571,13 +589,17 @@ function CursorClickEffectPreview({
 					viewBox="0 0 48 48"
 					aria-hidden="true"
 				>
-					<g
-						fill="none"
-						stroke="currentColor"
-					>
+					<g fill="none" stroke="currentColor">
 						<circle cx="24" cy="24" r="9" strokeWidth="1.8" opacity="0.72" />
 						<circle cx="24" cy="24" r="14.5" strokeWidth="1.5" opacity="0.4" />
-						<circle cx="24" cy="24" r="4.25" fill="currentColor" opacity="0.22" stroke="none" />
+						<circle
+							cx="24"
+							cy="24"
+							r="4.25"
+							fill="currentColor"
+							opacity="0.22"
+							stroke="none"
+						/>
 					</g>
 				</svg>
 			) : null}
@@ -660,7 +682,10 @@ function CursorClickEffectCards({
 						>
 							<div className="flex h-full flex-col items-center justify-between gap-3">
 								<div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-[8px] px-2 py-1.5">
-									<CursorClickEffectPreview effect={effect.id} color={effectColor} />
+									<CursorClickEffectPreview
+										effect={effect.id}
+										color={effectColor}
+									/>
 								</div>
 							</div>
 						</ToggleGroupItem>
@@ -815,6 +840,14 @@ interface SettingsPanelProps {
 	onClearAutoCaptions?: () => void;
 	onDownloadWhisperSmallModel?: () => void;
 	onDeleteWhisperSmallModel?: () => void;
+	captionCurrentTimeMs?: number;
+	selectedCaptionId?: string | null;
+	onBeginCaptionEdit?: (id: string) => void;
+	onCaptionTextEdit?: (id: string, text: string) => void;
+	onCaptionRetime?: (id: string, span: CaptionRetimeSpan) => void;
+	onCaptionSplit?: (id: string, atMs: number) => void;
+	onCaptionMerge?: (idA: string, idB: string) => void;
+	onCaptionDelete?: (id: string) => void;
 	nativeCaptureUnavailableSession?: boolean;
 	onOpenNativeCaptureUnavailableModal?: () => void;
 }
@@ -1249,6 +1282,14 @@ export function SettingsPanel({
 	onClearAutoCaptions,
 	onDownloadWhisperSmallModel,
 	onDeleteWhisperSmallModel,
+	captionCurrentTimeMs = 0,
+	selectedCaptionId = null,
+	onBeginCaptionEdit,
+	onCaptionTextEdit,
+	onCaptionRetime,
+	onCaptionSplit,
+	onCaptionMerge,
+	onCaptionDelete,
 	nativeCaptureUnavailableSession = false,
 	onOpenNativeCaptureUnavailableModal,
 }: SettingsPanelProps) {
@@ -3549,6 +3590,34 @@ export function SettingsPanel({
 			</section>
 		);
 
+		const captionSectionContent = (
+			<section className="flex flex-col gap-2">
+				<SectionLabel>{tSettings("sections.caption", "Caption")}</SectionLabel>
+				{selectedCaptionId !== null ? (
+					<CaptionListPanel
+						cues={autoCaptions}
+						selectedCaptionId={selectedCaptionId}
+						currentTimeMs={captionCurrentTimeMs}
+						onBeginCaptionEdit={(id) => onBeginCaptionEdit?.(id)}
+						onCaptionTextEdit={(id, text) => onCaptionTextEdit?.(id, text)}
+						onCaptionRetime={(id, span) => onCaptionRetime?.(id, span)}
+						onCaptionSplit={(id, atMs) => onCaptionSplit?.(id, atMs)}
+						onCaptionMerge={(idA, idB) => onCaptionMerge?.(idA, idB)}
+						onCaptionDelete={(id) => onCaptionDelete?.(id)}
+					/>
+				) : (
+					<div className="rounded-lg bg-foreground/[0.03] px-2.5 py-6 text-center">
+						<p className="text-[11px] text-muted-foreground">
+							{tSettings(
+								"captions.selectOnTimeline",
+								"Select a caption on the timeline to edit it.",
+							)}
+						</p>
+					</div>
+				)}
+			</section>
+		);
+
 		switch (activeEffectSection) {
 			case "settings":
 				return settingsSectionContent;
@@ -3566,6 +3635,8 @@ export function SettingsPanel({
 				return sceneSectionContent;
 			case "captions":
 				return captionsSectionContent;
+			case "caption":
+				return captionSectionContent;
 			case "cursor":
 				return (
 					<section className="flex flex-col gap-2">
@@ -3694,12 +3765,15 @@ export function SettingsPanel({
 										<div className="flex flex-wrap gap-1.5">
 											{CLICK_EFFECT_COLOR_OPTIONS.map((color) => {
 												const isSelected =
-													cursorClickEffectColor.toLowerCase() === color.toLowerCase();
+													cursorClickEffectColor.toLowerCase() ===
+													color.toLowerCase();
 												return (
 													<button
 														key={color}
 														type="button"
-														onClick={() => onCursorClickEffectColorChange?.(color)}
+														onClick={() =>
+															onCursorClickEffectColorChange?.(color)
+														}
 														className={cn(
 															"h-6 w-6 rounded-[8px] border transition-transform hover:scale-[1.04]",
 															isSelected
@@ -3713,7 +3787,9 @@ export function SettingsPanel({
 											})}
 											<button
 												type="button"
-												onClick={() => cursorClickEffectColorInputRef.current?.click()}
+												onClick={() =>
+													cursorClickEffectColorInputRef.current?.click()
+												}
 												className="relative h-6 w-10 overflow-hidden rounded-[8px] border border-foreground/10 text-[8px] font-semibold uppercase tracking-[0.18em] text-foreground"
 												style={{
 													background: `linear-gradient(135deg, ${cursorClickEffectColor} 0%, ${cursorClickEffectColor} 58%, rgba(255,255,255,0.92) 58%, rgba(255,255,255,0.92) 100%)`,

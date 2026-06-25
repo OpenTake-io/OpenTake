@@ -110,6 +110,7 @@
 	"sections": {
 		"scene": "Scène",
 		"captions": "Ondertiteling",
+		"caption": "Ondertitel",
 		"zoom": "Zoom",
 		"cursor": "Cursor",
 		"webcam": "Webcam",
@@ -117,6 +118,7 @@
 		"crop": "Bijsnijden"
 	},
 	"captions": {
+		"selectOnTimeline": "Selecteer een ondertitel op de tijdlijn om deze te bewerken.",
 		"enabled": "Tonen",
 		"language": "Taal",
 		"downloading": "Downloaden...",

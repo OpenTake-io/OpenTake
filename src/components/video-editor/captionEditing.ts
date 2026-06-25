@@ -55,7 +55,7 @@ function buildCaptionWordsForEditedText(
 	});
 }
 
-function normalizeCaptionWords(cue: CaptionCue): CaptionCueWord[] {
+export function normalizeCaptionWords(cue: CaptionCue): CaptionCueWord[] {
 	const validSourceWords = Array.isArray(cue.words)
 		? cue.words.filter(
 				(word): word is CaptionCueWord =>
@@ -87,14 +87,14 @@ function normalizeCaptionWords(cue: CaptionCue): CaptionCueWord[] {
 		.filter((word) => word.text.length > 0);
 }
 
-function captionWordsToText(words: CaptionCueWord[]) {
+export function captionWordsToText(words: CaptionCueWord[]) {
 	return words
 		.map((word, index) => `${index > 0 && word.leadingSpace ? " " : ""}${word.text}`)
 		.join("")
 		.trim();
 }
 
-function normalizeCaptionWordSpacing(words: CaptionCueWord[]): CaptionCueWord[] {
+export function normalizeCaptionWordSpacing(words: CaptionCueWord[]): CaptionCueWord[] {
 	return words
 		.slice()
 		.sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs)

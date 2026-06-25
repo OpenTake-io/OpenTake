@@ -110,6 +110,7 @@
 	"sections": {
 		"scene": "場景",
 		"captions": "字幕",
+		"caption": "字幕",
 		"zoom": "縮放",
 		"cursor": "游標",
 		"webcam": "網路攝影機",
@@ -117,6 +118,7 @@
 		"crop": "裁切"
 	},
 	"captions": {
+		"selectOnTimeline": "在時間軸上選擇字幕進行編輯。",
 		"enabled": "顯示",
 		"language": "語言",
 		"downloading": "下載中...",
