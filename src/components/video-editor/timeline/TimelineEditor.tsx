@@ -71,6 +71,9 @@ export interface TimelineEditorProps {
 	onSelectAudio?: (id: string | null) => void;
 	captionRegions?: CaptionCue[];
 	onCaptionSpanChange?: (id: string, span: Span) => void;
+	onCaptionDelete?: (id: string) => void;
+	onCaptionAdded?: (span: Span) => void;
+	captionsEnabled?: boolean;
 	selectedCaptionId?: string | null;
 	onSelectCaption?: (id: string | null) => void;
 	videoPath?: string | null;
@@ -149,6 +152,9 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onSelectAudio,
 			captionRegions = [],
 			onCaptionSpanChange,
+			onCaptionDelete,
+			onCaptionAdded,
+			captionsEnabled = false,
 			selectedCaptionId,
 			onSelectCaption,
 			videoPath,
@@ -188,6 +194,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 		});
 
 		const [liveSpanPreviewById, setLiveSpanPreviewById] = useState<Record<string, Span>>({});
+		const [isDragging, setIsDragging] = useState(false);
 		const liveZoomPreview = useMemo(() => {
 			const previewSpans: Record<string, Span> = { ...liveSpanPreviewById };
 			const hiddenZoomIds = new Set<string>();
@@ -331,6 +338,8 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			handleItemSpanChange,
 			canPlaceZoomAtMs,
 			addZoomAtMs,
+			canPlaceCaptionAtMs,
+			addCaptionAtMs,
 		} = useTimelineEditorRuntime({
 			ref,
 			videoDuration,
@@ -372,6 +381,10 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onSelectAudio,
 			captionCues: captionRegions,
 			onCaptionSpanChange,
+			onCaptionDelete,
+			onCaptionAdded,
+			selectedCaptionId,
+			onSelectCaption,
 			isMac,
 			keyShortcuts,
 			isTimelineFocusedRef,
@@ -425,6 +438,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 						onItemSpanChange={handleItemSpanChange}
 						resolveTargetRowId={getResolvedDropRowId}
 						allRegionSpans={allRegionSpans}
+						onDraggingChange={setIsDragging}
 						onLiveSpanPreviewChange={(id, span) => {
 							setLiveSpanPreviewById((prev) => {
 								if (!span) {
@@ -460,6 +474,9 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							onSeek={onSeek}
 							onAddZoomAtMs={addZoomAtMs}
 							canPlaceZoomAtMs={canPlaceZoomAtMs}
+							onAddCaptionAtMs={addCaptionAtMs}
+							canPlaceCaptionAtMs={canPlaceCaptionAtMs}
+							captionsEnabled={captionsEnabled}
 							onSelectZoom={handleSelectZoom}
 							onSelectClip={handleSelectClip}
 							onSelectAnnotation={handleSelectAnnotation}
@@ -478,6 +495,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							showSourceAudioTrack={showSourceAudioTrack}
 							liveSpanPreviewById={liveZoomPreview.previewSpans}
 							liveHiddenItemIds={Array.from(liveZoomPreview.hiddenZoomIds)}
+							isDragging={isDragging}
 							isLoading={isLoading}
 						/>
 					</TimelineWrapper>

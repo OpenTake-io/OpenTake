@@ -13,14 +13,17 @@ interface UseTimelineSelectionParams {
 	selectedClipId?: string | null;
 	selectedAnnotationId?: string | null;
 	selectedAudioId?: string | null;
+	selectedCaptionId?: string | null;
 	onZoomDelete: (id: string) => void;
 	onClipDelete?: (id: string) => void;
 	onAnnotationDelete?: (id: string) => void;
 	onAudioDelete?: (id: string) => void;
+	onCaptionDelete?: (id: string) => void;
 	onSelectZoom: (id: string | null) => void;
 	onSelectClip?: (id: string | null) => void;
 	onSelectAnnotation?: (id: string | null) => void;
 	onSelectAudio?: (id: string | null) => void;
+	onSelectCaption?: (id: string | null) => void;
 }
 
 export function useTimelineSelection({
@@ -32,14 +35,17 @@ export function useTimelineSelection({
 	selectedClipId,
 	selectedAnnotationId,
 	selectedAudioId,
+	selectedCaptionId,
 	onZoomDelete,
 	onClipDelete,
 	onAnnotationDelete,
 	onAudioDelete,
+	onCaptionDelete,
 	onSelectZoom,
 	onSelectClip,
 	onSelectAnnotation,
 	onSelectAudio,
+	onSelectCaption,
 }: UseTimelineSelectionParams) {
 	const [keyframes, setKeyframes] = useState<{ id: string; time: number }[]>([]);
 	const [selectedKeyframeId, setSelectedKeyframeId] = useState<string | null>(null);
@@ -112,6 +118,12 @@ export function useTimelineSelection({
 		onAudioDelete(selectedAudioId);
 		onSelectAudio(null);
 	}, [selectedAudioId, onAudioDelete, onSelectAudio]);
+
+	const deleteSelectedCaption = useCallback(() => {
+		if (!selectedCaptionId || !onCaptionDelete) return;
+		onCaptionDelete(selectedCaptionId);
+		onSelectCaption?.(null);
+	}, [selectedCaptionId, onCaptionDelete, onSelectCaption]);
 
 	const clearSelectedBlocks = useCallback(() => {
 		onSelectZoom(null);
@@ -201,6 +213,7 @@ export function useTimelineSelection({
 		deleteSelectedClip,
 		deleteSelectedAnnotation,
 		deleteSelectedAudio,
+		deleteSelectedCaption,
 		clearSelectedBlocks,
 		handleSelectZoom,
 		handleSelectClip,

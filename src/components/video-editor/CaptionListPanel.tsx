@@ -1,5 +1,6 @@
 import { ArrowsMerge, Scissors, Trash } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import type { CaptionRetimeSpan } from "./captionOps";
 import type { CaptionCue } from "./types";
 
@@ -101,7 +102,10 @@ function CaptionEditor({
 				</span>
 				<textarea
 					value={draftText}
-					rows={2}
+					rows={3}
+					// Freshly-added captions start empty — focus the field so the
+					// user can type immediately after dropping one on the timeline.
+					autoFocus={cue.text === ""}
 					onFocus={() => onBeginEdit(cue.id)}
 					onChange={(event) => setDraftText(event.target.value)}
 					onBlur={commitText}
@@ -115,7 +119,7 @@ function CaptionEditor({
 							event.currentTarget.blur();
 						}
 					}}
-					className="w-full resize-none rounded-md border border-foreground/10 bg-background/60 px-2 py-1.5 text-sm text-foreground outline-none focus-visible:border-[#2563EB] focus-visible:ring-1 focus-visible:ring-[#2563EB]"
+					className="min-h-[4.5rem] w-full resize-none rounded-md border border-foreground/10 bg-background/60 px-2 py-1.5 text-sm text-foreground outline-none focus-visible:border-[#2563EB] focus-visible:ring-1 focus-visible:ring-[#2563EB]"
 				/>
 			</label>
 
@@ -174,14 +178,16 @@ function CaptionEditor({
 					<ArrowsMerge className="h-4 w-4" />
 					Merge
 				</button>
-				<button
+				<Button
 					type="button"
+					variant="destructive"
+					size="sm"
 					onClick={() => onDelete(cue.id)}
-					className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20"
+					className="h-9 gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
 				>
-					<Trash className="h-4 w-4" />
+					<Trash className="h-3 w-3" />
 					Delete
-				</button>
+				</Button>
 			</div>
 		</div>
 	);
@@ -208,6 +214,7 @@ export default function CaptionListPanel({
 
 	return (
 		<CaptionEditor
+			key={cue.id}
 			cue={cue}
 			canMerge={canMerge}
 			currentTimeMs={currentTimeMs}
