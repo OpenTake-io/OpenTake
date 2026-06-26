@@ -20,6 +20,29 @@ function createCaptionCueId(): string {
 	return `caption-${globalThis.crypto.randomUUID()}`;
 }
 
+/**
+ * Build a new caption cue with a generated id. Word timings are intentionally
+ * omitted — the renderer derives placeholder per-word timings from the text
+ * until the user adds real ones.
+ */
+export function createCaptionCue(params: {
+	startMs: number;
+	endMs: number;
+	text?: string;
+}): CaptionCue {
+	return {
+		id: createCaptionCueId(),
+		startMs: Math.round(params.startMs),
+		endMs: Math.round(params.endMs),
+		text: params.text ?? "",
+	};
+}
+
+/** Insert a cue and keep the list ordered, matching the other cue operations. */
+export function addCue(cues: CaptionCue[], cue: CaptionCue): CaptionCue[] {
+	return sortCaptionCues([...cues, cue]);
+}
+
 function rescaleWordsIntoSpan(
 	words: CaptionCueWord[],
 	oldStartMs: number,

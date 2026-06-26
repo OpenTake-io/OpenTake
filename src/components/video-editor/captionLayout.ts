@@ -59,7 +59,9 @@ type CaptionSourceWord = {
 };
 
 const CAPTION_ENTER_MS = 180;
-const CAPTION_EXIT_MS = 140;
+// Keep the exit symmetric with the entrance so captions fade out with the
+// same opacity/translateY/scale curve and duration they faded in with.
+const CAPTION_EXIT_MS = CAPTION_ENTER_MS;
 const CAPTION_BLOCK_GAP_BREAK_MS = 500;
 
 function clamp(value: number, min: number, max: number) {
@@ -518,13 +520,34 @@ export function buildActiveCaptionLayout(options: {
 		getActiveCaptionCue(options.cues, options.timeMs) ??
 		options.cues.find((candidate) => candidate.id === pageCueId) ??
 		options.cues[0];
+	// `animationEndMs` is stretched to the next page's start (see buildCaptionPages)
+	// so consecutive pages stay on screen with no gap. That's right for continuous
+	// speech, but pages are built from every cue flattened together — so when a
+	// caption component (cue) is the last before a pause, its stitched end points
+	// across the silence into the next cue. exitProgress would then stay pinned at
+	// 1 and the caption would vanish with no fade. Anchor the exit to the real end
+	// of the visible words instead, and only when nothing follows within the
+	// gap-break window (otherwise keep the stitched end so continuous page swaps
+	// don't flicker).
+	const visibleContentEndMs = visibleWords.reduce(
+		(latest, word) => Math.max(latest, word.endMs),
+		animationStartMs,
+	);
+	const willDisappear =
+		options.settings.animationStyle !== "none" &&
+		!isWithinCaptionCoverage(options.cues, visibleContentEndMs + 1);
+	const exitAnchorMs = willDisappear ? visibleContentEndMs : animationEndMs;
 	const enterProgress = clamp01((options.timeMs - animationStartMs) / CAPTION_ENTER_MS);
-	const exitProgress = clamp01((animationEndMs - options.timeMs) / CAPTION_EXIT_MS);
+	const exitProgress = clamp01((exitAnchorMs - options.timeMs) / CAPTION_EXIT_MS);
 	const animation = getCaptionAnimationState(
 		options.settings.animationStyle,
 		enterProgress,
 		exitProgress,
 	);
+	// On a real disappearance the per-style opacity only eases to its readability
+	// floor (~0.3) before the element unmounts, which reads as a snap. Fade fully
+	// to 0 across the exit window so the caption leaves smoothly.
+	const opacity = willDisappear ? animation.opacity * exitProgress : animation.opacity;
 
 	return {
 		cue: activeCue,
@@ -550,7 +573,7 @@ export function buildActiveCaptionLayout(options: {
 			})),
 		},
 		visiblePageIndex,
-		opacity: animation.opacity,
+		opacity,
 		translateY: animation.translateY,
 		scale: animation.scale,
 	} satisfies ActiveCaptionLayout;

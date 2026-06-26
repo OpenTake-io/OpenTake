@@ -30,6 +30,7 @@ import {
 	isAudioTrackRowId,
 } from "../../core/rows";
 import type { TimelineRenderItem } from "../../core/timelineTypes";
+import { DEFAULT_CAPTION_DURATION_MS } from "../../hooks/actions/useTimelineCaptionActions";
 import { useTimelineAudioPeaks } from "../../hooks/useTimelineAudioPeaks";
 import Item from "../../Item";
 import glassStyles from "../../ItemGlass.module.css";
@@ -60,6 +61,9 @@ interface TimelineCanvasProps {
 	onSelectAudio?: (id: string | null) => void;
 	onSelectCaption?: (id: string | null) => void;
 	onAddZoomAtMs?: (startMs: number) => void;
+	onAddCaptionAtMs?: (startMs: number) => void;
+	canPlaceCaptionAtMs?: (startMs: number) => boolean;
+	captionsEnabled?: boolean;
 	selectedZoomId: string | null;
 	selectedClipId?: string | null;
 	selectedAnnotationId?: string | null;
@@ -73,7 +77,131 @@ interface TimelineCanvasProps {
 	showSourceAudioTrack?: boolean;
 	liveSpanPreviewById?: Record<string, { start: number; end: number }>;
 	liveHiddenItemIds?: string[];
+	isDragging?: boolean;
 	isLoading?: boolean;
+}
+
+interface LaneHoverParams {
+	direction: string;
+	rangeStart: number;
+	visibleDurationMs: number;
+	videoDurationMs: number;
+	valueToPixels: (value: number) => number;
+	// Ghost block length to preview under the cursor.
+	ghostDurationMs: number;
+	// Whether the lane currently accepts adds (e.g. captions only when shown).
+	enabled: boolean;
+	// Suppress the ghost while a drag/resize is in progress.
+	isDragging: boolean;
+	onAddAtMs?: (startMs: number) => void;
+	canPlaceAtMs?: (startMs: number) => boolean;
+}
+
+/**
+ * Hover + click-to-add behaviour for a single timeline lane (zoom, captions, …).
+ * Tracks the pointer position over the row and derives the translucent "add"
+ * ghost geometry. Lanes differ only by their ghost duration, enabled flag and
+ * add/can-place callbacks.
+ */
+function useTimelineLaneHover({
+	direction,
+	rangeStart,
+	visibleDurationMs,
+	videoDurationMs,
+	valueToPixels,
+	ghostDurationMs,
+	enabled,
+	isDragging,
+	onAddAtMs,
+	canPlaceAtMs,
+}: LaneHoverParams) {
+	const [isHovered, setIsHovered] = useState(false);
+	const [hoverMs, setHoverMs] = useState<number | null>(null);
+
+	const updateHoverTime = useCallback(
+		(clientX: number, rect: DOMRect) => {
+			if (rect.width <= 0) return;
+			const position =
+				direction === "rtl"
+					? Math.max(0, Math.min(rect.right - clientX, rect.width))
+					: Math.max(0, Math.min(clientX - rect.left, rect.width));
+			const ratio = position / rect.width;
+			const nextMs = rangeStart + ratio * visibleDurationMs;
+			setHoverMs(Math.max(0, Math.min(nextMs, videoDurationMs)));
+		},
+		[direction, rangeStart, videoDurationMs, visibleDurationMs],
+	);
+
+	const onMouseEnter = useCallback(
+		(event: MouseEvent<HTMLDivElement>) => {
+			setIsHovered(true);
+			updateHoverTime(event.clientX, event.currentTarget.getBoundingClientRect());
+		},
+		[updateHoverTime],
+	);
+
+	const onMouseMove = useCallback(
+		(event: MouseEvent<HTMLDivElement>) => {
+			setIsHovered(true);
+			updateHoverTime(event.clientX, event.currentTarget.getBoundingClientRect());
+		},
+		[updateHoverTime],
+	);
+
+	const onMouseLeave = useCallback(() => {
+		setIsHovered(false);
+		setHoverMs(null);
+	}, []);
+
+	const onMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+		event.stopPropagation();
+	}, []);
+
+	const onClick = useCallback(
+		(event: MouseEvent<HTMLDivElement>) => {
+			event.stopPropagation();
+			if (!onAddAtMs || hoverMs === null) return;
+			const startMs = Math.max(0, Math.min(hoverMs, videoDurationMs));
+			if (canPlaceAtMs && !canPlaceAtMs(startMs)) return;
+			onAddAtMs(startMs);
+		},
+		[canPlaceAtMs, onAddAtMs, videoDurationMs, hoverMs],
+	);
+
+	const reset = useCallback(() => {
+		setIsHovered(false);
+		setHoverMs(null);
+	}, []);
+
+	const ghostStartMs = hoverMs === null ? null : Math.max(0, Math.min(hoverMs, videoDurationMs));
+	const ghostEndMs =
+		ghostStartMs === null
+			? null
+			: Math.max(ghostStartMs, Math.min(videoDurationMs, ghostStartMs + ghostDurationMs));
+	const ghostStartOffsetPx =
+		ghostStartMs === null ? 0 : valueToPixels(Math.max(0, ghostStartMs - rangeStart));
+	const ghostEndOffsetPx =
+		ghostEndMs === null ? 0 : valueToPixels(Math.max(0, ghostEndMs - rangeStart));
+	const ghostWidthPx = Math.max(18, ghostEndOffsetPx - ghostStartOffsetPx);
+	const canShowGhost =
+		!isDragging &&
+		enabled &&
+		isHovered &&
+		ghostStartMs !== null &&
+		(onAddAtMs ? (canPlaceAtMs?.(ghostStartMs) ?? true) : false);
+
+	return {
+		reset,
+		ghostStartMs,
+		ghostStartOffsetPx,
+		ghostWidthPx,
+		canShowGhost,
+		onMouseEnter,
+		onMouseMove,
+		onMouseLeave,
+		onMouseDown,
+		onClick,
+	};
 }
 
 interface TimelineHoverParams {
@@ -84,6 +212,10 @@ interface TimelineHoverParams {
 	videoDurationMs: number;
 	onAddZoomAtMs?: (startMs: number) => void;
 	canPlaceZoomAtMs?: (startMs: number) => boolean;
+	onAddCaptionAtMs?: (startMs: number) => void;
+	canPlaceCaptionAtMs?: (startMs: number) => boolean;
+	captionsEnabled?: boolean;
+	isDragging: boolean;
 	valueToPixels: (value: number) => number;
 }
 
@@ -95,12 +227,14 @@ function useTimelineHover({
 	videoDurationMs,
 	onAddZoomAtMs,
 	canPlaceZoomAtMs,
+	onAddCaptionAtMs,
+	canPlaceCaptionAtMs,
+	captionsEnabled,
+	isDragging,
 	valueToPixels,
 }: TimelineHoverParams) {
 	const [isTimelineHovered, setIsTimelineHovered] = useState(false);
 	const [timelineHoverMs, setTimelineHoverMs] = useState<number | null>(null);
-	const [isZoomRowHovered, setIsZoomRowHovered] = useState(false);
-	const [zoomRowHoverMs, setZoomRowHoverMs] = useState<number | null>(null);
 
 	const visibleDurationMs = Math.max(1, rangeEnd - rangeStart);
 
@@ -135,82 +269,42 @@ function useTimelineHover({
 		[isTimelineHovered, updateTimelineHoverTime],
 	);
 
+	const zoom = useTimelineLaneHover({
+		direction,
+		rangeStart,
+		visibleDurationMs,
+		videoDurationMs,
+		valueToPixels,
+		ghostDurationMs: Math.min(1000, videoDurationMs),
+		enabled: true,
+		isDragging,
+		onAddAtMs: onAddZoomAtMs,
+		canPlaceAtMs: canPlaceZoomAtMs,
+	});
+
+	const caption = useTimelineLaneHover({
+		direction,
+		rangeStart,
+		visibleDurationMs,
+		videoDurationMs,
+		valueToPixels,
+		ghostDurationMs: Math.min(DEFAULT_CAPTION_DURATION_MS, videoDurationMs),
+		enabled: Boolean(captionsEnabled),
+		isDragging,
+		onAddAtMs: onAddCaptionAtMs,
+		canPlaceAtMs: canPlaceCaptionAtMs,
+	});
+
 	const handleTimelineMouseLeave = useCallback(() => {
 		setIsTimelineHovered(false);
 		setTimelineHoverMs(null);
-		setIsZoomRowHovered(false);
-		setZoomRowHoverMs(null);
-	}, []);
+		zoom.reset();
+		caption.reset();
+	}, [zoom.reset, caption.reset]);
 
-	const updateZoomRowHoverTime = useCallback(
-		(clientX: number, rect: DOMRect) => {
-			if (rect.width <= 0) return;
-			const position =
-				direction === "rtl"
-					? Math.max(0, Math.min(rect.right - clientX, rect.width))
-					: Math.max(0, Math.min(clientX - rect.left, rect.width));
-			const ratio = position / rect.width;
-			const nextMs = rangeStart + ratio * visibleDurationMs;
-			setZoomRowHoverMs(Math.max(0, Math.min(nextMs, videoDurationMs)));
-		},
-		[direction, rangeStart, videoDurationMs, visibleDurationMs],
-	);
-
-	const handleZoomRowMouseEnter = useCallback(
-		(event: MouseEvent<HTMLDivElement>) => {
-			setIsZoomRowHovered(true);
-			updateZoomRowHoverTime(event.clientX, event.currentTarget.getBoundingClientRect());
-		},
-		[updateZoomRowHoverTime],
-	);
-
-	const handleZoomRowMouseMove = useCallback(
-		(event: MouseEvent<HTMLDivElement>) => {
-			if (!isZoomRowHovered) setIsZoomRowHovered(true);
-			updateZoomRowHoverTime(event.clientX, event.currentTarget.getBoundingClientRect());
-		},
-		[isZoomRowHovered, updateZoomRowHoverTime],
-	);
-
-	const handleZoomRowMouseLeave = useCallback(() => {
-		setIsZoomRowHovered(false);
-		setZoomRowHoverMs(null);
-	}, []);
-
-	const handleZoomRowMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
-		event.stopPropagation();
-	}, []);
-
-	const handleZoomRowClick = useCallback(
-		(event: MouseEvent<HTMLDivElement>) => {
-			event.stopPropagation();
-			if (!onAddZoomAtMs || zoomRowHoverMs === null) return;
-			const startMs = Math.max(0, Math.min(zoomRowHoverMs, videoDurationMs));
-			if (canPlaceZoomAtMs && !canPlaceZoomAtMs(startMs)) return;
-			onAddZoomAtMs(startMs);
-		},
-		[canPlaceZoomAtMs, onAddZoomAtMs, videoDurationMs, zoomRowHoverMs],
-	);
-
-	const ghostStartMs =
-		zoomRowHoverMs === null ? null : Math.max(0, Math.min(zoomRowHoverMs, videoDurationMs));
-	const ghostDurationMs = Math.min(1000, videoDurationMs);
-	const ghostEndMs =
-		ghostStartMs === null
-			? null
-			: Math.max(ghostStartMs, Math.min(videoDurationMs, ghostStartMs + ghostDurationMs));
-	const ghostStartOffsetPx =
-		ghostStartMs === null ? 0 : valueToPixels(Math.max(0, ghostStartMs - rangeStart));
-	const ghostEndOffsetPx =
-		ghostEndMs === null ? 0 : valueToPixels(Math.max(0, ghostEndMs - rangeStart));
-	const ghostWidthPx = Math.max(18, ghostEndOffsetPx - ghostStartOffsetPx);
 	const timelineGhostOffsetPx =
 		timelineHoverMs === null ? 0 : valueToPixels(Math.max(0, timelineHoverMs - rangeStart));
 	const canShowGhostPlayhead = isTimelineHovered && timelineHoverMs !== null;
-	const canShowGhostZoom =
-		isZoomRowHovered &&
-		ghostStartMs !== null &&
-		(onAddZoomAtMs ? (canPlaceZoomAtMs?.(ghostStartMs) ?? true) : false);
 
 	return {
 		canShowGhostPlayhead,
@@ -218,15 +312,24 @@ function useTimelineHover({
 		handleTimelineMouseEnter,
 		handleTimelineMouseMove,
 		handleTimelineMouseLeave,
-		canShowGhostZoom,
-		ghostStartMs,
-		ghostStartOffsetPx,
-		ghostWidthPx,
-		handleZoomRowMouseEnter,
-		handleZoomRowMouseMove,
-		handleZoomRowMouseLeave,
-		handleZoomRowMouseDown,
-		handleZoomRowClick,
+		canShowGhostZoom: zoom.canShowGhost,
+		ghostStartMs: zoom.ghostStartMs,
+		ghostStartOffsetPx: zoom.ghostStartOffsetPx,
+		ghostWidthPx: zoom.ghostWidthPx,
+		handleZoomRowMouseEnter: zoom.onMouseEnter,
+		handleZoomRowMouseMove: zoom.onMouseMove,
+		handleZoomRowMouseLeave: zoom.onMouseLeave,
+		handleZoomRowMouseDown: zoom.onMouseDown,
+		handleZoomRowClick: zoom.onClick,
+		canShowGhostCaption: caption.canShowGhost,
+		captionGhostStartMs: caption.ghostStartMs,
+		captionGhostStartOffsetPx: caption.ghostStartOffsetPx,
+		captionGhostWidthPx: caption.ghostWidthPx,
+		handleCaptionRowMouseEnter: caption.onMouseEnter,
+		handleCaptionRowMouseMove: caption.onMouseMove,
+		handleCaptionRowMouseLeave: caption.onMouseLeave,
+		handleCaptionRowMouseDown: caption.onMouseDown,
+		handleCaptionRowClick: caption.onClick,
 	};
 }
 
@@ -259,6 +362,16 @@ interface TimelineCanvasRowsProps {
 	onZoomRowMouseLeave: MouseEventHandler<HTMLDivElement>;
 	onZoomRowMouseDown: MouseEventHandler<HTMLDivElement>;
 	onZoomRowClick: MouseEventHandler<HTMLDivElement>;
+	captionsEnabled?: boolean;
+	canShowGhostCaption: boolean;
+	captionGhostStartMs: number | null;
+	captionGhostStartOffsetPx: number;
+	captionGhostWidthPx: number;
+	onCaptionRowMouseEnter: MouseEventHandler<HTMLDivElement>;
+	onCaptionRowMouseMove: MouseEventHandler<HTMLDivElement>;
+	onCaptionRowMouseLeave: MouseEventHandler<HTMLDivElement>;
+	onCaptionRowMouseDown: MouseEventHandler<HTMLDivElement>;
+	onCaptionRowClick: MouseEventHandler<HTMLDivElement>;
 }
 
 interface AudioItemWithWaveformProps {
@@ -328,6 +441,16 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 	onZoomRowMouseLeave,
 	onZoomRowMouseDown,
 	onZoomRowClick,
+	captionsEnabled = false,
+	canShowGhostCaption,
+	captionGhostStartMs,
+	captionGhostStartOffsetPx,
+	captionGhostWidthPx,
+	onCaptionRowMouseEnter,
+	onCaptionRowMouseMove,
+	onCaptionRowMouseLeave,
+	onCaptionRowMouseDown,
+	onCaptionRowClick,
 }: TimelineCanvasRowsProps) {
 	const hiddenIds = useMemo(() => new Set(liveHiddenItemIds ?? []), [liveHiddenItemIds]);
 	const { clipItems, zoomItems, captionItems, annotationRows, audioRows } = useMemo(() => {
@@ -497,8 +620,45 @@ const TimelineCanvasRows = memo(function TimelineCanvasRows({
 					))}
 			</Row>
 
-			{captionItems.length > 0 && (
-				<Row id={CAPTION_ROW_ID} isEmpty={false}>
+			{(captionsEnabled || captionItems.length > 0) && (
+				<Row
+					id={CAPTION_ROW_ID}
+					isEmpty={captionItems.length === 0}
+					onMouseEnter={onCaptionRowMouseEnter}
+					onMouseMove={onCaptionRowMouseMove}
+					onMouseLeave={onCaptionRowMouseLeave}
+					onMouseDown={onCaptionRowMouseDown}
+					onClick={onCaptionRowClick}
+				>
+					{canShowGhostCaption && captionGhostStartMs !== null && (
+						<div className="absolute inset-0 z-[3] pointer-events-none">
+							<div
+								className="absolute top-1/2 -translate-y-1/2 h-[85%] min-h-[22px]"
+								style={
+									direction === "rtl"
+										? {
+												right: `${captionGhostStartOffsetPx}px`,
+												width: `${captionGhostWidthPx}px`,
+											}
+										: {
+												left: `${captionGhostStartOffsetPx}px`,
+												width: `${captionGhostWidthPx}px`,
+											}
+								}
+							>
+								<div
+									className={cn(
+										glassStyles.glassCaption,
+										"w-full h-full overflow-hidden flex items-center justify-center cursor-default relative opacity-80",
+									)}
+								>
+									<div className="relative z-10 inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/45 bg-white/15 text-white">
+										<Plus className="h-2.5 w-2.5" />
+									</div>
+								</div>
+							</div>
+						</div>
+					)}
 					{captionItems.map((item) => (
 						<Item
 							id={item.id}
@@ -568,6 +728,9 @@ export default function TimelineCanvas({
 	onSeek,
 	onAddZoomAtMs,
 	canPlaceZoomAtMs,
+	onAddCaptionAtMs,
+	canPlaceCaptionAtMs,
+	captionsEnabled,
 	onSelectZoom,
 	onSelectClip,
 	onSelectAnnotation,
@@ -586,6 +749,7 @@ export default function TimelineCanvas({
 	showSourceAudioTrack = false,
 	liveSpanPreviewById,
 	liveHiddenItemIds,
+	isDragging = false,
 	isLoading = false,
 }: TimelineCanvasProps) {
 	const { setTimelineRef, style, sidebarWidth, direction, range, valueToPixels, pixelsToValue } =
@@ -770,6 +934,15 @@ export default function TimelineCanvas({
 		handleZoomRowMouseLeave,
 		handleZoomRowMouseDown,
 		handleZoomRowClick,
+		canShowGhostCaption,
+		captionGhostStartMs,
+		captionGhostStartOffsetPx,
+		captionGhostWidthPx,
+		handleCaptionRowMouseEnter,
+		handleCaptionRowMouseMove,
+		handleCaptionRowMouseLeave,
+		handleCaptionRowMouseDown,
+		handleCaptionRowClick,
 	} = useTimelineHover({
 		direction,
 		sidebarWidth,
@@ -778,6 +951,10 @@ export default function TimelineCanvas({
 		videoDurationMs,
 		onAddZoomAtMs,
 		canPlaceZoomAtMs,
+		onAddCaptionAtMs,
+		canPlaceCaptionAtMs,
+		captionsEnabled,
+		isDragging,
 		valueToPixels,
 	});
 
@@ -852,6 +1029,16 @@ export default function TimelineCanvas({
 					onZoomRowMouseLeave={handleZoomRowMouseLeave}
 					onZoomRowMouseDown={handleZoomRowMouseDown}
 					onZoomRowClick={handleZoomRowClick}
+					captionsEnabled={captionsEnabled}
+					canShowGhostCaption={canShowGhostCaption}
+					captionGhostStartMs={captionGhostStartMs}
+					captionGhostStartOffsetPx={captionGhostStartOffsetPx}
+					captionGhostWidthPx={captionGhostWidthPx}
+					onCaptionRowMouseEnter={handleCaptionRowMouseEnter}
+					onCaptionRowMouseMove={handleCaptionRowMouseMove}
+					onCaptionRowMouseLeave={handleCaptionRowMouseLeave}
+					onCaptionRowMouseDown={handleCaptionRowMouseDown}
+					onCaptionRowClick={handleCaptionRowClick}
 				/>
 			</div>
 		</div>

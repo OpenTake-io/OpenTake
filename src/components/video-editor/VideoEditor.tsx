@@ -121,10 +121,19 @@ import { resolveAutoCaptionSourcePath } from "./autoCaptionSource";
 import { CropControl } from "./CropControl";
 import {
 	type CaptionEditTarget,
+	normalizeCaptionEditText,
 	normalizeCaptionWords,
 	updateCaptionCuesForEditedTarget,
 } from "./captionEditing";
-import { type CaptionRetimeSpan, deleteCue, mergeCues, retimeCue, splitCue } from "./captionOps";
+import {
+	addCue,
+	type CaptionRetimeSpan,
+	createCaptionCue,
+	deleteCue,
+	mergeCues,
+	retimeCue,
+	splitCue,
+} from "./captionOps";
 import { ExportSettingsMenu } from "./ExportSettingsMenu";
 import ExtensionManager from "./ExtensionManager";
 import {
@@ -3677,6 +3686,16 @@ export default function VideoEditor() {
 				return captions;
 			}
 			const words = normalizeCaptionWords(cue);
+			if (words.length === 0) {
+				// Text-only cue (e.g. a caption added manually from the timeline,
+				// which starts empty with no words). updateCaptionCuesForEditedTarget
+				// can't seed a cue that has no words, so set the text directly — the
+				// renderer derives placeholder word timings from the cue text.
+				const normalized = normalizeCaptionEditText(text);
+				return captions.map((value) =>
+					value.id === id ? { ...value, text: normalized } : value,
+				);
+			}
 			const target: CaptionEditTarget = {
 				id: cue.id,
 				startMs: cue.startMs,
@@ -3716,6 +3735,27 @@ export default function VideoEditor() {
 		setAutoCaptions((captions) => deleteCue(captions, id));
 	}, []);
 
+	const handleCaptionAdded = useCallback(
+		(span: Span) => {
+			videoPlaybackRef.current?.cancelCaptionEdit();
+			// span is in timeline-ms; caption cues are stored in source-ms.
+			const newCue = createCaptionCue({
+				startMs: mapTimelineTimeToSourceTime(span.start),
+				endMs: mapTimelineTimeToSourceTime(span.end),
+			});
+			setAutoCaptions((captions) => addCue(captions, newCue));
+			// Select the new caption and open its side-panel editor.
+			setSelectedCaptionId(newCue.id);
+			setActiveEffectSection("caption");
+			setSelectedZoomId(null);
+			setSelectedClipId(null);
+			setSelectedAnnotationId(null);
+			setSelectedAudioId(null);
+			handleSeek(span.start / 1000, { pause: true });
+		},
+		[handleSeek, mapTimelineTimeToSourceTime],
+	);
+
 	const handlePreviewSkipBack = useCallback(() => {
 		const currentMs = timelinePlayheadTime * 1000;
 		const keyframes = timelineRef.current?.keyframes ?? [];
@@ -3738,6 +3778,7 @@ export default function VideoEditor() {
 			setActiveEffectSection("zoom");
 			setSelectedAnnotationId(null);
 			setSelectedAudioId(null);
+			setSelectedCaptionId(null);
 		} else {
 			setActiveEffectSection((s) => (s === "zoom" ? "scene" : s));
 		}
@@ -3748,6 +3789,7 @@ export default function VideoEditor() {
 		if (id) {
 			setSelectedZoomId(null);
 			setSelectedAudioId(null);
+			setSelectedCaptionId(null);
 		}
 	}, []);
 
@@ -3770,6 +3812,7 @@ export default function VideoEditor() {
 			setZoomRegions((prev) => [...prev, newRegion]);
 			setSelectedZoomId(id);
 			setSelectedAnnotationId(null);
+			setSelectedCaptionId(null);
 			extensionHost.emitEvent({
 				type: "timeline:region-added",
 				data: { id, startMs: newRegion.startMs, endMs: newRegion.endMs },
@@ -3973,6 +4016,7 @@ export default function VideoEditor() {
 			setSelectedZoomId(null);
 			setSelectedAnnotationId(null);
 			setSelectedAudioId(null);
+			setSelectedCaptionId(null);
 		} else {
 			setActiveEffectSection((s) => (s === "clip" ? "scene" : s));
 		}
@@ -4163,6 +4207,7 @@ export default function VideoEditor() {
 		if (id) {
 			setSelectedZoomId(null);
 			setSelectedAnnotationId(null);
+			setSelectedCaptionId(null);
 			setActiveEffectSection("audio");
 		}
 	}, []);
@@ -4182,6 +4227,7 @@ export default function VideoEditor() {
 		setSelectedAudioId(id);
 		setSelectedZoomId(null);
 		setSelectedAnnotationId(null);
+		setSelectedCaptionId(null);
 		setActiveEffectSection("audio");
 	}, []);
 
@@ -6799,6 +6845,9 @@ export default function VideoEditor() {
 						}
 						selectedCaptionId={selectedCaptionId}
 						onSelectCaption={handleSelectCaption}
+						onCaptionDelete={handleCaptionDelete}
+						onCaptionAdded={handleCaptionAdded}
+						captionsEnabled={autoCaptionSettings.enabled}
 						annotationRegions={annotationRegions}
 						onAnnotationAdded={handleAnnotationAdded}
 						onAnnotationSpanChange={handleAnnotationSpanChange}
