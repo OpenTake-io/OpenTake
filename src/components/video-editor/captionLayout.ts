@@ -179,8 +179,10 @@ export function flattenCaptionWords(cues: CaptionCue[]) {
 		const cueDuration = Math.max(1, cue.endMs - cue.startMs);
 		const fallbackWordDuration = cueDuration / sourceWords.length;
 		const previousCue = cueIndex > 0 ? cues[cueIndex - 1] : null;
-		const shouldForceCueBreak =
-			previousCue !== null && cue.startMs - previousCue.endMs >= CAPTION_BLOCK_GAP_BREAK_MS;
+		// Each cue is its own phrase, so always start a new line/page at a cue boundary.
+		// Otherwise back-to-back phrases (a small gap) get re-packed together by width and
+		// their boundary disappears on screen — we want one phrase shown at a time.
+		const shouldForceCueBreak = previousCue !== null;
 
 		sourceWords.forEach((word, wordIndex) => {
 			const fallbackStartMs = cue.startMs + fallbackWordDuration * wordIndex;

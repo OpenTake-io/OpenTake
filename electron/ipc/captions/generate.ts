@@ -9,9 +9,9 @@ import { getBundledWhisperExecutableCandidates } from "../paths/binaries";
 import { resolveRecordingSession } from "../project/session";
 import { normalizeVideoSourcePath } from "../utils";
 import { parseSrtCues, parseWhisperJsonCues, shouldRetryWhisperWithoutJson } from "./parser";
+import { segmentCuesIntoPhrases } from "./segment";
 import {
 	parseSilenceIntervals,
-	resegmentCuesBySilence,
 	SILENCE_DETECT_MIN_S,
 	SILENCE_NOISE_DB,
 	type SilenceInterval,
@@ -259,19 +259,28 @@ export async function generateAutoCaptionsFromVideo(options: {
 		const timedCues = jsonEnabled
 			? parseWhisperJsonCues(await fs.readFile(jsonPath, "utf-8"))
 			: [];
+		if (jsonEnabled && timedCues.length === 0) {
+			// JSON ran but yielded no word-timed cues (empty/malformed output). We fall back
+			// to SRT, which has no word timings — captions are then split by sentence text and
+			// silence rather than precise word timing. Surface it for diagnosis.
+			console.warn(
+				"[auto-captions] Whisper JSON produced no word-timed cues; falling back to SRT (no word timings).",
+			);
+		}
 		const cues =
 			timedCues.length > 0 ? timedCues : parseSrtCues(await fs.readFile(srtPath, "utf-8"));
 		if (cues.length === 0) {
 			throw new Error("Whisper completed, but no caption cues were produced.");
 		}
 
-		// Whisper cues span silence and don't break on pauses. Re-segment them against
-		// ground-truth acoustic silence (ffmpeg `silencedetect`) so captions only cover
-		// real speech. Failure here must not block caption generation — fall back to raw.
+		// Whisper cues run sentences together and don't break on pauses. Re-segment them
+		// into one caption per sentence/phrase using Whisper's own word stream (punctuation
+		// + pauses), backed by ground-truth acoustic silence (ffmpeg `silencedetect`).
+		// Failure here must not block caption generation — fall back to raw.
 		let cuesToReturn = cues;
 		try {
 			const silences = await detectSilenceIntervals({ ffmpegPath, wavPath });
-			const resegmented = resegmentCuesBySilence(cues, silences);
+			const resegmented = segmentCuesIntoPhrases(cues, silences);
 			if (resegmented.length > 0) {
 				cuesToReturn = resegmented;
 			}

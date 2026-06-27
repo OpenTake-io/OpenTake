@@ -171,7 +171,7 @@ function splitTextProportionally(text: string, overlaps: Span[]): string[] {
 }
 
 /** Pad spans toward neighbors by at most half the silent gap, so cues never overlap. */
-function padSpans(spans: Span[], edgePadMs: number): void {
+export function padSpans(spans: Span[], edgePadMs: number): void {
 	for (let index = 0; index < spans.length; index += 1) {
 		const prevEndMs = index > 0 ? spans[index - 1].endMs : null;
 		const nextStartMs = index < spans.length - 1 ? spans[index + 1].startMs : null;
