@@ -103,11 +103,9 @@ export function useTimelineDndBindings({
 			if (!excludeId) return false;
 			const itemKind = resolveItemKind(excludeId);
 
-			if (itemKind === "annotation" || itemKind === "caption") return false;
+			if (itemKind === "annotation") return false;
 
-			const checkOverlap = (
-				regions: (ZoomRegion | TrimRegion | ClipRegion | SpeedRegion | AudioRegion)[],
-			) =>
+			const checkOverlap = (regions: { id: string; startMs: number; endMs: number }[]) =>
 				regions.some((region) => {
 					if (region.id === excludeId) return false;
 					return spansOverlap(newSpan, { start: region.startMs, end: region.endMs });
@@ -117,6 +115,9 @@ export function useTimelineDndBindings({
 			if (itemKind === "trim") return checkOverlap(trimRegions);
 			if (itemKind === "clip") return checkOverlap(clipRegions);
 			if (itemKind === "speed") return checkOverlap(speedRegions);
+			// Captions share a single lane and must never overlap, so validate a dragged or
+			// resized caption against the other cues just like the other timeline items.
+			if (itemKind === "caption") return checkOverlap(captionCues);
 
 			if (itemKind === "audio") {
 				const activeTrackIndex = resolveTrackIndex("audio", excludeId, rowId);
@@ -135,6 +136,7 @@ export function useTimelineDndBindings({
 			clipRegions,
 			audioRegions,
 			speedRegions,
+			captionCues,
 		],
 	);
 

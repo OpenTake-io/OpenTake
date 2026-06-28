@@ -280,10 +280,10 @@ export async function generateAutoCaptionsFromVideo(options: {
 		let cuesToReturn = cues;
 		try {
 			const silences = await detectSilenceIntervals({ ffmpegPath, wavPath });
-			const resegmented = segmentCuesIntoPhrases(cues, silences);
-			if (resegmented.length > 0) {
-				cuesToReturn = resegmented;
-			}
+			// An empty result is a valid resegmentation (e.g. every transcribed word fell
+			// inside a long detected silence and was dropped as a hallucination), so take it
+			// as-is. Only a thrown exception should fall back to the raw cues.
+			cuesToReturn = segmentCuesIntoPhrases(cues, silences);
 		} catch (error) {
 			console.warn(
 				"[auto-captions] Silence-aware re-segmentation failed, using raw cues:",

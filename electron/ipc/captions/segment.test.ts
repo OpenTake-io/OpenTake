@@ -104,6 +104,30 @@ describe("segmentCuesIntoPhrases", () => {
 		expect(result[0].text).toBe("Okay. Great.");
 	});
 
+	it("does not merge two short captions across a real pause just above the merge gap", () => {
+		// Two short, sentence-ended phrases separated by a 450ms gap (just above the 400ms
+		// mergeGapMs). Edge padding shrinks the apparent gap, so if merge eligibility ran on
+		// padded timings it would wrongly fuse them. Merge must run on the true speech gap.
+		const cues: CaptionCuePayload[] = [
+			{
+				id: "caption-1",
+				startMs: 0,
+				endMs: 1_250,
+				text: "Okay. Great.",
+				words: [
+					{ text: "Okay.", startMs: 0, endMs: 400 },
+					{ text: "Great.", startMs: 850, endMs: 1_250, leadingSpace: true },
+				],
+			},
+		];
+		const result = segmentCuesIntoPhrases(cues, []);
+		expect(result).toHaveLength(2);
+		expect(result[0].text).toBe("Okay.");
+		expect(result[1].text).toBe("Great.");
+		// Padding still applies, but cues stay separate and non-overlapping.
+		expect(result[0].endMs).toBeLessThanOrEqual(result[1].startMs);
+	});
+
 	it("does not merge a short sentence into a full-length one", () => {
 		const cues: CaptionCuePayload[] = [
 			{

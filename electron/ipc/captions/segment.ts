@@ -409,7 +409,10 @@ export function segmentCuesIntoPhrases(
 		const shouldBreak =
 			endsSentence(word.text) ||
 			gapMs >= pauseMs ||
-			silenceInGap(word.endMs, next.startMs, silences, splitSilenceMs) ||
+			// Only consult acoustic silence when there's a real gap between the words. When
+			// consecutive words overlap or abut (gapMs <= 0) a silence interval spanning that
+			// region must not manufacture a bogus split.
+			(gapMs > 0 && silenceInGap(word.endMs, next.startMs, silences, splitSilenceMs)) ||
 			phraseDurationMs >= maxPhraseMs;
 
 		if (shouldBreak) {
@@ -438,7 +441,6 @@ export function segmentCuesIntoPhrases(
 	}
 
 	pieces.sort((left, right) => left.startMs - right.startMs || left.endMs - right.endMs);
-	padSpans(pieces, edgePadMs);
 
 	const sentenceCues: CaptionCuePayload[] = pieces.map((piece) => ({
 		id: "",
@@ -447,5 +449,11 @@ export function segmentCuesIntoPhrases(
 		text: piece.text,
 		...(piece.words.length > 0 ? { words: piece.words } : {}),
 	}));
-	return renumberCues(mergeShortAdjacentCaptions(sentenceCues, mergeOptions));
+	// Merge rapid-fire short captions BEFORE padding so merge eligibility sees the true
+	// speech gaps. Padding pulls cue edges toward each other, which would shrink the
+	// apparent gap and could merge two captions across a real pause sitting just above
+	// mergeGapMs. Pad the survivors afterward so envelopes still get their edge padding.
+	const merged = mergeShortAdjacentCaptions(sentenceCues, mergeOptions);
+	padSpans(merged, edgePadMs);
+	return renumberCues(merged);
 }

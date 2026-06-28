@@ -2787,6 +2787,10 @@ export function SettingsPanel({
 						onCheckedChange={(timelineQuickAdd) =>
 							updateAutoCaptionSettings({ timelineQuickAdd })
 						}
+						aria-label={tSettings(
+							"captions.timelineQuickAdd",
+							"Hover to add on timeline",
+						)}
 						className="data-[state=checked]:bg-[#2563EB] scale-75"
 					/>
 				</div>

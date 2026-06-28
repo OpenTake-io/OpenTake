@@ -32,6 +32,34 @@ export function useTimelineCaptionActions({
 		[totalMs, captionRegions],
 	);
 
+	// Resolve the exact span an add would create at `startMs`, clamped to the next caption
+	// and the end of the timeline. Shared with the hover ghost so the preview matches the
+	// inserted caption exactly. Returns null when no caption can be placed there.
+	const resolveCaptionSpanAtMs = useCallback(
+		(startMs: number): Span | null => {
+			if (totalMs === 0) {
+				return null;
+			}
+			const startPos = Math.max(0, Math.min(startMs, totalMs));
+			if (!canPlaceCaptionAtMs(startPos)) {
+				return null;
+			}
+			const nextCaptionStartMs = captionRegions
+				.filter((cue) => cue.startMs > startPos)
+				.reduce((min, cue) => Math.min(min, cue.startMs), totalMs);
+			const endPos = Math.min(
+				startPos + DEFAULT_CAPTION_DURATION_MS,
+				totalMs,
+				nextCaptionStartMs,
+			);
+			if (endPos <= startPos) {
+				return null;
+			}
+			return { start: startPos, end: endPos };
+		},
+		[totalMs, canPlaceCaptionAtMs, captionRegions],
+	);
+
 	const addCaptionAtMs = useCallback(
 		(startMs: number) => {
 			if (!onCaptionAdded || totalMs === 0) {
@@ -45,24 +73,18 @@ export function useTimelineCaptionActions({
 				);
 				return;
 			}
-			const nextCaptionStartMs = captionRegions
-				.filter((cue) => cue.startMs > startPos)
-				.reduce((min, cue) => Math.min(min, cue.startMs), totalMs);
-			const endPos = Math.min(
-				startPos + DEFAULT_CAPTION_DURATION_MS,
-				totalMs,
-				nextCaptionStartMs,
-			);
-			if (endPos <= startPos) {
+			const span = resolveCaptionSpanAtMs(startPos);
+			if (!span) {
 				return;
 			}
-			onCaptionAdded({ start: startPos, end: endPos });
+			onCaptionAdded(span);
 		},
-		[onCaptionAdded, totalMs, canPlaceCaptionAtMs, captionRegions],
+		[onCaptionAdded, totalMs, canPlaceCaptionAtMs, resolveCaptionSpanAtMs],
 	);
 
 	return {
 		canPlaceCaptionAtMs,
 		addCaptionAtMs,
+		resolveCaptionSpanAtMs,
 	};
 }

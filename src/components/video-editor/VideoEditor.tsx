@@ -4530,6 +4530,12 @@ export default function VideoEditor() {
 		}
 	}, [selectedAudioId, audioRegions]);
 
+	useEffect(() => {
+		if (selectedCaptionId && !autoCaptions.some((cue) => cue.id === selectedCaptionId)) {
+			setSelectedCaptionId(null);
+		}
+	}, [selectedCaptionId, autoCaptions]);
+
 	const showExportSuccessToast = useCallback((filePath: string) => {
 		toast.success(`Exported successfully to ${filePath}`, {
 			action: {

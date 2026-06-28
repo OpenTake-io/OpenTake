@@ -333,6 +333,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			handleSelectClip,
 			handleSelectAnnotation,
 			handleSelectAudio,
+			handleSelectCaption,
 			hasOverlap,
 			timelineItems,
 			allRegionSpans,
@@ -342,6 +343,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			addZoomAtMs,
 			canPlaceCaptionAtMs,
 			addCaptionAtMs,
+			resolveCaptionSpanAtMs,
 		} = useTimelineEditorRuntime({
 			ref,
 			videoDuration,
@@ -478,13 +480,14 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							canPlaceZoomAtMs={canPlaceZoomAtMs}
 							onAddCaptionAtMs={addCaptionAtMs}
 							canPlaceCaptionAtMs={canPlaceCaptionAtMs}
+							resolveCaptionSpanAtMs={resolveCaptionSpanAtMs}
 							captionsEnabled={captionsEnabled}
 							captionQuickAddEnabled={captionQuickAddEnabled}
 							onSelectZoom={handleSelectZoom}
 							onSelectClip={handleSelectClip}
 							onSelectAnnotation={handleSelectAnnotation}
 							onSelectAudio={handleSelectAudio}
-							onSelectCaption={onSelectCaption}
+							onSelectCaption={handleSelectCaption}
 							selectedZoomId={selectedZoomId}
 							selectedClipId={selectedClipId}
 							selectedAnnotationId={selectedAnnotationId}
