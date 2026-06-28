@@ -142,6 +142,7 @@
 	"captions": {
 		"selectOnTimeline": "Seleziona un sottotitolo sulla timeline per modificarlo.",
 		"enabled": "Mostra",
+		"timelineQuickAdd": "Passa il mouse per aggiungere sulla timeline",
 		"language": "Lingua",
 		"downloading": "Download in corso...",
 		"deleteModel": "Elimina modello",

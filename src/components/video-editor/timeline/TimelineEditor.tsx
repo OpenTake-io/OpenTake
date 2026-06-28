@@ -74,6 +74,7 @@ export interface TimelineEditorProps {
 	onCaptionDelete?: (id: string) => void;
 	onCaptionAdded?: (span: Span) => void;
 	captionsEnabled?: boolean;
+	captionQuickAddEnabled?: boolean;
 	selectedCaptionId?: string | null;
 	onSelectCaption?: (id: string | null) => void;
 	videoPath?: string | null;
@@ -155,6 +156,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onCaptionDelete,
 			onCaptionAdded,
 			captionsEnabled = false,
+			captionQuickAddEnabled = true,
 			selectedCaptionId,
 			onSelectCaption,
 			videoPath,
@@ -477,6 +479,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							onAddCaptionAtMs={addCaptionAtMs}
 							canPlaceCaptionAtMs={canPlaceCaptionAtMs}
 							captionsEnabled={captionsEnabled}
+							captionQuickAddEnabled={captionQuickAddEnabled}
 							onSelectZoom={handleSelectZoom}
 							onSelectClip={handleSelectClip}
 							onSelectAnnotation={handleSelectAnnotation}

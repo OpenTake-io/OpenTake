@@ -6848,6 +6848,7 @@ export default function VideoEditor() {
 						onCaptionDelete={handleCaptionDelete}
 						onCaptionAdded={handleCaptionAdded}
 						captionsEnabled={autoCaptionSettings.enabled}
+						captionQuickAddEnabled={autoCaptionSettings.timelineQuickAdd}
 						annotationRegions={annotationRegions}
 						onAnnotationAdded={handleAnnotationAdded}
 						onAnnotationSpanChange={handleAnnotationSpanChange}

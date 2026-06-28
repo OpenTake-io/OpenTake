@@ -2778,6 +2778,18 @@ export function SettingsPanel({
 						</SelectContent>
 					</Select>
 				</div>
+				<div className="flex items-center justify-between gap-3 rounded-lg bg-foreground/[0.03] px-2.5 py-2">
+					<div className="text-[10px] text-muted-foreground">
+						{tSettings("captions.timelineQuickAdd", "Hover to add on timeline")}
+					</div>
+					<Switch
+						checked={autoCaptionSettings.timelineQuickAdd}
+						onCheckedChange={(timelineQuickAdd) =>
+							updateAutoCaptionSettings({ timelineQuickAdd })
+						}
+						className="data-[state=checked]:bg-[#2563EB] scale-75"
+					/>
+				</div>
 				<label className="flex items-center justify-between rounded-lg bg-foreground/[0.03] px-2.5 py-2">
 					<span className="text-[10px] text-muted-foreground">
 						{tSettings("captions.textColor", "Text color")}

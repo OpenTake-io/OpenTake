@@ -120,6 +120,7 @@
 	"captions": {
 		"selectOnTimeline": "在時間軸上選擇字幕進行編輯。",
 		"enabled": "顯示",
+		"timelineQuickAdd": "懸停以在時間軸上新增",
 		"language": "語言",
 		"downloading": "下載中...",
 		"deleteModel": "刪除模型",

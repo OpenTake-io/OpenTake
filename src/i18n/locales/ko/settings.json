@@ -120,6 +120,7 @@
 	"captions": {
 		"selectOnTimeline": "타임라인에서 자막을 선택하여 편집하세요.",
 		"enabled": "표시",
+		"timelineQuickAdd": "타임라인에 마우스를 올려 추가",
 		"language": "언어",
 		"downloading": "다운로드 중...",
 		"deleteModel": "모델 삭제",
