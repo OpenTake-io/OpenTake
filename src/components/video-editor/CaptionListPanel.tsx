@@ -1,6 +1,7 @@
 import { ArrowsMerge, Scissors, Trash } from "@phosphor-icons/react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useScopedT } from "@/contexts/I18nContext";
 import type { CaptionRetimeSpan } from "./captionOps";
 import type { CaptionCue } from "./types";
 
@@ -62,9 +63,14 @@ function CaptionEditor({
 	onMerge,
 	onDelete,
 }: CaptionEditorProps) {
+	const t = useScopedT("settings");
 	const [draftText, setDraftText] = useState(cue.text);
 	const [startValue, setStartValue] = useState(formatTimecode(cue.startMs));
 	const [endValue, setEndValue] = useState(formatTimecode(cue.endMs));
+	// Escape resets the draft and blurs, but `setDraftText` is batched so the blur-driven
+	// `commitText` would still see the stale (edited) draft and save it. This flag lets the
+	// cancel path tell the next blur to discard instead of commit.
+	const cancelNextCommitRef = useRef(false);
 
 	useEffect(() => {
 		setDraftText(cue.text);
@@ -73,6 +79,11 @@ function CaptionEditor({
 	}, [cue.text, cue.startMs, cue.endMs]);
 
 	const commitText = useCallback(() => {
+		if (cancelNextCommitRef.current) {
+			cancelNextCommitRef.current = false;
+			setDraftText(cue.text);
+			return;
+		}
 		const normalized = draftText.trim();
 		if (normalized && normalized !== cue.text) {
 			onTextEdit(cue.id, normalized);
@@ -98,7 +109,7 @@ function CaptionEditor({
 		<div className="flex flex-col gap-3 rounded-lg bg-foreground/[0.03] px-2.5 py-2.5">
 			<label className="flex flex-col gap-1">
 				<span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-					Text
+					{t("captions.editor.text", "Text")}
 				</span>
 				<textarea
 					value={draftText}
@@ -115,6 +126,7 @@ function CaptionEditor({
 							event.currentTarget.blur();
 						}
 						if (event.key === "Escape") {
+							cancelNextCommitRef.current = true;
 							setDraftText(cue.text);
 							event.currentTarget.blur();
 						}
@@ -126,7 +138,7 @@ function CaptionEditor({
 			<div className="flex items-center gap-2">
 				<label className="flex flex-1 flex-col gap-1">
 					<span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-						Start
+						{t("captions.editor.start", "Start")}
 					</span>
 					<input
 						value={startValue}
@@ -142,7 +154,7 @@ function CaptionEditor({
 				</label>
 				<label className="flex flex-1 flex-col gap-1">
 					<span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-						End
+						{t("captions.editor.end", "End")}
 					</span>
 					<input
 						value={endValue}
@@ -167,7 +179,7 @@ function CaptionEditor({
 					className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-foreground/10 bg-foreground/5 text-xs font-medium text-foreground transition-colors hover:bg-foreground/10"
 				>
 					<Scissors className="h-4 w-4" />
-					Split
+					{t("captions.editor.split", "Split")}
 				</button>
 				<button
 					type="button"
@@ -176,7 +188,7 @@ function CaptionEditor({
 					className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-foreground/10 bg-foreground/5 text-xs font-medium text-foreground transition-colors hover:bg-foreground/10 disabled:opacity-40"
 				>
 					<ArrowsMerge className="h-4 w-4" />
-					Merge
+					{t("captions.editor.merge", "Merge")}
 				</button>
 				<Button
 					type="button"
@@ -186,7 +198,7 @@ function CaptionEditor({
 					className="h-9 gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 text-xs text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20"
 				>
 					<Trash className="h-3 w-3" />
-					Delete
+					{t("captions.editor.delete", "Delete")}
 				</Button>
 			</div>
 		</div>

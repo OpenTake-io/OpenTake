@@ -192,7 +192,15 @@
 		"maxWidth": "Max Width",
 		"boxRadius": "Box Radius",
 		"backgroundOpacity": "Background Opacity",
-		"textColor": "Text Color"
+		"textColor": "Text Color",
+		"editor": {
+			"text": "Text",
+			"start": "Start",
+			"end": "End",
+			"split": "Split",
+			"merge": "Merge",
+			"delete": "Delete"
+		}
 	},
 	"crop": {
 		"title": "Crop Video",

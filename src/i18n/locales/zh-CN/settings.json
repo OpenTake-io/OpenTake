@@ -127,7 +127,7 @@
 	"sections": {
 		"scene": "场景",
 		"captions": "字幕",
-		"caption": "字幕",
+		"caption": "字幕编辑",
 		"zoom": "缩放",
 		"cursor": "光标",
 		"webcam": "摄像头",

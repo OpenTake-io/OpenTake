@@ -142,6 +142,7 @@ export function useTimelineEditorRuntime({
 		handleSelectClip,
 		handleSelectAnnotation,
 		handleSelectAudio,
+		handleSelectCaption,
 		cycleAnnotationsAtCurrentTime,
 	} = useTimelineSelection({
 		totalMs,
@@ -220,11 +221,12 @@ export function useTimelineEditorRuntime({
 		onZoomSuggested,
 	});
 
-	const { canPlaceCaptionAtMs, addCaptionAtMs } = useTimelineCaptionActions({
-		totalMs,
-		captionRegions: captionCues,
-		onCaptionAdded,
-	});
+	const { canPlaceCaptionAtMs, addCaptionAtMs, resolveCaptionSpanAtMs } =
+		useTimelineCaptionActions({
+			totalMs,
+			captionRegions: captionCues,
+			onCaptionAdded,
+		});
 
 	const handleSplitClip = useCallback(() => {
 		if (!videoDuration || videoDuration === 0 || totalMs === 0 || !onClipSplit) {
@@ -317,6 +319,7 @@ export function useTimelineEditorRuntime({
 		handleSelectClip,
 		handleSelectAnnotation,
 		handleSelectAudio,
+		handleSelectCaption,
 		hasOverlap,
 		timelineItems,
 		allRegionSpans,
@@ -326,6 +329,7 @@ export function useTimelineEditorRuntime({
 		addZoomAtMs,
 		canPlaceCaptionAtMs,
 		addCaptionAtMs,
+		resolveCaptionSpanAtMs,
 		handleAddZoom,
 		handleSuggestZooms,
 		handleSplitClip,

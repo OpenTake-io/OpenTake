@@ -63,6 +63,7 @@ interface TimelineCanvasProps {
 	onAddZoomAtMs?: (startMs: number) => void;
 	onAddCaptionAtMs?: (startMs: number) => void;
 	canPlaceCaptionAtMs?: (startMs: number) => boolean;
+	resolveCaptionSpanAtMs?: (startMs: number) => { start: number; end: number } | null;
 	captionsEnabled?: boolean;
 	captionQuickAddEnabled?: boolean;
 	selectedZoomId: string | null;
@@ -96,6 +97,9 @@ interface LaneHoverParams {
 	isDragging: boolean;
 	onAddAtMs?: (startMs: number) => void;
 	canPlaceAtMs?: (startMs: number) => boolean;
+	// When set, the ghost previews the exact span an add would produce (clamped to
+	// neighbors/end) instead of a fixed ghostDurationMs. Returns null when no add fits.
+	resolveGhostSpanMs?: (startMs: number) => { start: number; end: number } | null;
 }
 
 /**
@@ -115,6 +119,7 @@ function useTimelineLaneHover({
 	isDragging,
 	onAddAtMs,
 	canPlaceAtMs,
+	resolveGhostSpanMs,
 }: LaneHoverParams) {
 	const [isHovered, setIsHovered] = useState(false);
 	const [hoverMs, setHoverMs] = useState<number | null>(null);
@@ -175,11 +180,20 @@ function useTimelineLaneHover({
 		setHoverMs(null);
 	}, []);
 
-	const ghostStartMs = hoverMs === null ? null : Math.max(0, Math.min(hoverMs, videoDurationMs));
+	const clampedHoverMs =
+		hoverMs === null ? null : Math.max(0, Math.min(hoverMs, videoDurationMs));
+	// When a resolver is supplied, preview the exact span the add would create (clamped to
+	// the next item / end of timeline); otherwise fall back to a fixed-length ghost.
+	const resolvedSpan =
+		resolveGhostSpanMs && clampedHoverMs !== null ? resolveGhostSpanMs(clampedHoverMs) : null;
+	const ghostStartMs =
+		clampedHoverMs === null ? null : resolvedSpan ? resolvedSpan.start : clampedHoverMs;
 	const ghostEndMs =
 		ghostStartMs === null
 			? null
-			: Math.max(ghostStartMs, Math.min(videoDurationMs, ghostStartMs + ghostDurationMs));
+			: resolvedSpan
+				? resolvedSpan.end
+				: Math.max(ghostStartMs, Math.min(videoDurationMs, ghostStartMs + ghostDurationMs));
 	const ghostStartOffsetPx =
 		ghostStartMs === null ? 0 : valueToPixels(Math.max(0, ghostStartMs - rangeStart));
 	const ghostEndOffsetPx =
@@ -190,7 +204,11 @@ function useTimelineLaneHover({
 		enabled &&
 		isHovered &&
 		ghostStartMs !== null &&
-		(onAddAtMs ? (canPlaceAtMs?.(ghostStartMs) ?? true) : false);
+		(resolveGhostSpanMs
+			? resolvedSpan !== null
+			: onAddAtMs
+				? (canPlaceAtMs?.(ghostStartMs) ?? true)
+				: false);
 
 	return {
 		reset,
@@ -216,6 +234,7 @@ interface TimelineHoverParams {
 	canPlaceZoomAtMs?: (startMs: number) => boolean;
 	onAddCaptionAtMs?: (startMs: number) => void;
 	canPlaceCaptionAtMs?: (startMs: number) => boolean;
+	resolveCaptionSpanAtMs?: (startMs: number) => { start: number; end: number } | null;
 	captionsEnabled?: boolean;
 	captionQuickAddEnabled?: boolean;
 	isDragging: boolean;
@@ -232,6 +251,7 @@ function useTimelineHover({
 	canPlaceZoomAtMs,
 	onAddCaptionAtMs,
 	canPlaceCaptionAtMs,
+	resolveCaptionSpanAtMs,
 	captionsEnabled,
 	captionQuickAddEnabled = true,
 	isDragging,
@@ -297,6 +317,7 @@ function useTimelineHover({
 		isDragging,
 		onAddAtMs: onAddCaptionAtMs,
 		canPlaceAtMs: canPlaceCaptionAtMs,
+		resolveGhostSpanMs: resolveCaptionSpanAtMs,
 	});
 
 	const handleTimelineMouseLeave = useCallback(() => {
@@ -734,6 +755,7 @@ export default function TimelineCanvas({
 	canPlaceZoomAtMs,
 	onAddCaptionAtMs,
 	canPlaceCaptionAtMs,
+	resolveCaptionSpanAtMs,
 	captionsEnabled,
 	captionQuickAddEnabled,
 	onSelectZoom,
@@ -916,10 +938,12 @@ export default function TimelineCanvas({
 			if (item.rowId === CAPTION_ROW_ID) hasCaptionRow = true;
 		}
 		const sourceAudioRows = showSourceAudioTrack ? sourceAudioTracks.length : 0;
-		return (
-			2 + sourceAudioRows + annotationRowIds.size + audioRowIds.size + (hasCaptionRow ? 1 : 0)
-		);
-	}, [items, showSourceAudioTrack, sourceAudioTracks.length]);
+		// The caption lane is always shown when captions are enabled (even before any cue
+		// exists), so count it whenever captionsEnabled — not only when a caption item is
+		// present — or the min-height/stretch math undersizes the empty lane.
+		const captionRows = hasCaptionRow || captionsEnabled ? 1 : 0;
+		return 2 + sourceAudioRows + annotationRowIds.size + audioRowIds.size + captionRows;
+	}, [items, showSourceAudioTrack, sourceAudioTracks.length, captionsEnabled]);
 	const timelineRowsMinHeightPx = getTimelineRowsMinHeightPx(timelineRowCount);
 	const timelineContentMinHeightPx = getTimelineContentMinHeightPx(timelineRowCount);
 	const timelineViewportStretchFactor = getTimelineViewportStretchFactor(timelineRowCount);
@@ -958,6 +982,7 @@ export default function TimelineCanvas({
 		canPlaceZoomAtMs,
 		onAddCaptionAtMs,
 		canPlaceCaptionAtMs,
+		resolveCaptionSpanAtMs,
 		captionsEnabled,
 		captionQuickAddEnabled,
 		isDragging,

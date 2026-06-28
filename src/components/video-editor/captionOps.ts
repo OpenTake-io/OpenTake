@@ -30,10 +30,12 @@ export function createCaptionCue(params: {
 	endMs: number;
 	text?: string;
 }): CaptionCue {
+	const startMs = Math.round(params.startMs);
 	return {
 		id: createCaptionCueId(),
-		startMs: Math.round(params.startMs),
-		endMs: Math.round(params.endMs),
+		startMs,
+		// Preserve the minimum-duration invariant (endMs > startMs) for every caller.
+		endMs: Math.max(startMs + 1, Math.round(params.endMs)),
 		text: params.text ?? "",
 	};
 }
@@ -91,22 +93,24 @@ export function retimeCue(cues: CaptionCue[], id: string, span: CaptionRetimeSpa
 
 	const cue = sorted[index];
 	const newStartMs = Math.max(0, Math.round(span.startMs));
-	const newEndMs = Math.max(newStartMs + 1, Math.round(span.endMs));
+	const requestedEndMs = Math.max(newStartMs + 1, Math.round(span.endMs));
+
+	const words =
+		Array.isArray(cue.words) && cue.words.length > 0 ? normalizeCaptionWords(cue) : [];
+	// Each word needs a monotonic, non-overlapping range of at least 1ms, so the span must
+	// be at least as long as the word count. A shorter span would force later words to pile
+	// up and overlap/reorder, so widen the end to the minimum viable span in that case.
+	const newEndMs =
+		words.length > 0 ? Math.max(requestedEndMs, newStartMs + words.length) : requestedEndMs;
 
 	if (newStartMs === cue.startMs && newEndMs === cue.endMs) {
 		return cues;
 	}
 
-	const hasWords = Array.isArray(cue.words) && cue.words.length > 0;
-	const nextWords = hasWords
-		? rescaleWordsIntoSpan(
-				normalizeCaptionWords(cue),
-				cue.startMs,
-				cue.endMs,
-				newStartMs,
-				newEndMs,
-			)
-		: null;
+	const nextWords =
+		words.length > 0
+			? rescaleWordsIntoSpan(words, cue.startMs, cue.endMs, newStartMs, newEndMs)
+			: null;
 
 	const nextCueValue: CaptionCue = {
 		id: cue.id,

@@ -77,6 +77,16 @@ describe("captionOps.retimeCue", () => {
 		expect(result[0].words).toBeUndefined();
 	});
 
+	it("keeps words valid and non-overlapping when retimed shorter than its word count", () => {
+		// Retiming a 4-word cue into a 3ms span can't fit one monotonic 1ms range per word,
+		// which is where overlapping/reordered word timings appear. The span is widened to
+		// the minimum viable length so the words stay valid.
+		const result = retimeCue(makeCues(), "a", { startMs: 0, endMs: 3 });
+		const cue = result.find((value) => value.id === "a");
+		expect(cue?.words).toHaveLength(4);
+		assertCuesValid(result);
+	});
+
 	it("is a no-op for an unknown id", () => {
 		const cues = makeCues();
 		expect(retimeCue(cues, "missing", { startMs: 0, endMs: 100 })).toBe(cues);
