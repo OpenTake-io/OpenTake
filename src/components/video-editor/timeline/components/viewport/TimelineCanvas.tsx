@@ -64,6 +64,7 @@ interface TimelineCanvasProps {
 	onAddCaptionAtMs?: (startMs: number) => void;
 	canPlaceCaptionAtMs?: (startMs: number) => boolean;
 	captionsEnabled?: boolean;
+	captionQuickAddEnabled?: boolean;
 	selectedZoomId: string | null;
 	selectedClipId?: string | null;
 	selectedAnnotationId?: string | null;
@@ -160,12 +161,13 @@ function useTimelineLaneHover({
 	const onClick = useCallback(
 		(event: MouseEvent<HTMLDivElement>) => {
 			event.stopPropagation();
-			if (!onAddAtMs || hoverMs === null) return;
+			// Respect the lane's enabled flag so a hidden ghost can't still add on click.
+			if (!enabled || !onAddAtMs || hoverMs === null) return;
 			const startMs = Math.max(0, Math.min(hoverMs, videoDurationMs));
 			if (canPlaceAtMs && !canPlaceAtMs(startMs)) return;
 			onAddAtMs(startMs);
 		},
-		[canPlaceAtMs, onAddAtMs, videoDurationMs, hoverMs],
+		[enabled, canPlaceAtMs, onAddAtMs, videoDurationMs, hoverMs],
 	);
 
 	const reset = useCallback(() => {
@@ -215,6 +217,7 @@ interface TimelineHoverParams {
 	onAddCaptionAtMs?: (startMs: number) => void;
 	canPlaceCaptionAtMs?: (startMs: number) => boolean;
 	captionsEnabled?: boolean;
+	captionQuickAddEnabled?: boolean;
 	isDragging: boolean;
 	valueToPixels: (value: number) => number;
 }
@@ -230,6 +233,7 @@ function useTimelineHover({
 	onAddCaptionAtMs,
 	canPlaceCaptionAtMs,
 	captionsEnabled,
+	captionQuickAddEnabled = true,
 	isDragging,
 	valueToPixels,
 }: TimelineHoverParams) {
@@ -289,7 +293,7 @@ function useTimelineHover({
 		videoDurationMs,
 		valueToPixels,
 		ghostDurationMs: Math.min(DEFAULT_CAPTION_DURATION_MS, videoDurationMs),
-		enabled: Boolean(captionsEnabled),
+		enabled: Boolean(captionsEnabled) && captionQuickAddEnabled,
 		isDragging,
 		onAddAtMs: onAddCaptionAtMs,
 		canPlaceAtMs: canPlaceCaptionAtMs,
@@ -731,6 +735,7 @@ export default function TimelineCanvas({
 	onAddCaptionAtMs,
 	canPlaceCaptionAtMs,
 	captionsEnabled,
+	captionQuickAddEnabled,
 	onSelectZoom,
 	onSelectClip,
 	onSelectAnnotation,
@@ -954,6 +959,7 @@ export default function TimelineCanvas({
 		onAddCaptionAtMs,
 		canPlaceCaptionAtMs,
 		captionsEnabled,
+		captionQuickAddEnabled,
 		isDragging,
 		valueToPixels,
 	});
