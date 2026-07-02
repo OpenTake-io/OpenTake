@@ -110,6 +110,7 @@
 	"sections": {
 		"scene": "Escena",
 		"captions": "Subtítulos",
+		"caption": "Subtítulo",
 		"zoom": "Zoom",
 		"cursor": "Cursor",
 		"webcam": "Cámara",
@@ -117,7 +118,9 @@
 		"crop": "Recorte"
 	},
 	"captions": {
+		"selectOnTimeline": "Selecciona un subtítulo en la línea de tiempo para editarlo.",
 		"enabled": "Mostrar",
+		"timelineQuickAdd": "Pasar el cursor para añadir en la línea de tiempo",
 		"language": "Idioma",
 		"downloading": "Descargando...",
 		"deleteModel": "Eliminar modelo",

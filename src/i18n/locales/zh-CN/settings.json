@@ -127,6 +127,7 @@
 	"sections": {
 		"scene": "场景",
 		"captions": "字幕",
+		"caption": "字幕编辑",
 		"zoom": "缩放",
 		"cursor": "光标",
 		"webcam": "摄像头",
@@ -134,7 +135,9 @@
 		"crop": "裁剪"
 	},
 	"captions": {
+		"selectOnTimeline": "在时间轴上选择字幕进行编辑。",
 		"enabled": "显示",
+		"timelineQuickAdd": "悬停以在时间轴上添加",
 		"language": "语言",
 		"downloading": "下载中...",
 		"deleteModel": "删除模型",

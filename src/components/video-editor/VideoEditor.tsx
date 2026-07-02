@@ -118,8 +118,22 @@ import type { SourceAudioTrackSettings } from "@/components/video-editor/audio/a
 import { extensionHost } from "@/lib/extensions";
 import { useVideoEditorAudio } from "./audio/useVideoEditorAudio";
 import { resolveAutoCaptionSourcePath } from "./autoCaptionSource";
-import { type CaptionEditTarget, updateCaptionCuesForEditedTarget } from "./captionEditing";
 import { CropControl } from "./CropControl";
+import {
+	type CaptionEditTarget,
+	normalizeCaptionEditText,
+	normalizeCaptionWords,
+	updateCaptionCuesForEditedTarget,
+} from "./captionEditing";
+import {
+	addCue,
+	type CaptionRetimeSpan,
+	createCaptionCue,
+	deleteCue,
+	mergeCues,
+	retimeCue,
+	splitCue,
+} from "./captionOps";
 import { ExportSettingsMenu } from "./ExportSettingsMenu";
 import ExtensionManager from "./ExtensionManager";
 import {
@@ -399,9 +413,8 @@ export default function VideoEditor() {
 	const [projectSaveDialogDraft, setProjectSaveDialogDraft] = useState("");
 	const [isSavingProjectDialog, setIsSavingProjectDialog] = useState(false);
 	const [unsavedChangesDialogOpen, setUnsavedChangesDialogOpen] = useState(false);
-	const [unsavedChangesDialogActionLabel, setUnsavedChangesDialogActionLabel] = useState(
-		"continue",
-	);
+	const [unsavedChangesDialogActionLabel, setUnsavedChangesDialogActionLabel] =
+		useState("continue");
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [isPlaying, setIsPlaying] = useState(false);
@@ -538,6 +551,7 @@ export default function VideoEditor() {
 	const [selectedAnnotationId, setSelectedAnnotationId] = useState<string | null>(null);
 	const [audioRegions, setAudioRegions] = useState<AudioRegion[]>([]);
 	const [selectedAudioId, setSelectedAudioId] = useState<string | null>(null);
+	const [selectedCaptionId, setSelectedCaptionId] = useState<string | null>(null);
 	const [sourceAudioTrackSettingsByClip, setSourceAudioTrackSettingsByClip] = useState<
 		Record<string, SourceAudioTrackSettings>
 	>({});
@@ -2850,6 +2864,9 @@ export default function VideoEditor() {
 			}
 
 			setAutoCaptions(result.cues);
+			if (result.cues.length > 0) {
+				setAutoCaptionSettings((prev) => ({ ...prev, enabled: true }));
+			}
 			toast.success(result.message || `Generated ${result.cues.length} captions`);
 		} catch (error) {
 			toast.error(getErrorMessage(error));
@@ -3522,6 +3539,16 @@ export default function VideoEditor() {
 		[zoomRegions, mapTimelineTimeToSourceTime],
 	);
 
+	const effectiveCaptionRegions = useMemo<CaptionCue[]>(
+		() =>
+			autoCaptions.map((cue) => ({
+				...cue,
+				startMs: mapSourceTimeToTimelineTime(cue.startMs),
+				endMs: mapSourceTimeToTimelineTime(cue.endMs),
+			})),
+		[autoCaptions, mapSourceTimeToTimelineTime],
+	);
+
 	const timelinePlayheadTime = useMemo(
 		() => mapSourceTimeToTimelineTime(currentTime * 1000) / 1000,
 		[currentTime, mapSourceTimeToTimelineTime],
@@ -3627,6 +3654,108 @@ export default function VideoEditor() {
 		[handleSeek],
 	);
 
+	const handleSelectCaption = useCallback(
+		(id: string | null) => {
+			setSelectedCaptionId(id);
+			if (!id) {
+				setActiveEffectSection((section) => (section === "caption" ? "scene" : section));
+				return;
+			}
+			setActiveEffectSection("caption");
+			setSelectedZoomId(null);
+			setSelectedClipId(null);
+			setSelectedAnnotationId(null);
+			setSelectedAudioId(null);
+			const cue = autoCaptions.find((value) => value.id === id);
+			if (cue) {
+				handleSeek(mapSourceTimeToTimelineTime(cue.startMs) / 1000, { pause: true });
+			}
+		},
+		[autoCaptions, handleSeek, mapSourceTimeToTimelineTime],
+	);
+
+	const handleBeginCaptionEdit = useCallback((id: string) => {
+		videoPlaybackRef.current?.cancelCaptionEdit();
+		setSelectedCaptionId(id);
+	}, []);
+
+	const handleCaptionTextEdit = useCallback((id: string, text: string) => {
+		setAutoCaptions((captions) => {
+			const cue = captions.find((value) => value.id === id);
+			if (!cue) {
+				return captions;
+			}
+			const words = normalizeCaptionWords(cue);
+			if (words.length === 0) {
+				// Text-only cue (e.g. a caption added manually from the timeline,
+				// which starts empty with no words). updateCaptionCuesForEditedTarget
+				// can't seed a cue that has no words, so set the text directly — the
+				// renderer derives placeholder word timings from the cue text.
+				const normalized = normalizeCaptionEditText(text);
+				return captions.map((value) =>
+					value.id === id ? { ...value, text: normalized } : value,
+				);
+			}
+			const target: CaptionEditTarget = {
+				id: cue.id,
+				startMs: cue.startMs,
+				endMs: cue.endMs,
+				text: cue.text,
+				words: words.map((word, index) => ({
+					cueId: cue.id,
+					cueWordIndex: index,
+					startMs: word.startMs,
+					endMs: word.endMs,
+					text: word.text,
+					leadingSpace: Boolean(word.leadingSpace),
+				})),
+			};
+			return updateCaptionCuesForEditedTarget(captions, target, text);
+		});
+	}, []);
+
+	const handleCaptionRetime = useCallback((id: string, span: CaptionRetimeSpan) => {
+		videoPlaybackRef.current?.cancelCaptionEdit();
+		setAutoCaptions((captions) => retimeCue(captions, id, span));
+	}, []);
+
+	const handleCaptionSplit = useCallback((id: string, atMs: number) => {
+		videoPlaybackRef.current?.cancelCaptionEdit();
+		setAutoCaptions((captions) => splitCue(captions, id, atMs));
+	}, []);
+
+	const handleCaptionMerge = useCallback((idA: string, idB: string) => {
+		videoPlaybackRef.current?.cancelCaptionEdit();
+		setAutoCaptions((captions) => mergeCues(captions, idA, idB));
+	}, []);
+
+	const handleCaptionDelete = useCallback((id: string) => {
+		videoPlaybackRef.current?.cancelCaptionEdit();
+		setSelectedCaptionId((prev) => (prev === id ? null : prev));
+		setAutoCaptions((captions) => deleteCue(captions, id));
+	}, []);
+
+	const handleCaptionAdded = useCallback(
+		(span: Span) => {
+			videoPlaybackRef.current?.cancelCaptionEdit();
+			// span is in timeline-ms; caption cues are stored in source-ms.
+			const newCue = createCaptionCue({
+				startMs: mapTimelineTimeToSourceTime(span.start),
+				endMs: mapTimelineTimeToSourceTime(span.end),
+			});
+			setAutoCaptions((captions) => addCue(captions, newCue));
+			// Select the new caption and open its side-panel editor.
+			setSelectedCaptionId(newCue.id);
+			setActiveEffectSection("caption");
+			setSelectedZoomId(null);
+			setSelectedClipId(null);
+			setSelectedAnnotationId(null);
+			setSelectedAudioId(null);
+			handleSeek(span.start / 1000, { pause: true });
+		},
+		[handleSeek, mapTimelineTimeToSourceTime],
+	);
+
 	const handlePreviewSkipBack = useCallback(() => {
 		const currentMs = timelinePlayheadTime * 1000;
 		const keyframes = timelineRef.current?.keyframes ?? [];
@@ -3649,6 +3778,7 @@ export default function VideoEditor() {
 			setActiveEffectSection("zoom");
 			setSelectedAnnotationId(null);
 			setSelectedAudioId(null);
+			setSelectedCaptionId(null);
 		} else {
 			setActiveEffectSection((s) => (s === "zoom" ? "scene" : s));
 		}
@@ -3659,6 +3789,7 @@ export default function VideoEditor() {
 		if (id) {
 			setSelectedZoomId(null);
 			setSelectedAudioId(null);
+			setSelectedCaptionId(null);
 		}
 	}, []);
 
@@ -3681,6 +3812,7 @@ export default function VideoEditor() {
 			setZoomRegions((prev) => [...prev, newRegion]);
 			setSelectedZoomId(id);
 			setSelectedAnnotationId(null);
+			setSelectedCaptionId(null);
 			extensionHost.emitEvent({
 				type: "timeline:region-added",
 				data: { id, startMs: newRegion.startMs, endMs: newRegion.endMs },
@@ -3884,6 +4016,7 @@ export default function VideoEditor() {
 			setSelectedZoomId(null);
 			setSelectedAnnotationId(null);
 			setSelectedAudioId(null);
+			setSelectedCaptionId(null);
 		} else {
 			setActiveEffectSection((s) => (s === "clip" ? "scene" : s));
 		}
@@ -4074,6 +4207,7 @@ export default function VideoEditor() {
 		if (id) {
 			setSelectedZoomId(null);
 			setSelectedAnnotationId(null);
+			setSelectedCaptionId(null);
 			setActiveEffectSection("audio");
 		}
 	}, []);
@@ -4093,6 +4227,7 @@ export default function VideoEditor() {
 		setSelectedAudioId(id);
 		setSelectedZoomId(null);
 		setSelectedAnnotationId(null);
+		setSelectedCaptionId(null);
 		setActiveEffectSection("audio");
 	}, []);
 
@@ -4394,6 +4529,12 @@ export default function VideoEditor() {
 			setSelectedAudioId(null);
 		}
 	}, [selectedAudioId, audioRegions]);
+
+	useEffect(() => {
+		if (selectedCaptionId && !autoCaptions.some((cue) => cue.id === selectedCaptionId)) {
+			setSelectedCaptionId(null);
+		}
+	}, [selectedCaptionId, autoCaptions]);
 
 	const showExportSuccessToast = useCallback((filePath: string) => {
 		toast.success(`Exported successfully to ${filePath}`, {
@@ -6374,6 +6515,14 @@ export default function VideoEditor() {
 								onPickWhisperModel={handlePickWhisperModel}
 								onGenerateAutoCaptions={handleGenerateAutoCaptions}
 								onClearAutoCaptions={handleClearAutoCaptions}
+								captionCurrentTimeMs={Math.round(currentTime * 1000)}
+								selectedCaptionId={selectedCaptionId}
+								onBeginCaptionEdit={handleBeginCaptionEdit}
+								onCaptionTextEdit={handleCaptionTextEdit}
+								onCaptionRetime={handleCaptionRetime}
+								onCaptionSplit={handleCaptionSplit}
+								onCaptionMerge={handleCaptionMerge}
+								onCaptionDelete={handleCaptionDelete}
 								onDownloadWhisperSmallModel={handleDownloadWhisperSmallModel}
 								onDeleteWhisperSmallModel={handleDeleteWhisperSmallModel}
 								nativeCaptureUnavailableSession={sessionNativeCaptureUnavailable}
@@ -6693,6 +6842,19 @@ export default function VideoEditor() {
 						onAudioDelete={handleAudioDelete}
 						selectedAudioId={selectedAudioId}
 						onSelectAudio={handleSelectAudio}
+						captionRegions={effectiveCaptionRegions}
+						onCaptionSpanChange={(id, span) =>
+							handleCaptionRetime(id, {
+								startMs: mapTimelineTimeToSourceTime(span.start),
+								endMs: mapTimelineTimeToSourceTime(span.end),
+							})
+						}
+						selectedCaptionId={selectedCaptionId}
+						onSelectCaption={handleSelectCaption}
+						onCaptionDelete={handleCaptionDelete}
+						onCaptionAdded={handleCaptionAdded}
+						captionsEnabled={autoCaptionSettings.enabled}
+						captionQuickAddEnabled={autoCaptionSettings.timelineQuickAdd}
 						annotationRegions={annotationRegions}
 						onAnnotationAdded={handleAnnotationAdded}
 						onAnnotationSpanChange={handleAnnotationSpanChange}
