@@ -11,6 +11,7 @@ import { fromFileUrl } from "../projectPersistence";
 import type {
 	AnnotationRegion,
 	AudioRegion,
+	CaptionCue,
 	ClipRegion,
 	CursorTelemetryPoint,
 	SpeedRegion,
@@ -68,6 +69,14 @@ export interface TimelineEditorProps {
 	onAudioDelete?: (id: string) => void;
 	selectedAudioId?: string | null;
 	onSelectAudio?: (id: string | null) => void;
+	captionRegions?: CaptionCue[];
+	onCaptionSpanChange?: (id: string, span: Span) => void;
+	onCaptionDelete?: (id: string) => void;
+	onCaptionAdded?: (span: Span) => void;
+	captionsEnabled?: boolean;
+	captionQuickAddEnabled?: boolean;
+	selectedCaptionId?: string | null;
+	onSelectCaption?: (id: string | null) => void;
 	videoPath?: string | null;
 	videoSourcePath?: string | null;
 	cursorTelemetrySourcePath?: string | null;
@@ -142,6 +151,14 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onAudioDelete,
 			selectedAudioId,
 			onSelectAudio,
+			captionRegions = [],
+			onCaptionSpanChange,
+			onCaptionDelete,
+			onCaptionAdded,
+			captionsEnabled = false,
+			captionQuickAddEnabled = true,
+			selectedCaptionId,
+			onSelectCaption,
 			videoPath,
 			videoSourcePath,
 			cursorTelemetrySourcePath,
@@ -179,6 +196,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 		});
 
 		const [liveSpanPreviewById, setLiveSpanPreviewById] = useState<Record<string, Span>>({});
+		const [isDragging, setIsDragging] = useState(false);
 		const liveZoomPreview = useMemo(() => {
 			const previewSpans: Record<string, Span> = { ...liveSpanPreviewById };
 			const hiddenZoomIds = new Set<string>();
@@ -315,6 +333,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			handleSelectClip,
 			handleSelectAnnotation,
 			handleSelectAudio,
+			handleSelectCaption,
 			hasOverlap,
 			timelineItems,
 			allRegionSpans,
@@ -322,6 +341,9 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			handleItemSpanChange,
 			canPlaceZoomAtMs,
 			addZoomAtMs,
+			canPlaceCaptionAtMs,
+			addCaptionAtMs,
+			resolveCaptionSpanAtMs,
 		} = useTimelineEditorRuntime({
 			ref,
 			videoDuration,
@@ -361,6 +383,12 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 			onAudioDelete,
 			selectedAudioId,
 			onSelectAudio,
+			captionCues: captionRegions,
+			onCaptionSpanChange,
+			onCaptionDelete,
+			onCaptionAdded,
+			selectedCaptionId,
+			onSelectCaption,
 			isMac,
 			keyShortcuts,
 			isTimelineFocusedRef,
@@ -414,6 +442,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 						onItemSpanChange={handleItemSpanChange}
 						resolveTargetRowId={getResolvedDropRowId}
 						allRegionSpans={allRegionSpans}
+						onDraggingChange={setIsDragging}
 						onLiveSpanPreviewChange={(id, span) => {
 							setLiveSpanPreviewById((prev) => {
 								if (!span) {
@@ -449,14 +478,21 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							onSeek={onSeek}
 							onAddZoomAtMs={addZoomAtMs}
 							canPlaceZoomAtMs={canPlaceZoomAtMs}
+							onAddCaptionAtMs={addCaptionAtMs}
+							canPlaceCaptionAtMs={canPlaceCaptionAtMs}
+							resolveCaptionSpanAtMs={resolveCaptionSpanAtMs}
+							captionsEnabled={captionsEnabled}
+							captionQuickAddEnabled={captionQuickAddEnabled}
 							onSelectZoom={handleSelectZoom}
 							onSelectClip={handleSelectClip}
 							onSelectAnnotation={handleSelectAnnotation}
 							onSelectAudio={handleSelectAudio}
+							onSelectCaption={handleSelectCaption}
 							selectedZoomId={selectedZoomId}
 							selectedClipId={selectedClipId}
 							selectedAnnotationId={selectedAnnotationId}
 							selectedAudioId={selectedAudioId}
+							selectedCaptionId={selectedCaptionId}
 							selectAllBlocksActive={selectAllBlocksActive}
 							onClearBlockSelection={clearSelectedBlocks}
 							keyframes={keyframes}
@@ -465,6 +501,7 @@ const TimelineEditor = forwardRef<TimelineEditorHandle, TimelineEditorProps>(
 							showSourceAudioTrack={showSourceAudioTrack}
 							liveSpanPreviewById={liveZoomPreview.previewSpans}
 							liveHiddenItemIds={Array.from(liveZoomPreview.hiddenZoomIds)}
+							isDragging={isDragging}
 							isLoading={isLoading}
 						/>
 					</TimelineWrapper>
