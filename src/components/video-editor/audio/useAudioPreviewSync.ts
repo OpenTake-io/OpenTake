@@ -6,6 +6,7 @@ import {
   enablePitchPreservingPlayback,
   estimateCompanionAudioStartDelaySeconds,
   getMediaSyncPlaybackRate,
+  resolvePreviewMediaDuration,
 } from "@/lib/mediaTiming";
 import type { AudioRegion, SpeedRegion } from "../types";
 
@@ -381,7 +382,7 @@ export function useAudioPreviewSync({
       audio.volume = Math.max(0, Math.min(1, getSourceTrackPreviewGain(sourceAudioPath) * (isCurrentClipMuted ? 0 : previewVolume)));
 
       enablePitchPreservingPlayback(audio);
-      const audioDuration = Number.isFinite(audio.duration) ? audio.duration : null;
+      const audioDuration = resolvePreviewMediaDuration(audio.duration, duration);
       const isMicCompanionTrack = /\.mic\./i.test(sourceAudioPath);
       const rawStartDelaySeconds = estimateCompanionAudioStartDelaySeconds(
         duration,
