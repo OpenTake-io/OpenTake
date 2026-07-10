@@ -47,6 +47,11 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run lint
 
+      - name: Check formatting (advisory)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        continue-on-error: true
+        run: npm run format:check
+
       - name: Test
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm test
