@@ -9,7 +9,7 @@ import {
 	LEGACY_PROJECT_FILE_EXTENSIONS,
 	PROJECT_FILE_EXTENSION,
 } from "../constants";
-import { writeProjectFileAtomically } from "../project/atomicSave";
+import { getProjectBackupPath, writeProjectFileAtomically } from "../project/atomicSave";
 import {
 	getProjectsDir,
   getProjectThumbnailPath,
@@ -432,6 +432,7 @@ export function registerProjectHandlers() {
               }
             })
             await fs.rm(getProjectThumbnailPath(activeProjectPath), { force: true }).catch(() => undefined)
+            await fs.rm(getProjectBackupPath(activeProjectPath), { force: true }).catch(() => undefined)
 
             const recentProjectPaths = await loadRecentProjectPaths()
             const filteredRecentProjectPaths: string[] = []

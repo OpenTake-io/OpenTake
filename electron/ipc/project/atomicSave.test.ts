@@ -31,6 +31,7 @@ describe("writeProjectFileAtomically", () => {
 			code: "ENOENT",
 		});
 		await expectNoTemporaryArtifacts();
+		await expectNoTemporaryArtifacts();
 	});
 
 	it("removes a stale backup when the target has no previous generation", async () => {
@@ -63,6 +64,7 @@ describe("writeProjectFileAtomically", () => {
 		).rejects.toBeDefined();
 
 		await expect(fs.readFile(projectPath, "utf-8")).resolves.toBe('{"version":1,"name":"old"}');
+		await expectNoTemporaryArtifacts();
 
 		await fs.rm(getProjectBackupPath(projectPath), { recursive: true });
 		await writeProjectFileAtomically(projectPath, '{"version":1,"name":"retry"}');
@@ -78,6 +80,7 @@ describe("writeProjectFileAtomically", () => {
 	it("serializes overlapping writes to the same project", async () => {
 		await writeProjectFileAtomically(projectPath, '{"revision":1}');
 
+		// Each call enters the queue synchronously before its first await, preserving invocation order.
 		await Promise.all([
 			writeProjectFileAtomically(projectPath, '{"revision":2}'),
 			writeProjectFileAtomically(projectPath, '{"revision":3}'),
@@ -91,13 +94,19 @@ describe("writeProjectFileAtomically", () => {
 	});
 
 	it.skipIf(process.platform === "win32")(
-		"preserves existing project permission bits on replacement",
+		"preserves exact project permission bits despite the process umask",
 		async () => {
-			await fs.writeFile(projectPath, '{"revision":1}', { mode: 0o600 });
+			await fs.writeFile(projectPath, '{"revision":1}', { mode: 0o666 });
+			await fs.chmod(projectPath, 0o666);
+			const previousUmask = process.umask(0o077);
 
-			await writeProjectFileAtomically(projectPath, '{"revision":2}');
+			try {
+				await writeProjectFileAtomically(projectPath, '{"revision":2}');
+			} finally {
+				process.umask(previousUmask);
+			}
 
-			expect((await fs.stat(projectPath)).mode & 0o777).toBe(0o600);
+			expect((await fs.stat(projectPath)).mode & 0o777).toBe(0o666);
 		},
 	);
 });
