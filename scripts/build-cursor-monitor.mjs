@@ -124,8 +124,8 @@ try {
 	configureWithWindowsCmakeGenerator({
 		prefix: "build-cursor-monitor",
 		clearCache: clearCmakeCache,
-		configure: (generator) =>
-			execSync(`${cmake} .. -G "${generator}" -A x64`, {
+		configure: (generator, toolset) =>
+			execSync(`${cmake} .. -G "${generator}" -A x64${toolset ? ` -T ${toolset}` : ""}`, {
 				cwd: buildDir,
 				stdio: "inherit",
 				timeout: 120000,

@@ -19,7 +19,7 @@ describe("configureWithWindowsCmakeGenerator", () => {
 
 		expect(selected).toBe("Visual Studio 18 2026");
 		expect(WINDOWS_VISUAL_STUDIO_INSTALL_DIRS[0]).toBe("18");
-		expect(configure).toHaveBeenCalledTimes(1);
+		expect(configure).toHaveBeenCalledWith("Visual Studio 18 2026", "v143");
 		expect(clearCache).toHaveBeenCalledTimes(1);
 	});
 
@@ -32,15 +32,17 @@ describe("configureWithWindowsCmakeGenerator", () => {
 			prefix: "test",
 			clearCache,
 			log,
-			configure: (generator) => {
-				attempted.push(generator);
+			configure: (generator, toolset) => {
+				attempted.push({ name: generator, toolset });
 				if (generator !== "Visual Studio 16 2019") {
 					throw new Error(`${generator} unavailable`);
 				}
 			},
 		});
 
-		expect(attempted).toEqual(WINDOWS_CMAKE_GENERATORS.map(({ name }) => name));
+		expect(attempted).toEqual(
+			WINDOWS_CMAKE_GENERATORS.map(({ name, toolset }) => ({ name, toolset })),
+		);
 		expect(clearCache).toHaveBeenCalledTimes(3);
 		expect(log).toHaveBeenCalledTimes(2);
 		expect(selected).toBe("Visual Studio 16 2019");
