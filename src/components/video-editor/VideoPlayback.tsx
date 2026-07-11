@@ -18,6 +18,10 @@ import {
 	getMediaSyncPlaybackRate,
 } from "@/lib/mediaTiming";
 import {
+	destroyPixiApplication,
+	initializePixiApplicationWithTimeout,
+} from "@/lib/pixiApplicationLifecycle";
+import {
 	DEFAULT_WALLPAPER_PATH,
 	DEFAULT_WALLPAPER_RELATIVE_PATH,
 	isVideoWallpaperSource,
@@ -169,7 +173,6 @@ import {
 import { clampFocusToStage as clampFocusToStageUtil } from "./videoPlayback/focusUtils";
 import {
 	layoutVideoContent as layoutVideoContentUtil,
-	scalePreviewBorderRadius,
 } from "./videoPlayback/layoutUtils";
 import { updateOverlayIndicator } from "./videoPlayback/overlayUtils";
 import { createVideoEventHandlers } from "./videoPlayback/videoEventHandlers";
@@ -258,30 +261,6 @@ function isRendererUnavailableError(error: unknown): boolean {
 function summarizeRendererAttempts(attempts: readonly PixiRendererAttempt[]): string {
 	const details = attempts.map((attempt) => `${attempt.backend}: ${attempt.message}`).join(" | ");
 	return `No supported Pixi preview renderer was available. Attempted: ${details}`;
-}
-
-type PixiInitOptions = Parameters<Application["init"]>[0];
-
-async function initApplicationWithTimeout(
-	app: Application,
-	options: PixiInitOptions,
-	backend: PixiPreviewBackend,
-): Promise<void> {
-	const timeoutErrorMessage = `Initialization timed out after ${PIXI_RENDERER_INIT_TIMEOUT_MS}ms for ${backend} renderer`;
-	let timeoutId: ReturnType<typeof setTimeout> | undefined;
-	const timeoutPromise = new Promise<never>((_, reject) => {
-		timeoutId = setTimeout(() => {
-			reject(new Error(timeoutErrorMessage));
-		}, PIXI_RENDERER_INIT_TIMEOUT_MS);
-	});
-
-	try {
-		await Promise.race([app.init(options), timeoutPromise]);
-	} finally {
-		if (timeoutId !== undefined) {
-			clearTimeout(timeoutId);
-		}
-	}
 }
 
 function getCursorPositionAtTime(
@@ -681,7 +660,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					const initStarted =
 						typeof performance === "undefined" ? Date.now() : performance.now();
 					try {
-						await initApplicationWithTimeout(
+						await initializePixiApplicationWithTimeout(
 							rendererApp,
 							{
 								width: container.clientWidth,
@@ -695,6 +674,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 								autoStart: true,
 								sharedTicker: false,
 							},
+							PIXI_RENDERER_INIT_TIMEOUT_MS,
 							backend,
 						);
 						const elapsed = Math.round(
@@ -723,7 +703,10 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 							`[VideoPlayback] Failed to init ${backend} renderer (${statusMessage}) after ${elapsed}ms; trying fallback.`,
 							error,
 						);
-						rendererApp.destroy(true);
+						destroyPixiApplication(
+							rendererApp,
+							`${backend} preview renderer initialization`,
+						);
 					}
 				}
 
@@ -2127,11 +2110,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				app.ticker.maxFPS = 60;
 
 				if (!mounted) {
-					app.destroy(true, {
-						children: true,
-						texture: false,
-						textureSource: false,
-					});
+					destroyPixiApplication(app, "unmounted preview renderer");
 					return;
 				}
 
@@ -2227,13 +2206,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 				motionBlurFilterRef.current?.destroy();
 				zoomBlurFilterRef.current = null;
 				motionBlurFilterRef.current = null;
-				if (app && app.renderer) {
-					app.destroy(true, {
-						children: true,
-						texture: false,
-						textureSource: false,
-					});
-				}
+				destroyPixiApplication(app, "preview renderer");
 				appRef.current = null;
 				cameraContainerRef.current = null;
 				videoEffectsContainerRef.current = null;
