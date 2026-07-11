@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	getAudioResourceCacheScope,
 	getAudioResourceVersionKey,
 	getVersionedAudioResourceUrl,
 	isAudioResourceLoadCurrent,
@@ -46,5 +47,18 @@ describe("getAudioResourceVersionKey", () => {
 		expect(getVersionedAudioResourceUrl("https://cdn.example/audio.wav?sig=abc", 2)).toBe(
 			"https://cdn.example/audio.wav?sig=abc",
 		);
+	});
+
+	it("uses one cache scope for every version of a loopback resource", () => {
+		const baseUrl =
+			"http://127.0.0.1:43123/video?path=C%3A%5CRecordly%5Crecording.mic.wav";
+		const versionedUrl = `${baseUrl}&recordlyAudioVersion=4`;
+
+		expect(getAudioResourceCacheScope(versionedUrl)).toBe(baseUrl);
+		expect(
+			getAudioResourceCacheScope(
+				"https://cdn.example/audio.wav?recordlyAudioVersion=4&sig=abc",
+			),
+		).toBe("https://cdn.example/audio.wav?recordlyAudioVersion=4&sig=abc");
 	});
 });
