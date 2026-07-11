@@ -54,7 +54,7 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.3.13",
-		"@electron/rebuild": "^4.0.3",
+		"@electron/rebuild": "^4.2.0",
 		"@fix-webm-duration/fix": "^1.0.1",
 		"@radix-ui/react-accordion": "^1.2.12",
 		"@radix-ui/react-dialog": "^1.1.15",
