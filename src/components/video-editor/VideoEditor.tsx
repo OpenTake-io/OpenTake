@@ -6889,6 +6889,7 @@ export default function VideoEditor() {
 						selectedAnnotationId={selectedAnnotationId}
 						onSelectAnnotation={handleSelectAnnotation}
 						showSourceAudioTrack={clipRegions.some((c) => c.showSourceAudio)}
+						sourceAudioResourceVersion={sourceAudioFallbackRefreshKey}
 						sourceAudioTrackSettings={audio.activeSourceAudioTrackSettings}
 						getSourceAudioTrackSettingsForClip={
 							audio.getSourceAudioTrackSettingsForClip
