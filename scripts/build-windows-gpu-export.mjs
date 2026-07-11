@@ -122,8 +122,8 @@ try {
 	configureWithWindowsCmakeGenerator({
 		prefix: "build-windows-gpu-export",
 		clearCache: clearCmakeCache,
-		configure: (generator) =>
-			execSync(`${cmake} .. -G "${generator}" -A ${generatorArch}`, {
+		configure: (generator, toolset) =>
+			execSync(`${cmake} .. -G "${generator}" -A ${generatorArch}${toolset ? ` -T ${toolset}` : ""}`, {
 				cwd: buildDir,
 				stdio: "inherit",
 				timeout: 120000,

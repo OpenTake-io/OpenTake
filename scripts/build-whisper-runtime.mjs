@@ -274,7 +274,7 @@ async function shouldSkipBuild(target) {
 	}
 }
 
-function getConfigureArgs(sourceDir, target, generator) {
+function getConfigureArgs(sourceDir, target, generator, toolset) {
 	const args = [
 		"-S",
 		sourceDir,
@@ -284,6 +284,7 @@ function getConfigureArgs(sourceDir, target, generator) {
 		"-DWHISPER_BUILD_SERVER=OFF",
 		"-DBUILD_SHARED_LIBS=OFF",
 		...(generator ? ["-G", generator] : []),
+		...(toolset ? ["-T", toolset] : []),
 		...target.configureArgs,
 	];
 
@@ -437,8 +438,8 @@ async function main() {
 						force: true,
 					});
 				},
-				configure: (generator) =>
-					execFileSync(cmake, getConfigureArgs(sourceDir, target, generator), {
+				configure: (generator, toolset) =>
+					execFileSync(cmake, getConfigureArgs(sourceDir, target, generator, toolset), {
 						stdio: "inherit",
 						timeout: 300000,
 					}),

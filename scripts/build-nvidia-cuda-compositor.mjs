@@ -244,9 +244,9 @@ try {
 	configureWithWindowsCmakeGenerator({
 		prefix: "build-nvidia-cuda-compositor",
 		clearCache: clearCmakeCache,
-		configure: (generator) =>
+		configure: (generator, toolset) =>
 			execSync(
-				`${cmake} .. -G "${generator}" -A ${generatorArch} -DRECORDLY_NVIDIA_VIDEO_CODEC_SDK_ROOT="${videoCodecSdkRoot}"`,
+				`${cmake} .. -G "${generator}" -A ${generatorArch}${toolset ? ` -T ${toolset}` : ""} -DRECORDLY_NVIDIA_VIDEO_CODEC_SDK_ROOT="${videoCodecSdkRoot}"`,
 				{
 					cwd: buildDir,
 					stdio: "inherit",
