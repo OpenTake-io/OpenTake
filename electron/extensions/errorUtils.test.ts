@@ -38,6 +38,28 @@ describe("formatMarketplaceHttpError", () => {
 		).toBe("Marketplace request failed (HTTP 409): Extension version already exists");
 	});
 
+	it("prefers a string error when both JSON detail fields are present", () => {
+		expect(
+			formatMarketplaceHttpError({
+				status: 400,
+				contentType: "application/json",
+				body: JSON.stringify({ error: "Primary detail", message: "Secondary detail" }),
+			}),
+		).toBe("Marketplace request failed (HTTP 400): Primary detail");
+	});
+
+	it("hides malformed JSON bodies", () => {
+		const body = '{"error":"internal route details"';
+		const message = formatMarketplaceHttpError({
+			status: 400,
+			contentType: "application/json",
+			body,
+		});
+
+		expect(message).toBe("Marketplace request failed (HTTP 400).");
+		expect(message).not.toContain(body);
+	});
+
 	it("bounds long JSON details and marks truncation without splitting Unicode", () => {
 		const detail = `🚀${"x".repeat(200)}`;
 		const message = formatMarketplaceHttpError({
