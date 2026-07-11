@@ -87,7 +87,12 @@ import {
 } from "@/utils/aspectRatioUtils";
 import { planClipSpeedChange } from "./clipSpeedChange";
 import { ExtensionIcon } from "./ExtensionIcon";
-import { calculateMp4ExportDimensions, calculateMp4SourceDimensions } from "./exportDimensions";
+import {
+	calculateMp4ExportDimensions,
+	calculateMp4SourceDimensions,
+	type Mp4SupportProbeSnapshot,
+	shouldDebounceMp4SupportProbe,
+} from "./exportDimensions";
 import { resolveSavingExportProgress } from "./exportProgressState";
 import { resolveExportStartSettings } from "./exportStartSettings";
 import { resolveExportStatusModel } from "./exportStatusModel";
@@ -256,6 +261,7 @@ type CancelableExporter = {
 };
 
 const EXPORT_BLOB_STREAM_CHUNK_BYTES = 16 * 1024 * 1024;
+const MP4_CROP_PROBE_DEBOUNCE_MS = 200;
 
 async function streamExportBlobToTempFile(blob: Blob, extension: string): Promise<string | null> {
 	if (
@@ -701,6 +707,7 @@ export default function VideoEditor() {
 	const pendingFreshRecordingAutoSuggestTelemetryCountRef = useRef(0);
 	const cropSnapshotRef = useRef<CropRegion | null>(null);
 	const mp4SupportRequestRef = useRef(0);
+	const previousMp4SupportProbeRef = useRef<Mp4SupportProbeSnapshot | null>(null);
 	const smokeExportStartedRef = useRef(false);
 	const projectAutosaveTimeoutRef = useRef<number | null>(null);
 	const pendingProjectSaveDialogRef = useRef<PendingProjectSaveDialog | null>(null);
@@ -1485,15 +1492,22 @@ export default function VideoEditor() {
 		[gifSizePreset],
 	);
 
-	const desiredMp4SourceDimensions = useMemo(() => {
+	const mp4SourceDimensions = useMemo(() => {
 		const sourceVideo = isPreviewReady ? videoPlaybackRef.current?.video : null;
+		return {
+			width: sourceVideo?.videoWidth || 1920,
+			height: sourceVideo?.videoHeight || 1080,
+		};
+	}, [isPreviewReady]);
+
+	const desiredMp4SourceDimensions = useMemo(() => {
 		return calculateMp4SourceDimensions(
-			sourceVideo?.videoWidth || 1920,
-			sourceVideo?.videoHeight || 1080,
+			mp4SourceDimensions.width,
+			mp4SourceDimensions.height,
 			aspectRatio,
 			cropRegion,
 		);
-	}, [aspectRatio, cropRegion, isPreviewReady]);
+	}, [aspectRatio, cropRegion, mp4SourceDimensions.height, mp4SourceDimensions.width]);
 
 	const mp4OutputDimensions = useMemo(() => {
 		const baseWidth = supportedMp4SourceDimensions.encoderPath
@@ -1533,21 +1547,6 @@ export default function VideoEditor() {
 				);
 			}
 
-			setSupportedMp4SourceDimensions((current) => {
-				if (
-					current.width === result.width &&
-					current.height === result.height &&
-					current.capped === result.capped &&
-					current.encoderPath?.codec === result.encoderPath?.codec &&
-					current.encoderPath?.hardwareAcceleration ===
-						result.encoderPath?.hardwareAcceleration
-				) {
-					return current;
-				}
-
-				return result;
-			});
-
 			return result;
 		},
 		[desiredMp4SourceDimensions.height, desiredMp4SourceDimensions.width],
@@ -1557,6 +1556,19 @@ export default function VideoEditor() {
 		let cancelled = false;
 		const requestId = mp4SupportRequestRef.current + 1;
 		mp4SupportRequestRef.current = requestId;
+		const probeSnapshot: Mp4SupportProbeSnapshot = {
+			sourceWidth: mp4SourceDimensions.width,
+			sourceHeight: mp4SourceDimensions.height,
+			targetWidth: desiredMp4SourceDimensions.width,
+			targetHeight: desiredMp4SourceDimensions.height,
+			aspectRatio,
+			frameRate: mp4FrameRate,
+		};
+		const shouldDebounce = shouldDebounceMp4SupportProbe(
+			previousMp4SupportProbeRef.current,
+			probeSnapshot,
+		);
+		previousMp4SupportProbeRef.current = probeSnapshot;
 		setSupportedMp4SourceDimensions({
 			width: desiredMp4SourceDimensions.width,
 			height: desiredMp4SourceDimensions.height,
@@ -1564,33 +1576,48 @@ export default function VideoEditor() {
 			encoderPath: null,
 		});
 
-		void ensureSupportedMp4SourceDimensions(mp4FrameRate)
-			.then((result) => {
-				if (cancelled || requestId !== mp4SupportRequestRef.current) {
-					return;
-				}
-				setSupportedMp4SourceDimensions(result);
-			})
-			.catch(() => {
-				if (cancelled || requestId !== mp4SupportRequestRef.current) {
-					return;
-				}
-				setSupportedMp4SourceDimensions({
-					width: desiredMp4SourceDimensions.width,
-					height: desiredMp4SourceDimensions.height,
-					capped: false,
-					encoderPath: null,
+		const runProbe = () => {
+			void ensureSupportedMp4SourceDimensions(mp4FrameRate)
+				.then((result) => {
+					if (cancelled || requestId !== mp4SupportRequestRef.current) {
+						return;
+					}
+					setSupportedMp4SourceDimensions(result);
+				})
+				.catch(() => {
+					if (cancelled || requestId !== mp4SupportRequestRef.current) {
+						return;
+					}
+					setSupportedMp4SourceDimensions({
+						width: desiredMp4SourceDimensions.width,
+						height: desiredMp4SourceDimensions.height,
+						capped: false,
+						encoderPath: null,
+					});
 				});
-			});
+		};
+
+		const timeoutId = shouldDebounce
+			? window.setTimeout(runProbe, MP4_CROP_PROBE_DEBOUNCE_MS)
+			: null;
+		if (timeoutId === null) {
+			runProbe();
+		}
 
 		return () => {
 			cancelled = true;
+			if (timeoutId !== null) {
+				window.clearTimeout(timeoutId);
+			}
 		};
 	}, [
+		aspectRatio,
 		desiredMp4SourceDimensions.height,
 		desiredMp4SourceDimensions.width,
 		ensureSupportedMp4SourceDimensions,
 		mp4FrameRate,
+		mp4SourceDimensions.height,
+		mp4SourceDimensions.width,
 	]);
 
 	// Extension-contributed standalone section pages (no parentSection)

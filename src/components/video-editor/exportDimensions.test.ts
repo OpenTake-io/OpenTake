@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { calculateMp4ExportDimensions, calculateMp4SourceDimensions } from "./exportDimensions";
+import {
+	calculateMp4ExportDimensions,
+	calculateMp4SourceDimensions,
+	shouldDebounceMp4SupportProbe,
+} from "./exportDimensions";
 
 describe("calculateMp4SourceDimensions", () => {
 	it("keeps native exports at the source dimensions", () => {
@@ -80,5 +84,50 @@ describe("calculateMp4ExportDimensions", () => {
 			width: 972,
 			height: 1728,
 		});
+	});
+});
+
+describe("shouldDebounceMp4SupportProbe", () => {
+	const baseSnapshot = {
+		sourceWidth: 1920,
+		sourceHeight: 1080,
+		targetWidth: 1920,
+		targetHeight: 1080,
+		aspectRatio: "native" as const,
+		frameRate: 30 as const,
+	};
+
+	it("debounces only native crop-driven target changes", () => {
+		expect(
+			shouldDebounceMp4SupportProbe(baseSnapshot, {
+				...baseSnapshot,
+				targetHeight: 864,
+			}),
+		).toBe(true);
+	});
+
+	it("keeps non-crop probe changes immediate", () => {
+		expect(shouldDebounceMp4SupportProbe(null, baseSnapshot)).toBe(false);
+		expect(
+			shouldDebounceMp4SupportProbe(baseSnapshot, {
+				...baseSnapshot,
+				frameRate: 60,
+			}),
+		).toBe(false);
+		expect(
+			shouldDebounceMp4SupportProbe(baseSnapshot, {
+				...baseSnapshot,
+				sourceWidth: 1280,
+				sourceHeight: 720,
+				targetWidth: 1280,
+				targetHeight: 720,
+			}),
+		).toBe(false);
+		expect(
+			shouldDebounceMp4SupportProbe(baseSnapshot, {
+				...baseSnapshot,
+				aspectRatio: "16:9",
+			}),
+		).toBe(false);
 	});
 });
