@@ -1,5 +1,35 @@
-import type { ExportQuality } from "@/lib/exporter";
+import type { ExportMp4FrameRate, ExportQuality } from "@/lib/exporter";
 import { type AspectRatio, getAspectRatioValue } from "@/utils/aspectRatioUtils";
+
+export type Mp4SupportProbeSnapshot = {
+	sourceWidth: number;
+	sourceHeight: number;
+	targetWidth: number;
+	targetHeight: number;
+	aspectRatio: AspectRatio;
+	frameRate: ExportMp4FrameRate;
+};
+
+export function shouldDebounceMp4SupportProbe(
+	previous: Mp4SupportProbeSnapshot | null,
+	current: Mp4SupportProbeSnapshot,
+): boolean {
+	if (
+		!previous ||
+		current.aspectRatio !== "native" ||
+		previous.aspectRatio !== current.aspectRatio ||
+		previous.frameRate !== current.frameRate ||
+		previous.sourceWidth !== current.sourceWidth ||
+		previous.sourceHeight !== current.sourceHeight
+	) {
+		return false;
+	}
+
+	return (
+		previous.targetWidth !== current.targetWidth ||
+		previous.targetHeight !== current.targetHeight
+	);
+}
 
 function normalizeEvenDimension(value: number): number {
 	return Math.max(2, Math.floor(value / 2) * 2);
