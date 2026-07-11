@@ -206,6 +206,60 @@ describe("navigation event handlers", () => {
 
 		expect(on).toHaveBeenCalledWith("will-navigate", expect.any(Function));
 		expect(on).toHaveBeenCalledWith("will-redirect", expect.any(Function));
+		expect(on).toHaveBeenCalledWith("did-navigate", expect.any(Function));
 		expect(setWindowOpenHandler).toHaveBeenCalledWith(expect.any(Function));
+	});
+
+	it("does not trust a renderer-mutated URL as an exact reload", () => {
+		let currentUrl = "file:///opt/Recordly/dist/index.html?windowType=editor";
+		const on = vi.fn();
+		const webContents = {
+			getURL: () => currentUrl,
+			on,
+			setWindowOpenHandler: vi.fn(),
+		};
+		const openExternal = vi.fn(async () => undefined);
+
+		hardenWebContentsNavigation(webContents, openExternal);
+
+		// history.replaceState() changes getURL() without crossing a document-navigation boundary.
+		currentUrl = "file:///opt/Recordly/dist/index.html?windowType=source-selector";
+		const willNavigate = on.mock.calls.find(([eventName]) => eventName === "will-navigate")?.[1];
+		if (typeof willNavigate !== "function") {
+			throw new Error("will-navigate handler was not registered");
+		}
+
+		const preventDefault = vi.fn();
+		willNavigate({ url: currentUrl, preventDefault });
+
+		expect(preventDefault).toHaveBeenCalledOnce();
+		expect(openExternal).not.toHaveBeenCalled();
+	});
+
+	it("trusts an exact reload after a completed document navigation", () => {
+		const on = vi.fn();
+		const webContents = {
+			getURL: () => "",
+			on,
+			setWindowOpenHandler: vi.fn(),
+		};
+
+		hardenWebContentsNavigation(
+			webContents,
+			vi.fn(async () => undefined),
+		);
+
+		const didNavigate = on.mock.calls.find(([eventName]) => eventName === "did-navigate")?.[1];
+		const willNavigate = on.mock.calls.find(([eventName]) => eventName === "will-navigate")?.[1];
+		if (typeof didNavigate !== "function" || typeof willNavigate !== "function") {
+			throw new Error("navigation handlers were not registered");
+		}
+
+		const loadedUrl = "file:///opt/Recordly/dist/index.html?windowType=editor";
+		didNavigate({}, loadedUrl);
+		const preventDefault = vi.fn();
+		willNavigate({ url: loadedUrl, preventDefault });
+
+		expect(preventDefault).not.toHaveBeenCalled();
 	});
 });
