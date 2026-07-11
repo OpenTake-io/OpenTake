@@ -47,6 +47,9 @@ async function writeSyncedTemporaryFile(
 	const handle = await fs.open(filePath, "wx", mode);
 	try {
 		await handle.writeFile(contents, "utf-8");
+		if (mode !== undefined) {
+			await handle.chmod(mode);
+		}
 		await handle.sync();
 	} finally {
 		await handle.close();
