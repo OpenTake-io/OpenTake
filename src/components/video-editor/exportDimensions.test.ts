@@ -32,6 +32,18 @@ describe("calculateMp4SourceDimensions", () => {
 		});
 	});
 
+	it("ignores crop bounds for fixed-aspect exports", () => {
+		expect(
+			calculateMp4SourceDimensions(1920, 1080, "9:16", {
+				width: 0.5,
+				height: 0.5,
+			}),
+		).toEqual({
+			width: 1080,
+			height: 1920,
+		});
+	});
+
 	it("uses the rotated source bounds for portrait social ratios", () => {
 		expect(calculateMp4SourceDimensions(1920, 1080, "4:5")).toEqual({
 			width: 1080,
