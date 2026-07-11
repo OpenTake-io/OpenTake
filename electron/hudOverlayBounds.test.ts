@@ -175,4 +175,14 @@ describe("shouldExpandHudOverlayFallback", () => {
 			}),
 		).toBe(true);
 	});
+
+	it("does not expand for webcam visibility outside recording", () => {
+		expect(
+			shouldExpandHudOverlayFallback({
+				fallbackExpanded: false,
+				recordingActive: false,
+				webcamPreviewVisible: true,
+			}),
+		).toBe(false);
+	});
 });
