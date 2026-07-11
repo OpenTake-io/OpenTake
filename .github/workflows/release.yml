@@ -53,17 +53,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_BODY: ${{ github.event.release.body }}
           REQUESTED_SCOPE: ${{ github.event.inputs.release_scope }}
+          RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
+          DISPATCH_TAG_NAME: ${{ github.event.inputs.tag_name }}
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "release" ]; then
-            TAG_NAME="${{ github.event.release.tag_name }}"
+            TAG_NAME="$RELEASE_TAG_NAME"
             IS_PRERELEASE="${{ github.event.release.prerelease }}"
             RELEASE_SCOPE="all"
             if [ "$IS_PRERELEASE" = "true" ] && grep -Fq '<!-- release-scope: windows-linux -->' <<< "$RELEASE_BODY"; then
               RELEASE_SCOPE="windows-linux"
             fi
           else
-            TAG_NAME="${{ github.event.inputs.tag_name }}"
+            TAG_NAME="$DISPATCH_TAG_NAME"
             IS_PRERELEASE="$(gh release view "$TAG_NAME" --repo "${{ github.repository }}" --json isPrerelease --jq '.isPrerelease' 2>/dev/null || echo false)"
             RELEASE_SCOPE="${REQUESTED_SCOPE:-all}"
           fi
