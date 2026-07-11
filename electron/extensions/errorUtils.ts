@@ -25,10 +25,12 @@ export function formatMarketplaceHttpError({
 				const { error, message } = payload as { error?: unknown; message?: unknown };
 				const value = typeof error === "string" ? error : message;
 				if (typeof value === "string" && value.trim()) {
-					detail = value
-						.trim()
-						.replace(/\s+/g, " ")
-						.slice(0, MAX_MARKETPLACE_ERROR_DETAIL_LENGTH);
+					const normalized = value.trim().replace(/\s+/g, " ");
+					const codePoints = Array.from(normalized);
+					detail =
+						codePoints.length > MAX_MARKETPLACE_ERROR_DETAIL_LENGTH
+							? `${codePoints.slice(0, MAX_MARKETPLACE_ERROR_DETAIL_LENGTH - 1).join("")}…`
+							: normalized;
 				}
 			}
 		} catch {

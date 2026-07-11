@@ -28,6 +28,28 @@ describe("formatMarketplaceHttpError", () => {
 		).toBe("Marketplace request failed (HTTP 400): Invalid search query");
 	});
 
+	it("uses a JSON message when an error field is absent", () => {
+		expect(
+			formatMarketplaceHttpError({
+				status: 409,
+				contentType: "application/json",
+				body: JSON.stringify({ message: "Extension version already exists" }),
+			}),
+		).toBe("Marketplace request failed (HTTP 409): Extension version already exists");
+	});
+
+	it("bounds long JSON details and marks truncation without splitting Unicode", () => {
+		const detail = `🚀${"x".repeat(200)}`;
+		const message = formatMarketplaceHttpError({
+			status: 400,
+			contentType: "application/problem+json",
+			body: JSON.stringify({ error: detail }),
+		});
+
+		expect(message).toBe(`Marketplace request failed (HTTP 400): 🚀${"x".repeat(198)}…`);
+		expect(Array.from(message.split(": ")[1])).toHaveLength(200);
+	});
+
 	it("does not expose non-JSON response bodies", () => {
 		expect(
 			formatMarketplaceHttpError({
