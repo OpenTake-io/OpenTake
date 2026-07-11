@@ -157,14 +157,29 @@ describe("shouldGrantDisplayCapture", () => {
 		).toBe(true);
 	});
 
-	it("accepts the exact packaged file HUD with an opaque origin", () => {
+	it("accepts the packaged loopback renderer with its exact origin", () => {
 		expect(
 			shouldGrantDisplayCapture(
-				makeRequest({ currentDocumentUrl: FILE_HUD_URL, securityOrigin: "file://" }),
+				makeRequest({
+					currentDocumentUrl: PACKAGED_HUD_URL,
+					securityOrigin: "http://127.0.0.1:43127",
+				}),
 				TRUSTED_DOCUMENT_BASE_URLS,
 			),
 		).toBe(true);
 	});
+
+	it.each(["null", "file://", "file:///"])(
+		"accepts Chromium's packaged file origin form: %s",
+		(securityOrigin) => {
+			expect(
+				shouldGrantDisplayCapture(
+					makeRequest({ currentDocumentUrl: FILE_HUD_URL, securityOrigin }),
+					TRUSTED_DOCUMENT_BASE_URLS,
+				),
+			).toBe(true);
+		},
+	);
 
 	it.each([
 		["another BrowserWindow", { isTrustedCaptureWindow: false }],
