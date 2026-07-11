@@ -1,7 +1,7 @@
-import WorkerConstructor from "./waveform.worker?worker";
-import { getAudioResourceVersionKey } from "../audioResourceVersion";
-import type { AudioPeaksData } from "../../timeline/core/timelineTypes";
 import { WAVEFORM_DEFAULT_PEAK_COUNT } from "../../timeline/core/constants";
+import type { AudioPeaksData } from "../../timeline/core/timelineTypes";
+import { getAudioResourceVersionKey } from "../audioResourceVersion";
+import WorkerConstructor from "./waveform.worker?worker";
 
 const MAX_WAVEFORM_PEAKS = 200_000;
 
