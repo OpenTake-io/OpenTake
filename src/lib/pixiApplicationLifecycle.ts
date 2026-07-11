@@ -77,6 +77,28 @@ export async function initializePixiApplication(
 	if (destroyRequests.has(app)) completeDestroy(app);
 }
 
+export async function initializePixiApplicationWithTimeout(
+	app: Application,
+	options: PixiInitOptions,
+	timeoutMs: number,
+	backendLabel: string,
+): Promise<void> {
+	let timeoutId: ReturnType<typeof setTimeout> | undefined;
+	const timeoutPromise = new Promise<never>((_, reject) => {
+		timeoutId = setTimeout(() => {
+			reject(
+				new Error(`Initialization timed out after ${timeoutMs}ms for ${backendLabel} renderer`),
+			);
+		}, timeoutMs);
+	});
+
+	try {
+		await Promise.race([initializePixiApplication(app, options), timeoutPromise]);
+	} finally {
+		if (timeoutId !== undefined) clearTimeout(timeoutId);
+	}
+}
+
 export function destroyPixiApplication(app: Application | null, context: string): void {
 	if (!app || destroyRequests.has(app) || completedCleanups.has(app)) return;
 
