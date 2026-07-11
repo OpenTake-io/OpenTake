@@ -82,7 +82,10 @@ import {
 	clampMediaTimeToDuration,
 	getEffectiveVideoStreamDurationSeconds,
 } from "@/lib/mediaTiming";
-import { destroyPixiApplication, initializePixiApplication } from "@/lib/pixiApplicationLifecycle";
+import {
+	destroyPixiApplication,
+	initializePixiApplicationWithTimeout,
+} from "@/lib/pixiApplicationLifecycle";
 import { isVideoWallpaperSource } from "@/lib/wallpapers";
 import {
 	type AnnotationRenderAssets,
@@ -283,30 +286,6 @@ function isKnownRendererUnavailableError(error: unknown): boolean {
 		message.includes(CANVAS_RENDERER_NOT_IMPLEMENTED_HINT.toLowerCase()) ||
 		message.includes(NO_RENDERER_HINT)
 	);
-}
-
-type PixiInitOptions = Parameters<Application["init"]>[0];
-
-async function initApplicationWithTimeout(
-	app: Application,
-	options: PixiInitOptions,
-	backend: ExportRenderBackend,
-): Promise<void> {
-	const timeoutErrorMessage = `Initialization timed out after ${PIXI_RENDERER_INIT_TIMEOUT_MS}ms for ${backend} renderer`;
-	let timeoutId: ReturnType<typeof setTimeout> | undefined;
-	const timeoutPromise = new Promise<never>((_, reject) => {
-		timeoutId = setTimeout(() => {
-			reject(new Error(timeoutErrorMessage));
-		}, PIXI_RENDERER_INIT_TIMEOUT_MS);
-	});
-
-	try {
-		await Promise.race([initializePixiApplication(app, options), timeoutPromise]);
-	} finally {
-		if (timeoutId !== undefined) {
-			clearTimeout(timeoutId);
-		}
-	}
 }
 
 interface RenderSnapshot {
@@ -721,12 +700,13 @@ export class FrameRenderer {
 			const app = new Application();
 			const initStarted = typeof performance === "undefined" ? Date.now() : performance.now();
 			try {
-				await initApplicationWithTimeout(
+				await initializePixiApplicationWithTimeout(
 					app,
 					{
 						...baseOptions,
 						preference: backend,
 					},
+					PIXI_RENDERER_INIT_TIMEOUT_MS,
 					backend,
 				);
 				const elapsed = Math.round(

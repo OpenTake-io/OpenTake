@@ -17,7 +17,10 @@ import {
 	enablePitchPreservingPlayback,
 	getMediaSyncPlaybackRate,
 } from "@/lib/mediaTiming";
-import { destroyPixiApplication, initializePixiApplication } from "@/lib/pixiApplicationLifecycle";
+import {
+	destroyPixiApplication,
+	initializePixiApplicationWithTimeout,
+} from "@/lib/pixiApplicationLifecycle";
 import {
 	DEFAULT_WALLPAPER_PATH,
 	DEFAULT_WALLPAPER_RELATIVE_PATH,
@@ -258,30 +261,6 @@ function isRendererUnavailableError(error: unknown): boolean {
 function summarizeRendererAttempts(attempts: readonly PixiRendererAttempt[]): string {
 	const details = attempts.map((attempt) => `${attempt.backend}: ${attempt.message}`).join(" | ");
 	return `No supported Pixi preview renderer was available. Attempted: ${details}`;
-}
-
-type PixiInitOptions = Parameters<Application["init"]>[0];
-
-async function initApplicationWithTimeout(
-	app: Application,
-	options: PixiInitOptions,
-	backend: PixiPreviewBackend,
-): Promise<void> {
-	const timeoutErrorMessage = `Initialization timed out after ${PIXI_RENDERER_INIT_TIMEOUT_MS}ms for ${backend} renderer`;
-	let timeoutId: ReturnType<typeof setTimeout> | undefined;
-	const timeoutPromise = new Promise<never>((_, reject) => {
-		timeoutId = setTimeout(() => {
-			reject(new Error(timeoutErrorMessage));
-		}, PIXI_RENDERER_INIT_TIMEOUT_MS);
-	});
-
-	try {
-		await Promise.race([initializePixiApplication(app, options), timeoutPromise]);
-	} finally {
-		if (timeoutId !== undefined) {
-			clearTimeout(timeoutId);
-		}
-	}
 }
 
 function getCursorPositionAtTime(
@@ -681,7 +660,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 					const initStarted =
 						typeof performance === "undefined" ? Date.now() : performance.now();
 					try {
-						await initApplicationWithTimeout(
+						await initializePixiApplicationWithTimeout(
 							rendererApp,
 							{
 								width: container.clientWidth,
@@ -695,6 +674,7 @@ const VideoPlayback = forwardRef<VideoPlaybackRef, VideoPlaybackProps>(
 								autoStart: true,
 								sharedTicker: false,
 							},
+							PIXI_RENDERER_INIT_TIMEOUT_MS,
 							backend,
 						);
 						const elapsed = Math.round(

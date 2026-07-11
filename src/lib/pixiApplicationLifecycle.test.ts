@@ -1,6 +1,10 @@
 import type { Application } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
-import { destroyPixiApplication, initializePixiApplication } from "./pixiApplicationLifecycle";
+import {
+	destroyPixiApplication,
+	initializePixiApplication,
+	initializePixiApplicationWithTimeout,
+} from "./pixiApplicationLifecycle";
 
 function createApplication(init: () => Promise<void> = async () => undefined) {
 	return {
@@ -88,5 +92,22 @@ describe("Pixi application lifecycle", () => {
 			cleanupError,
 		);
 		warn.mockRestore();
+	});
+
+	it("reports the backend when initialization times out", async () => {
+		vi.useFakeTimers();
+		try {
+			const app = createApplication(() => new Promise<void>(() => undefined));
+			const initialization = initializePixiApplicationWithTimeout(app, {}, 250, "webgpu");
+			const rejection = initialization.catch((error: unknown) => error);
+
+			await vi.advanceTimersByTimeAsync(250);
+
+			await expect(rejection).resolves.toEqual(
+				new Error("Initialization timed out after 250ms for webgpu renderer"),
+			);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });

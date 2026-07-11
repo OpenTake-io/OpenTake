@@ -72,7 +72,10 @@ import {
 	clampMediaTimeToDuration,
 	getEffectiveVideoStreamDurationSeconds,
 } from "@/lib/mediaTiming";
-import { destroyPixiApplication, initializePixiApplication } from "@/lib/pixiApplicationLifecycle";
+import {
+	destroyPixiApplication,
+	initializePixiApplicationWithTimeout,
+} from "@/lib/pixiApplicationLifecycle";
 import { isVideoWallpaperSource } from "@/lib/wallpapers";
 import { renderAnnotations } from "./annotationRenderer";
 import { renderCaptions } from "./captionRenderer";
@@ -172,30 +175,6 @@ function isCanvasRenderer(renderer: Application): boolean {
 
 function toErrorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error ?? "Unknown renderer init error");
-}
-
-type PixiInitOptions = Parameters<Application["init"]>[0];
-
-async function initApplicationWithTimeout(
-	app: Application,
-	options: PixiInitOptions,
-	backend: ExportRenderBackend,
-): Promise<void> {
-	const timeoutErrorMessage = `Initialization timed out after ${PIXI_RENDERER_INIT_TIMEOUT_MS}ms for ${backend} renderer`;
-	let timeoutId: ReturnType<typeof setTimeout> | undefined;
-	const timeoutPromise = new Promise<never>((_, reject) => {
-		timeoutId = setTimeout(() => {
-			reject(new Error(timeoutErrorMessage));
-		}, PIXI_RENDERER_INIT_TIMEOUT_MS);
-	});
-
-	try {
-		await Promise.race([initializePixiApplication(app, options), timeoutPromise]);
-	} finally {
-		if (timeoutId !== undefined) {
-			clearTimeout(timeoutId);
-		}
-	}
 }
 
 function summarizeRendererAttempts(attempts: readonly PixiRendererAttempt[]): string {
@@ -359,12 +338,13 @@ export class FrameRenderer {
 			const app = new Application();
 			const initStarted = typeof performance === "undefined" ? Date.now() : performance.now();
 			try {
-				await initApplicationWithTimeout(
+				await initializePixiApplicationWithTimeout(
 					app,
 					{
 						...baseOptions,
 						preference: backend,
 					},
+					PIXI_RENDERER_INIT_TIMEOUT_MS,
 					backend,
 				);
 				const elapsed = Math.round(
