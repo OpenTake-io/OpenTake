@@ -88,21 +88,21 @@ const defaultReportOpenError: ReportOpenError = (url, error) => {
 };
 
 export function createWillNavigateHandler(
-	getCurrentUrl: () => string,
+	getTrustedRendererUrl: () => string,
 	openExternal: OpenExternal,
 	reportOpenError: ReportOpenError = defaultReportOpenError,
 ) {
 	return (event: NavigationEvent): void => {
-		const currentUrl = getCurrentUrl();
+		const trustedRendererUrl = getTrustedRendererUrl();
 		// Preserve an exact reload, but freeze all renderer-selected destination changes,
 		// including same-origin query mutations that can carry privileged local paths.
-		if (isExactRendererLocation(currentUrl, event.url)) {
+		if (isExactRendererLocation(trustedRendererUrl, event.url)) {
 			return;
 		}
 
 		// The internal-target check only prevents app URLs from leaking into the system browser.
 		event.preventDefault();
-		if (isInternalRendererTarget(currentUrl, event.url)) {
+		if (isInternalRendererTarget(trustedRendererUrl, event.url)) {
 			return;
 		}
 
@@ -134,9 +134,15 @@ export function hardenWebContentsNavigation(
 	openExternal: OpenExternal,
 	reportOpenError: ReportOpenError = defaultReportOpenError,
 ): void {
+	// Renderer history APIs mutate getURL() without a document navigation. Keep the last
+	// main-frame document URL as the reload trust boundary instead of trusting that live value.
+	let trustedRendererUrl = webContents.getURL();
+	webContents.on("did-navigate", (_event, url) => {
+		trustedRendererUrl = url;
+	});
 	webContents.on(
 		"will-navigate",
-		createWillNavigateHandler(() => webContents.getURL(), openExternal, reportOpenError),
+		createWillNavigateHandler(() => trustedRendererUrl, openExternal, reportOpenError),
 	);
 	webContents.on("will-redirect", createWillRedirectHandler());
 	webContents.setWindowOpenHandler(
