@@ -1,5 +1,4 @@
 * text=auto eol=lf
-
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.dll binary
@@ -16,7 +15,7 @@
 *.pdf binary
 *.png binary
 *.ttf binary
-*.wasm binary
+*.wasm filter=lfs diff=lfs merge=lfs -text
 *.wav binary
 *.webm binary
 *.woff binary
@@ -25,4 +24,3 @@
 docs/media/*.gif filter=lfs diff=lfs merge=lfs -text
 public/wallpapers/* filter=lfs diff=lfs merge=lfs -text
 electron/native/bin/* filter=lfs diff=lfs merge=lfs -text
-*.wasm filter=lfs diff=lfs merge=lfs -text
