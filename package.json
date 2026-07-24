@@ -33,6 +33,7 @@
 		"build:cursor-monitor": "node scripts/build-cursor-monitor.mjs",
 		"build:mac": "npm run build:platform-native-helpers && tsc && vite build --config vite.config.ts && npm run normalize:electron-main-cjs && npm run smoke:electron-main-cjs && electron-builder --mac",
 		"build:win": "npm run build:platform-native-helpers && tsc && vite build --config vite.config.ts && npm run normalize:electron-main-cjs && npm run smoke:electron-main-cjs && electron-builder --win",
+		"build:win:msix": "npm run build:platform-native-helpers && tsc && vite build --config vite.config.ts && npm run normalize:electron-main-cjs && npm run smoke:electron-main-cjs && python scripts/prepare-msix-assets.py && electron-builder --win msix --x64",
 		"build:linux": "npm run build:platform-native-helpers && tsc && vite build --config vite.config.ts && npm run normalize:electron-main-cjs && npm run smoke:electron-main-cjs && electron-builder --linux",
 		"i18n:check": "node scripts/i18n-check.mjs",
 		"benchmark:export-queues": "node scripts/benchmark-export-queues.mjs",

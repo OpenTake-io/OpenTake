@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+         xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+         xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+         IgnorableNamespaces="uap rescap desktop uap3 com">
+
+  <Identity Name="1EA26DEE.OpenTake"
+            Publisher="CN=88264862-8029-4C85-A740-2E7CB3BC9C20"
+            Version="${version}" />
+
+  <Properties>
+    <DisplayName>${displayName}</DisplayName>
+    <PublisherDisplayName>柠檬叶工作室</PublisherDisplayName>
+    <Logo>${logo}</Logo>
+    <Description>A free, creator-focused screen recorder with auto-zoom, cursor effects, backgrounds, annotations, and more.</Description>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-US" />
+    <Resource Language="zh-CN" />
+  </Resources>
+
+  <Applications>
+    <Application Id="OpenTake"
+                 Executable="${executableName}"
+                 EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="${displayName}"
+                          Description="A free, creator-focused screen recorder"
+                          BackgroundColor="${backgroundColor}"
+                          Square150x150Logo="${logo}"
+                          Square44x44Logo="${logo}">
+        <uap:DefaultTile Wide310x150Logo="${logo}"
+                         ShortName="OpenTake"
+                         ShowNameOnTiles="true" />
+        <uap:SplashScreen Image="${splashScreen}" />
+      </uap:VisualElements>
+
+      <Extensions>
+        <!-- File type association for .opentake project files -->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="opentake-project">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.opentake</uap:FileType>
+            </uap:SupportedFileTypes>
+            <uap:DisplayName>OpenTake Project</uap:DisplayName>
+            <uap:Logo>icons/icons/win/icon.ico</uap:Logo>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+
+        <!-- Protocol handler for opentake:// URLs -->
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="opentake" ReturnResults="none" DependsOn="OpenTake">
+            <uab:DisplayName>OpenTake Protocol</uab:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+
+        <!-- Run full trust (required for Electron apps) -->
+        <desktop:Extension Category="windows.fullTrustProcess">
+          <desktop:FullTrustProcess EntryPoint="Windows.FullTrustApplication">
+            <desktop:Parameters>
+              <desktop:Parameter Name="executableName" Value="${executableName}" />
+            </desktop:Parameters>
+          </desktop:FullTrustProcess>
+        </desktop:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- Required for screen capture -->
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="screenCapture" />
+
+    <!-- Required for audio recording -->
+    <DeviceCapability Name="microphone" />
+
+    <!-- Required for webcam -->
+    <DeviceCapability Name="webcam" />
+
+    <!-- Required for file access -->
+    <uap:Capability Name="removableStorage" />
+    <uap:Capability Name="internetClient" />
+  </Capabilities>
+
+  <Extensions>
+    <!-- WebView2 runtime dependency -->
+    <Extension Category="windows.activatableClass.inProcessServer">
+      <InProcessServer>
+        <Path>Microsoft.WebView2.FixedVersionRuntime.dll</Path>
+        <ActivatableClass ActivatableClassId="Microsoft.Web.WebView2.Core.ICoreWebView2Environment" ThreadingModel="both" />
+      </InProcessServer>
+    </Extension>
+  </Extensions>
+</Package>
