@@ -1,0 +1,207 @@
+name: Build MSIX Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      sign_package:
+        description: Sign the MSIX package
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+  push:
+    branches: [dev, main]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - '.github/workflows/antislop.yml'
+      - '.github/workflows/auto-translate-zh.yml'
+      - '.github/workflows/homebrew-tap.yml'
+      - '.github/workflows/quality.yml'
+      - '.github/workflows/winget-releaser.yml'
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+  artifact-metadata: write
+
+jobs:
+  build-windows-msix:
+    name: Build Windows MSIX
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Configure Windows signing
+        if: inputs.sign_package == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_CERTIFICATE_P12_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_P12_BASE64 }}
+          WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_P12_BASE64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD)) {
+            Write-Warning 'Windows signing secrets are missing. Building an unsigned package.'
+            Add-Content -Path $env:GITHUB_ENV -Value 'CSC_IDENTITY_AUTO_DISCOVERY=false'
+            exit 0
+          }
+
+          $certPath = Join-Path $env:RUNNER_TEMP 'windows-signing-cert.p12'
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERTIFICATE_P12_BASE64))
+          Add-Content -Path $env:GITHUB_ENV -Value "WIN_CSC_LINK=$certPath"
+          Add-Content -Path $env:GITHUB_ENV -Value "WIN_CSC_KEY_PASSWORD=$env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install bundled FFmpeg binary
+        run: node scripts/install-ffmpeg-static.mjs
+
+      - name: Verify bundled FFmpeg binary
+        run: |
+          node -e "const fs=require('node:fs'); const ffmpeg=require('ffmpeg-static'); if (typeof ffmpeg !== 'string' || !fs.existsSync(ffmpeg)) { throw new Error('Bundled ffmpeg-static binary is missing: ' + ffmpeg); } console.log('Using bundled ffmpeg binary: ' + ffmpeg);"
+
+      - name: Remove stale uiohook build output
+        shell: pwsh
+        run: |
+          if (Test-Path node_modules/uiohook-napi/build) {
+            Remove-Item node_modules/uiohook-napi/build -Recurse -Force
+          }
+
+      - name: Install app dependencies
+        run: npx electron-builder install-app-deps
+
+      - name: Generate MSIX assets
+        shell: pwsh
+        run: python scripts/prepare-msix-assets.py
+
+      - name: Build Windows MSIX
+        shell: pwsh
+        run: |
+          npm run build:platform-native-helpers
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npx tsc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npx vite build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npx electron-builder --win msix --x64 --publish never
+        env:
+          # MSIX specific environment variables
+          MSIX_PUBLISHER: "CN=OpenTake, O=OpenTake, C=US"
+          MSIX_VERSION: ${{ github.event.inputs.version || '1.0.0' }}
+
+      - name: Smoke test packaged Windows paths
+        run: npm run smoke:packaged-binaries
+
+      - name: Generate Windows MSIX artifact checksums
+        run: npm run checksums:release -- SHA256SUMS-windows-msix.txt
+
+      - name: Attest Windows MSIX artifacts
+        uses: actions/attest@v4
+        with:
+          subject-checksums: release/SHA256SUMS-windows-msix.txt
+
+      - name: Upload Windows MSIX artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-msix-release
+          path: |
+            release/**/*.msix
+            release/**/*.appx
+            release/SHA256SUMS*.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  # Optional: Build NSIS alongside MSIX for comparison
+  build-windows-nsis:
+    name: Build Windows NSIS (Comparison)
+    runs-on: windows-latest
+    if: github.event_name == 'workflow_dispatch'
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Configure Windows signing
+        if: inputs.sign_package == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_CERTIFICATE_P12_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_P12_BASE64 }}
+          WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_P12_BASE64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD)) {
+            Write-Warning 'Windows signing secrets are missing. Building an unsigned installer.'
+            Add-Content -Path $env:GITHUB_ENV -Value 'CSC_IDENTITY_AUTO_DISCOVERY=false'
+            exit 0
+          }
+
+          $certPath = Join-Path $env:RUNNER_TEMP 'windows-signing-cert.p12'
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERTIFICATE_P12_BASE64))
+          Add-Content -Path $env:GITHUB_ENV -Value "WIN_CSC_LINK=$certPath"
+          Add-Content -Path $env:GITHUB_ENV -Value "WIN_CSC_KEY_PASSWORD=$env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install bundled FFmpeg binary
+        run: node scripts/install-ffmpeg-static.mjs
+
+      - name: Remove stale uiohook build output
+        shell: pwsh
+        run: |
+          if (Test-Path node_modules/uiohook-napi/build) {
+            Remove-Item node_modules/uiohook-napi/build -Recurse -Force
+          }
+
+      - name: Install app dependencies
+        run: npx electron-builder install-app-deps
+
+      - name: Build Windows NSIS
+        shell: pwsh
+        run: |
+          npm run build:platform-native-helpers
+          npx tsc
+          npx vite build
+          npx electron-builder --win nsis --x64 --publish never
+
+      - name: Generate Windows NSIS artifact checksums
+        run: npm run checksums:release -- SHA256SUMS-windows-nsis.txt
+
+      - name: Upload Windows NSIS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-nsis-release
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/SHA256SUMS*.txt
+          if-no-files-found: error
+          retention-days: 30
