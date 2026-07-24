@@ -50,7 +50,7 @@ describe("ThemeContext persistence", () => {
 	});
 
 	it("loads the persisted theme preference from Electron app settings", () => {
-		stubElectronSettings({ "recordly.theme": "dark" });
+		stubElectronSettings({ "opentake.theme": "dark" });
 
 		expect(loadThemePreference()).toBe("dark");
 	});
@@ -60,13 +60,13 @@ describe("ThemeContext persistence", () => {
 
 		persistThemePreference("dark");
 
-		expect(settingsStore.get("recordly.theme")).toBe("dark");
+		expect(settingsStore.get("opentake.theme")).toBe("dark");
 	});
 
 	it("falls back to localStorage when Electron settings are unavailable", () => {
 		vi.stubGlobal(
 			"localStorage",
-			createStorageMock({ "recordly.theme": "light" }),
+			createStorageMock({ "opentake.theme": "light" }),
 		);
 
 		expect(loadThemePreference()).toBe("light");

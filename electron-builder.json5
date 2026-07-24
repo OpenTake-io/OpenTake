@@ -1,7 +1,7 @@
 // @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "dev.recordly.app",
+  "appId": "io.opentake.app",
   "electronUpdaterCompatibility": ">=2.16",
   "asar": true,
   "asarUnpack": [
@@ -10,7 +10,7 @@
     "node_modules/uiohook-napi/**",
     "electron/native/**"
   ],
-  "productName": "Recordly",
+  "productName": "OpenTake",
   "npmRebuild": true,
   "buildDependenciesFromSource": true,
   "compression": "normal",
@@ -41,8 +41,8 @@
   "publish": [
     {
       "provider": "github",
-      "owner": "webadderall",
-      "repo": "Recordly",
+      "owner": "OpenTake-io",
+      "repo": "OpenTake",
       "tagNamePrefix": "v",
       "publishAutoUpdate": true
     }
@@ -65,29 +65,29 @@
     "icon": "icons/icons/mac/icon.icns",
     "artifactName": "${productName}-${arch}.${ext}",
     "extendInfo": {
-      "NSAudioCaptureUsageDescription": "Recordly needs audio capture permission to record system audio.",
-      "NSCameraUsageDescription": "Recordly needs camera access to record webcam video.",
-      "NSMicrophoneUsageDescription": "Recordly needs microphone access to record voice audio.",
+      "NSAudioCaptureUsageDescription": "OpenTake needs audio capture permission to record system audio.",
+      "NSCameraUsageDescription": "OpenTake needs camera access to record webcam video.",
+      "NSMicrophoneUsageDescription": "OpenTake needs microphone access to record voice audio.",
       "NSCameraUseContinuityCameraDeviceType": true,
       "com.apple.security.device.audio-input": true,
       "CFBundleDocumentTypes": [
         {
-          "CFBundleTypeName": "Recordly Project",
+          "CFBundleTypeName": "OpenTake Project",
           "CFBundleTypeRole": "Editor",
-          "CFBundleTypeExtensions": ["recordly"],
+          "CFBundleTypeExtensions": ["opentake"],
           "CFBundleTypeIconFile": "icon.icns",
           "LSHandlerRank": "Owner",
-          "LSItemContentTypes": ["dev.recordly.app.project"]
+          "LSItemContentTypes": ["io.opentake.app.project"]
         }
       ],
       "UTExportedTypeDeclarations": [
         {
-          "UTTypeIdentifier": "dev.recordly.app.project",
-          "UTTypeDescription": "Recordly Project",
+          "UTTypeIdentifier": "io.opentake.app.project",
+          "UTTypeDescription": "OpenTake Project",
           "UTTypeConformsTo": ["public.json"],
           "UTTypeTagSpecification": {
-            "public.filename-extension": ["recordly"],
-            "public.mime-type": "application/x-recordly-project"
+            "public.filename-extension": ["opentake"],
+            "public.mime-type": "application/x-opentake-project"
           }
         }
       ]
@@ -107,8 +107,7 @@
     ],
     "icon": "icons/icons/win/icon.ico"
     ,
-    "executableName": "Recordly",
+    "executableName": "OpenTake",
     "artifactName": "${productName}-windows-${arch}.${ext}"
   }
 }
-

@@ -2352,7 +2352,7 @@ export class ModernVideoExporter {
 			return null;
 		}
 		const startedAt = this.getNowMs();
-		const sessionId = `recordly-static-layout-${Date.now()}-${Math.random()
+		const sessionId = `opentake-static-layout-${Date.now()}-${Math.random()
 			.toString(36)
 			.slice(2, 8)}`;
 		const previousEncodeBackend = this.encodeBackend;

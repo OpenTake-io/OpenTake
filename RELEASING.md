@@ -1,4 +1,4 @@
-# Releasing Recordly
+# Releasing OpenTake
 
 This repository now uses `electron-builder` + `electron-updater` for macOS, Windows, and Linux auto-updates.
 
@@ -42,8 +42,8 @@ If the certificate you currently have is only `Apple Development`, that is not e
 To export and encode the certificate:
 
 ```bash
-security export -k ~/Library/Keychains/login.keychain-db -t identities -f pkcs12 -P "YOUR_P12_PASSWORD" -o recordly-mac-signing.p12
-base64 < recordly-mac-signing.p12 | pbcopy
+security export -k ~/Library/Keychains/login.keychain-db -t identities -f pkcs12 -P "YOUR_P12_PASSWORD" -o opentake-mac-signing.p12
+base64 < opentake-mac-signing.p12 | pbcopy
 ```
 
 Paste the copied base64 into `APPLE_SIGNING_CERTIFICATE_P12_BASE64` and the export password into `APPLE_SIGNING_CERTIFICATE_PASSWORD`.
