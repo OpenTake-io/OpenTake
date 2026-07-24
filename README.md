@@ -1,7 +1,7 @@
 Language: EN | [简中](README.zh-CN.md)
 
 <p align="center">
-  <img width="220" alt="OpenTake Logo" src="https://github.com/user-attachments/assets/414b8838-6731-45d4-a815-6e3c0aa1fe52" />
+  <img width="220" alt="OpenTake Logo" src="./public/app-icons-webp/opentake-256.webp" />
 </p>
 
 <p align="center">
