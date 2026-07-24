@@ -1651,7 +1651,7 @@ export class ModernVideoExporter {
 			return null;
 		}
 
-		if (wallpaper.startsWith("/wallpapers/") || wallpaper.startsWith("/app-icons/")) {
+		if (wallpaper.startsWith("/wallpapers/") || wallpaper.startsWith("/app-icons-webp/")) {
 			const assetPath = await this.resolveNativeBundledAssetPath(wallpaper);
 			if (assetPath) {
 				return { backgroundColor: "#101010", backgroundImagePath: assetPath };

@@ -14,7 +14,7 @@ export default function App() {
 	const [windowType, setWindowType] = useState("");
 	const { t } = useI18n();
 	const isMacOS = /mac/i.test(navigator.platform);
-	const appIconSrc = "/app-icons/opentake-128.png";
+	const appIconSrc = "/app-icons-webp/opentake-128.webp";
 
 	useEffect(() => {
 		const params = new URLSearchParams(window.location.search);

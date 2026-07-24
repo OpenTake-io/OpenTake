@@ -3,7 +3,7 @@ import { fromFileUrl, toFileUrl } from "@/components/video-editor/projectPersist
 const NOOP = () => undefined;
 const REMOTE_MEDIA_URL_PATTERN = /^(https?:|blob:|data:)/i;
 const LOOPBACK_MEDIA_HOSTS = new Set(["127.0.0.1", "localhost"]);
-const BUNDLED_ASSET_PATH_PREFIXES = ["/wallpapers/", "/app-icons/"];
+const BUNDLED_ASSET_PATH_PREFIXES = ["/wallpapers/", "/app-icons-webp/"];
 
 export function isAbsoluteLocalPath(resource: string) {
 	return (

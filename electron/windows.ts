@@ -18,12 +18,12 @@ const nodeRequire = createRequire(import.meta.url);
 const APP_ROOT = path.join(electronWindowsDir, "..");
 const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
 const RENDERER_DIST = path.join(APP_ROOT, "dist");
-const WINDOW_ICON_FILENAME =
-	process.platform === "darwin" ? "opentakemac-512.png" : "opentake-512.png";
 const WINDOW_ICON_PATH = path.join(
-	process.env.VITE_PUBLIC || RENDERER_DIST,
-	"app-icons",
-	WINDOW_ICON_FILENAME,
+	APP_ROOT,
+	"icons",
+	"icons",
+	"png",
+	"512x512.png",
 );
 
 let hudOverlayWindow: BrowserWindow | null = null;

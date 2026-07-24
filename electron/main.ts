@@ -238,14 +238,20 @@ function getExistingEditorWindow(): BrowserWindow | null {
 let defaultTrayIcon: ReturnType<typeof getTrayIcon> | null = null;
 let recordingTrayIcon: ReturnType<typeof getTrayIcon> | null = null;
 
-function getPlatformAppIconFilename(size: 32 | 128 | 512) {
-	const baseName = process.platform === "darwin" ? "opentakemac" : "opentake";
-	return `app-icons/${baseName}-${size}.png`;
+function getPlatformAppIconPath(size: 32 | 128 | 512) {
+	// Use system icons from icons/icons directory
+	const sizeMap = { 32: "32x32", 128: "128x128", 512: "512x512" };
+	return path.join(electronMainDir, `../icons/icons/png/${sizeMap[size]}.png`);
 }
 
 function getDefaultTrayIcon() {
 	if (!defaultTrayIcon) {
-		defaultTrayIcon = getTrayIcon(getPlatformAppIconFilename(32));
+		const iconPath = getPlatformAppIconPath(32);
+		defaultTrayIcon = nativeImage.createFromPath(iconPath).resize({
+			width: 24,
+			height: 24,
+			quality: "best",
+		});
 	}
 	return defaultTrayIcon;
 }
@@ -549,7 +555,8 @@ function syncDockIcon() {
 		return;
 	}
 
-	const dockIcon = getAppImage(getPlatformAppIconFilename(512));
+	const iconPath = getPlatformAppIconPath(512);
+	const dockIcon = nativeImage.createFromPath(iconPath);
 	if (!dockIcon.isEmpty()) {
 		app.dock.setIcon(dockIcon);
 	}
@@ -620,7 +627,7 @@ function sendUpdateToastToWindows(channel: "update-toast-state", payload: unknow
 		const notification = new Notification({
 			title: getUpdateNotificationTitle(updatePayload),
 			body: getUpdateNotificationBody(updatePayload),
-			icon: getAppImage(getPlatformAppIconFilename(128)),
+			icon: getPlatformAppIconPath(128),
 			silent: false,
 		});
 
