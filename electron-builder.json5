@@ -104,13 +104,13 @@
   "win": {
     "target": [
       "nsis",
-      "appx"
+      "msix"
     ],
     "icon": "icons/icons/win/icon.ico",
     "executableName": "OpenTake",
     "artifactName": "${productName}-windows-${arch}.${ext}"
   },
-  "appx": {
+  "msix": {
     "applicationId": "1EA26DEE.OpenTake",
     "identityName": "1EA26DEE.OpenTake",
     "publisher": "CN=88264862-8029-4C85-A740-2E7CB3BC9C20",

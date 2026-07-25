@@ -106,7 +106,7 @@ jobs:
           # Continue even if some helpers fail (e.g., NVIDIA CUDA)
           npx tsc
           npx vite build
-          npx electron-builder --win appx --x64 --publish never
+          npx electron-builder --win msix --x64 --publish never
         env:
           # MSIX specific environment variables
           MSIX_PUBLISHER: "CN=OpenTake, O=OpenTake, C=US"
