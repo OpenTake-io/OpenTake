@@ -103,32 +103,10 @@
   },
   "win": {
     "target": [
-      "nsis",
-      "msix"
+      "nsis"
     ],
     "icon": "icons/icons/win/icon.ico",
     "executableName": "OpenTake",
     "artifactName": "${productName}-windows-${arch}.${ext}"
-  },
-  "msix": {
-    "applicationId": "1EA26DEE.OpenTake",
-    "identityName": "1EA26DEE.OpenTake",
-    "publisher": "CN=88264862-8029-4C85-A740-2E7CB3BC9C20",
-    "publisherDisplayName": "柠檬叶工作室",
-    "languages": ["en-US", "zh-CN"],
-    "backgroundColor": "transparent",
-    "showNameOnTiles": true,
-    "setBuildNumber": true,
-    "logo": "build/msix-assets/Square150x150Logo.png",
-    "splashScreen": "build/msix-assets/SplashScreen.png",
-    "extensions": [
-      {
-        "name": "Microsoft.WebView2",
-        "parameters": {
-          "silentInstall": true,
-          "perMachine": false
-        }
-      }
-    ]
   }
 }
