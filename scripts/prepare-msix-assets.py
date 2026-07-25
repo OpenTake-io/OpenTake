@@ -58,6 +58,11 @@ def create_msix_image(source_img, size, output_path, background_color=(0, 0, 0, 
 
 
 def main():
+    # Set UTF-8 encoding for Windows console
+    import sys
+    if sys.platform == 'win32':
+        sys.stdout.reconfigure(encoding='utf-8')
+
     # Create output directory
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -76,7 +81,7 @@ def main():
         output_path = os.path.join(OUTPUT_DIR, f'{name}.png')
         create_msix_image(source_img, size, output_path)
 
-    print(f"\n✅ MSIX assets generated in: {OUTPUT_DIR}")
+    print(f"\n[OK] MSIX assets generated in: {OUTPUT_DIR}")
     print("\nGenerated files:")
     for name in MSIX_SIZES.keys():
         print(f"  - {name}.png")
