@@ -87,6 +87,9 @@ jobs:
       - name: Install app dependencies
         run: npx electron-builder install-app-deps
 
+      - name: Install Python dependencies
+        run: pip install Pillow
+
       - name: Generate MSIX assets
         shell: pwsh
         run: python scripts/prepare-msix-assets.py
